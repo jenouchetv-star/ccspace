@@ -678,6 +678,15 @@ order by relname;
 --                      deploy-notify.ps1) - this is what stops anyone else
 --                      on the internet from calling the function directly
 --                      and sending mail through your Resend account.
+--
+-- The trigger passes NEW.data, not row_to_json(NEW) - every backed table in
+-- this app is shaped {id, data jsonb, created_at, updated_at}, and notify's
+-- own code reads fields straight off the top level of "record" (record.email,
+-- record.subject, ...), which only lines up with the data column's contents,
+-- not the whole row. Confirmed live: row_to_json(NEW) produced a real
+-- "No email on this record" 400 from every trigger-fired call until this was
+-- fixed - check net._http_response for a 400 with that message if new
+-- signups/tickets silently stop generating email after any future change here.
 
 create extension if not exists pg_net;
 
@@ -694,7 +703,7 @@ begin
       'Content-Type', 'application/json',
       'x-webhook-secret', '<WEBHOOK_SECRET>'
     ),
-    body := jsonb_build_object('table', TG_TABLE_NAME, 'record', row_to_json(NEW))
+    body := jsonb_build_object('table', TG_TABLE_NAME, 'record', NEW.data)
   );
   return NEW;
 end;
