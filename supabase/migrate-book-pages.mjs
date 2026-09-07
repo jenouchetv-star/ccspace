@@ -68,11 +68,12 @@ function parsePageContentBlock(block){
   const h3Matches = [...block.matchAll(/<h3([^>]*)>([\s\S]*?)<\/h3>/g)];
   h3Matches.forEach((m, idx) => {
     const isItalic = /font-style:italic/.test(m[1]);
+    const isWhite = /color:\s*#fff/.test(m[1]);
     const text = decodeEntities(m[2].replace(/<[^>]+>/g, ""));
     layers.push({ id: uid("ly"), type:"text", content: text,
       x:10, y: isCover ? (70 + idx * 8) : (35 + idx * 30), w:80, h:25,
       style: isItalic ? "quote" : (isCover ? "heading" : "body"),
-      align:"left", color: isCover ? "#fff" : "", locked:false });
+      align:"left", color: (isCover || isWhite) ? "#fff" : "", locked:false });
   });
 
   const imgMatch = block.match(/<img src="([^"]*)" alt="([^"]*)"/);
