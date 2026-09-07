@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UFO Target Practice</title>
+    <style>
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #1B2A32 0%, #4A3260 50%, #1B2A32 100%);
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            /* Nebula wash in CSS; the animated starfield is drawn by the game itself. */
+            background-image:
+                radial-gradient(circle at 22% 18%, rgba(180, 155, 216, .38), transparent 48%),
+                radial-gradient(circle at 78% 72%, rgba(122, 74, 134, .50), transparent 54%);
+            background-attachment: fixed;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+
+            overflow: hidden;
+        }
+
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            image-rendering: pixelated;
+            display: block;
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            color: #fff;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px 16px;
+        }
+
+        #score {
+            order: 1;
+        }
+
+        #timer {
+            order: 3;
+        }
+
+        #stats {
+            order: 2;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        #efficiencyBtn {
+            background: rgba(122, 74, 134, 0.55);
+            border: 1px solid rgba(255,255,255,0.5);
+            color: #fff;
+            font: inherit;
+            font-size: 12px;
+            font-weight: bold;
+            border-radius: 10px;
+            padding: 1px 9px;
+            cursor: pointer;
+            text-shadow: none;
+        }
+        #efficiencyBtn:hover { background: rgba(180, 155, 216, 0.75); }
+
+        #efficiencyModal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(20,14,26,0.96);
+            color: #fff;
+            padding: 26px 28px;
+            border-radius: 12px;
+            text-align: left;
+            border: 2px solid #B49BD8;
+            z-index: 30;
+            display: none;
+            max-width: 380px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+        #efficiencyModal h3 {
+            color: #F5B921;
+            margin: 0 0 10px;
+        }
+        #efficiencyModal p {
+            font-size: 15px;
+            line-height: 1.5;
+            margin: 0 0 10px;
+        }
+        #efficiencyModal button {
+            background: linear-gradient(135deg, #7A4A86 0%, #B49BD8 100%);
+            color: #fff;
+            border: none;
+            padding: 8px 18px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            border: 2px solid #7A4A86;
+            z-index: 20;
+            display: none;
+        }
+
+        #gameOver h2 {
+            color: #F5B921;
+            margin-top: 0;
+        }
+
+        #playAgain {
+            background: linear-gradient(135deg, #7A4A86 0%, #B49BD8 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+        }
+
+        #playAgain:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(122, 74, 134, 0.5);
+        }
+
+        .stars {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            width: 2px;
+            height: 2px;
+            border-radius: 50%;
+            animation: twinkle 2s infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+    </style>
+    <link rel="stylesheet" href="game-skin.css">
+</head>
+<body class="ccs-game ccs-ufo">
+    <div id="gameContainer">
+        <div class="stars"></div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui">
+            <div id="score">Score: 0</div>
+            <div id="timer">Time: 60s</div>
+            <div id="stats">
+                <span id="hits">Hits: 0</span>
+                <span id="misses">Misses: 0</span>
+                <span>Efficiency: <span id="efficiency">0%</span> <button id="efficiencyBtn" type="button">what's this?</button></span>
+            </div>
+        </div>
+        <div id="efficiencyModal">
+            <h3>What's efficiency?</h3>
+            <p>Efficiency is how many of your shots actually hit a UFO, out of all the shots you fired.</p>
+            <p>Say you fired 10 shots and 7 of them hit a UFO. That's 7 out of 10 — or 70% efficiency.</p>
+            <p>Shooting fast fires more lasers, but aiming carefully is what makes your efficiency go up!</p>
+            <button id="closeEfficiency" type="button">Got it</button>
+        </div>
+        <div id="gameOver">
+            <h2>Game Over!</h2>
+            <p>Final Score: <span id="finalScore">0</span></p>
+            <p style="font-size:15px">Hits: <span id="finalHits">0</span> &middot; Misses: <span id="finalMisses">0</span> &middot; Efficiency: <span id="finalEfficiency">0%</span></p>
+            <button id="playAgain">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const timerElement = document.getElementById('timer');
+        const gameOverElement = document.getElementById('gameOver');
+        const finalScoreElement = document.getElementById('finalScore');
+        const playAgainButton = document.getElementById('playAgain');
+        const hitsElement = document.getElementById('hits');
+        const missesElement = document.getElementById('misses');
+        const efficiencyElement = document.getElementById('efficiency');
+        const efficiencyModal = document.getElementById('efficiencyModal');
+
+        // Set canvas size to full screen
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Game state
+        let gameState = {
+            score: 0,
+            timeLeft: 60,
+            gameActive: true,
+            mouse: { x: 400, y: 300 },
+            shotsFired: 0,
+            hits: 0
+        };
+
+        // Efficiency = hits / shots fired - shown live, and explained on demand
+        // in a kid-level modal rather than assumed to be understood.
+        function updateStatsUI() {
+            const misses = gameState.shotsFired - gameState.hits;
+            const eff = gameState.shotsFired > 0 ? Math.round((gameState.hits / gameState.shotsFired) * 100) : 0;
+            hitsElement.textContent = `Hits: ${gameState.hits}`;
+            missesElement.textContent = `Misses: ${misses}`;
+            efficiencyElement.textContent = `${eff}%`;
+        }
+        function fireShot(kind, x, y){
+            if (kind === 'bomb') bombs.push(new Laser(x, y, 'white'));
+            else lasers.push(new Laser(x, y, kind));
+            gameState.shotsFired++;
+            updateStatsUI();
+        }
+
+        // Game objects
+        let player = { x: window.innerWidth / 2, y: window.innerHeight - 50, width: 36, height: 36 };
+        let ufos = [];
+        let lasers = [];
+        let bombs = [];
+        let explosions = [];
+        let particles = [];
+
+        // Initialize stars
+        function createStars() {
+            const starsContainer = document.querySelector('.stars');
+            for (let i = 0; i < 50; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 2 + 's';
+                starsContainer.appendChild(star);
+            }
+        }
+
+        // UFO class - Updated to a 16-bit design
+        class UFO {
+            constructor() {
+                // Dimensions of the UFO sprite in pixels (conceptual)
+                // These are the dimensions of the pixel art itself, not scaled by pixel.
+                this.width = 64;
+                this.height = 40;
+
+                // Initial position (off-screen, entering from left or right)
+                this.x = Math.random() < 0.5 ? -this.width : canvas.width;
+                this.y = Math.random() * (canvas.height - this.height - 50) + 25; // Keep within vertical bounds
+
+                // Determine UFO type and properties (speed, points, dome color)
+                const rand = Math.random();
+                if (rand < 0.5) {
+                    this.type = 'blue';
+                    this.speed = 2; // Slower speed for common UFOs
+                    this.points = 1;
+                    this.domeColor = '#3388FF';       // Medium blue
+                    this.domeHighlightColor = '#66B2FF'; // Light blue
+                    this.domeShadowColor = '#0044CC';   // Dark blue
+                } else if (rand < 0.8) {
+                    this.type = 'green';
+                    this.speed = 4; // Medium speed
+                    this.points = 2;
+                    this.domeColor = '#44CC44';       // Medium green
+                    this.domeHighlightColor = '#88FF88'; // Light green
+                    this.domeShadowColor = '#008800';   // Dark green
+                } else {
+                    this.type = 'red';
+                    this.speed = 6; // Faster speed for rare UFOs
+                    this.points = 3;
+                    this.domeColor = '#FF4444';       // Medium red
+                    this.domeHighlightColor = '#FF8888'; // Light red
+                    this.domeShadowColor = '#CC0000';   // Dark red
+                }
+
+                // Colors for the body and lights, consistent across all UFO types
+                this.bodyMainColor = '#A0A0A0';       // Light grey
+                this.bodyShadeColor = '#707070';      // Medium grey
+                this.bodyDarkShadeColor = '#404040';  // Dark grey (for underside)
+                this.outlineColor = '#000000';        // Black outline
+                this.lightColor = '#FFFF00';          // Yellow lights
+
+                // Direction of movement (1 for right, -1 for left)
+                this.directionX = this.x < 0 ? 1 : -1;
+                // Vertical bobbing motion
+                this.directionY = (Math.random() - 0.5) * 0.5;
+                this.bobOffset = Math.random() * Math.PI * 2; // Offset for sine wave to vary bobbing start
+            }
+
+            // Update UFO position
+            update() {
+                this.x += this.directionX * this.speed;
+                // Add vertical bobbing motion using sine wave
+                this.y += this.directionY * this.speed + Math.sin(Date.now() * 0.005 + this.bobOffset) * 0.5;
+
+                // Keep UFO in bounds vertically
+                if (this.y < 0) this.y = 0;
+                if (this.y > canvas.height - this.height) this.y = canvas.height - this.height;
+            }
+
+            // Draw UFO on the canvas
+            draw() {
+                ctx.save(); // Save current canvas state
+                ctx.translate(this.x, this.y); // Move canvas origin to UFO's position
+                ctx.imageSmoothingEnabled = false; // Disable image smoothing for crisp pixel art
+
+                const pixel = 1; // Each unit in drawing corresponds to 1 pixel of the sprite
+
+                // Helper function to draw a single pixel block
+                const drawPixelBlock = (x, y, w, h, color) => {
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x * pixel, y * pixel, w * pixel, h * pixel);
+                };
+
+                // --- Draw Main Body (Saucer) ---
+                // Top Outline of the saucer
+                drawPixelBlock(3, 15, 58, 1, this.outlineColor);
+                drawPixelBlock(4, 14, 56, 1, this.outlineColor);
+                drawPixelBlock(5, 13, 54, 1, this.outlineColor);
+                drawPixelBlock(6, 12, 52, 1, this.outlineColor);
+                drawPixelBlock(7, 11, 50, 1, this.outlineColor);
+                drawPixelBlock(8, 10, 48, 1, this.outlineColor);
+
+                // Main flat section of the saucer (light grey)
+                drawPixelBlock(8, 11, 48, 4, this.bodyMainColor);
+                drawPixelBlock(7, 12, 50, 1, this.bodyMainColor);
+                drawPixelBlock(6, 13, 52, 1, this.bodyMainColor);
+                drawPixelBlock(5, 14, 54, 1, this.bodyMainColor);
+                drawPixelBlock(4, 15, 56, 1, this.bodyMainColor);
+
+                // Mid-section shading/detail (medium grey)
+                drawPixelBlock(4, 16, 56, 1, this.bodyShadeColor);
+                drawPixelBlock(3, 17, 58, 1, this.bodyShadeColor);
+                drawPixelBlock(2, 18, 60, 1, this.bodyShadeColor);
+                drawPixelBlock(1, 19, 62, 1, this.bodyShadeColor);
+                drawPixelBlock(0, 20, 64, 1, this.bodyShadeColor);
+
+                // Bottom section / underside (dark grey)
+                drawPixelBlock(1, 21, 62, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(2, 22, 60, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(3, 23, 58, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(4, 24, 56, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(5, 25, 54, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(6, 26, 52, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(7, 27, 50, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(8, 28, 48, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(9, 29, 46, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(10, 30, 44, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(11, 31, 42, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(12, 32, 40, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(13, 33, 38, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(14, 34, 36, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(15, 35, 34, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(16, 36, 32, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(17, 37, 30, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(18, 38, 28, 1, this.bodyDarkShadeColor);
+                drawPixelBlock(19, 39, 26, 1, this.bodyDarkShadeColor);
+
+
+                // --- Draw Dome ---
+                // Outline
+                drawPixelBlock(18, 0, 28, 1, this.outlineColor);
+                drawPixelBlock(17, 1, 30, 1, this.outlineColor);
+                drawPixelBlock(16, 2, 32, 1, this.outlineColor);
+                drawPixelBlock(15, 3, 34, 1, this.outlineColor);
+                drawPixelBlock(14, 4, 36, 1, this.outlineColor);
+                drawPixelBlock(13, 5, 38, 1, this.outlineColor);
+                drawPixelBlock(12, 6, 40, 1, this.outlineColor);
+                drawPixelBlock(11, 7, 42, 1, this.outlineColor);
+                drawPixelBlock(10, 8, 44, 1, this.outlineColor);
+                drawPixelBlock(9, 9, 46, 1, this.outlineColor);
+
+                // Dome Fill (main color, based on UFO type)
+                drawPixelBlock(19, 1, 26, 7, this.domeColor);
+                drawPixelBlock(18, 2, 28, 6, this.domeColor);
+                drawPixelBlock(17, 3, 30, 5, this.domeColor);
+                drawPixelBlock(16, 4, 32, 4, this.domeColor);
+                drawPixelBlock(15, 5, 34, 3, this.domeColor);
+                drawPixelBlock(14, 6, 36, 2, this.domeColor);
+                drawPixelBlock(13, 7, 38, 1, this.domeColor);
+
+                // Dome Highlight (light color, based on UFO type)
+                drawPixelBlock(28, 2, 6, 2, this.domeHighlightColor);
+                drawPixelBlock(29, 3, 4, 1, this.domeHighlightColor);
+                drawPixelBlock(30, 4, 2, 1, this.domeHighlightColor);
+
+                // Dome Shadow (dark color, based on UFO type)
+                drawPixelBlock(19, 8, 26, 1, this.domeShadowColor);
+                drawPixelBlock(18, 9, 28, 1, this.domeShadowColor);
+                drawPixelBlock(17, 10, 30, 1, this.domeShadowColor);
+
+
+                // --- Draw Lights (Yellow) ---
+                // The reference image has 6 lights on the main body.
+                // Original animation logic: lights cycle through states
+                const lightState = Math.floor(Date.now() / 400) % 3;
+                const lightPositions = [
+                    { x: 12, y: 18 }, // Leftmost light
+                    { x: 19, y: 18 },
+                    { x: 26, y: 18 }, // Center-left
+                    { x: 33, y: 18 }, // Center-right
+                    { x: 40, y: 18 },
+                    { x: 47, y: 18 }  // Rightmost light
+                ];
+
+                lightPositions.forEach((pos, index) => {
+                    if (index % 3 === lightState) {
+                        drawPixelBlock(pos.x, pos.y, 4, 2, this.lightColor); // Active light
+                    } else {
+                        drawPixelBlock(pos.x, pos.y, 4, 2, '#444400'); // Dimmed light (darker yellow/brown)
+                    }
+                });
+
+                // --- Draw Beam effect below UFO ---
+                // Keeping the original beam logic, appears randomly
+                if (Math.random() < 0.05) { // Reduced frequency for less visual clutter
+                    ctx.fillStyle = 'rgba(255, 255, 0, 0.3)'; // Yellowish transparent beam
+                    const beamWidth = this.width * 0.6;
+                    const beamHeight = 20;
+                    ctx.fillRect((this.width - beamWidth) / 2, this.height, beamWidth, beamHeight);
+                }
+
+                ctx.restore(); // Restore canvas state
+            }
+
+            // Check if UFO is off-screen
+            isOffScreen() {
+                return this.x < -this.width || this.x > canvas.width + this.width;
+            }
+        }
+
+        // Laser class
+        class Laser {
+            constructor(x, y, type = 'blue') {
+                this.x = x;
+                this.y = y;
+                this.width = 4;
+                this.height = 15;
+                this.type = type;
+
+                if (type === 'blue') {
+                    this.speed = 6;
+                    this.color = '#00ccff';
+                } else if (type === 'white') {
+                    this.speed = 8;
+                    this.color = '#ffffff';
+                } else if (type === 'purple') {
+                    this.speed = 12;
+                    this.color = '#cc44ff';
+                }
+
+                // Lasers always travel straight up
+                this.directionX = 0;
+                this.directionY = -1;
+            }
+
+            update() {
+                this.y += this.directionY * this.speed;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // Laser beam
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                ctx.fillRect(-this.width/2, -this.height/2, this.width, this.height);
+
+                ctx.restore();
+            }
+
+            isOffScreen() {
+                return this.y < -this.height;
+            }
+        }
+
+        // Explosion class
+        class Explosion {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.particles = [];
+                this.duration = 30;
+                this.frame = 0;
+
+                // Create explosion particles
+                for (let i = 0; i < 8; i++) {
+                    this.particles.push({
+                        x: x,
+                        y: y,
+                        vx: (Math.random() - 0.5) * 8,
+                        vy: (Math.random() - 0.5) * 8,
+                        life: 20,
+                        color: `hsl(${Math.random() * 60 + 15}, 80%, 60%)`
+                    });
+                }
+            }
+
+            update() {
+                this.frame++;
+                this.particles.forEach(particle => {
+                    particle.x += particle.vx;
+                    particle.y += particle.vy;
+                    particle.life--;
+                    particle.vx *= 0.95;
+                    particle.vy *= 0.95;
+                });
+                this.particles = this.particles.filter(p => p.life > 0);
+            }
+
+            draw() {
+                this.particles.forEach(particle => {
+                    ctx.save();
+                    ctx.globalAlpha = particle.life / 20;
+                    ctx.fillStyle = particle.color;
+                    ctx.shadowBlur = 5;
+                    ctx.shadowColor = particle.color;
+                    ctx.beginPath();
+                    ctx.arc(particle.x, particle.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                });
+            }
+
+            isDead() {
+                return this.frame > this.duration;
+            }
+        }
+
+        // Draw player ship
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+
+            // Disable antialiasing for pixel-perfect rendering
+            ctx.imageSmoothingEnabled = false;
+
+            // Larger ship - scale up by 20%
+            const scale = 1.2;
+            ctx.scale(scale, scale);
+
+            // Ship body - main hull (dark gray)
+            ctx.fillStyle = '#4a4a4a';
+            ctx.fillRect(-12, -8, 24, 16);
+
+            // Ship nose (light gray)
+            ctx.fillStyle = '#8a8a8a';
+            ctx.fillRect(-8, -12, 16, 8);
+            ctx.fillRect(-4, -16, 8, 4);
+
+            // Ship wings (medium gray)
+            ctx.fillStyle = '#6a6a6a';
+            ctx.fillRect(-16, -4, 8, 12);
+            ctx.fillRect(8, -4, 8, 12);
+
+            // Cockpit (cyan details)
+            ctx.fillStyle = '#00ccaa';
+            ctx.fillRect(-6, -10, 12, 4);
+            ctx.fillRect(-2, -14, 4, 2);
+
+            // Wing details (cyan accents)
+            ctx.fillStyle = '#00ccaa';
+            ctx.fillRect(-14, -2, 4, 2);
+            ctx.fillRect(10, -2, 4, 2);
+
+            // Engine thrusters (dark openings)
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(-10, 6, 4, 4);
+            ctx.fillRect(6, 6, 4, 4);
+
+            // Engine flames (animated)
+            const flameOffset = Math.sin(Date.now() * 0.02) * 2;
+
+            // Left engine flame
+            ctx.fillStyle = '#ff4444';
+            ctx.fillRect(-10, 10, 4, 4 + flameOffset);
+            ctx.fillStyle = '#ff8844';
+            ctx.fillRect(-10, 12, 4, 2 + flameOffset);
+            ctx.fillStyle = '#ffaa44';
+            ctx.fillRect(-10, 14, 4, 2 + flameOffset);
+
+            // Right engine flame
+            ctx.fillStyle = '#ff4444';
+            ctx.fillRect(6, 10, 4, 4 + flameOffset);
+            ctx.fillStyle = '#ff8844';
+            ctx.fillRect(6, 12, 4, 2 + flameOffset);
+            ctx.fillStyle = '#ffaa44';
+            ctx.fillRect(6, 14, 4, 2 + flameOffset);
+
+            // Cockpit window (light blue)
+            ctx.fillStyle = '#aaccff';
+            ctx.fillRect(-4, -8, 8, 2);
+
+            // Wing tip lights (blinking)
+            const blinkState = Math.floor(Date.now() / 500) % 2;
+            if (blinkState) {
+                ctx.fillStyle = '#00ff00';
+                ctx.fillRect(-16, -2, 2, 2);
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(14, -2, 2, 2);
+            }
+
+            ctx.restore();
+        }
+
+        // Collision detection
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+
+        // Spawn UFOs
+        function spawnUFO() {
+            if (ufos.length < 10 && gameState.gameActive) {
+                ufos.push(new UFO());
+            }
+        }
+
+        // Game loop
+        function gameLoop() {
+            if (!gameState.gameActive) return;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Handle continuous shooting
+            handleContinuousShooting();
+
+            // Update player position
+            player.x = gameState.mouse.x;
+            player.y = gameState.mouse.y;
+
+            // Keep player within screen bounds
+            player.x = Math.max(18, Math.min(canvas.width - 18, player.x));
+            player.y = Math.max(18, Math.min(canvas.height - 18, player.y));
+
+            // Update UFOs
+            ufos.forEach((ufo, index) => {
+                ufo.update();
+                if (ufo.isOffScreen()) {
+                    ufos.splice(index, 1);
+                }
+            });
+
+            // Update lasers
+            lasers.forEach((laser, index) => {
+                laser.update();
+                if (laser.isOffScreen()) {
+                    lasers.splice(index, 1);
+                }
+            });
+
+            // Update bombs
+            bombs.forEach((bomb, index) => {
+                bomb.update();
+                if (bomb.isOffScreen()) {
+                    bombs.splice(index, 1);
+                }
+            });
+
+            // Update explosions
+            explosions.forEach((explosion, index) => {
+                explosion.update();
+                if (explosion.isDead()) {
+                    explosions.splice(index, 1);
+                }
+            });
+
+            // Check laser-UFO collisions
+            lasers.forEach((laser, laserIndex) => {
+                ufos.forEach((ufo, ufoIndex) => {
+                    if (checkCollision(laser, ufo)) {
+                        explosions.push(new Explosion(ufo.x + ufo.width/2, ufo.y + ufo.height/2));
+                        ufos.splice(ufoIndex, 1);
+                        lasers.splice(laserIndex, 1);
+                        gameState.score += ufo.points;
+                        gameState.hits++;
+                        scoreElement.textContent = `Score: ${gameState.score}`;
+                        updateStatsUI();
+                    }
+                });
+            });
+
+            // Check bomb-UFO collisions
+            bombs.forEach((bomb, bombIndex) => {
+                ufos.forEach((ufo, ufoIndex) => {
+                    if (checkCollision(bomb, ufo)) {
+                        explosions.push(new Explosion(ufo.x + ufo.width/2, ufo.y + ufo.height/2));
+                        ufos.splice(ufoIndex, 1);
+                        bombs.splice(bombIndex, 1);
+                        gameState.score += ufo.points;
+                        gameState.hits++;
+                        scoreElement.textContent = `Score: ${gameState.score}`;
+                        updateStatsUI();
+                    }
+                });
+            });
+
+            // Draw everything
+            ufos.forEach(ufo => ufo.draw());
+            lasers.forEach(laser => laser.draw());
+            bombs.forEach(bomb => bomb.draw());
+            explosions.forEach(explosion => explosion.draw());
+            drawPlayer();
+
+            // Spawn new UFOs
+            if (Math.random() < 0.02) {
+                spawnUFO();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Timer
+        function updateTimer() {
+            if (!gameState.gameActive) return;
+
+            gameState.timeLeft--;
+            timerElement.textContent = `Time: ${gameState.timeLeft}s`;
+
+            if (gameState.timeLeft <= 0) {
+                endGame();
+            } else {
+                setTimeout(updateTimer, 1000);
+            }
+        }
+
+        // End game
+        function endGame() {
+            gameState.gameActive = false;
+            finalScoreElement.textContent = gameState.score;
+            const misses = gameState.shotsFired - gameState.hits;
+            const eff = gameState.shotsFired > 0 ? Math.round((gameState.hits / gameState.shotsFired) * 100) : 0;
+            document.getElementById('finalHits').textContent = gameState.hits;
+            document.getElementById('finalMisses').textContent = misses;
+            document.getElementById('finalEfficiency').textContent = eff + '%';
+            gameOverElement.style.display = 'block';
+        }
+
+        // Start new game
+        function startGame() {
+            gameState = {
+                score: 0,
+                timeLeft: 60,
+                gameActive: true,
+                mouse: { x: canvas.width / 2, y: canvas.height - 50 },
+                shotsFired: 0,
+                hits: 0
+            };
+
+            player = { x: canvas.width / 2, y: canvas.height - 50, width: 36, height: 36 };
+            ufos = [];
+            lasers = [];
+            bombs = [];
+            explosions = [];
+            particles = [];
+            mouseDown = false;
+            lastShotTime = 0;
+
+            scoreElement.textContent = `Score: ${gameState.score}`;
+            timerElement.textContent = `Time: ${gameState.timeLeft}s`;
+            updateStatsUI();
+            gameOverElement.style.display = 'none';
+
+            updateTimer();
+            gameLoop();
+        }
+
+        // Event listeners
+        let mouseDown = false;
+        let lastShotTime = 0;
+        const shotDelay = 150; // milliseconds between shots
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            gameState.mouse.x = e.clientX - rect.left;
+            gameState.mouse.y = e.clientY - rect.top;
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (!gameState.gameActive) return;
+
+            mouseDown = true;
+            const currentTime = Date.now();
+
+            if (currentTime - lastShotTime > shotDelay) {
+                if (e.button === 0) { // Left click - blue laser
+                    fireShot('blue', player.x, player.y);
+                } else if (e.button === 2) { // Right click - white bolt
+                    fireShot('bomb', player.x, player.y);
+                }
+                lastShotTime = currentTime;
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            mouseDown = false;
+        });
+
+        // Keyboard controls for different laser types
+        document.addEventListener('keydown', (e) => {
+            if (!gameState.gameActive) return;
+
+            const currentTime = Date.now();
+            if (currentTime - lastShotTime > shotDelay) {
+                if (e.key === '1') {
+                    fireShot('blue', player.x, player.y);
+                    lastShotTime = currentTime;
+                } else if (e.key === '2') {
+                    fireShot('white', player.x, player.y);
+                    lastShotTime = currentTime;
+                } else if (e.key === '3') {
+                    fireShot('purple', player.x, player.y);
+                    lastShotTime = currentTime;
+                }
+            }
+        });
+
+        // Continuous shooting while mouse is held down
+        function handleContinuousShooting() {
+            if (mouseDown && gameState.gameActive) {
+                const currentTime = Date.now();
+                if (currentTime - lastShotTime > shotDelay) {
+                    // Default to blue laser for continuous shooting
+                    fireShot('blue', player.x, player.y);
+                    lastShotTime = currentTime;
+                }
+            }
+        }
+
+
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        playAgainButton.addEventListener('click', startGame);
+
+        document.getElementById('efficiencyBtn').addEventListener('click', () => {
+            efficiencyModal.style.display = 'block';
+        });
+        document.getElementById('closeEfficiency').addEventListener('click', () => {
+            efficiencyModal.style.display = 'none';
+        });
+
+        // Initialize game
+        createStars();
+        startGame();
+    </script>
+</body>
+</html>

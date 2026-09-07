@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air Hockey Arcade</title>
+    <!-- Load Poppins font -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;800&display=swap" rel="stylesheet">
+    <!-- Load Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the game board and overrides */
+        body {
+            font-family: 'Poppins', sans-serif; /* Changed font to Poppins */
+            transition: background 0.5s ease-in-out;
+            height: 100vh; /* Set height to 100% of viewport */
+            overflow-y: auto; /* Allow scrolling only if content truly exceeds */
+        }
+        /* Gradient Background */
+        .game-bg {
+            background: linear-gradient(145deg, #1B2A32, #131F26);
+        }
+        /* Canvas Styling (The table) */
+        #gameCanvas {
+            background-color: #22343D; /* Dark Teal Table Top */
+            border: 8px solid #17B3CE; /* Vibrant Green Border */
+            box-shadow:
+                0 0 30px rgba(23, 179, 206, 0.5), /* Outer Glow */
+                inset 0 0 20px rgba(0, 0, 0, 0.8); /* Inner shadow for depth */
+            /* Ensure the canvas maintains aspect ratio via JS, but scales visually */
+            width: 100%;
+            height: auto;
+        }
+        /* Hide the default cursor over the canvas */
+        #gameCanvas {
+            cursor: none;
+        }
+
+        /* #game-container is transform-scaled by fitToViewport() in JS;
+           #game-fit is given the resulting scaled width/height in JS too,
+           so its layout box matches what's actually visible and the
+           body's flex centering has no phantom oversized space to center
+           around. transform-origin stays top-left to match that math. */
+        #game-fit { display: inline-block; }
+        #game-container { transform-origin: top left; }
+
+        /* A little glow on the panel itself, echoing the table's own
+           neon border instead of a flat drop shadow. */
+        .game-glow {
+            box-shadow:
+                0 0 0 1px rgba(59, 130, 246, 0.25),
+                0 25px 50px -12px rgba(0, 0, 0, 0.6),
+                0 0 40px rgba(23, 179, 206, 0.15);
+        }
+
+        .game-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: linear-gradient(90deg, #60a5fa, #f87171);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .game-title__puck {
+            display: inline-block;
+            width: 0.8em;
+            height: 0.8em;
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #ffffff, #cbd5e1 45%, #64748b 100%);
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+        }
+
+        /* Difficulty buttons carry a one-line note now, not just a label -
+           the flex column stacks them without needing extra markup per
+           button beyond the two spans already in the HTML. */
+        .difficulty-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.15rem;
+            min-width: 11rem;
+        }
+        .difficulty-button__title { font-size: 1.15rem; letter-spacing: 0.02em; }
+        .difficulty-button__note { font-size: 0.72rem; font-weight: 600; opacity: 0.85; text-transform: none; }
+
+        /* Tally row: a static label plus a horizontally-scrollable strip of
+           puck chips, so a long match's worth of scores never breaks the
+           board's fixed height (which fitToViewport()'s math depends on). */
+        .tally-row { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+        .tally-row__label { flex: none; }
+        .tally-row__chips {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding-bottom: 2px;
+        }
+        .tally-dash { opacity: 0.6; }
+        .puck-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: none;
+            width: 1.6em;
+            height: 1.6em;
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #ffffff, #dbeafe 55%, #93c5fd 100%);
+            color: #1B2A32;
+            font-size: 0.85em;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4), 0 2px 4px rgba(0, 0, 0, 0.35);
+        }
+        .tally-op { opacity: 0.7; flex: none; }
+        .tally-total { flex: none; color: #fde68a; }
+
+    </style>
+    <link rel="stylesheet" href="game-skin.css">
+</head>
+<!-- h-screen ensures the body takes full viewport height. my-auto centers the container vertically. -->
+<body class="ccs-game ccs-hockey game-bg flex flex-col justify-start items-center h-screen overflow-y-auto p-4">
+
+    <!-- #game-fit is sized in JS to match #game-container's scaled footprint,
+         so the transform-scale below (fitToViewport()) shrinks the whole
+         game uniformly to whichever of width/height is tighter, without
+         throwing off the body's flex centering or leaving a phantom
+         scrollbar behind. -->
+    <div id="game-fit" class="my-auto">
+    <!-- Container is set to 100% viewport width, capped at max-w-6xl for aesthetics on huge screens -->
+    <div id="game-container" class="w-full max-w-6xl p-6 bg-gray-800 rounded-xl shadow-2xl border-t-4 border-blue-500 game-glow">
+        <h1 class="game-title text-4xl font-extrabold text-center mb-6 tracking-wide">
+            <span class="game-title__puck" aria-hidden="true"></span> Air Hockey Arcade
+        </h1>
+
+        <!-- Difficulty Selection Screen -->
+        <div id="difficulty-selection" class="flex flex-col items-center justify-center p-8 bg-gray-700 rounded-lg shadow-xl">
+            <h2 class="text-2xl font-bold text-yellow-400 mb-6">Select Difficulty</h2>
+            <div class="flex flex-col sm:flex-row gap-6">
+                <button data-difficulty="easy" class="difficulty-button difficulty-button--easy px-8 py-3 rounded-full text-white font-semibold transition transform hover:scale-105 shadow-lg bg-green-500 hover:bg-green-600">
+                    <span class="difficulty-button__title">Easy</span>
+                    <span class="difficulty-button__note">Chill pace, gentle AI</span>
+                </button>
+                <button data-difficulty="medium" class="difficulty-button difficulty-button--medium px-8 py-3 rounded-full text-white font-semibold transition transform hover:scale-105 shadow-lg bg-yellow-500 hover:bg-yellow-600">
+                    <span class="difficulty-button__title">Medium</span>
+                    <span class="difficulty-button__note">Balanced, a real match</span>
+                </button>
+                <button data-difficulty="hard" class="difficulty-button difficulty-button--hard px-8 py-3 rounded-full text-white font-semibold transition transform hover:scale-105 shadow-lg bg-red-500 hover:bg-red-600">
+                    <span class="difficulty-button__title">Hard</span>
+                    <span class="difficulty-button__note">Fast, sharp, unforgiving</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="hidden flex flex-col items-center">
+
+            <!-- Reset Match Button -->
+            <button id="reserve-button" class="px-6 py-2 mb-4 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-full shadow-lg transition duration-200 uppercase tracking-wider">
+                Reset Match
+            </button>
+
+            <!-- Scoreboard -->
+            <div id="scoreboard" class="flex justify-between w-full mb-2 font-mono text-3xl font-bold text-white bg-gray-900/50 p-3 rounded-lg shadow-inner border border-gray-700">
+                <div class="text-blue-400">PLAYER: <span id="player-score">0</span></div>
+                <div class="text-red-400">AI: <span id="ai-score">0</span></div>
+            </div>
+
+            <!-- Running addition tally - every scored puck keeps its own
+                 chip (styled like the puck it came from) instead of
+                 collapsing into plain "2+4=6" text, so the running math is
+                 something a kid can actually read at a glance. -->
+            <div id="tally-board" class="flex justify-between w-full mb-4 font-mono text-sm sm:text-base font-bold bg-gray-900/30 p-2 rounded-lg border border-gray-700">
+                <div class="tally-row text-blue-300" id="player-tally">
+                    <span class="tally-row__label">PLAYER</span>
+                    <span class="tally-row__chips"><span class="tally-dash">&mdash;</span></span>
+                </div>
+                <div class="tally-row text-red-300" id="ai-tally">
+                    <span class="tally-row__label">AI</span>
+                    <span class="tally-row__chips"><span class="tally-dash">&mdash;</span></span>
+                </div>
+            </div>
+
+            <!-- Canvas Container -->
+            <!-- Fixed internal resolution: 1000x500 for consistent physics -
+                 wider than square gives both paddles more lateral room to
+                 maneuver than a tighter court would. -->
+            <canvas id="gameCanvas" width="1000" height="500" class="rounded-xl"></canvas>
+
+            <!-- Message Box (Used for 'Click to serve' prompt) -->
+            <div id="message-box" class="mt-4 text-center">
+                <p id="game-message" class="text-xl font-semibold text-gray-200"></p>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="game-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex justify-center items-center z-50">
+        <div class="bg-gray-700 p-10 rounded-xl shadow-2xl text-center max-w-sm w-11/12 transform transition-all duration-300 scale-100 border-t-8 border-yellow-400">
+            <h2 id="modal-title" class="text-5xl font-extrabold mb-4 uppercase text-yellow-400 leading-tight"></h2>
+            <p id="modal-message" class="text-xl text-gray-100 mb-8">Play another round?</p>
+            <button id="modal-restart-button" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full shadow-lg transition transform hover:scale-105 duration-200 uppercase tracking-wider">
+                New Game
+            </button>
+        </div>
+    </div>
+
+
+    <script>
+        // --- Game Setup and Constants ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // UI elements
+        const difficultySelectionScreen = document.getElementById('difficulty-selection');
+        const gameScreen = document.getElementById('game-screen');
+        const difficultyButtons = document.querySelectorAll('.difficulty-button');
+        const reserveButton = document.getElementById('reserve-button');
+        const playerScoreDisplay = document.getElementById('player-score');
+        const aiScoreDisplay = document.getElementById('ai-score');
+        const gameMessage = document.getElementById('game-message');
+        const scoreboard = document.getElementById('scoreboard');
+
+        // Modal Elements
+        const gameModal = document.getElementById('game-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalRestartButton = document.getElementById('modal-restart-button');
+        const modalMessage = document.getElementById('modal-message');
+
+
+        // Fixed internal game coordinates for physics
+        const GAME_WIDTH = canvas.width;
+        const GAME_HEIGHT = canvas.height;
+        const GOAL_WIDTH = 10;
+        const GOAL_HEIGHT = 150;
+        const HALF_COURT = GAME_WIDTH / 2;
+        const PUCK_RADIUS = 18;
+        const PADDLE_RADIUS = 30;
+        const PADDLE_SPEED_MULTIPLIER = 1.1;
+        const PUCK_FRICTION = 0.995;
+        const MAX_PUCK_SPEED = 18;
+        const WINNING_SCORE = 25;
+        const PUCK_COUNT = 5;
+        // How often (in frames) each puck's net travel is sampled to catch
+        // one pinned between a wall and a paddle - it keeps bouncing at
+        // real speed, so instantaneous speed alone can't tell that apart
+        // from a genuine attack.
+        const STUCK_CHECK_FRAMES = 40;
+
+        /** Lightens (positive percent) or darkens (negative) a "#rrggbb"
+            color - used to build the embossed gradient/rim on the paddles
+            without hand-authoring a second color per paddle. */
+        function shadeColor(hex, percent) {
+            hex = hex.replace('#', '');
+            if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+            const num = parseInt(hex, 16);
+            const amount = Math.round(255 * (percent / 100));
+            const r = Math.max(0, Math.min(255, (num >> 16) + amount));
+            const g = Math.max(0, Math.min(255, ((num >> 8) & 0xFF) + amount));
+            const b = Math.max(0, Math.min(255, (num & 0xFF) + amount));
+            return 'rgb(' + r + ', ' + g + ', ' + b + ')';
+        }
+
+        // AI Difficulty Mapping
+        const aiSpeedMap = {
+            easy: { maxSpeed: 4, accuracy: 0.2 },
+            medium: { maxSpeed: 7, accuracy: 0.5 },
+            hard: { maxSpeed: 10, accuracy: 0.8 }
+        };
+
+        let currentDifficulty = 'medium';
+        let aiConfig = aiSpeedMap[currentDifficulty];
+        let playerPaddle, aiPaddle, pucks = [];
+        let playerScore = 0, aiScore = 0;
+        let gameLoopRunning = false;
+        let gameActive = false;
+        let lastTime = 0;
+
+        // Running addition-chain tallies, one per side, each scored value
+        // kept as its own puck-styled chip - "2 + 4 = 6" as pucks a kid can
+        // actually read, not a run-on string of plain digits.
+        const playerTallyDisplay = document.getElementById('player-tally').querySelector('.tally-row__chips');
+        const aiTallyDisplay = document.getElementById('ai-tally').querySelector('.tally-row__chips');
+        let playerTally = { values: [], total: 0 };
+        let aiTally = { values: [], total: 0 };
+        function appendTally(tally, value) {
+            tally.values.push(value);
+            tally.total += value;
+        }
+        function renderTallyChips(tally) {
+            if (!tally.values.length) return '<span class="tally-dash">&mdash;</span>';
+            return tally.values.map((v, i) =>
+                (i > 0 ? '<span class="tally-op">+</span>' : '') + '<span class="puck-chip">' + v + '</span>'
+            ).join('') + '<span class="tally-op">=</span><span class="tally-total">' + tally.total + '</span>';
+        }
+
+        // Input tracking
+        let mouseX = HALF_COURT / 2;
+        let mouseY = GAME_HEIGHT / 2;
+
+        // --- Game Objects ---
+        class HockeyObject {
+            constructor(x, y, radius, color) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.color = color;
+                this.velocityX = 0;
+                this.velocityY = 0;
+                this.mass = radius;
+            }
+
+            draw() {
+                ctx.save();
+                // Paddles (no .value) get an embossed, raised-disc look;
+                // numbered pucks keep the flat glossy fill so the number
+                // stays easy to read against it.
+                if (this.value === undefined) {
+                    const lightX = this.x - this.radius * 0.35;
+                    const lightY = this.y - this.radius * 0.35;
+                    const gradient = ctx.createRadialGradient(
+                        lightX, lightY, this.radius * 0.05,
+                        this.x, this.y, this.radius
+                    );
+                    gradient.addColorStop(0, shadeColor(this.color, 45));
+                    gradient.addColorStop(0.55, this.color);
+                    gradient.addColorStop(1, shadeColor(this.color, -35));
+
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = gradient;
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+                    ctx.shadowBlur = 12;
+                    ctx.shadowOffsetY = 3;
+                    ctx.fill();
+
+                    // A defined darker rim reads as a raised edge instead of
+                    // the disc fading straight into the felt.
+                    ctx.shadowColor = 'transparent';
+                    ctx.lineWidth = Math.max(2, this.radius * 0.06);
+                    ctx.strokeStyle = shadeColor(this.color, -45);
+                    ctx.stroke();
+
+                    // The actual "shine" that sells the embossed look.
+                    ctx.beginPath();
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+                    ctx.ellipse(lightX, lightY, this.radius * 0.32, this.radius * 0.2, -Math.PI / 4, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.shadowColor = this.color;
+                    ctx.shadowBlur = 10;
+                    ctx.fill();
+
+                    // Add highlight/reflection
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                    ctx.arc(this.x - this.radius / 3, this.y - this.radius / 3, this.radius / 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+
+                // A numbered puck shows its value - that's what turns a
+                // goal into a math fact instead of a plain point.
+                if (this.value !== undefined) {
+                    ctx.save();
+                    ctx.fillStyle = '#1B2A32';
+                    ctx.font = 'bold ' + Math.round(this.radius * 1.1) + 'px Poppins, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(String(this.value), this.x, this.y + 1);
+                    ctx.restore();
+                }
+            }
+        }
+
+        // --- Core Functions ---
+
+        function initGame() {
+            // Hide modal if visible
+            gameModal.classList.add('hidden');
+
+            playerPaddle = new HockeyObject(
+                (HALF_COURT - PADDLE_RADIUS) / 2,
+                GAME_HEIGHT / 2,
+                PADDLE_RADIUS,
+                '#3b82f6'
+            );
+            aiPaddle = new HockeyObject(
+                GAME_WIDTH - (HALF_COURT - PADDLE_RADIUS) / 2,
+                GAME_HEIGHT / 2,
+                PADDLE_RADIUS,
+                '#ef4444'
+            );
+
+            pucks = [];
+            for (let i = 0; i < PUCK_COUNT; i++) pucks.push(spawnPuck());
+
+            playerScore = 0;
+            aiScore = 0;
+            playerTally = { values: [], total: 0 };
+            aiTally = { values: [], total: 0 };
+            playerScoreDisplay.textContent = playerScore;
+            aiScoreDisplay.textContent = aiScore;
+            playerTallyDisplay.innerHTML = renderTallyChips(playerTally);
+            aiTallyDisplay.innerHTML = renderTallyChips(aiTally);
+            gameMessage.textContent = "First to " + WINNING_SCORE + " points!";
+            gameActive = true;
+        }
+
+        /** A fresh numbered puck, already moving in a random direction from
+            just off centre - five of these stay in play at once instead of
+            one puck served back and forth. */
+        function spawnPuck() {
+            const p = new HockeyObject(
+                GAME_WIDTH / 2 + (Math.random() - 0.5) * 120,
+                GAME_HEIGHT / 2 + (Math.random() - 0.5) * 200,
+                PUCK_RADIUS,
+                '#ffffff'
+            );
+            p.mass = 5;
+            p.value = 1 + Math.floor(Math.random() * 9);
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 4 + Math.random() * 2;
+            p.velocityX = Math.cos(angle) * speed;
+            p.velocityY = Math.sin(angle) * speed;
+            return p;
+        }
+
+        function handleDifficultySelection(event) {
+            // closest(), not classList.contains(event.target) - the button
+            // now wraps a title/note pair of child spans, and a click on
+            // either of those would otherwise never match the button itself.
+            const button = event.target.closest('.difficulty-button');
+            if (button) {
+                currentDifficulty = button.dataset.difficulty;
+                aiConfig = aiSpeedMap[currentDifficulty];
+
+                difficultySelectionScreen.classList.add('hidden');
+                gameScreen.classList.remove('hidden');
+
+                // Start game loop
+                initGame();
+                if (!gameLoopRunning) {
+                    requestAnimationFrame(gameLoop);
+                    gameLoopRunning = true;
+                }
+                fitToViewport();
+            }
+        }
+
+        function paddleUpdate(paddle, targetX, targetY) {
+            // Apply simple interpolation (smoother movement)
+            const dx = targetX - paddle.x;
+            const dy = targetY - paddle.y;
+
+            // Move based on distance and speed multiplier
+            paddle.velocityX = dx * PADDLE_SPEED_MULTIPLIER;
+            paddle.velocityY = dy * PADDLE_SPEED_MULTIPLIER;
+
+            paddle.x += paddle.velocityX;
+            paddle.y += paddle.velocityY;
+
+            // Boundary checks (Player is always clamped to the left half)
+            const minX = (paddle === playerPaddle) ? PADDLE_RADIUS : HALF_COURT + PADDLE_RADIUS;
+            const maxX = (paddle === playerPaddle) ? HALF_COURT - PADDLE_RADIUS : GAME_WIDTH - PADDLE_RADIUS;
+
+            paddle.x = Math.max(minX, Math.min(maxX, paddle.x));
+            paddle.y = Math.max(PADDLE_RADIUS, Math.min(GAME_HEIGHT - PADDLE_RADIUS, paddle.y));
+        }
+
+        function aiLogic() {
+            if (!pucks.length) return;
+            // With five pucks moving at once, the AI tracks whichever one
+            // is the biggest active threat right now - furthest into its
+            // own half, weighted toward ones heading further in. A puck
+            // that has come to rest (friction stopped it, often in a
+            // corner) is never picked as the threat, even if its raw x
+            // position is the largest - otherwise the AI parks next to a
+            // dead puck forever and ignores whatever else is in play.
+            const REST_SPEED = 0.3;
+            let puck = null, bestThreat = -Infinity, anyMoving = false;
+            pucks.forEach(p => {
+                const speed = Math.sqrt(p.velocityX * p.velocityX + p.velocityY * p.velocityY);
+                if (speed > REST_SPEED) anyMoving = true;
+                const threat = speed > REST_SPEED
+                    ? p.x + (p.velocityX > 0 ? p.velocityX * 10 : 0)
+                    : -Infinity;
+                if (threat > bestThreat) { bestThreat = threat; puck = p; }
+            });
+
+            const OFFENSIVE_LIMIT_X = HALF_COURT - 50;
+            let targetX, targetY;
+
+            if (!anyMoving || !puck) {
+                // Nothing on the board is worth chasing - drift back to a
+                // ready position at mid-court instead of staying wherever
+                // the last real threat happened to leave it. This is what
+                // frees the AI from a corner once play moves on.
+                targetX = HALF_COURT + (GAME_WIDTH - HALF_COURT) / 2;
+                targetY = GAME_HEIGHT / 2;
+            } else if (puck.x >= OFFENSIVE_LIMIT_X || puck.velocityX < -1) {
+                // --- DEFENSIVE STRATEGY ---
+                const errorFactor = (1 - aiConfig.accuracy) * 100;
+                const trackingError = (Math.random() - 0.5) * errorFactor;
+                targetX = GAME_WIDTH - PADDLE_RADIUS - 30;
+                targetY = puck.y + trackingError;
+            } else {
+                // --- OFFENSIVE STRATEGY ---
+                targetX = puck.x + PADDLE_RADIUS + 5;
+                targetY = GAME_HEIGHT / 2; // Aim for center goal
+            }
+
+            // Simple speed-limited movement towards targetX/targetY
+            const dx = targetX - aiPaddle.x;
+            const dy = targetY - aiPaddle.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 1) {
+                const angle = Math.atan2(dy, dx);
+                const offense = puck && puck.x < OFFENSIVE_LIMIT_X && puck.velocityX > -1 && anyMoving;
+                const speed = Math.min(dist * 0.2, offense ? aiConfig.maxSpeed * 1.5 : aiConfig.maxSpeed);
+                aiPaddle.x += Math.cos(angle) * speed;
+                aiPaddle.y += Math.sin(angle) * speed;
+            }
+
+            // Clamp AI paddle boundaries (right side)
+            aiPaddle.x = Math.max(HALF_COURT + PADDLE_RADIUS, Math.min(GAME_WIDTH - PADDLE_RADIUS, aiPaddle.x));
+            aiPaddle.y = Math.max(PADDLE_RADIUS, Math.min(GAME_HEIGHT - PADDLE_RADIUS, aiPaddle.y));
+        }
+
+        /** Returns 'ai', 'player', or null for whichever goal this puck
+            just scored in, so the caller can retire it, credit its value,
+            and grow the running addition chain. */
+        function puckUpdate(puck) {
+            puck.x += puck.velocityX;
+            puck.y += puck.velocityY;
+
+            // Apply friction
+            puck.velocityX *= PUCK_FRICTION;
+            puck.velocityY *= PUCK_FRICTION;
+
+            // Corner-trap check: every STUCK_CHECK_FRAMES, compare current
+            // position against the last checkpoint. A puck pinned between a
+            // wall and a paddle bounces at real speed but covers almost no
+            // net ground, which is exactly what this catches (aiLogic()'s
+            // speed-only "is anything moving" check can't tell the two
+            // apart, which is why the AI used to camp next to one forever).
+            // Repositioning it - not just nudging its velocity - matters:
+            // a velocity-only fix can get immediately overwritten by the
+            // very next paddleCollision() call this same frame if the puck
+            // is still overlapping the paddle.
+            if (puck.stuckCheckX === undefined) {
+                puck.stuckCheckX = puck.x;
+                puck.stuckCheckY = puck.y;
+                puck.stuckFrames = 0;
+            }
+            puck.stuckFrames++;
+            if (puck.stuckFrames >= STUCK_CHECK_FRAMES) {
+                const netDist = Math.hypot(puck.x - puck.stuckCheckX, puck.y - puck.stuckCheckY);
+                if (netDist < puck.radius * 3) {
+                    puck.x = GAME_WIDTH / 2 + (Math.random() - 0.5) * 120;
+                    puck.y = GAME_HEIGHT / 2 + (Math.random() - 0.5) * 200;
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 4 + Math.random() * 2;
+                    puck.velocityX = Math.cos(angle) * speed;
+                    puck.velocityY = Math.sin(angle) * speed;
+                }
+                puck.stuckCheckX = puck.x;
+                puck.stuckCheckY = puck.y;
+                puck.stuckFrames = 0;
+            }
+
+            // Wall collision (Top/Bottom)
+            if (puck.y - PUCK_RADIUS < 0) {
+                puck.y = PUCK_RADIUS;
+                puck.velocityY *= -1;
+            } else if (puck.y + PUCK_RADIUS > GAME_HEIGHT) {
+                puck.y = GAME_HEIGHT - PUCK_RADIUS;
+                puck.velocityY *= -1;
+            }
+
+            // Goal detection (Left/Right)
+            if (puck.x < PUCK_RADIUS || puck.x > GAME_WIDTH - PUCK_RADIUS) {
+
+                const isGoalArea = puck.y > (GAME_HEIGHT / 2 - GOAL_HEIGHT / 2) &&
+                                   puck.y < (GAME_HEIGHT / 2 + GOAL_HEIGHT / 2);
+
+                if (isGoalArea) {
+                    if (puck.x < PUCK_RADIUS) return 'ai';
+                    if (puck.x > GAME_WIDTH - PUCK_RADIUS) return 'player';
+                } else {
+                    // Rebound off the wall outside the goal area
+                    if (puck.x < PUCK_RADIUS) {
+                        puck.x = PUCK_RADIUS;
+                    } else {
+                        puck.x = GAME_WIDTH - PUCK_RADIUS;
+                    }
+                    puck.velocityX *= -1;
+                }
+            }
+            return null;
+        }
+
+        function paddleCollision(puck, paddle) {
+            const dx = puck.x - paddle.x;
+            const dy = puck.y - paddle.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const minDistance = puck.radius + paddle.radius;
+
+            if (distance < minDistance) {
+                // Collision occurred
+
+                // 1. Move puck out of overlap (prevents sticking)
+                const angle = Math.atan2(dy, dx);
+                const overlap = minDistance - distance;
+                puck.x += overlap * Math.cos(angle);
+                puck.y += overlap * Math.sin(angle);
+
+                // 2. Simple impulse based collision
+                let newSpeed = Math.sqrt(paddle.velocityX * paddle.velocityX + paddle.velocityY * paddle.velocityY) * 0.5 + 8;
+                newSpeed = Math.min(newSpeed, MAX_PUCK_SPEED);
+
+                puck.velocityX = newSpeed * Math.cos(angle) * 1.5;
+                puck.velocityY = newSpeed * Math.sin(angle) * 1.5;
+            }
+        }
+
+        /** Equal-mass elastic collision between two pucks (every puck is
+            the same radius/mass) - without this they were passing straight
+            through each other despite the field having five in play. */
+        function puckCollision(a, b) {
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const minDistance = a.radius + b.radius;
+            if (distance <= 0 || distance >= minDistance) return;
+
+            const nx = dx / distance;
+            const ny = dy / distance;
+
+            // Separate them evenly so they don't sink into each other.
+            const overlap = (minDistance - distance) / 2;
+            a.x -= overlap * nx;
+            a.y -= overlap * ny;
+            b.x += overlap * nx;
+            b.y += overlap * ny;
+
+            // Swap the velocity component along the collision normal;
+            // equal masses mean a full exchange, no mass-weighting needed.
+            const relVel = (b.velocityX - a.velocityX) * nx + (b.velocityY - a.velocityY) * ny;
+            if (relVel >= 0) return; // already moving apart
+            a.velocityX += relVel * nx;
+            a.velocityY += relVel * ny;
+            b.velocityX -= relVel * nx;
+            b.velocityY -= relVel * ny;
+        }
+
+        function checkWinCondition() {
+            if (playerScore >= WINNING_SCORE) {
+                endGame("YOU WIN!");
+            } else if (aiScore >= WINNING_SCORE) {
+                endGame("Sorry, try again");
+            }
+        }
+
+        function endGame(message) {
+            gameActive = false;
+
+            // Populate modal content
+            let titleText = message;
+            let titleColor, messageText;
+
+            if (message.includes("WIN")) {
+                titleColor = "text-green-400";
+                messageText = "Congratulations! You aced this match. Let's see if you can do it again!";
+            } else { // Sorry, try again
+                titleColor = "text-red-400";
+                messageText = "The AI was tough this time. Don't give up—ready for a rematch?";
+            }
+
+            modalTitle.textContent = titleText;
+            modalTitle.className = `text-5xl font-extrabold mb-4 uppercase ${titleColor} leading-tight`;
+            modalMessage.textContent = messageText;
+
+            // Show the modal
+            gameModal.classList.remove('hidden');
+
+            // Clear the small message box text
+            gameMessage.textContent = "";
+        }
+
+        function drawCourt() {
+            // Center Line
+            ctx.setLineDash([10, 10]);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(HALF_COURT, 0);
+            ctx.lineTo(HALF_COURT, GAME_HEIGHT);
+            ctx.stroke();
+
+            // Center Circle
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.arc(HALF_COURT, GAME_HEIGHT / 2, 60, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Goals (Semi-circles at the ends)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.fillRect(0, GAME_HEIGHT / 2 - GOAL_HEIGHT / 2, GOAL_WIDTH, GOAL_HEIGHT);
+            ctx.fillRect(GAME_WIDTH - GOAL_WIDTH, GAME_HEIGHT / 2 - GOAL_HEIGHT / 2, GOAL_WIDTH, GOAL_HEIGHT);
+
+            // Goal Posts (Lines)
+            ctx.strokeStyle = '#F5B921';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            // Left Goal Posts
+            ctx.moveTo(GOAL_WIDTH, GAME_HEIGHT / 2 - GOAL_HEIGHT / 2);
+            ctx.lineTo(GOAL_WIDTH, GAME_HEIGHT / 2 + GOAL_HEIGHT / 2);
+            // Right Goal Posts
+            ctx.moveTo(GAME_WIDTH - GOAL_WIDTH, GAME_HEIGHT / 2 - GOAL_HEIGHT / 2);
+            ctx.lineTo(GAME_WIDTH - GOAL_WIDTH, GAME_HEIGHT / 2 + GOAL_HEIGHT / 2);
+            ctx.stroke();
+        }
+
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            // Clear the canvas
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            // Draw the court elements
+            drawCourt();
+
+            if (gameActive) {
+                // Update player paddle (tracks mouse)
+                const playerTargetX = Math.min(mouseX, HALF_COURT - playerPaddle.radius);
+                paddleUpdate(playerPaddle, playerTargetX, mouseY);
+
+                // AI Logic & Update
+                aiLogic();
+
+                // Puck movement and collision - each puck is scored and
+                // replaced independently, so five stay in play throughout.
+                for (let i = pucks.length - 1; i >= 0; i--) {
+                    const p = pucks[i];
+                    const scorer = puckUpdate(p);
+                    if (scorer) {
+                        if (scorer === 'ai') {
+                            aiScore += p.value;
+                            aiScoreDisplay.textContent = aiScore;
+                            appendTally(aiTally, p.value);
+                            aiTallyDisplay.innerHTML = renderTallyChips(aiTally);
+                            gameMessage.textContent = "Goal for AI! +" + p.value;
+                        } else {
+                            playerScore += p.value;
+                            playerScoreDisplay.textContent = playerScore;
+                            appendTally(playerTally, p.value);
+                            playerTallyDisplay.innerHTML = renderTallyChips(playerTally);
+                            gameMessage.textContent = "Goal for Player! +" + p.value;
+                        }
+                        checkWinCondition();
+                        pucks.splice(i, 1);
+                        if (gameActive) pucks.push(spawnPuck());
+                        continue;
+                    }
+                    paddleCollision(p, playerPaddle);
+                    paddleCollision(p, aiPaddle);
+                }
+
+                // Puck-vs-puck collisions - every unique pair, once per frame.
+                for (let i = 0; i < pucks.length; i++) {
+                    for (let j = i + 1; j < pucks.length; j++) {
+                        puckCollision(pucks[i], pucks[j]);
+                    }
+                }
+            }
+
+            // Draw objects
+            playerPaddle.draw();
+            aiPaddle.draw();
+            pucks.forEach(p => p.draw());
+
+            // Request the next frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Responsiveness and Event Listeners ---
+
+        // Function to handle canvas visual resizing (maintaining aspect ratio)
+        function resizeCanvas() {
+            const container = document.getElementById('game-container');
+            const containerWidth = container.clientWidth - 48; // Account for padding
+            const aspectRatio = GAME_WIDTH / GAME_HEIGHT;
+
+            // The table also has to leave room for the title, the reset button,
+            // the scoreboard and the message line, or the page runs off screen.
+            const chrome = 250;
+            const heightBudget = Math.max(180, window.innerHeight - chrome);
+
+            let newWidth = Math.min(containerWidth, heightBudget * aspectRatio);
+            let newHeight = newWidth / aspectRatio;
+
+            // Set canvas style dimensions (visual scaling)
+            canvas.style.width = `${newWidth}px`;
+            canvas.style.height = `${newHeight}px`;
+
+            // Match scoreboard width to canvas width for better visual alignment
+            if (scoreboard) {
+                 scoreboard.style.width = `${newWidth}px`;
+            }
+        }
+
+        /** Scales the whole game (title, difficulty screen or game screen,
+            whichever is showing) down to fit the viewport, on top of
+            resizeCanvas()'s own width-based sizing - the two are
+            complementary, not redundant: resizeCanvas() keeps the canvas
+            itself at the right aspect ratio for the space it's given, and
+            this catches the case where the *total* stacked height (title +
+            buttons/scoreboard/tally + canvas) still doesn't fit a short
+            viewport, which no per-element width calculation can see.
+            Reset to natural size first so the measurement isn't scaled by
+            a previous call. */
+        function fitToViewport() {
+            const container = document.getElementById('game-container');
+            const fitWrapper = document.getElementById('game-fit');
+            container.style.transform = 'none';
+            fitWrapper.style.width = '';
+            fitWrapper.style.height = '';
+
+            const rect = container.getBoundingClientRect();
+            const margin = 16;
+            const scale = Math.min(
+                1,
+                (window.innerWidth - margin) / rect.width,
+                (window.innerHeight - margin) / rect.height
+            );
+
+            if (scale < 1) {
+                container.style.transform = `scale(${scale})`;
+                fitWrapper.style.width = (rect.width * scale) + 'px';
+                fitWrapper.style.height = (rect.height * scale) + 'px';
+            }
+        }
+
+        // Player Input: Track mouse position
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+
+            // Scale mouse coordinates back to the internal 1000x500 system
+            const scaleX = GAME_WIDTH / rect.width;
+            const scaleY = GAME_HEIGHT / rect.height;
+
+            mouseX = (e.clientX - rect.left) * scaleX;
+            mouseY = (e.clientY - rect.top) * scaleY;
+
+            mouseX = Math.min(mouseX, HALF_COURT - PADDLE_RADIUS);
+        });
+
+        // UI Interaction: Set up difficulty buttons
+        difficultyButtons.forEach(button => {
+            button.addEventListener('click', handleDifficultySelection);
+        });
+
+        // UI Interaction: Reserve Button (Resets scores and puck position)
+        reserveButton.addEventListener('click', () => {
+            gameModal.classList.add('hidden');
+            gameMessage.textContent = "Match Reset! Click to serve.";
+            initGame(); // initGame resets scores and sets up paddles/puck
+        });
+
+        // UI Interaction: Modal Restart Button
+        modalRestartButton.addEventListener('click', () => {
+            gameModal.classList.add('hidden');
+            initGame();
+        });
+
+        // Initial setup and resize handling
+        window.addEventListener('resize', () => { resizeCanvas(); fitToViewport(); });
+        window.onload = () => {
+            resizeCanvas(); // Initial call
+            difficultySelectionScreen.classList.remove('hidden');
+            gameScreen.classList.add('hidden');
+            fitToViewport();
+        };
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Match</title>
+    <!-- Import Poppins and Roboto Mono fonts from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* CSS Variables matching the CCS site's brand palette */
+        :root {
+            --paper: #FAF4E6;
+            --paper-card: #FFFBF3;
+            --ink: #1E2226;
+            --cyan-deep: #0A5280;
+            --cyan-hover: #1670A6;
+            --leaf: #3A7A37;
+            --leaf-deep: #2F6B2C;
+            --berry: #BC3229;
+            --sun: #F2C230;
+            --sun-hot: #DD7A22;
+
+            --color-card-back: var(--cyan-deep);
+            --color-card-front-pattern: var(--paper);
+            --color-card-match: var(--leaf);
+            --color-card-mismatch: var(--berry);
+            --color-text-light: var(--ink);
+            --color-accent-1: var(--berry);
+            --color-timer: var(--sun-hot);
+            --color-font-main: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+            --color-font-digital: 'Roboto Mono', monospace;
+            --shadow-card: 0 4px 6px rgba(20, 40, 60, 0.14), 0 1px 3px rgba(20, 40, 60, 0.1);
+            --shadow-modal: 0 10px 25px rgba(20, 40, 60, 0.22);
+            --transition-speed: 0.4s;
+            --transition-timing: ease-in-out;
+        }
+
+        body {
+            background: var(--paper);
+            background-image:
+                radial-gradient(circle at center, rgba(30,52,62,.09) 1px, transparent 1.2px),
+                linear-gradient(180deg, #E2EDEF 0%, #EEF4F3 26%, var(--paper) 66%, #FDF8EC 100%);
+            background-size: 7px 7px, 100% 100%;
+            color: var(--color-text-light);
+            font-family: var(--color-font-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            font-size: 16px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .game-container {
+            text-align: center;
+            width: 100vw;
+            height: 100vh;
+            max-width: none;
+            display: flex;
+            flex-direction: column;
+            gap: 2vh;
+            justify-content: center;
+            align-items: center;
+            padding: 2vh 2vw;
+            box-sizing: border-box;
+        }
+
+        header {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            align-items: center;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: clamp(1.5rem, 5vw, 2.5rem);
+            letter-spacing: 2px;
+            font-weight: 800;
+            text-transform: uppercase;
+            margin: 0;
+            color: var(--ink);
+            font-family: var(--color-font-main);
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: clamp(0.5rem, 2vw, 1rem);
+            font-size: clamp(0.9rem, 2.5vw, 1.25rem);
+            font-weight: 600;
+            width: 100%;
+            flex-wrap: wrap;
+            font-family: var(--color-font-main);
+        }
+
+        .timer, .best-time, .match-counter {
+            background-color: var(--paper-card);
+            border: 2px solid var(--ink);
+            padding: clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.8rem, 3vw, 1rem);
+            border-radius: 15px;
+            box-shadow: 4px 4px 0 var(--ink);
+            min-width: 120px;
+            color: var(--ink);
+        }
+
+        .timer, .best-time {
+            font-family: var(--color-font-digital);
+            color: var(--color-timer);
+            font-weight: 700;
+        }
+
+        .card-grid {
+            display: grid;
+            gap: clamp(0.5rem, 2vw, 0.75rem);
+            perspective: 1000px;
+            width: 100%;
+            max-width: none;
+            margin: 0 auto;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+        }
+
+        /* Specific mobile layout: 4 columns for screens up to 576px */
+        @media (max-width: 576px) {
+            .card-grid {
+                grid-template-columns: repeat(4, 1fr);
+                width: calc(100% - 20px); /* Adjust width to fit */
+                padding: 10px;
+            }
+        }
+
+        .card-wrapper {
+            position: relative;
+            height: 0;
+            padding-bottom: 100%;
+            cursor: pointer;
+            border-radius: 20px;
+            transform-style: preserve-3d;
+            transition: transform var(--transition-speed) var(--transition-timing), border-color 0.4s ease-in-out;
+            box-shadow: var(--shadow-card);
+            border: 4px solid var(--ink);
+            outline: none;
+        }
+
+        .card-wrapper:hover, .card-wrapper:focus {
+            transform: scale(1.05) translateY(-5px);
+            box-shadow: 0 8px 10px rgba(20, 40, 60, 0.22), 0 3px 6px rgba(20, 40, 60, 0.12);
+        }
+
+        .card-wrapper:hover .card-front, .card-wrapper:focus .card-front {
+            background-color: var(--cyan-hover);
+        }
+
+        .card-wrapper.flipped {
+            transform: rotateY(180deg);
+        }
+
+        .card-wrapper.mismatched {
+            border-color: var(--color-card-mismatch) !important;
+        }
+
+        .card-wrapper.flipped:hover,
+        .card-wrapper.matched:hover,
+        .card-wrapper.flipped:focus,
+        .card-wrapper.matched:focus {
+            transform: rotateY(180deg);
+            box-shadow: var(--shadow-card);
+        }
+
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 15px;
+            font-size: clamp(2rem, 8vw, 2.5rem);
+            transition: transform var(--transition-speed) var(--transition-timing), background-color 0.3s ease;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .card-front {
+            background-color: var(--color-card-back);
+            background-image: radial-gradient(var(--color-card-front-pattern) 15%, transparent 15%),
+                              radial-gradient(var(--color-card-front-pattern) 15%, transparent 15%);
+            background-size: 15px 15px;
+            background-position: 0 0, 7.5px 7.5px;
+        }
+
+        .card-back {
+            background-color: var(--paper-card);
+            transform: rotateY(180deg);
+        }
+
+        .card-face svg {
+            transition: transform 0.3s ease-out;
+            width: 60%;
+            height: 70%;
+        }
+
+        .card-wrapper.matched .card-back {
+            background-color: var(--color-card-match);
+            animation: pulse 0.8s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1.0) rotateY(180deg); }
+            50% { transform: scale(1.1) rotateY(180deg); }
+            100% { transform: scale(1.0) rotateY(180deg); }
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s, visibility 0.5s;
+            z-index: 100;
+        }
+
+        .modal.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-content {
+            background-color: var(--paper-card);
+            border: 3px solid var(--ink);
+            padding: 3rem;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: var(--shadow-modal);
+            transform: scale(0.9);
+            transition: transform 0.5s var(--transition-timing);
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .modal.show .modal-content {
+            transform: scale(1);
+        }
+
+        .modal-content h2 {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            color: var(--leaf-deep);
+            font-weight: 800;
+            font-family: var(--color-font-main);
+        }
+
+        .modal-content p {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            color: var(--ink);
+            font-family: var(--color-font-main);
+        }
+
+        .start-modal .modal-content h2 {
+            margin-bottom: 1.5rem;
+        }
+
+        .start-modal .modal-content p {
+            font-size: 1rem;
+            max-width: 400px;
+            margin: 0 auto 1.5rem;
+            line-height: 1.5;
+        }
+
+        .start-modal .modal-content ul {
+            text-align: left;
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+            list-style-type: none;
+            max-width: 400px;
+            margin: 0 auto 1.5rem;
+        }
+
+        .start-modal .modal-content li {
+            position: relative;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--ink);
+            opacity: .85;
+        }
+
+        .start-modal .modal-content li::before {
+            content: '\2022';
+            position: absolute;
+            left: -1rem;
+            color: var(--color-timer);
+        }
+
+
+        .btn {
+            background: var(--berry);
+            color: #FFF6EE;
+            border: 2px solid var(--ink);
+            padding: 0.75rem 1.5rem;
+            border-radius: 999px;
+            font-size: 1rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.3s ease-in-out;
+            box-shadow: 4px 4px 0 var(--ink);
+            font-family: var(--color-font-main);
+        }
+
+        .btn:focus {
+            outline: 3px solid var(--ink);
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 6px 6px 0 var(--ink);
+        }
+
+        .play-again-btn, .start-game-btn {
+            background: var(--sun);
+            color: var(--ink);
+        }
+
+        .confetti-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: -1;
+        }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #f0f;
+            animation: confetti-fall 5s linear infinite;
+        }
+
+        @keyframes confetti-fall {
+            0% { transform: translateY(-100px) rotateZ(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotateZ(720deg); opacity: 0.5; }
+        }
+
+        /* Responsive adjustments for larger cards on different screen sizes */
+        @media (min-width: 577px) and (max-width: 768px) {
+            .card-grid {
+                grid-template-columns: repeat(4, 1fr);
+                max-width: 500px;
+            }
+            h1 { font-size: 2rem; }
+            .game-info { font-size: 1rem; }
+        }
+        @media (max-width: 576px) {
+            .card-grid {
+                grid-template-columns: repeat(4, 1fr); /* 4 columns for mobile */
+            }
+        }
+        @media (min-width: 1024px) {
+            .card-grid {
+                grid-template-columns: repeat(5, 1fr);
+                max-width: 1000px;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="game-skin.css">
+</head>
+<body class="ccs-game ccs-memory">
+    <div class="game-container">
+        <header>
+            <div class="game-info">
+                <div class="timer">Time: <span id="timer-display">00:00</span></div>
+                <div class="best-time">Best: <span id="best-time-display">--:--</span></div>
+                <div class="match-counter"><span id="match-count-display">0</span> / 10</div>
+                <button id="replay-btn" class="btn play-again-btn" style="display:none">Play Again</button>
+            </div>
+        </header>
+
+        <div class="card-grid" id="card-grid"></div>
+
+    </div>
+
+    <!-- Start Game Modal -->
+    <div class="modal start-modal" id="start-modal">
+        <div class="modal-content">
+            <h2>Memory Match</h2>
+            <p>Ready to test your memory? Flip two cards to find a match. Find all the pairs to win!</p>
+            <ul>
+                <li>Tap or click a card to flip it over.</li>
+                <li>Find two cards with the same shape to make a pair.</li>
+                <li>Watch the timer and try to beat your best time!</li>
+            </ul>
+            <button id="start-game-btn" class="btn start-game-btn">Start Game</button>
+        </div>
+    </div>
+
+    <!-- Win Game Modal -->
+    <div class="modal win-modal" id="win-modal">
+        <div class="modal-content">
+            <div class="confetti-container" id="confetti-container"></div>
+            <h2>Congratulations!</h2>
+            <p>You finished in <span id="final-time-display">00:00</span>!</p>
+            <button id="play-again-btn" class="btn play-again-btn">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const cardGrid = document.getElementById('card-grid');
+            const timerDisplay = document.getElementById('timer-display');
+            const bestTimeDisplay = document.getElementById('best-time-display');
+            const winModal = document.getElementById('win-modal');
+            const finalTimeDisplay = document.getElementById('final-time-display');
+            const playAgainBtn = document.getElementById('play-again-btn');
+            const confettiContainer = document.getElementById('confetti-container');
+            const matchCountDisplay = document.getElementById('match-count-display');
+            const startModal = document.getElementById('start-modal');
+            const startGameBtn = document.getElementById('start-game-btn');
+            const replayBtn = document.getElementById('replay-btn');
+
+            const cardShapes = [
+                { shape: 'star', color: '#ff6b6b' },
+                { shape: 'circle', color: '#4ecdc4' },
+                { shape: 'square', color: '#f5b55e' },
+                { shape: 'triangle', color: '#42a5f5' },
+                { shape: 'hexagon', color: '#ab47bc' },
+                { shape: 'diamond', color: '#66bb6a' },
+                { shape: 'pentagon', color: '#d25d6b' },
+                { shape: 'heart', color: '#ffe66d' },
+                { shape: 'spade', color: '#88d8b0' },
+                { shape: 'club', color: '#ff995c' }
+            ];
+
+            let cards = [];
+            let flippedCards = [];
+            let matchedPairs = 0;
+            let timerInterval;
+            let startTime;
+            let timerRunning = false;
+            let lockBoard = false;
+
+            const totalPairs = cardShapes.length;
+
+            const getShapeSvg = (shape, color) => {
+                const svgMap = {
+                    'star': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.77 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`,
+                    'circle': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><circle cx="12" cy="12" r="10"/></svg>`,
+                    'square': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><rect x="4" y="4" width="16" height="16"/></svg>`,
+                    'triangle': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 2L2 22h20L12 2z"/></svg>`,
+                    'hexagon': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 2l-8 4v8l8 4 8-4v-8l-8-4z"/></svg>`,
+                    'diamond': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 2l10 10-10 10-10-10 10-10z"/></svg>`,
+                    'pentagon': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 2l-9.5 7.2L5.8 22h12.4l3.3-12.8L12 2z"/></svg>`,
+                    'heart': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5A5.4 5.4 0 017.5 3c2.45 0 4.24 1.22 5.5 2.5 1.26-1.28 3.05-2.5 5.5-2.5A5.4 5.4 0 0122 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`,
+                    'spade': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 22l-6-6h12l-6 6zm0-16c-3.3 0-6 2.7-6 6s6 12 6 12 6-8.7 6-12-2.7-6-6-6z"/></svg>`,
+                    'club': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 18a4 4 0 01-4-4 4 4 0 01-4-4 4 4 0 018-2 4 4 0 018 2 4 4 0 01-4 4 4 4 0 01-4 4z"/></svg>`
+                };
+                return svgMap[shape];
+            };
+
+            const shuffle = (array) => {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+            };
+
+            const initGame = () => {
+                // To support a 4x5 grid for mobile, we need 20 cards (10 pairs).
+                // Ensure the number of cards matches the layout.
+                const gameCards = [...cardShapes, ...cardShapes];
+                shuffle(gameCards);
+                cards = gameCards.map((card, index) => ({ ...card, id: index }));
+
+                cardGrid.innerHTML = '';
+
+                cards.forEach(card => {
+                    const cardWrapper = document.createElement('div');
+                    cardWrapper.classList.add('card-wrapper');
+                    cardWrapper.dataset.shape = card.shape;
+                    cardWrapper.dataset.color = card.color;
+                    cardWrapper.setAttribute('tabindex', '0');
+                    cardWrapper.addEventListener('click', (event) => handleCardClick(event.currentTarget));
+                    cardWrapper.addEventListener('keydown', (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            handleCardClick(event.currentTarget);
+                        }
+                    });
+
+                    const cardFront = document.createElement('div');
+                    cardFront.classList.add('card-face', 'card-front');
+
+                    const cardBack = document.createElement('div');
+                    cardBack.classList.add('card-face', 'card-back');
+                    cardBack.innerHTML = getShapeSvg(card.shape, card.color);
+
+                    cardWrapper.appendChild(cardFront);
+                    cardWrapper.appendChild(cardBack);
+                    cardGrid.appendChild(cardWrapper);
+                });
+
+                flippedCards = [];
+                matchedPairs = 0;
+                timerRunning = false;
+                lockBoard = false;
+                clearInterval(timerInterval);
+                timerDisplay.textContent = '00:00';
+                matchCountDisplay.textContent = '0';
+                replayBtn.style.display = 'none';
+            };
+
+            const startTimer = () => {
+                if (timerRunning) return;
+                startTime = Date.now();
+                timerRunning = true;
+                timerInterval = setInterval(updateTimerDisplay, 1000);
+            };
+
+            const updateTimerDisplay = () => {
+                const elapsedTime = Date.now() - startTime;
+                const minutes = Math.floor(elapsedTime / 60000);
+                const seconds = Math.floor((elapsedTime % 60000) / 1000);
+                const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                timerDisplay.textContent = formattedTime;
+            };
+
+            const stopTimer = () => {
+                clearInterval(timerInterval);
+                timerRunning = false;
+            };
+
+            const loadBestTime = () => {
+                const bestTime = localStorage.getItem('memoryGameBestTime');
+                if (bestTime) {
+                    bestTimeDisplay.textContent = bestTime;
+                }
+            };
+
+            const saveBestTime = (time) => {
+                const currentBestTime = localStorage.getItem('memoryGameBestTime');
+                if (!currentBestTime || time < currentBestTime) {
+                    localStorage.setItem('memoryGameBestTime', time);
+                    bestTimeDisplay.textContent = time;
+                }
+            };
+
+            const handleCardClick = (cardWrapper) => {
+                if (cardWrapper.classList.contains('flipped') || cardWrapper.classList.contains('matched') || lockBoard) {
+                    return;
+                }
+
+                if (!timerRunning) {
+                    startTimer();
+                }
+
+                cardWrapper.classList.add('flipped');
+                flippedCards.push(cardWrapper);
+
+                if (flippedCards.length === 1) {
+                    return;
+                } else if (flippedCards.length === 2) {
+                    lockBoard = true;
+                    setTimeout(() => {
+                        checkForMatch();
+                    }, 100);
+                }
+            };
+
+            const checkForMatch = () => {
+                const [card1, card2] = flippedCards;
+
+                if (card1.dataset.shape === card2.dataset.shape && card1.dataset.color === card2.dataset.color) {
+                    card1.classList.add('matched');
+                    card2.classList.add('matched');
+                    matchedPairs++;
+                    matchCountDisplay.textContent = matchedPairs;
+                    checkWinCondition();
+                    resetTurn();
+                } else {
+                    card1.classList.add('mismatched');
+                    card2.classList.add('mismatched');
+
+                    setTimeout(() => {
+                        card1.classList.remove('flipped', 'mismatched');
+                        card2.classList.remove('flipped', 'mismatched');
+                        resetTurn();
+                    }, 1200);
+                }
+            };
+
+            const resetTurn = () => {
+                flippedCards = [];
+                lockBoard = false;
+            };
+
+            const checkWinCondition = () => {
+                if (matchedPairs === totalPairs) {
+                    stopTimer();
+                    const finalTime = timerDisplay.textContent;
+                    saveBestTime(finalTime);
+                    showWinModal(finalTime);
+                    replayBtn.style.display = 'inline-block';
+                }
+            };
+
+            const showStartModal = () => {
+                startModal.classList.add('show');
+            };
+
+            const hideStartModal = () => {
+                startModal.classList.remove('show');
+            };
+
+            const showWinModal = (finalTime) => {
+                finalTimeDisplay.textContent = finalTime;
+                winModal.classList.add('show');
+                const confettiColors = ['#0A5280', '#3A7A37', '#BC3229', '#F2C230', '#BFA5E0', '#7FD1C1'];
+                for (let i = 0; i < 50; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.classList.add('confetti');
+                    confetti.style.left = `${Math.random() * 100}vw`;
+                    confetti.style.backgroundColor = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+                    confetti.style.animationDelay = `${Math.random() * 2}s`;
+                    confetti.style.animationDuration = `${5 + Math.random() * 5}s`;
+                    confettiContainer.appendChild(confetti);
+                }
+            };
+
+            const hideWinModal = () => {
+                winModal.classList.remove('show');
+                confettiContainer.innerHTML = '';
+            };
+
+            startGameBtn.addEventListener('click', () => {
+                hideStartModal();
+                initGame();
+            });
+
+            playAgainBtn.addEventListener('click', () => {
+                hideWinModal();
+                initGame();
+            });
+
+            replayBtn.addEventListener('click', () => {
+                hideWinModal();
+                initGame();
+            });
+
+            loadBestTime();
+            showStartModal();
+        });
+    </script>
+</body>
+</html>

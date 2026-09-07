@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Balloon Pop Math</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,700&display=swap');
+
+  :root {
+    --color-pink: #BC3229;
+    --color-blue: #0A5280;
+    --color-green: #3A7A37;
+    --color-yellow: #F2C230;
+    --color-purple: #BFA5E0;
+    --color-orange: #DD7A22;
+    --color-red: #BC3229;
+    --color-teal: #7FD1C1;
+    --ink: #1E2226;
+    --cyan-deep: #0A5280;
+    --leaf-deep: #2F6B2C;
+    --paper: #FAF4E6;
+    --paper-card: #FFFBF3;
+    --sun: #F2C230;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    padding: 20px;
+    background: linear-gradient(180deg, #5FB8E6 0%, #8FD3EE 28%, #CDECE4 62%, var(--paper) 100%);
+    color: var(--ink);
+    overflow: hidden;
+    position: relative;
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  .sun{
+    position:absolute; top:4vmin; right:6vmin; width:9vmin; height:9vmin; min-width:52px; min-height:52px;
+    background:radial-gradient(circle at 35% 35%, #FDE28A, var(--sun) 70%);
+    border-radius:50%; box-shadow:0 0 5vmin rgba(242,194,48,.55);
+    pointer-events:none; z-index:0;
+  }
+
+  .cloud{ position:absolute; background:#fff; border-radius:50%; opacity:.9; pointer-events:none; z-index:0; filter:blur(.2px); }
+  .cloud::before, .cloud::after{ content:''; position:absolute; background:#fff; border-radius:50%; }
+  .cloud--a{ width:9vmin; height:4vmin; top:10vmin; left:-14vmin; animation:cloudDrift 46s linear infinite; }
+  .cloud--a::before{ width:6vmin; height:6vmin; top:-3vmin; left:1vmin; }
+  .cloud--a::after{ width:5vmin; height:5vmin; top:-2vmin; left:5.5vmin; }
+  .cloud--b{ width:7vmin; height:3vmin; top:26vmin; left:-12vmin; animation:cloudDrift 62s linear infinite; animation-delay:-18s; opacity:.75; }
+  .cloud--b::before{ width:4.5vmin; height:4.5vmin; top:-2.2vmin; left:1vmin; }
+  .cloud--b::after{ width:3.5vmin; height:3.5vmin; top:-1.5vmin; left:4vmin; }
+  .cloud--c{ width:11vmin; height:4.5vmin; top:2vmin; left:-16vmin; animation:cloudDrift 54s linear infinite; animation-delay:-30s; opacity:.7; }
+  .cloud--c::before{ width:7vmin; height:7vmin; top:-3.5vmin; left:1.5vmin; }
+  .cloud--c::after{ width:5.5vmin; height:5.5vmin; top:-2.5vmin; left:6.5vmin; }
+
+  @keyframes cloudDrift{
+    0%{ transform:translateX(0); }
+    100%{ transform:translateX(130vw); }
+  }
+
+  h1 {
+    font-size: 5vmin;
+    color: var(--ink);
+    text-shadow: 0 2px 0 rgba(255, 255, 255, 0.55);
+    margin: 0 0 2vmin;
+    font-weight: 800;
+    position: relative; z-index: 2;
+  }
+
+  #prompt {
+    font-size: 4vmin;
+    color: var(--ink);
+    margin-bottom: 3vmin;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+    font-weight: 700;
+    position: relative; z-index: 2;
+  }
+
+  #challenge-counter {
+    font-size: 2.5vmin;
+    color: var(--leaf-deep);
+    font-weight: 800;
+    margin-bottom: 2vmin;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+    position: relative; z-index: 2;
+  }
+
+  #game-container {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+  }
+
+  .balloon {
+    position: absolute;
+    width: 9vmin;
+    height: 10.5vmin;
+    min-width: 56px;
+    min-height: 66px;
+    border-radius: 50% 50% 46% 46% / 62% 62% 38% 38%;
+    color: white;
+    font-size: 4.4vmin;
+    font-weight: 800;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    border: 3px solid rgba(30, 34, 38, .38);
+    box-shadow: inset -6px -8px 0 rgba(0, 0, 0, 0.14), 0 10px 16px rgba(10, 40, 60, 0.22);
+    transition: transform 0.3s ease;
+  }
+
+  .balloon::before{
+    /* wicker basket */
+    content: '';
+    position: absolute;
+    bottom: -30%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36%;
+    height: 18%;
+    background: #8A5A2B;
+    border: 2px solid rgba(30,34,38,.4);
+    border-radius: 3px;
+    box-shadow: inset 0 3px 0 rgba(255,255,255,.15), inset 0 -3px 0 rgba(0,0,0,.2);
+  }
+
+  .balloon::after {
+    /* two rigging lines from envelope to basket */
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 20%;
+    background: rgba(30, 34, 38, .55);
+    bottom: -18%;
+    left: 50%;
+    transform: translateX(-50%);
+    box-shadow: -9px 0 0 rgba(30, 34, 38, .55), 9px 0 0 rgba(30, 34, 38, .55);
+  }
+
+  .balloon:hover {
+    transform: scale(1.1);
+  }
+
+  .popped {
+    animation: popAnim 0.4s forwards;
+    cursor: default;
+  }
+
+  @keyframes popAnim {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.5) rotate(15deg); opacity: 0.6; }
+    100% { transform: scale(0); opacity: 0; }
+  }
+
+  #message {
+    font-size: 3vmin;
+    color: var(--leaf-deep);
+    margin-top: 3vmin;
+    min-height: 4vmin;
+    font-weight: 800;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+    position: relative; z-index: 2;
+  }
+
+  #next-btn {
+    padding: 1.5vmin 3vmin;
+    font-size: 2.5vmin;
+    background: var(--cyan-deep);
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    color: #FFF6EE;
+    font-family: inherit;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 0 rgba(30,34,38,.4);
+    user-select: none;
+    transition: transform 0.2s, background 0.2s;
+    margin-top: 2vmin;
+    position: relative; z-index: 2;
+  }
+
+  #next-btn:hover {
+    background: var(--leaf-deep);
+    transform: translateY(-2px);
+  }
+
+  /* Modal styles */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(20, 30, 38, 0.55);
+    display: none; /* Hidden by default */
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+  }
+
+  .modal-content {
+    background: var(--paper-card);
+    padding: 4vmin 6vmin;
+    border-radius: 20px;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    transform: scale(0.8);
+    animation: popIn 0.3s forwards;
+    border: 3px solid var(--ink);
+    font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+  }
+
+  @keyframes popIn {
+    to { transform: scale(1); }
+  }
+
+  .modal-content h2 {
+    font-size: 4vmin;
+    color: var(--leaf-deep);
+    font-weight: 800;
+    margin: 0 0 3vmin;
+  }
+
+  .modal-content p {
+    font-size: 2vmin;
+    margin: 1vmin 0;
+    color: var(--ink);
+  }
+
+  .modal-content button {
+    padding: 2vmin 4vmin;
+    font-size: 3vmin;
+    background: var(--cyan-deep);
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    color: #FFF6EE;
+    font-family: inherit;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 0 rgba(30,34,38,.4);
+    transition: transform 0.2s, background 0.2s;
+    margin-top: 4vmin;
+  }
+
+  .modal-content button:hover {
+    background: var(--leaf-deep);
+    transform: translateY(-2px);
+  }
+
+  /* Style for the X marker */
+  .wrong-answer-x {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 8vmin;
+    color: var(--color-red);
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+    pointer-events: none; /* Don't interfere with balloon clicks */
+    animation: fadeOut 1s forwards;
+  }
+
+  @keyframes fadeOut {
+    0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+  }
+</style>
+    <link rel="stylesheet" href="game-skin.css">
+</head>
+<body class="ccs-game ccs-balloon">
+
+  <div class="sun" aria-hidden="true"></div>
+  <div class="cloud cloud--a" aria-hidden="true"></div>
+  <div class="cloud cloud--b" aria-hidden="true"></div>
+  <div class="cloud cloud--c" aria-hidden="true"></div>
+
+  <h1>Balloon Pop Math</h1>
+  <div id="challenge-counter"></div>
+  <div id="prompt"></div>
+  <div id="game-container"></div>
+  <div id="message"></div>
+  <button id="next-btn" style="display:none;">Next Round</button>
+
+  <!-- The Modal -->
+  <div id="myModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2 id="modal-heading">Great Job!</h2>
+      <p id="modal-question"></p>
+      <p id="modal-answer"></p>
+      <button id="modal-next-btn">Next math challenge</button>
+    </div>
+  </div>
+
+  <script>
+    // Get all the DOM elements and store them in constants
+    const container = document.getElementById("game-container");
+    const promptEl = document.getElementById("prompt");
+    const messageEl = document.getElementById("message");
+    const modal = document.getElementById("myModal");
+    const modalHeadingEl = document.getElementById("modal-heading");
+    const modalQuestionEl = document.getElementById("modal-question");
+    const modalAnswerEl = document.getElementById("modal-answer");
+    const modalNextBtn = document.getElementById("modal-next-btn");
+    const counterEl = document.getElementById("challenge-counter");
+
+    // Array of colors for the balloons
+    const colors = [
+      'var(--color-pink)',
+      'var(--color-blue)',
+      'var(--color-green)',
+      'var(--color-yellow)',
+      'var(--color-purple)',
+      'var(--color-orange)',
+      'var(--color-red)',
+      'var(--color-teal)'
+    ];
+
+    // Array of names for the word problems
+    const wordProblemNames = ["Chike", "Zecharai", "Kaleb", "Kelysta", "Gabby", "Olivia", "Chloe", "Alexus"];
+
+    let balloons = [];
+    let targetNumber = null;
+    let poppedCount = 0;
+    const speed = 0.5; // Constant speed for all balloons
+    const repulsionForce = 0.1; // Reduced repulsion force for smoother separation
+    let animationFrameId = null; // Variable to store the animation frame ID
+    let currentChallenge = 0;
+    const totalChallenges = 50;
+    const NUM_BALLOONS = 8; // Constant for the number of balloons
+
+    // Function to get a random gradient color
+    function getRandomColor() {
+      const randomIndex = Math.floor(Math.random() * colors.length);
+      const startColor = colors[randomIndex];
+      const endColor = colors[(randomIndex + 1) % colors.length];
+      return `radial-gradient(circle at 30% 30%, ${startColor} 40%, ${endColor})`;
+    }
+
+    // Function to create a new balloon element
+    function createBalloon(number) {
+      const balloon = document.createElement("div");
+      balloon.className = "balloon";
+      balloon.textContent = number;
+      balloon.style.background = getRandomColor();
+      balloon.dataset.number = number;
+      balloon.radius = balloon.offsetWidth / 2;
+
+      let initialX, initialY;
+      let overlapping = true;
+      let attempts = 0;
+
+      // Attempt to place the balloon without overlapping
+      while (overlapping && attempts < 100) {
+        initialX = Math.random() * (container.clientWidth - balloon.offsetWidth);
+        initialY = Math.random() * (container.clientHeight - balloon.offsetHeight);
+        overlapping = false;
+        for (const existingBalloon of balloons) {
+          const dx = (initialX + balloon.offsetWidth / 2) - (existingBalloon.posX + existingBalloon.offsetWidth / 2);
+          const dy = (initialY + balloon.offsetHeight / 2) - (existingBalloon.posY + existingBalloon.offsetHeight / 2);
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          if (distance < (balloon.offsetWidth / 2 + existingBalloon.offsetWidth / 2) * 1.5) {
+            overlapping = true;
+            break;
+          }
+        }
+        attempts++;
+      }
+
+      balloon.style.left = `${initialX}px`;
+      balloon.style.top = `${initialY}px`;
+
+      // Store position and velocity for physics simulation
+      balloon.posX = parseFloat(balloon.style.left);
+      balloon.posY = parseFloat(balloon.style.top);
+
+      // Create a random initial velocity vector and normalize it to a constant speed
+      const angle = Math.random() * Math.PI * 2;
+      balloon.velX = Math.cos(angle) * speed;
+      balloon.velY = Math.sin(angle) * speed;
+
+      // Add a click listener to the balloon
+      balloon.addEventListener("click", () => {
+        if (!balloon.classList.contains("popped")) {
+          handleBalloonClick(balloon);
+        }
+      });
+      container.appendChild(balloon);
+      return balloon;
+    }
+
+    // Function to generate a shuffled array of numbers with a guaranteed target
+    function getNumbersForChallenge(target, range) {
+        const numbers = new Set();
+        numbers.add(target);
+        while (numbers.size < NUM_BALLOONS) {
+            numbers.add(Math.floor(Math.random() * range) + 1);
+        }
+        const shuffledNumbers = [...numbers];
+        for (let i = shuffledNumbers.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffledNumbers[i], shuffledNumbers[j]] = [shuffledNumbers[j], shuffledNumbers[i]];
+        }
+        return shuffledNumbers;
+    }
+
+    // Function to handle a balloon click
+    function handleBalloonClick(balloon) {
+      const num = Number(balloon.dataset.number);
+      let isCorrect = false;
+
+      // Check if the prompt is for "greater than" or a specific number
+      const promptText = promptEl.textContent.toLowerCase();
+
+      // Handle greater/less than problems first
+      if (promptText.includes("greater than")) {
+        isCorrect = num > targetNumber;
+      } else if (promptText.includes("less than")) {
+        isCorrect = num < targetNumber;
+      }
+      // Handle place value problems
+      else if (promptText.includes("number in the ones place")) {
+        // The previous bug was here. Corrected to check the ones digit of the target number
+        isCorrect = num === (targetNumber % 10);
+      } else if (promptText.includes("number in the tens place")) {
+        // The previous bug was here. Corrected to check the tens digit of the target number
+        isCorrect = num === Math.floor(targetNumber / 10);
+      }
+      // All other problems, including addition, subtraction, word problems, and "tens and ones" grouping
+      else {
+        isCorrect = num === targetNumber;
+      }
+
+      if (isCorrect) {
+        balloon.classList.add("popped");
+        poppedCount++;
+        balloon.style.pointerEvents = "none";
+
+        // Check if all correct balloons have been popped
+        let totalCorrect = 1;
+        if (promptText.includes("greater than")) {
+          totalCorrect = balloons.filter(b => Number(b.dataset.number) > targetNumber).length;
+        } else if (promptText.includes("less than")) {
+          totalCorrect = balloons.filter(b => Number(b.dataset.number) < targetNumber).length;
+        }
+
+        if (poppedCount === totalCorrect) {
+          endRound(true);
+        }
+      } else {
+        messageEl.textContent = "Oops! Try again!";
+        messageEl.style.color = '#C13B31';
+
+        // Add the 'X' marker
+        const xMarker = document.createElement("div");
+        xMarker.className = "wrong-answer-x";
+        xMarker.textContent = "X";
+        balloon.appendChild(xMarker);
+
+        // Remove the 'X' after a short delay
+        setTimeout(() => {
+          xMarker.remove();
+          messageEl.textContent = "";
+        }, 1500);
+      }
+    }
+
+    // Function to handle the end of a round
+    function endRound(success) {
+      if (success) {
+        // Check if the game is complete
+        if (currentChallenge >= totalChallenges) {
+          modalHeadingEl.textContent = "Congratulations!";
+          modalQuestionEl.textContent = "You've completed all 50 challenges!";
+          modalAnswerEl.textContent = "Great job on your math skills!";
+          modalNextBtn.style.display = "none"; // Hide the button
+        } else {
+          // Update the modal with the question and correct answer
+          modalHeadingEl.textContent = "Great Job!";
+          modalQuestionEl.textContent = `Question: ${promptEl.textContent}`;
+          modalAnswerEl.textContent = `Correct Answer: ${targetNumber}`;
+          modalNextBtn.textContent = "Next math challenge";
+          modalNextBtn.style.display = "block";
+        }
+        modal.style.display = "flex";
+      }
+    }
+
+    // Function to set the game prompt for the round
+    function setPrompt() {
+      const challengeType = Math.floor(Math.random() * 8); // 0-7 for different challenges
+      let numbers = [];
+      let tempNum;
+
+      const randomName = wordProblemNames[Math.floor(Math.random() * wordProblemNames.length)];
+
+      switch(challengeType) {
+        case 0:
+          // Basic addition facts within 20
+          let num1 = Math.floor(Math.random() * 10) + 1;
+          let num2 = Math.floor(Math.random() * 10) + 1;
+          targetNumber = num1 + num2;
+          promptEl.textContent = `Pop the balloon that is ${num1} + ${num2}`;
+          numbers = getNumbersForChallenge(targetNumber, 20);
+          break;
+        case 1:
+          // Subtraction facts within 20
+          tempNum = Math.floor(Math.random() * 15) + 5;
+          let tempNum2 = Math.floor(Math.random() * 4) + 1;
+          targetNumber = tempNum - tempNum2;
+          promptEl.textContent = `Pop the balloon that is ${tempNum} - ${tempNum2}`;
+          numbers = getNumbersForChallenge(targetNumber, 15);
+          break;
+        case 2:
+          // Place value - ones digit
+          tempNum = Math.floor(Math.random() * 89) + 11;
+          targetNumber = tempNum;
+          promptEl.textContent = `Pop the number in the ones place of ${tempNum}`;
+          // Generate numbers for the ones place challenge
+          numbers = getNumbersForChallenge(targetNumber % 10, 9);
+          break;
+        case 3:
+          // Place value - tens digit
+          tempNum = Math.floor(Math.random() * 89) + 11;
+          targetNumber = tempNum;
+          promptEl.textContent = `Pop the number in the tens place of ${tempNum}`;
+          // Generate numbers for the tens place challenge
+          numbers = getNumbersForChallenge(Math.floor(targetNumber / 10), 9);
+          break;
+        case 4:
+          // Word problem - combining
+          let obj1 = Math.floor(Math.random() * 5) + 2;
+          let obj2 = Math.floor(Math.random() * 5) + 2;
+          const items = ["apples", "crayons", "pencils", "cookies"];
+          const item = items[Math.floor(Math.random() * items.length)];
+          targetNumber = obj1 + obj2;
+          promptEl.textContent = `${randomName} has ${obj1} ${item} and finds ${obj2} more. Pop the total.`;
+          numbers = getNumbersForChallenge(targetNumber, 15);
+          break;
+        case 5:
+          // Word problem - taking away
+          let obj3 = Math.floor(Math.random() * 5) + 5;
+          let obj4 = Math.floor(Math.random() * 4) + 1;
+          const items2 = ["marbles", "stickers", "blocks", "toy cars"];
+          const item2 = items2[Math.floor(Math.random() * items2.length)];
+          targetNumber = obj3 - obj4;
+          promptEl.textContent = `${randomName} has ${obj3} ${item2} and gives away ${obj4}. Pop what's left.`;
+          numbers = getNumbersForChallenge(targetNumber, 10);
+          break;
+        case 6:
+          // Number sequence
+          let startNum = Math.floor(Math.random() * 30) + 10;
+          let endNum = startNum + 4;
+          targetNumber = startNum + 2;
+          promptEl.textContent = `Pop the missing number in the sequence: ${startNum}, ${startNum+1}, __, ${endNum-1}, ${endNum}`;
+          numbers = getNumbersForChallenge(targetNumber, 10);
+          break;
+        case 7:
+          // Grouping tens and ones
+          let tens = Math.floor(Math.random() * 5) + 1;
+          let ones = Math.floor(Math.random() * 9);
+          targetNumber = (tens * 10) + ones;
+          promptEl.textContent = `Pop the number that is ${tens} tens and ${ones} ones.`;
+          numbers = getNumbersForChallenge(targetNumber, 50);
+          break;
+      }
+      messageEl.textContent = "";
+      poppedCount = 0;
+      generateBalloons(numbers);
+    }
+
+    // Function to generate new balloons
+    function generateBalloons(numbers) {
+      container.innerHTML = "";
+      balloons = [];
+      numbers.forEach(num => {
+        balloons.push(createBalloon(num));
+      });
+    }
+
+    // Function to check for balloon collisions and apply physics
+    function checkBalloonCollisions() {
+      for (let i = 0; i < balloons.length; i++) {
+        for (let j = i + 1; j < balloons.length; j++) {
+          const b1 = balloons[i];
+          const b2 = balloons[j];
+
+          if (b1.classList.contains("popped") || b2.classList.contains("popped")) continue;
+
+          // Calculate the distance and vector between balloon centers
+          const dx = (b1.posX + b1.offsetWidth / 2) - (b2.posX + b2.offsetWidth / 2);
+          const dy = (b1.posY + b1.offsetHeight / 2) - (b2.posY + b2.offsetHeight / 2);
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const sumOfRadii = (b1.offsetWidth + b2.offsetWidth) / 2;
+
+          // If the balloons are too close or touching
+          if (distance < sumOfRadii) {
+            // Apply a gentle repulsion force to prevent overlap
+            const overlap = sumOfRadii - distance;
+            const separationX = (dx / distance) * overlap;
+            const separationY = (dy / distance) * overlap;
+
+            // Adjust positions to prevent overlap
+            b1.posX += separationX * repulsionForce;
+            b1.posY += separationY * repulsionForce;
+            b2.posX -= separationX * repulsionForce;
+            b2.posY -= separationY * repulsionForce;
+
+            // Simplified elastic collision
+            const temp_velX = b1.velX;
+            const temp_velY = b1.velY;
+            b1.velX = b2.velX;
+            b1.velY = b2.velY;
+            b2.velX = temp_velX;
+            b2.velY = temp_velY;
+          }
+        }
+      }
+    }
+
+    // The main animation loop
+    function animateBalloons() {
+      balloons.forEach(balloon => {
+        if (!balloon.classList.contains("popped")) {
+          let newX = balloon.posX + balloon.velX;
+          let newY = balloon.posY + balloon.velY;
+
+          const balloonWidth = balloon.offsetWidth;
+          const balloonHeight = balloon.offsetHeight;
+
+          // Check for collision with container boundaries
+          if (newX + balloonWidth > container.clientWidth || newX < 0) {
+            balloon.velX = -balloon.velX;
+            newX = Math.max(0, Math.min(newX, container.clientWidth - balloonWidth));
+          }
+          if (newY + balloonHeight > container.clientHeight || newY < 0) {
+            balloon.velY = -balloon.velY;
+            newY = Math.max(0, Math.min(newY, container.clientHeight - balloonHeight));
+          }
+
+          // Update position
+          balloon.posX = newX;
+          balloon.posY = newY;
+          balloon.style.left = `${newX}px`;
+          balloon.style.top = `${newY}px`;
+
+          // Normalize the velocity to maintain a constant speed
+          const currentSpeed = Math.sqrt(balloon.velX * balloon.velX + balloon.velY * balloon.velY);
+          if (currentSpeed > 0) {
+            balloon.velX = (balloon.velX / currentSpeed) * speed;
+            balloon.velY = (balloon.velY / currentSpeed) * speed;
+          }
+        }
+      });
+      // Call the collision detection function
+      checkBalloonCollisions();
+      animationFrameId = requestAnimationFrame(animateBalloons);
+    }
+
+    // Function to start a new game round
+    function startGame() {
+      // Cancel any existing animation frame to prevent multiple loops
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      modal.style.display = "none";
+      currentChallenge++;
+      counterEl.textContent = `Challenge ${currentChallenge} of ${totalChallenges}`;
+      setPrompt();
+      animateBalloons();
+    }
+
+    // Call startGame() and set up event listeners once the window has loaded
+    window.onload = function() {
+      modalNextBtn.addEventListener("click", startGame);
+      startGame();
+    };
+  </script>
+</body>
+</html>

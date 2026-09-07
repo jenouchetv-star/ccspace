@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPELLING DETECTIVE</title>
+    <style>
+        /* --- General Styling & Background --- */
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
+
+        body {
+            font-family: 'Fredoka One', cursive;
+            background: linear-gradient(to bottom, #EAF3F5, #FAF4E6);
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* --- Main Game Container --- */
+        .game-container {
+            background-color: white;
+            border-radius: 25px;
+            padding: 40px 20px 20px 20px; /* Increased top padding */
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2), inset 0 0 10px rgba(0,0,0,0.1);
+            border: 12px solid #7A4A86; /* Bright Purple */
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        /* --- Definition Display --- */
+        .definition-display {
+            margin-bottom: 20px;
+            font-family: 'Fredoka One', cursive;
+            font-weight: 500; /* Changed to medium weight */
+            font-size: 1.4em;
+            color: #555;
+            min-height: 50px; /* Reserve space */
+            padding: 0 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* --- Word Display --- */
+        .word-display {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 25px;
+            height: 70px; /* Set a fixed height */
+        }
+
+        .letter-box {
+            width: 60px;
+            height: 60px;
+            background-color: #7A4A86;
+            border: 3px solid #333;
+            border-radius: 10px;
+            color: #F5B921; /* Yellow */
+            font-size: 2.8em;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-shadow: 2px 2px 2px #333;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: transform 0.2s ease, background-color 0.2s;
+        }
+
+        .letter-box.revealed {
+            transform: scale(1.1);
+            background-color: #F5B921;
+            color: #7A4A86;
+        }
+
+        /* --- Letter Pool --- */
+        .letter-pool {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0,0,0,0.05);
+            border-radius: 15px;
+            min-height: 150px; /* Ensure space for two rows */
+        }
+
+        .letter-button {
+            width: 55px;
+            height: 55px;
+            border-radius: 12px;
+            border: none;
+            color: white;
+            font-size: 2.2em;
+            font-family: 'Fredoka One', cursive;
+            cursor: pointer;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.4);
+            box-shadow: 0 6px 0px #555, 0 8px 15px rgba(0,0,0,0.3);
+            transition: all 0.1s ease-in-out;
+            position: relative; /* For the 'X' overlay */
+            overflow: hidden; /* Hide overflow from pseudo-elements */
+        }
+
+        .letter-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 0px #555, 0 10px 18px rgba(0,0,0,0.3);
+        }
+
+        .letter-button:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0px #555, 0 4px 8px rgba(0,0,0,0.4);
+        }
+
+        .letter-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: translateY(2px);
+            box-shadow: 0 4px 0px #555;
+        }
+
+        /* 'X' overlay for incorrect guesses */
+        .letter-button.incorrect::after {
+            content: 'X';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            font-weight: bold;
+            color: white;
+            background-color: rgba(193, 59, 49, 0.88);
+            border-radius: 12px;
+            animation: pop-in 0.3s ease-out;
+        }
+
+        /* --- Wrong Guesses Tracker --- */
+        #wrong-guesses-tracker {
+            margin-top: 20px;
+            font-size: 1.5em;
+            color: #C13B31;
+            font-weight: bold;
+        }
+
+        /* --- Modal for Messages --- */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            font-size: 1.5em;
+            border: 10px solid #7A4A86;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+            animation: pop-in 0.4s ease-out;
+            max-width: 90%;
+        }
+
+        .modal-content h2 {
+            font-size: 1.8em;
+            margin-top: 0;
+            color: #3A7A37;
+        }
+
+        .modal-content p {
+            font-family: 'Roboto', sans-serif;
+            font-size: 1.1em;
+            color: #555;
+            margin: 15px 0;
+        }
+
+        #next-word-button {
+            background-color: #3A7A37;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 15px 30px;
+            font-family: 'Fredoka One', cursive;
+            font-size: 1.2em;
+            cursor: pointer;
+            margin-top: 20px;
+            box-shadow: 0 4px #2F6B2C;
+            transition: all 0.1s ease-in-out;
+        }
+
+        #next-word-button:hover {
+            background-color: #2F6B2C;
+            transform: translateY(-2px);
+            box-shadow: 0 6px #2F6B2C;
+        }
+
+        @keyframes pop-in {
+            from { transform: scale(0.5); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+    </style>
+    <link rel="stylesheet" href="game-skin.css">
+</head>
+<body class="ccs-game ccs-spell">
+
+    <div class="game-container">
+        <div id="definition-display" class="definition-display"></div>
+
+        <div id="word-display" class="word-display"></div>
+
+        <div id="letter-pool" class="letter-pool"></div>
+
+        <div id="wrong-guesses-tracker">
+            Chances Left: <span id="wrong-guesses-count">0</span>
+        </div>
+    </div>
+
+    <div id="message-modal" class="modal">
+        <div class="modal-content">
+            <div id="modal-win-content">
+                <h2 id="win-word"></h2>
+                <p id="win-definition"></p>
+                <button id="next-word-button">Next Word</button>
+            </div>
+            <div id="modal-lose-content" style="display:none;">
+                 <h2 style="color: #C13B31;">Out of Guesses!</h2>
+                 <p>The word was: <strong id="lose-word"></strong></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Game Variables ---
+            const wordData = [
+                { word: 'apple', definition: 'A yummy red fruit that grows on trees.' },
+                { word: 'ball', definition: 'A round toy you can throw and catch.' },
+                { word: 'cake', definition: 'A sweet treat we eat on birthdays.' },
+                { word: 'duck', definition: 'A bird that swims and quacks.' },
+                { word: 'frog', definition: 'A small green animal that hops.' },
+                { word: 'grape', definition: 'A small, round, purple fruit.' },
+                { word: 'house', definition: 'Where you live with your family.' },
+                { word: 'juice', definition: 'A yummy drink made from fruit.' },
+                { word: 'kite', definition: 'A toy that flies high in the sky.' },
+                { word: 'lion', definition: 'A big, wild cat that roars.' },
+                { word: 'moon', definition: 'The big circle that shines in the night sky.' },
+                { word: 'nest', definition: 'A bird\'s cozy home in a tree.' },
+                { word: 'orange', definition: 'A round, orange fruit.' },
+                { word: 'pear', definition: 'A sweet, green fruit.' },
+                { word: 'queen', definition: 'A princess who rules a kingdom.' },
+                { word: 'rain', definition: 'Water that falls from the clouds.' },
+                { word: 'star', definition: 'A bright, twinkling light in the night sky.' },
+                { word: 'tree', definition: 'A big, tall plant with green leaves.' },
+                { word: 'uncle', definition: 'The brother of your mom or dad.' },
+                { word: 'vase', definition: 'A jar for holding pretty flowers.' },
+                { word: 'water', definition: 'What you drink to stay healthy.' },
+                { word: 'yoyo', definition: 'A toy that goes up and down on a string.' },
+                { word: 'zebra', definition: 'A black and white striped animal.' },
+                { word: 'boat', definition: 'Something that floats on water.' },
+                { word: 'chair', definition: 'A comfy seat for one person.' },
+                { word: 'door', definition: 'What you open to go into a room.' },
+                { word: 'earth', definition: 'The planet we all live on.' },
+                { word: 'flower', definition: 'The colorful, pretty part of a plant.' },
+                { word: 'grass', definition: 'The green stuff that covers the ground.' },
+                { word: 'happy', definition: 'How you feel when you smile.' },
+                { word: 'island', definition: 'A piece of land in the big ocean.' },
+                { word: 'jelly', definition: 'A sweet, wiggly food.' },
+                { word: 'leaf', definition: 'The green part of a tree.' },
+                { word: 'magic', definition: 'A special power that makes amazing things happen.' },
+                { word: 'pizza', definition: 'A yummy round food with cheese and sauce.' },
+                { word: 'cloud', definition: 'The fluffy white things in the sky.' },
+                { word: 'dream', definition: 'A story you see when you are asleep.' },
+                { word: 'field', definition: 'A big, open place to run and play.' },
+                { word: 'glove', definition: 'Something you wear on your hands.' },
+                { word: 'heart', definition: 'The part of you that feels love.' },
+                { word: 'igloo', definition: 'A cozy little house made of snow.' },
+                { word: 'jacket', definition: 'What you wear when it\'s cold outside.' },
+                { word: 'key', definition: 'A tool you use to open a lock.' },
+                { word: 'light', definition: 'What makes the room bright so you can see.' },
+                { word: 'mouse', definition: 'A tiny animal that squeaks.' },
+                { word: 'night', definition: 'When the moon and stars come out.' },
+                { word: 'ocean', definition: 'A big place where dolphins swim.' },
+                { word: 'puppy', definition: 'A cute, little baby dog.' },
+                { word: 'quiet', definition: 'When there is no sound.' },
+                { word: 'river', definition: 'A long stream of water.' },
+                { word: 'snake', definition: 'A long animal that slithers on the ground.' },
+                { word: 'table', definition: 'Where you sit to eat your food.' },
+                { word: 'watch', definition: 'Something you wear to tell the time.' },
+                { word: 'beach', definition: 'A sandy place next to the ocean.' },
+                { word: 'bread', definition: 'What you use to make a sandwich.' },
+                { word: 'candy', definition: 'A sweet treat like a lollipop.' },
+                { word: 'clock', definition: 'It tells you what time it is.' },
+                { word: 'dance', definition: 'When you move your body to music.' },
+                { word: 'family', definition: 'The people who love you, like mommy and daddy.' },
+                { word: 'garden', definition: 'Where flowers and vegetables grow.' },
+                { word: 'horse', definition: 'A big animal you can ride.' },
+                { word: 'image', definition: 'A picture of something.' },
+                { word: 'jump', definition: 'When you go up and down with your legs.' },
+                { word: 'king', definition: 'A man who rules a kingdom.' },
+                { word: 'lemon', definition: 'A sour, yellow fruit.' },
+                { word: 'music', definition: 'Fun sounds that make you want to dance.' },
+                { word: 'paper', definition: 'What you use to draw pictures on.' },
+                { word: 'pencil', definition: 'A tool you use for writing and drawing.' },
+                { word: 'phone', definition: 'What you use to talk to people far away.' },
+                { word: 'photo', definition: 'A picture you take with a camera.' },
+                { word: 'plane', definition: 'A machine that flies in the sky.' },
+                { word: 'plant', definition: 'Something that grows from the ground, like a flower.' },
+                { word: 'plate', definition: 'What you eat your food from.' },
+                { word: 'play', definition: 'Having fun with toys and friends.' },
+                { word: 'prize', definition: 'Something special you win in a game.' },
+                { word: 'robot', definition: 'A machine that can move and do jobs.' },
+                { word: 'rocket', definition: 'A spaceship that flies to the moon.' },
+                { word: 'room', definition: 'A part of your house, like your bedroom.' },
+                { word: 'rose', definition: 'A beautiful flower that is often red.' },
+                { word: 'school', definition: 'Where you go to learn and play.' },
+                { word: 'shirt', definition: 'A piece of clothing you wear on top.' },
+                { word: 'shoe', definition: 'Something you wear on your feet.' },
+                { word: 'sing', definition: 'Making music with your voice.' },
+                { word: 'sleep', definition: 'What you do in your bed at night.' },
+                { word: 'smile', definition: 'What you do with your mouth when you are happy.' },
+                { word: 'snack', definition: 'A small meal you eat between breakfast and lunch.' },
+                { word: 'snow', definition: 'The cold, white stuff that falls in winter.' },
+                { word: 'soap', definition: 'What you use to get clean in the bath.' },
+                { word: 'song', definition: 'A story you sing with music.' },
+                { word: 'soup', definition: 'A warm, liquid food you eat with a spoon.' },
+                { word: 'space', definition: 'The big, dark place where the stars and planets are.' },
+                { word: 'speak', definition: 'Using your voice to talk.' },
+                { word: 'spoon', definition: 'What you use to eat soup or ice cream.' },
+                { word: 'sport', definition: 'A fun game like soccer or baseball.' },
+                { word: 'spring', definition: 'The season when flowers start to grow.' },
+                { word: 'square', definition: 'A shape with four equal sides.' },
+                { word: 'stamp', definition: 'A little sticker you put on a letter.' },
+                { word: 'stand', definition: 'When you are up on your feet.' },
+                { word: 'start', definition: 'To begin something new.' },
+                { word: 'stay', definition: 'To not move from a place.' }
+            ];
+            const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+
+            let currentWordData = {};
+            let guessedWord = [];
+            let wrongLettersCount = 0;
+            let totalWrongLettersInPool = 0;
+
+            // --- DOM Elements ---
+            const wordDisplay = document.getElementById('word-display');
+            const letterPool = document.getElementById('letter-pool');
+            const definitionDisplay = document.getElementById('definition-display');
+            const messageModal = document.getElementById('message-modal');
+            const winContent = document.getElementById('modal-win-content');
+            const loseContent = document.getElementById('modal-lose-content');
+            const winWordEl = document.getElementById('win-word');
+            const winDefinitionEl = document.getElementById('win-definition');
+            const loseWordEl = document.getElementById('lose-word');
+            const nextWordButton = document.getElementById('next-word-button');
+            const wrongGuessesCountSpan = document.getElementById('wrong-guesses-count');
+
+            // --- Game Functions ---
+            function startGame() {
+                // Reset game state
+                wrongLettersCount = 0;
+                totalWrongLettersInPool = 0;
+
+                // Select a new word
+                currentWordData = wordData[Math.floor(Math.random() * wordData.length)];
+                guessedWord = Array(currentWordData.word.length).fill('');
+
+                // Update UI
+                definitionDisplay.textContent = currentWordData.definition;
+                renderWordDisplay();
+                renderLetterPool();
+
+                // Hide modal
+                messageModal.style.display = 'none';
+            }
+
+            function renderWordDisplay() {
+                wordDisplay.innerHTML = '';
+                for (let i = 0; i < currentWordData.word.length; i++) {
+                    const letterBox = document.createElement('div');
+                    letterBox.classList.add('letter-box');
+                    letterBox.textContent = guessedWord[i] || '';
+                    if (guessedWord[i]) {
+                        letterBox.classList.add('revealed');
+                    }
+                    wordDisplay.appendChild(letterBox);
+                }
+            }
+
+            function renderLetterPool() {
+                letterPool.innerHTML = '';
+                const poolSize = Math.max(9, Math.min(11, currentWordData.word.length + 5));
+                const uniqueLetters = [...new Set(currentWordData.word)];
+
+                while (uniqueLetters.length < poolSize) {
+                    const randomLetter = alphabet[Math.floor(Math.random() * alphabet.length)];
+                    if (!uniqueLetters.includes(randomLetter)) {
+                        uniqueLetters.push(randomLetter);
+                    }
+                }
+
+                // Shuffle the letters (Fisher-Yates shuffle)
+                for (let i = uniqueLetters.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [uniqueLetters[i], uniqueLetters[j]] = [uniqueLetters[j], uniqueLetters[i]];
+                }
+
+                totalWrongLettersInPool = 0;
+                const colors = ['#3A7A37', '#0C7387', '#C9931A', '#C1631A', '#7A4A86', '#A63A6B'];
+                uniqueLetters.forEach((letter, index) => {
+                    const button = document.createElement('button');
+                    button.classList.add('letter-button');
+                    button.textContent = letter;
+                    button.style.backgroundColor = colors[index % colors.length];
+                    button.addEventListener('click', () => handleGuess(letter, button));
+                    letterPool.appendChild(button);
+
+                    if (!currentWordData.word.includes(letter)) {
+                        totalWrongLettersInPool++;
+                    }
+                });
+
+                // Update the chances counter
+                wrongGuessesCountSpan.textContent = totalWrongLettersInPool;
+            }
+
+            function handleGuess(letter, button = null) {
+                if (!button) {
+                    const buttons = document.querySelectorAll('.letter-button');
+                    button = Array.from(buttons).find(btn => btn.textContent === letter && !btn.disabled);
+                }
+
+                if (!button || button.disabled) return;
+
+                button.disabled = true;
+
+                if (currentWordData.word.includes(letter)) {
+                    for (let i = 0; i < currentWordData.word.length; i++) {
+                        if (currentWordData.word[i] === letter) {
+                            guessedWord[i] = letter;
+                        }
+                    }
+                    renderWordDisplay();
+                    checkGameState();
+                } else {
+                    button.classList.add('incorrect');
+                    wrongLettersCount++;
+                    // Update the chances counter display
+                    wrongGuessesCountSpan.textContent = totalWrongLettersInPool - wrongLettersCount;
+                    checkGameState();
+                }
+            }
+
+            function checkGameState() {
+                if (!guessedWord.includes('')) {
+                    endGame(true);
+                } else if (wrongLettersCount === totalWrongLettersInPool) {
+                    endGame(false);
+                }
+            }
+
+            function endGame(isWin) {
+                winContent.style.display = 'none';
+                loseContent.style.display = 'none';
+
+                if (isWin) {
+                    winWordEl.textContent = currentWordData.word.toUpperCase();
+                    winDefinitionEl.textContent = currentWordData.definition;
+                    winContent.style.display = 'block';
+                } else {
+                    loseWordEl.textContent = currentWordData.word.toUpperCase();
+                    loseContent.style.display = 'block';
+                    setTimeout(startGame, 3000); // Auto-restart on lose
+                }
+                messageModal.style.display = 'flex';
+            }
+
+            // --- Event Listeners ---
+            nextWordButton.addEventListener('click', startGame);
+
+            // Keyboard input listener
+            window.addEventListener('keydown', (e) => {
+                if (e.key.match(/^[a-z]$/i)) {
+                    handleGuess(e.key.toLowerCase());
+                }
+            });
+
+            // --- Initial Game Start ---
+            startGame();
+        });
+    </script>
+</body>
+</html>

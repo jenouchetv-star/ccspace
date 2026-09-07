@@ -1,0 +1,1740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze Quest</title>
+    <style>
+        /* CCS brand font, matching the rest of the site */
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,700&display=swap');
+        /* The old wizard's own voice gets a distinct, storybook-serif face
+           instead of the game's usual sans, so his dialogue reads as
+           something being spoken by a character, not another UI label. */
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;0,900;1,700&display=swap');
+
+        :root{
+            --paper: #FAF4E6;
+            --paper-card: #FFFBF3;
+            --paper-2: #E6F0F2;
+            --ink: #1E2226;
+            --sun: #F2C230;
+            --sun-hot: #DD7A22;
+            --leaf: #3A7A37;
+            --leaf-deep: #2F6B2C;
+            --berry: #BC3229;
+            --cyan-deep: #0A5280;
+        }
+
+        /* Basic body styling for centering and background */
+        body {
+            font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh; /* Full viewport height */
+            background: var(--paper);
+            background-image:
+                radial-gradient(circle at center, rgba(30,52,62,.09) 1px, transparent 1.2px),
+                linear-gradient(180deg, #E2EDEF 0%, #EEF4F3 26%, var(--paper) 66%, #FDF8EC 100%);
+            background-size: 7px 7px, 100% 100%;
+            color: var(--ink); /* Ink text color */
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box; /* Include padding in element's total width and height */
+            overflow-x: hidden; /* Prevent horizontal scroll */
+        }
+
+        /* Main heading style */
+        h1 {
+            color: var(--ink);
+            font-weight: 800;
+            margin-bottom: 20px;
+            text-shadow: 0 2px 0 rgba(255,255,255,.6);
+        }
+
+        /* Game container styling */
+        #game-container {
+            background-color: var(--paper-card);
+            border: 3px solid var(--ink);
+            border-radius: 15px; /* Rounded corners */
+            padding: 25px;
+            box-shadow: 8px 8px 0 var(--ink); /* Flat brand shadow for depth */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px; /* Space between elements */
+            position: relative;
+            overflow: hidden; /* Ensure content stays within bounds */
+        }
+
+        /* Game info (Level and Timer) styling */
+        #game-info {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 800px; /* Max width to match fixed canvas size */
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: var(--ink);
+        }
+
+        /* Canvas styling */
+        canvas {
+            background-color: var(--paper-card); /* Maze surface */
+            display: block;
+            border: 5px solid var(--ink); /* Perimeter border */
+            border-radius: 8px; /* Slightly rounded canvas corners */
+            box-shadow: inset 0 0 10px rgba(20,40,60,0.15); /* Inner shadow for depth */
+            max-width: 100%; /* Make canvas responsive within its container */
+            height: auto; /* Maintain aspect ratio */
+        }
+
+        /* Controls container for arrow buttons */
+        #controls {
+            display: grid;
+            grid-template-areas:
+                ". up ."
+                "left down right"; /* Grid layout for arrow buttons */
+            gap: 10px; /* Space between buttons */
+            margin-top: 20px;
+        }
+
+        /* Styling for all control buttons */
+        .control-button {
+            background-color: var(--sun); /* Sun yellow */
+            color: var(--ink); /* Dark text */
+            border: 2px solid var(--ink);
+            border-radius: 10px;
+            padding: 15px 25px;
+            font-size: 1.5em;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 4px 4px 0 var(--ink);
+            transition: all 0.1s ease; /* Smooth transitions for hover/active states */
+            min-width: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Active state for button press */
+        .control-button:active {
+            box-shadow: 1px 1px 0 var(--ink);
+            transform: translate(3px, 3px); /* Push button down */
+        }
+
+        /* Hover state for buttons */
+        .control-button:hover {
+            background-color: var(--sun-hot);
+        }
+
+        /* Grid area assignments for specific buttons */
+        #up { grid-area: up; }
+        #left { grid-area: left; }
+        #down { grid-area: down; }
+        #right { grid-area: right; }
+
+        /* Hint button styling */
+        #hint-button {
+            background-color: var(--leaf);
+            color: #FFF6EE;
+            border: 2px solid var(--ink);
+            border-radius: 10px;
+            padding: 15px 25px;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 4px 4px 0 var(--ink);
+            transition: all 0.1s ease;
+            margin-top: 15px;
+        }
+
+        /* Hint button active state */
+        #hint-button:active {
+            box-shadow: 1px 1px 0 var(--ink);
+            transform: translate(3px, 3px);
+        }
+
+        /* Hint button hover state */
+        #hint-button:hover {
+            background-color: var(--leaf-deep);
+        }
+
+        /* Level Times Dropdown styling */
+        #level-times-dropdown-container {
+            margin-top: 20px;
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+        }
+
+        #level-times-dropdown {
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 2px solid var(--ink);
+            background-color: var(--paper-card);
+            color: var(--ink);
+            font-size: 1em;
+            cursor: pointer;
+            outline: none;
+            appearance: none; /* Remove default dropdown arrow */
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%231E2226%22%20d%3D%22M287%2C197.973L159.027%2C69.999c-4.88-4.88-12.796-4.88-17.676%2C0L5.4%2C197.973c-4.88%2C4.88-4.88%2C12.796%2C0%2C17.676l17.676%2C17.676c4.88%2C4.88%2C12.796%2C4.88%2C17.676%2C0L149.64%2C126.31l111.6%2C111.6c4.88%2C4.88%2C12.796%2C4.88%2C17.676%2C0l17.676-17.676C291.88%2C210.769%2C291.88%2C202.853%2C287%2C197.973z%22%2F%3E%3C%2Fsvg%3E'); /* Custom arrow */
+            background-repeat: no-repeat;
+            background-position: right 10px top 50%;
+            background-size: 12px;
+        }
+
+        #level-times-dropdown option {
+            background-color: var(--paper-card);
+            color: var(--ink);
+        }
+
+
+        /* Win Pop-up Modal styling */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1000; /* Sit on top of everything */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            background-color: rgba(0,0,0,0.6); /* Semi-transparent black overlay */
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s ease-out; /* Fade in animation for the overlay */
+        }
+
+        /* Modal content styling */
+        .modal-content {
+            background-color: var(--paper-card);
+            border: 3px solid var(--ink);
+            margin: auto;
+            padding: 40px;
+            border-radius: 20px; /* More rounded corners */
+            box-shadow: 0 15px 30px rgba(20,40,60,0.35); /* Deeper shadow */
+            text-align: center;
+            transform: scale(0.8); /* Initial scale for pop-in animation */
+            opacity: 0; /* Initial opacity for pop-in animation */
+            animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards; /* Pop-in animation */
+            max-width: 500px;
+            width: 90%; /* Responsive width */
+            color: var(--ink);
+            position: relative;
+        }
+
+        /* Modal heading style */
+        .modal-content h2 {
+            color: var(--leaf-deep);
+            font-weight: 800;
+            font-size: 2.5em;
+            margin-bottom: 15px;
+        }
+
+        /* Modal paragraph style */
+        .modal-content p {
+            font-size: 1.3em;
+            margin-bottom: 25px;
+        }
+
+        /* Modal button style */
+        .modal-content button {
+            background-color: var(--leaf);
+            color: #FFF6EE;
+            border: 2px solid var(--ink);
+            border-radius: 12px;
+            padding: 18px 35px;
+            font-size: 1.6em;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 5px 5px 0 var(--ink);
+            transition: all 0.1s ease;
+            letter-spacing: 1px;
+        }
+
+        /* Modal button active state */
+        .modal-content button:active {
+            box-shadow: 2px 2px 0 var(--ink);
+            transform: translate(3px, 3px);
+        }
+
+        /* Modal button hover state */
+        .modal-content button:hover {
+            background-color: var(--leaf-deep);
+        }
+
+        /* Quiz option buttons - the blue "?" tiles pause the maze and ask
+           one multiple-choice question; a correct answer skips the ball
+           ten cells ahead along the real solution path. */
+        .modal-content .quiz-option {
+            background-color: var(--paper);
+            color: var(--ink);
+            border: 2px solid var(--ink);
+            border-radius: 10px;
+            padding: 12px 16px;
+            font-size: 1.1em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            width: 100%;
+            text-align: center;
+            box-shadow: none;
+            letter-spacing: normal;
+        }
+        .modal-content .quiz-option:hover:not(:disabled) { background-color: var(--sun); color: var(--ink); }
+        .modal-content .quiz-option:disabled { cursor: default; opacity: 0.85; }
+        .modal-content .quiz-option.correct { background-color: var(--leaf); border-color: var(--leaf); color: #fff; }
+        .modal-content .quiz-option.wrong { background-color: var(--berry); border-color: var(--berry); color: #fff; }
+
+        /* The wizard quiz modal - his portrait to the left (a real cutout
+           now, no white box around him), his own words in a speech bubble
+           to the right, in a storybook serif so the maze's plain
+           sans-serif question text still reads clearly inside a bolded
+           line of his dialogue. */
+        .wizard-modal {
+            max-width: 820px;
+            text-align: left;
+        }
+        .wizard-modal__layout {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+        .wizard-modal__portrait {
+            flex: none;
+            display: block;
+            width: 385px;
+            height: auto;
+        }
+        .wizard-modal__right {
+            flex: 1;
+            min-width: 0;
+        }
+        .wizard-modal__title {
+            font-family: 'Playfair Display', 'Plus Jakarta Sans', serif;
+            font-style: italic;
+            font-size: 1.5em;
+            margin: 0 0 12px;
+        }
+        .wizard-modal__bubble {
+            position: relative;
+            background: #FFFFFF;
+            border: 3px solid var(--ink);
+            border-radius: 16px;
+            padding: 14px 18px;
+            margin-bottom: 4px;
+        }
+        .wizard-modal__bubble::before,
+        .wizard-modal__bubble::after {
+            content: "";
+            position: absolute;
+            top: 22px;
+            width: 0;
+            height: 0;
+            border-top: 9px solid transparent;
+            border-bottom: 9px solid transparent;
+        }
+        .wizard-modal__bubble::before { left: -13px; border-right: 13px solid var(--ink); }
+        .wizard-modal__bubble::after { left: -9px; border-right: 10px solid #FFFFFF; }
+        .wizard-modal__speech {
+            font-family: 'Playfair Display', 'Plus Jakarta Sans', serif;
+            font-style: italic;
+            line-height: 1.4;
+            margin: 0;
+        }
+        .wizard-modal__speech strong {
+            font-style: normal;
+            color: var(--sun-hot);
+        }
+
+        @media (max-width: 560px) {
+            .wizard-modal__layout { flex-direction: column; align-items: center; text-align: center; }
+            .wizard-modal__portrait { height: 140px; width: auto; }
+            .wizard-modal__title { text-align: center; }
+            .wizard-modal__bubble::before, .wizard-modal__bubble::after { display: none; }
+        }
+
+        /* Leaderboard Modal Specific Styles */
+        #leaderboardModal .modal-content {
+            max-width: 600px; /* Wider for leaderboard content */
+        }
+
+        #leaderboard {
+            list-style: none;
+            padding: 0;
+            margin: 20px 0;
+            font-size: 1.1em;
+            text-align: left;
+        }
+
+        #leaderboard li {
+            background-color: var(--paper-2); /* Alternate background for list items */
+            padding: 10px 15px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        #leaderboard li span:first-child {
+            font-weight: bold;
+            color: var(--sun-hot);
+        }
+
+        #leaderboard li span:last-child {
+            color: var(--ink);
+        }
+
+        /* Keyframe animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        /* Responsive adjustments for smaller screens */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            #game-container {
+                padding: 15px;
+            }
+
+            #game-info {
+                font-size: 1em;
+                flex-direction: column;
+                align-items: center;
+                gap: 5px;
+            }
+
+            canvas {
+                width: 100%; /* Make canvas fluid */
+                max-width: 800px; /* Cap max width */
+            }
+
+            .control-button {
+                padding: 10px 20px;
+                font-size: 1.2em;
+                min-width: 60px;
+            }
+
+            #controls {
+                gap: 8px;
+            }
+
+            #hint-button {
+                padding: 12px 20px;
+                font-size: 1em;
+            }
+
+            .modal-content {
+                padding: 25px;
+            }
+
+            .modal-content h2 {
+                font-size: 2em;
+            }
+
+            .modal-content p {
+                font-size: 1.1em;
+            }
+
+            .modal-content button {
+                padding: 15px 25px;
+                font-size: 1.4em;
+            }
+
+            #level-times-dropdown {
+                font-size: 0.9em;
+                padding: 8px 12px;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="game-skin.css">
+</head>
+<body class="ccs-game ccs-maze">
+    <h1>Maze Quest. Where questions determines your quest!</h1>
+
+    <div id="game-container">
+        <div id="game-info">
+            <span>Level: <span id="level-display">1</span></span>
+            <span>Time: <span id="timer-display">00:00</span></span>
+        </div>
+        <canvas id="mazeCanvas"></canvas>
+
+        <div id="controls">
+            <button id="up" class="control-button" aria-label="Move Up">&#9650;</button>
+            <button id="left" class="control-button" aria-label="Move Left">&#9664;</button>
+            <button id="down" class="control-button" aria-label="Move Down">&#9660;</button>
+            <button id="right" class="control-button" aria-label="Move Right">&#9654;</button>
+        </div>
+        <button id="hint-button">Hint</button>
+    </div>
+
+    <!-- Win Pop-up Modal -->
+    <div id="winModal" class="modal">
+        <div class="modal-content">
+            <h2 id="winPhrase"></h2>
+            <p>You have completed this level in <span id="finalTime"></span></p>
+            <button id="nextLevelBtn"></button>
+        </div>
+    </div>
+
+    <!-- Quiz Pop-up Modal - the old wizard who guards the maze's "?"
+         tiles. Three states share this one modal, swapping his portrait
+         and his own words: waiting with a riddle, casting a portal for a
+         correct answer, or arms crossed for a wrong one. -->
+    <div id="quizModal" class="modal">
+        <div class="modal-content wizard-modal">
+            <div class="wizard-modal__layout">
+                <img id="quizWizardImg" class="wizard-modal__portrait" src="../assets/games/wizard-question.png" alt="An old wizard">
+                <div class="wizard-modal__right">
+                    <h2 id="quizTitle" class="wizard-modal__title">The Old Wizard Speaks...</h2>
+                    <div class="wizard-modal__bubble">
+                        <p id="quizQuestion" class="wizard-modal__speech"></p>
+                        <p id="quizFeedback" class="wizard-modal__speech" style="font-weight:700;margin:10px 0 0"></p>
+                    </div>
+                    <div id="quizOptions" style="display:flex;flex-direction:column;gap:10px;margin-top:14px"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaderboard Pop-up Modal -->
+    <div id="leaderboardModal" class="modal">
+        <div class="modal-content">
+            <h2>Leaderboard</h2>
+            <ul id="leaderboard">
+                <!-- Leaderboard items will be inserted here by JavaScript -->
+            </ul>
+            <button id="playAgainBtn">Play Again (Level 1)</button>
+        </div>
+    </div>
+
+    <script>
+        // Get canvas and its 2D rendering context
+        const canvas = document.getElementById('mazeCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // --- Game State Variables ---
+        let currentLevel = 1; // Current game level
+        let maze = []; // 2D array representing the maze grid
+        let ball = { x: 0, y: 0, radius: 8, speed: 3 }; // Ball properties: position, size (16x16px), movement speed
+        const BALL_MARGIN = 6; // Margin around the ball for collision detection
+        // Effective diameter of the ball including its margin, used for path width calculations
+        const BALL_DIAMETER_EFFECTIVE = ball.radius * 2 + 2 * BALL_MARGIN; // 16px (ball) + 12px (margin) = 28px
+
+        let cellSize = 30; // Size of each cell in the maze grid (pixels)
+        let gridCols = 0; // Number of columns in the maze grid
+        let gridRows = 0; // Number of rows in the maze grid
+
+        // Object to track pressed keys for continuous movement
+        let keys = {
+            ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false,
+            w: false, s: false, a: false, d: false // WASD support
+        };
+        let isMoving = false; // Flag to indicate if the ball is currently moving
+        let lastMoveTime = 0; // Timestamp of the last ball movement for wiggle effect
+        const WIGGLE_INTERVAL = 7000; // Interval for ball wiggling when idle (7 seconds)
+        let wiggleOffset = 0; // Current vertical offset for wiggle animation
+        let wiggleAmplitude = 1; // Max vertical displacement for wiggle
+        let wiggleSpeed = 0.05; // Speed of the wiggle animation
+
+        let timerInterval; // Interval ID for the game timer
+        let startTime; // Timestamp when the current level started
+        let elapsedTime = 0; // Total elapsed time for the current level (seconds)
+        let animationFrameId; // ID returned by requestAnimationFrame for cancellation
+
+        let hintActive = false; // Flag if hint is currently displayed
+        let hintPath = []; // Array of cells representing the shortest path for hint
+        let hintArrowOffset = 0; // Vertical offset for hint arrow bouncing
+        let hintArrowAmplitude = 5; // Max vertical displacement for hint arrow bounce
+        let hintArrowSpeed = 0.02; // Speed of the hint arrow bounce animation
+
+        // 2D array to mark visited cells for green path tracing
+        let visitedPath = [];
+
+        // --- Speed ramp-up: the longer a direction is held, the faster
+        // the ball moves, up to a cap - resets the moment movement stops. ---
+        let movingSinceMs = null;
+        let speedMultiplier = 1;
+        const MAX_SPEED_MULTIPLIER = 2.2;
+        const SPEED_RAMP_MS = 1200;
+
+        // --- Blue "?" quiz tiles: reach one and a multiple-choice math or
+        // spelling question pauses the clock; answer correctly and the
+        // ball jumps ten cells toward the exit along the real solution. ---
+        let quizTiles = [];
+        let quizActive = false;
+        let boostPath = [];
+        const QUIZ_QUESTIONS = [
+            { q: "What is 6 + 7?", options: ["11", "13", "14", "12"], answer: 1 },
+            { q: "What is 9 - 4?", options: ["4", "6", "5", "3"], answer: 2 },
+            { q: "What is 3 × 4?", options: ["12", "10", "14", "9"], answer: 0 },
+            { q: "What is 15 - 8?", options: ["6", "7", "8", "9"], answer: 1 },
+            { q: "What is 5 + 9?", options: ["13", "14", "15", "12"], answer: 1 },
+            { q: "What is 4 × 5?", options: ["16", "18", "20", "24"], answer: 2 },
+            { q: "Which word is spelled correctly?", options: ["freind", "friend", "frend", "friennd"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["becuase", "because", "becaus", "becausse"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["definately", "definitly", "definitely", "defenitely"], answer: 2 },
+            { q: "Which word is spelled correctly?", options: ["seperate", "separate", "seprate", "separrate"], answer: 1 },
+            { q: "What is 8 + 6?", options: ["13", "14", "15", "12"], answer: 1 },
+            { q: "What is 7 + 8?", options: ["16", "14", "15", "13"], answer: 2 },
+            { q: "What is 12 + 9?", options: ["20", "21", "22", "19"], answer: 1 },
+            { q: "What is 11 + 9?", options: ["19", "20", "21", "18"], answer: 1 },
+            { q: "What is 14 - 6?", options: ["7", "8", "9", "6"], answer: 1 },
+            { q: "What is 20 - 13?", options: ["6", "7", "8", "9"], answer: 1 },
+            { q: "What is 16 - 9?", options: ["6", "7", "8", "5"], answer: 1 },
+            { q: "What is 6 × 6?", options: ["30", "32", "36", "42"], answer: 2 },
+            { q: "What is 7 × 3?", options: ["20", "21", "24", "18"], answer: 1 },
+            { q: "What is 8 × 2?", options: ["14", "16", "18", "12"], answer: 1 },
+            { q: "What is 9 × 3?", options: ["27", "24", "29", "21"], answer: 0 },
+            { q: "What is 12 ÷ 4?", options: ["2", "3", "4", "6"], answer: 1 },
+            { q: "What is 20 ÷ 5?", options: ["3", "4", "5", "6"], answer: 1 },
+            { q: "What is 18 ÷ 3?", options: ["5", "6", "7", "8"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["recieve", "receive", "receve", "receeve"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["beleive", "believe", "beleve", "belive"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["wich", "which", "whitch", "whichh"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["allright", "alright", "alwright", "allwright"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["untill", "until", "untile", "untyl"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["tommorow", "tomorow", "tomorrow", "tommorrow"], answer: 2 },
+            // --- More math ---
+            { q: "What is 5 × 5?", options: ["20", "24", "25", "30"], answer: 2 },
+            { q: "What is 10 × 10?", options: ["100", "90", "110", "120"], answer: 0 },
+            { q: "What is 13 + 17?", options: ["28", "29", "30", "31"], answer: 2 },
+            { q: "What is 25 - 17?", options: ["7", "8", "9", "6"], answer: 1 },
+            { q: "What is 30 ÷ 6?", options: ["4", "5", "6", "7"], answer: 1 },
+            { q: "What is 45 ÷ 9?", options: ["4", "5", "6", "7"], answer: 1 },
+            { q: "What is 6 + 6 + 6?", options: ["16", "17", "18", "19"], answer: 2 },
+            { q: "How many sides does a triangle have?", options: ["2", "3", "4", "5"], answer: 1 },
+            { q: "How many sides does a hexagon have?", options: ["5", "6", "7", "8"], answer: 1 },
+            { q: "What is half of 20?", options: ["8", "9", "10", "11"], answer: 2 },
+            { q: "What is double 12?", options: ["22", "23", "24", "26"], answer: 2 },
+            { q: "What number comes after 99?", options: ["100", "101", "98", "110"], answer: 0 },
+            { q: "What is 100 - 45?", options: ["45", "55", "65", "50"], answer: 1 },
+            { q: "What is 7 × 8?", options: ["54", "56", "58", "64"], answer: 1 },
+            { q: "What is 9 × 9?", options: ["81", "72", "90", "99"], answer: 0 },
+            { q: "How many minutes are in an hour?", options: ["50", "60", "70", "100"], answer: 1 },
+            { q: "How many days are in a week?", options: ["5", "6", "7", "8"], answer: 2 },
+            { q: "How many months are in a year?", options: ["10", "11", "12", "13"], answer: 2 },
+            { q: "What is 3 + 3 + 3 + 3?", options: ["9", "10", "12", "15"], answer: 2 },
+            { q: "What is the sum of 8 and 8?", options: ["14", "15", "16", "17"], answer: 2 },
+            // --- More spelling ---
+            { q: "Which word is spelled correctly?", options: ["thier", "their", "theyr", "theire"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["piece", "peice", "peece", "peeice"], answer: 0 },
+            { q: "Which word is spelled correctly?", options: ["neccessary", "necessary", "neccesary", "necesary"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["embarass", "embarrass", "embarras", "embbarass"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["accomodate", "acommodate", "accommodate", "acomodate"], answer: 2 },
+            { q: "Which word is spelled correctly?", options: ["goverment", "government", "govermment", "governmant"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["Febuary", "February", "Februari", "Febraury"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["Wendesday", "Wednesday", "Wensday", "Wednessday"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["beautifull", "beutiful", "beautiful", "beutifull"], answer: 2 },
+            { q: "Which word is spelled correctly?", options: ["twelth", "twelfth", "twelvth", "twelfeth"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["libary", "library", "libarary", "librairy"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["differnt", "diffrent", "different", "differant"], answer: 2 },
+            { q: "Which word is spelled correctly?", options: ["suprise", "surprise", "surprize", "suprize"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["knowlege", "knowledge", "knowledg", "knowlegde"], answer: 1 },
+            { q: "Which word is spelled correctly?", options: ["strenght", "strength", "strentgh", "strengh"], answer: 1 },
+            // --- Basic science ---
+            { q: "What planet do we live on?", options: ["Mars", "Venus", "Earth", "Jupiter"], answer: 2 },
+            { q: "What do plants need to make their own food?", options: ["Sunlight", "Moonlight", "Sand", "Ice"], answer: 0 },
+            { q: "How many legs does an insect have?", options: ["4", "6", "8", "10"], answer: 1 },
+            { q: "What gas do humans breathe in to survive?", options: ["Carbon dioxide", "Oxygen", "Nitrogen", "Helium"], answer: 1 },
+            { q: "What is the closest star to Earth?", options: ["The Moon", "The Sun", "Polaris", "Mars"], answer: 1 },
+            { q: "What do we call an animal that only eats plants?", options: ["Carnivore", "Herbivore", "Omnivore", "Predator"], answer: 1 },
+            { q: "What is frozen water called?", options: ["Steam", "Ice", "Vapor", "Fog"], answer: 1 },
+            { q: "How many bones are in the adult human body?", options: ["106", "206", "306", "406"], answer: 1 },
+            { q: "What part of the body pumps blood?", options: ["Lungs", "Brain", "Heart", "Stomach"], answer: 2 },
+            { q: "What do bees make?", options: ["Milk", "Honey", "Silk", "Butter"], answer: 1 },
+            { q: "Which sense do you use to hear?", options: ["Eyes", "Ears", "Nose", "Skin"], answer: 1 },
+            { q: "What is the process by which plants make food called?", options: ["Digestion", "Photosynthesis", "Respiration", "Evaporation"], answer: 1 },
+            { q: "What do caterpillars turn into?", options: ["Butterflies", "Ladybugs", "Spiders", "Ants"], answer: 0 },
+            { q: "What state of matter is water vapor?", options: ["Solid", "Liquid", "Gas", "Plasma"], answer: 2 },
+            { q: "Which planet is known as the Red Planet?", options: ["Venus", "Mars", "Saturn", "Mercury"], answer: 1 },
+            { q: "What force pulls objects toward the Earth?", options: ["Magnetism", "Gravity", "Friction", "Electricity"], answer: 1 },
+            { q: "What is the name for water that falls from clouds?", options: ["Steam", "Rain", "Ice", "Mist"], answer: 1 },
+            { q: "How many legs does a spider have?", options: ["6", "8", "10", "4"], answer: 1 },
+            { q: "What organ do you use to think?", options: ["Heart", "Lungs", "Brain", "Liver"], answer: 2 },
+            { q: "What is the largest planet in our solar system?", options: ["Earth", "Saturn", "Jupiter", "Neptune"], answer: 2 },
+            // --- Basic geography ---
+            { q: "What is the largest ocean on Earth?", options: ["Atlantic", "Indian", "Arctic", "Pacific"], answer: 3 },
+            { q: "What is the largest continent?", options: ["Africa", "Asia", "Europe", "Antarctica"], answer: 1 },
+            { q: "What is the smallest continent?", options: ["Australia", "Europe", "Antarctica", "South America"], answer: 0 },
+            { q: "What do we call a large area of sand with very little water?", options: ["Forest", "Desert", "Valley", "Plain"], answer: 1 },
+            { q: "What is the tallest mountain in the world?", options: ["K2", "Mount Everest", "Denali", "Kilimanjaro"], answer: 1 },
+            { q: "What is the longest river in the world?", options: ["Amazon", "Mississippi", "Nile", "Yangtze"], answer: 2 },
+            { q: "What do you call the place where a river meets the sea?", options: ["Delta", "Peninsula", "Canyon", "Plateau"], answer: 0 },
+            { q: "Which country is known for the Great Wall?", options: ["Japan", "China", "India", "Korea"], answer: 1 },
+            { q: "Which country is shaped like a boot?", options: ["Spain", "Italy", "Greece", "France"], answer: 1 },
+            { q: "What is the capital of France?", options: ["London", "Paris", "Rome", "Berlin"], answer: 1 },
+            { q: "What is the capital of the United States?", options: ["New York", "Los Angeles", "Washington, D.C.", "Chicago"], answer: 2 },
+            { q: "How many continents are there?", options: ["5", "6", "7", "8"], answer: 2 },
+            { q: "What do we call a piece of land surrounded by water on three sides?", options: ["Island", "Peninsula", "Isthmus", "Delta"], answer: 1 },
+            { q: "What do we call a piece of land completely surrounded by water?", options: ["Peninsula", "Island", "Cape", "Coast"], answer: 1 },
+            { q: "Which of these is the coldest continent?", options: ["Africa", "Antarctica", "Asia", "South America"], answer: 1 },
+            { q: "What is the name of the imaginary line around the middle of the Earth?", options: ["The Prime Meridian", "The Equator", "The Tropic", "The Axis"], answer: 1 },
+            { q: "Which of these is a country, not a city?", options: ["Tokyo", "Canada", "Sydney", "Cairo"], answer: 1 },
+            { q: "What ocean is closest to the United States' East Coast?", options: ["Pacific", "Atlantic", "Indian", "Arctic"], answer: 1 },
+            { q: "What do we call a chain of mountains?", options: ["A range", "A ridge", "A cliff", "A basin"], answer: 0 },
+            { q: "Which of these is a compass direction?", options: ["Up", "North", "Left", "Forward"], answer: 1 }
+        ];
+
+        // Store final times for each level
+        // Key: level number (e.g., 1, 2, 3), Value: elapsed time in seconds
+        let levelTimes = {};
+
+        // Maze dimensions for each level, fixed to 800x800 as requested
+        const levelDimensions = {
+            1: { width: 800, height: 800 },
+            2: { width: 800, height: 800 },
+            3: { width: 800, height: 800 },
+            4: { width: 800, height: 800 },
+            5: { width: 800, height: 800 },
+            6: { width: 800, height: 800 },
+            7: { width: 800, height: 800 },
+            8: { width: 800, height: 800 }
+        };
+
+        // --- Maze Cell Class ---
+        // Represents a single cell in the maze grid
+        class Cell {
+            constructor(col, row) {
+                this.col = col; // Column index
+                this.row = row; // Row index
+                // Walls: true if wall exists, false if passage
+                this.walls = {
+                    top: true,
+                    right: true,
+                    bottom: true,
+                    left: true
+                };
+                this.visited = false; // Used during maze generation
+            }
+        }
+
+        // --- Maze Generation (Recursive Backtracking Algorithm) ---
+        function generateMaze() {
+            // Set canvas dimensions based on the current level
+            const dims = levelDimensions[currentLevel];
+            canvas.width = dims.width;
+            canvas.height = dims.height;
+
+            // Dynamically calculate cellSize to fit the maze within the canvas,
+            // making mazes progressively denser and more complex for higher levels.
+            // Increased multiplier for more cells/complexity per level.
+            // This directly impacts the number of cells and thus the "straightness" of paths.
+            cellSize = Math.floor(Math.min(canvas.width, canvas.height) / (currentLevel * 10 + 30)); // Adjusted for higher density
+            // Ensure cellSize is at least the effective ball diameter plus a small buffer
+            if (cellSize < BALL_DIAMETER_EFFECTIVE + 2) {
+                cellSize = BALL_DIAMETER_EFFECTIVE + 2;
+            }
+
+            // Calculate grid dimensions based on new cellSize
+            gridCols = Math.floor(canvas.width / cellSize);
+            gridRows = Math.floor(canvas.height / cellSize);
+
+            // Initialize maze grid with all walls present
+            maze = [];
+            for (let r = 0; r < gridRows; r++) {
+                let row = [];
+                for (let c = 0; c < gridCols; c++) {
+                    row.push(new Cell(c, r));
+                }
+                maze.push(row);
+            }
+
+            // Initialize visitedPath grid for green tracing
+            visitedPath = Array(gridRows).fill(0).map(() => Array(gridCols).fill(false));
+
+            // Recursive Backtracking algorithm implementation
+            let stack = [];
+            let current = maze[0][0]; // Start from the top-left cell
+            current.visited = true;
+            stack.push(current);
+
+            while (stack.length > 0) {
+                let neighbors = [];
+                let { col, row } = current;
+
+                // Check all unvisited neighbors (top, right, bottom, left)
+                if (row > 0 && !maze[row - 1][col].visited) {
+                    neighbors.push(maze[row - 1][col]);
+                }
+                if (col < gridCols - 1 && !maze[row][col + 1].visited) {
+                    neighbors.push(maze[row][col + 1]);
+                }
+                if (row < gridRows - 1 && !maze[row + 1][col].visited) {
+                    neighbors.push(maze[row + 1][col]);
+                }
+                if (col > 0 && !maze[row][col - 1].visited) {
+                    neighbors.push(maze[row][col - 1]);
+                }
+
+                if (neighbors.length > 0) {
+                    // Choose a random unvisited neighbor
+                    let next = neighbors[Math.floor(Math.random() * neighbors.length)];
+
+                    stack.push(current); // Push current cell back to stack
+
+                    // Remove walls between current and chosen neighbor
+                    if (next.row < current.row) { // Next is top
+                        current.walls.top = false;
+                        next.walls.bottom = false;
+                    } else if (next.row > current.row) { // Next is bottom
+                        current.walls.bottom = false;
+                        next.walls.top = false;
+                    } else if (next.col < current.col) { // Next is left
+                        current.walls.left = false;
+                        next.walls.right = false;
+                    } else if (next.col > current.col) { // Next is right
+                        current.walls.right = false;
+                        next.walls.left = false;
+                    }
+
+                    current = next; // Move to the next cell
+                    current.visited = true;
+                } else {
+                    current = stack.pop(); // Backtrack if no unvisited neighbors
+                }
+            }
+
+            // Create start and exit points by removing perimeter walls
+            // Start: Top wall of the top-left cell
+            maze[0][0].walls.top = false;
+            // Exit: Bottom wall of the bottom-right cell
+            maze[gridRows - 1][gridCols - 1].walls.bottom = false;
+
+            // Calculate the initial shortest path to guide targeted loop additions
+            const initialStartCell = maze[0][0]; // Directly use the start cell
+            const initialEndCell = maze[gridRows - 1][gridCols - 1]; // Directly use the end cell
+            const solutionPathForLoops = findShortestPath(initialStartCell, initialEndCell);
+
+            // Place blue "?" quiz tiles along the real solution path, spaced
+            // out and clear of the start/exit cells, so a player roughly
+            // following the path is likely to run into each one. Capped
+            // lower on mobile than desktop - a small screen has less room
+            // per tile and a touch player is already managing on-screen
+            // movement controls, so too many quiz stops in a row crowds
+            // both the maze view and the player's attention.
+            quizTiles = [];
+            boostPath = [];
+            if (solutionPathForLoops.length > 6) {
+                const isMobileLayout = window.innerWidth <= 768
+                    || ('ontouchstart' in window && navigator.maxTouchPoints > 0);
+                const maxQuizTiles = isMobileLayout ? 8 : 15;
+                const tileCount = Math.min(maxQuizTiles, Math.floor(solutionPathForLoops.length / 8) + 1);
+                const usedIdx = new Set();
+                for (let i = 0; i < tileCount; i++) {
+                    let idx, attempts = 0;
+                    do {
+                        idx = 2 + Math.floor(Math.random() * (solutionPathForLoops.length - 4));
+                        attempts++;
+                    } while (usedIdx.has(idx) && attempts < 20);
+                    usedIdx.add(idx);
+                    const cell = solutionPathForLoops[idx];
+                    quizTiles.push({ col: cell.col, row: cell.row, answered: false });
+                }
+            }
+
+            // --- Post-processing: Add loops/extra channels to make path less linear ---
+            // Target a certain number of loops specifically on or near the solution path.
+            // This adds complexity along the solution, but we'll balance total openings.
+            const targetedLoopsCount = Math.floor(currentLevel * 2.5 + 5); // Increased for more targeted openings
+
+            for (let i = 0; i < targetedLoopsCount; i++) {
+                // Pick a random cell from the solution path (excluding start/end if too close to perimeter)
+                if (solutionPathForLoops.length > 2) {
+                    const pathIndex = Math.floor(Math.random() * (solutionPathForLoops.length - 2)) + 1; // Avoid very first/last
+                    let cell = solutionPathForLoops[pathIndex];
+
+                    let potentialNeighbors = [];
+                    // Check all 4 directions for a neighbor that is also visited and has a wall
+                    // This ensures we're breaking an *existing* wall to create a loop
+                    if (cell.row > 0 && maze[cell.row - 1][cell.col].visited && cell.walls.top) {
+                        potentialNeighbors.push({ neighbor: maze[cell.row - 1][cell.col], wall: 'top', oppWall: 'bottom' });
+                    }
+                    if (cell.row < gridRows - 1 && maze[cell.row + 1][cell.col].visited && cell.walls.bottom) {
+                        potentialNeighbors.push({ neighbor: maze[cell.row + 1][cell.col], wall: 'bottom', oppWall: 'top' });
+                    }
+                    if (cell.col > 0 && maze[cell.row][cell.col - 1].visited && cell.walls.left) {
+                        potentialNeighbors.push({ neighbor: maze[cell.row][cell.col - 1], wall: 'left', oppWall: 'right' });
+                    }
+                    if (cell.col < gridCols - 1 && maze[cell.row][cell.col + 1].visited && cell.walls.right) {
+                        potentialNeighbors.push({ neighbor: maze[cell.row][cell.col + 1], wall: 'right', oppWall: 'left' });
+                    }
+
+                    if (potentialNeighbors.length > 0) {
+                        let randomNeighbor = potentialNeighbors[Math.floor(Math.random() * potentialNeighbors.length)];
+                        let neighborCell = randomNeighbor.neighbor;
+                        let wallToBreak = randomNeighbor.wall;
+                        let oppWallToBreak = randomNeighbor.oppWall;
+
+                        // Break the wall
+                        cell.walls[wallToBreak] = false;
+                        neighborCell.walls[oppWallToBreak] = false;
+                    }
+                }
+            }
+
+            // Add some general random loops, ensuring a minimum number for crossroads.
+            // This formula ensures more crossroads, with a slower decrease in higher levels.
+            const generalLoopsCount = Math.max(5, Math.floor(15 - currentLevel * 0.7)); // Ensures at least 5 general crossroads, decreases slowly
+            for (let i = 0; i < generalLoopsCount; i++) {
+                let r = Math.floor(Math.random() * gridRows);
+                let c = Math.floor(Math.random() * gridCols);
+                let cell = maze[r][c];
+
+                let potentialNeighbors = [];
+                if (r > 0 && maze[r - 1][c].visited && cell.walls.top) {
+                    potentialNeighbors.push({ neighbor: maze[r - 1][c], wall: 'top', oppWall: 'bottom' });
+                }
+                if (r < gridRows - 1 && maze[r + 1][c].visited && cell.walls.bottom) {
+                    potentialNeighbors.push({ neighbor: maze[r + 1][c], wall: 'bottom', oppWall: 'top' });
+                }
+                if (c > 0 && maze[r][c - 1].visited && cell.walls.left) {
+                    potentialNeighbors.push({ neighbor: maze[r][c - 1], wall: 'left', oppWall: 'right' });
+                }
+                if (c < gridCols - 1 && maze[r][c + 1].visited && cell.walls.right) {
+                    potentialNeighbors.push({ neighbor: maze[r][c + 1], wall: 'right', oppWall: 'left' });
+                }
+
+                if (potentialNeighbors.length > 0) {
+                    let randomNeighbor = potentialNeighbors[Math.floor(Math.random() * potentialNeighbors.length)];
+                    let neighborCell = randomNeighbor.neighbor;
+                    let wallToBreak = randomNeighbor.wall;
+                    let oppWallToBreak = randomNeighbor.oppWall;
+
+                    cell.walls[wallToBreak] = false;
+                    neighborCell.walls[oppWallToBreak] = false;
+                }
+            }
+
+            // Set initial ball position inside the first cell, at its center
+            ball.x = maze[0][0].col * cellSize + cellSize / 2; // Center of the first cell
+            ball.y = maze[0][0].row * cellSize + cellSize / 2; // Center of the first cell
+            visitedPath[0][0] = true; // Mark starting cell as visited for green path
+
+            // Dynamically adjust ball speed based on cell size to prevent tunneling
+            // Ensure speed is always positive and less than half the available channel width
+            const availableChannelWidth = cellSize - BALL_DIAMETER_EFFECTIVE;
+            ball.speed = Math.max(1, Math.floor(availableChannelWidth * 0.7)); // Speed remains consistent with channel size
+        }
+
+        // --- Drawing Functions ---
+
+        // Draws the maze walls and visited path on the canvas
+        function drawMaze() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the entire canvas
+
+            // Draw maze surface background - Changed to white
+            ctx.fillStyle = '#FFFBF3'; // White for the maze floor
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw the green visited path
+            ctx.fillStyle = '#7FCB76'; // Green color for visited cells
+            for (let r = 0; r < gridRows; r++) {
+                for (let c = 0; c < gridCols; c++) {
+                    if (visitedPath[r][c]) {
+                        ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+                    }
+                }
+            }
+
+            // Draw the blue boost path - the ten cells a correct quiz
+            // answer just skipped the ball across.
+            if (boostPath.length) {
+                ctx.fillStyle = '#8FCBEC';
+                boostPath.forEach(cell => {
+                    ctx.fillRect(cell.col * cellSize, cell.row * cellSize, cellSize, cellSize);
+                });
+            }
+
+            // Draw maze walls
+            ctx.strokeStyle = '#1E2226'; // Ink for walls
+            ctx.lineWidth = 4; // Thickness of the walls
+
+            for (let r = 0; r < gridRows; r++) {
+                for (let c = 0; c < gridCols; c++) {
+                    let cell = maze[r][c];
+                    let x = cell.col * cellSize;
+                    let y = cell.row * cellSize;
+
+                    // Draw each wall if it exists for the current cell
+                    if (cell.walls.top) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x + cellSize, y);
+                        ctx.stroke();
+                    }
+                    if (cell.walls.right) {
+                        ctx.beginPath();
+                        ctx.moveTo(x + cellSize, y);
+                        ctx.lineTo(x + cellSize, y + cellSize);
+                        ctx.stroke();
+                    }
+                    if (cell.walls.bottom) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y + cellSize);
+                        ctx.lineTo(x + cellSize, y + cellSize);
+                        ctx.stroke();
+                    }
+                    if (cell.walls.left) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x, y + cellSize);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Draw "Start here" and "Exit" signs
+            ctx.fillStyle = '#DD7A22'; // Sun-hot for text
+            ctx.font = 'bold 20px "Plus Jakarta Sans"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // "Start here" sign positioning
+            ctx.fillText('Start here', maze[0][0].col * cellSize + cellSize / 2, maze[0][0].row * cellSize - 15);
+
+            // "Exit" sign positioning
+            ctx.fillText('Exit', maze[gridRows - 1][gridCols - 1].col * cellSize + cellSize / 2, maze[gridRows - 1][gridCols - 1].row * cellSize + cellSize + 15);
+
+            // Quiz tiles - blue "?" while unanswered, then a permanent
+            // green checkmark or red X once the wizard has judged it, so a
+            // player can see at a glance which ones they already got right
+            // or wrong instead of the tile just vanishing.
+            quizTiles.forEach(tile => {
+                const cx = tile.col * cellSize + cellSize / 2;
+                const cy = tile.row * cellSize + cellSize / 2;
+                const r = Math.max(6, cellSize * 0.32);
+                let fillColor = '#0A5280', glyph = '?';
+                if (tile.answered) {
+                    fillColor = tile.correct ? '#3A7A37' : '#BC3229';
+                    glyph = tile.correct ? '✓' : '✗';
+                }
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.fillStyle = fillColor;
+                ctx.fill();
+                ctx.strokeStyle = '#1E2226';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold ' + Math.max(10, Math.floor(cellSize * 0.4)) + 'px "Plus Jakarta Sans"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(glyph, cx, cy);
+            });
+        }
+
+        // Draws the ball with shadow and animation
+        function drawBall() {
+            let currentBallY = ball.y; // Y position for drawing, adjusted for animations
+            if (!isMoving) {
+                // Apply wiggle effect when ball is idle
+                const time = (Date.now() - lastMoveTime) / WIGGLE_INTERVAL;
+                wiggleOffset = Math.sin(time * Math.PI * 2) * wiggleAmplitude;
+                currentBallY += wiggleOffset;
+            } else {
+                // Apply subtle bounce effect when ball is moving
+                const bounceFactor = Math.sin(Date.now() * 0.01) * 0.5; // Small sine wave for bounce
+                currentBallY += bounceFactor;
+            }
+
+            // Draw ball shadow (ellipse below the ball)
+            ctx.beginPath();
+            ctx.ellipse(ball.x, currentBallY + ball.radius + 1, ball.radius * 0.9, ball.radius * 0.3, 0, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; // Semi-transparent black
+            ctx.fill();
+
+            // Draw the ball itself with a radial gradient for a dull sphere effect
+            let gradient = ctx.createRadialGradient(
+                ball.x - ball.radius * 0.3, currentBallY - ball.radius * 0.3, ball.radius * 0.1, // Inner circle for highlight
+                ball.x, currentBallY, ball.radius // Outer circle for main sphere
+            );
+            gradient.addColorStop(0, '#FDE28A'); // Sun highlight
+            gradient.addColorStop(1, '#F2C230'); // Sun for the ball
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(ball.x, currentBallY, ball.radius, 0, Math.PI * 2); // Draw a perfect circle
+            ctx.fill();
+        }
+
+        // Draws the hint arrow next to the ball
+        function drawHintArrow() {
+            // Only draw if hint is active and a path exists with at least one next step
+            if (!hintActive || hintPath.length < 2) return;
+
+            const currentCell = getBallCell(); // Get the cell the ball is currently in
+            const nextCell = hintPath[1]; // The next cell in the calculated shortest path
+
+            if (!nextCell) return; // Should not happen if hintPath has length > 1
+
+            // Calculate centers of current and next cells to determine arrow direction
+            const currentCellCenter = {
+                x: currentCell.col * cellSize + cellSize / 2,
+                y: currentCell.row * cellSize + cellSize / 2
+            };
+            const nextCellCenter = {
+                x: nextCell.col * cellSize + cellSize / 2,
+                y: nextCell.row * cellSize + cellSize / 2
+            };
+
+            // Calculate the angle for the arrow to point from current to next cell
+            let angle = Math.atan2(nextCellCenter.y - currentCellCenter.y, nextCellCenter.x - currentCellCenter.x);
+
+            // Apply bouncing offset for the arrow
+            hintArrowOffset = Math.sin(Date.now() * hintArrowSpeed) * hintArrowAmplitude;
+
+            // Save canvas state, translate, and rotate for drawing the arrow
+            ctx.save();
+            ctx.translate(ball.x, ball.y + hintArrowOffset); // Translate to ball position + bounce
+            ctx.rotate(angle); // Rotate to point in the correct direction
+
+            // Draw a simple red arrow shape
+            ctx.fillStyle = '#C13B31'; // Changed to Red for the arrow
+            ctx.beginPath();
+            ctx.moveTo(15, 0); // Arrow tip
+            ctx.lineTo(0, -10); // Left wing
+            ctx.lineTo(0, -5); // Left body
+            ctx.lineTo(-10, -5); // Back left
+            ctx.lineTo(-10, 5); // Back right
+            ctx.lineTo(0, 5); // Right body
+            ctx.lineTo(0, 10); // Right wing
+            ctx.closePath(); // Close the path to form the arrow
+            ctx.fill(); // Fill the arrow with red
+            ctx.restore(); // Restore canvas state
+        }
+
+        // --- Game Logic Functions ---
+
+        // Determines the maze cell the ball is currently occupying
+        function getBallCell() {
+            let col = Math.floor(ball.x / cellSize);
+            let row = Math.floor(ball.y / cellSize);
+            // Clamp cell indices to ensure they are within maze bounds
+            col = Math.max(0, Math.min(col, gridCols - 1));
+            row = Math.max(0, Math.min(row, gridRows - 1));
+            return maze[row][col];
+        }
+
+        // Checks if the ball can move in a given direction (dx, dy) without hitting a wall
+        function canMove(dx, dy) {
+            let currentCell = getBallCell();
+            let nextBallX = ball.x + dx;
+            let nextBallY = ball.y + dy;
+
+            // Calculate potential new bounding box edges
+            const nextBallLeft = nextBallX - ball.radius - BALL_MARGIN;
+            const nextBallRight = nextBallX + ball.radius + BALL_MARGIN;
+            const nextBallTop = nextBallY - ball.radius - BALL_MARGIN;
+            const nextBallBottom = nextBallY + ball.radius + BALL_MARGIN;
+
+            // Get current cell's pixel boundaries
+            const currentCellX = currentCell.col * cellSize;
+            const currentCellY = currentCell.row * cellSize;
+
+            // Determine if at start/exit for perimeter checks
+            const isAtStart = (currentCell.col === 0 && currentCell.row === 0);
+            const isAtExit = (currentCell.col === gridCols - 1 && currentCell.row === gridRows - 1);
+
+            // --- Check against current cell's walls ---
+            // If moving up and current cell has a top wall
+            if (dy < 0 && currentCell.walls.top) {
+                // If the ball's top edge would cross above the cell's top boundary
+                if (nextBallTop < currentCellY) {
+                    // Allow if it's the start cell and the top wall is explicitly removed for the opening
+                    if (!(isAtStart && !currentCell.walls.top)) return false;
+                }
+            }
+            // If moving down and current cell has a bottom wall
+            if (dy > 0 && currentCell.walls.bottom) {
+                // If the ball's bottom edge would cross below the cell's bottom boundary
+                if (nextBallBottom > currentCellY + cellSize) {
+                    // Allow if it's the exit cell and the bottom wall is explicitly removed for the opening
+                    if (!(isAtExit && !currentCell.walls.bottom)) return false;
+                }
+            }
+            // If moving left and current cell has a left wall
+            if (dx < 0 && currentCell.walls.left) {
+                // If the ball's left edge would cross left of the cell's left boundary
+                if (nextBallLeft < currentCellX) {
+                    return false;
+                }
+            }
+            // If moving right and current cell has a right wall
+            if (dx > 0 && currentCell.walls.right) {
+                // If the ball's right edge would cross right of the cell's right boundary
+                if (nextBallRight > currentCellX + cellSize) {
+                    return false;
+                }
+            }
+
+            // --- Check for collisions with walls of adjacent cells if moving into them ---
+            // This handles cases where the ball is moving towards a wall that is technically
+            // part of the *next* cell's boundary, but is still a wall for the current cell.
+
+            // Calculate the cell the ball *would* land in if it moved
+            let potentialNextCellCol = Math.floor(nextBallX / cellSize);
+            let potentialNextCellRow = Math.floor(nextBallY / cellSize);
+
+            // Clamp these to ensure they are valid indices
+            potentialNextCellCol = Math.max(0, Math.min(potentialNextCellCol, gridCols - 1));
+            potentialNextCellRow = Math.max(0, Math.min(potentialNextCellRow, gridRows - 1));
+
+            // If the ball is moving into a new cell
+            if (potentialNextCellCol !== currentCell.col || potentialNextCellRow !== currentCell.row) {
+                let targetCell = maze[potentialNextCellRow][potentialNextCellCol];
+
+                // Check wall between current and target cell
+                if (targetCell.row < currentCell.row) { // Moving up
+                    if (currentCell.walls.top) return false;
+                } else if (targetCell.row > currentCell.row) { // Moving down
+                    if (currentCell.walls.bottom) return false;
+                } else if (targetCell.col < currentCell.col) { // Moving left
+                    if (currentCell.walls.left) return false;
+                } else if (targetCell.col > currentCell.col) { // Moving right
+                    if (currentCell.walls.right) return false;
+                }
+            }
+
+            return true; // No collision detected
+        }
+
+
+        // Updates the ball's position based on pressed keys and collision detection
+        function updateBallPosition() {
+            let dx = 0;
+            let dy = 0;
+
+            // Determine desired movement direction
+            if (keys.ArrowUp || keys.w) dy = -ball.speed;
+            if (keys.ArrowDown || keys.s) dy = ball.speed;
+            if (keys.ArrowLeft || keys.a) dx = -ball.speed;
+            if (keys.ArrowRight || keys.d) dx = ball.speed;
+
+            // Update isMoving flag
+            isMoving = (dx !== 0 || dy !== 0);
+
+            if (isMoving) {
+                // The longer a direction stays held, the faster the ball
+                // goes - resets the instant movement stops.
+                if (movingSinceMs === null) movingSinceMs = Date.now();
+                speedMultiplier = Math.min(MAX_SPEED_MULTIPLIER, 1 + (Date.now() - movingSinceMs) / SPEED_RAMP_MS);
+                dx *= speedMultiplier;
+                dy *= speedMultiplier;
+
+                lastMoveTime = Date.now(); // Reset last move time for wiggle
+                hintActive = false; // Deactivate hint when ball moves
+
+                // Get current cell before potential move
+                let currentCell = getBallCell();
+                let newBallX = ball.x + dx;
+                let newBallY = ball.y + dy;
+
+                // Calculate potential new cell after move
+                let newCellCol = Math.floor(newBallX / cellSize);
+                let newCellRow = Math.floor(newBallY / cellSize);
+
+                // Clamp to valid cell indices for visitedPath
+                newCellCol = Math.max(0, Math.min(newCellCol, gridCols - 1));
+                newCellRow = Math.max(0, Math.min(newCellRow, gridRows - 1));
+
+                // If the ball has entered a new cell, mark it as visited
+                if (newCellCol !== currentCell.col || newCellRow !== currentCell.row) {
+                    visitedPath[newCellRow][newCellCol] = true;
+                }
+
+                // Apply movement only if allowed by collision detection
+                if (canMove(dx, 0)) { // Check horizontal movement
+                    ball.x += dx;
+                }
+                if (canMove(0, dy)) { // Check vertical movement
+                    ball.y += dy;
+                }
+            } else {
+                movingSinceMs = null;
+                speedMultiplier = 1;
+            }
+        }
+
+        // Checks if the ball has reached the maze exit
+        function checkWinCondition() {
+            const exitCell = maze[gridRows - 1][gridCols - 1]; // The bottom-right cell is the exit
+            const ballCell = getBallCell(); // Current cell of the ball
+
+            // Check if the ball is within the exit cell and has passed its vertical midpoint
+            // This allows the ball to fully "exit" through the bottom opening.
+            if (ballCell.col === exitCell.col && ballCell.row === exitCell.row && ball.y > exitCell.row * cellSize + cellSize / 2) {
+                stopGame(); // Stop game loop and timer
+                levelTimes[currentLevel] = elapsedTime; // Store the elapsed time for the current level
+                showWinModal(); // Display the "You Win" pop-up or leaderboard
+            }
+        }
+
+        // --- Quiz Tile Functions ---
+
+        // The wizard's own dialogue, one array per moment - picked at
+        // random each time so he doesn't say the exact same line every
+        // single tile. The portrait swap (question/portal/no-portal) is
+        // what actually carries the state; these lines just give it a
+        // voice.
+        const WIZARD_QUESTION_LINES = [
+            "Hoo hoo... halt there, young traveler! Answer me this riddle before you pass:",
+            "Ahh, a wanderer approaches. Solve my riddle, and the way may open:",
+            "Patience, patience. First, prove your wit to this old wizard:",
+            "Mmm, a curious one. Answer well, and I shall lend you my aid:",
+            "Not so fast! The old wizard has a question for thee:"
+        ];
+        const WIZARD_CORRECT_LINES = [
+            "Ahh, wisely spoken! Behold - a portal, to speed your way!",
+            "Just as I suspected - a clever mind! Step through, quickly now!",
+            "Correct! The old magic stirs... a portal opens before you!",
+            "Well answered, traveler! Let this portal carry you onward!"
+        ];
+        const WIZARD_WRONG_LINES = [
+            "Nay, that is not the answer I seek... No portal for you this time. Onward, on your own two feet!",
+            "Hmm, not quite, young one. The mist stays closed - keep wandering!",
+            "Wrong, wrong! The old wizard shakes his head. Find your own way onward!",
+            "Alas, no. The portal stays hidden. Try your luck further down the path!"
+        ];
+        function wizardLine(lines) { return lines[Math.floor(Math.random() * lines.length)]; }
+
+        // Milliseconds per word for the wizard's typewriter dialogue - slow
+        // enough that a young reader can actually keep up, not a brisk
+        // adult-reading-speed pace.
+        const WIZARD_WORD_DELAY_MS = 260;
+
+        // Reveals the wizard's dialogue one word at a time, like a closed
+        // caption, instead of dumping the whole line in at once - it reads
+        // more like he's actually speaking it. `parts` is a list of plain
+        // word strings, {word, strong:true} for an emphasized word (the
+        // question itself), or {br:true} for a line break. Any typewriter
+        // already running on this element is stopped first, so answering
+        // fast or reopening the modal never leaves two timers racing.
+        function typewriterWords(el, parts, wordDelayMs) {
+            clearInterval(el.__typerInterval);
+            el.innerHTML = '';
+            let i = 0;
+            function step() {
+                if (i >= parts.length) { clearInterval(el.__typerInterval); return; }
+                const part = parts[i++];
+                if (part && part.br) {
+                    el.appendChild(document.createElement('br'));
+                    return;
+                }
+                const word = typeof part === 'string' ? part : part.word;
+                const needsSpace = el.childNodes.length && el.lastChild.nodeName !== 'BR';
+                const span = document.createElement(part && part.strong ? 'strong' : 'span');
+                span.textContent = (needsSpace ? ' ' : '') + word;
+                el.appendChild(span);
+            }
+            step();
+            el.__typerInterval = setInterval(step, wordDelayMs || WIZARD_WORD_DELAY_MS);
+        }
+
+        // Checks whether the ball has just reached an unanswered "?" tile.
+        function checkQuizTrigger() {
+            if (quizActive) return;
+            const ballCell = getBallCell();
+            const tile = quizTiles.find(t => !t.answered && t.col === ballCell.col && t.row === ballCell.row);
+            if (tile) openQuiz(tile);
+        }
+
+        // Pauses the maze and asks one multiple-choice question.
+        function openQuiz(tile) {
+            quizActive = true;
+            tile.answered = true; // consumed the moment it triggers
+            pauseTimerForQuiz();
+
+            const picked = QUIZ_QUESTIONS[Math.floor(Math.random() * QUIZ_QUESTIONS.length)];
+            document.getElementById('quizWizardImg').src = '../assets/games/wizard-question.png';
+            document.getElementById('quizTitle').textContent = 'The Old Wizard Speaks...';
+            const introWords = wizardLine(WIZARD_QUESTION_LINES).split(' ');
+            const questionWords = picked.q.split(' ').map(w => ({ word: w, strong: true }));
+            typewriterWords(document.getElementById('quizQuestion'), introWords.concat([{ br: true }], questionWords));
+            const optsContainer = document.getElementById('quizOptions');
+            optsContainer.innerHTML = '';
+            document.getElementById('quizFeedback').textContent = '';
+
+            picked.options.forEach((opt, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'quiz-option';
+                btn.type = 'button';
+                btn.textContent = opt;
+                btn.addEventListener('click', () => answerQuiz(i, picked.answer, tile, optsContainer));
+                optsContainer.appendChild(btn);
+            });
+
+            document.getElementById('quizModal').style.display = 'flex';
+        }
+
+        // Handles the chosen answer - correct jumps the ball ten cells
+        // toward the exit along the real solution path; wrong just closes.
+        function answerQuiz(chosenIndex, correctIndex, tile, container) {
+            const buttons = container.querySelectorAll('.quiz-option');
+            buttons.forEach(b => b.disabled = true);
+            const feedback = document.getElementById('quizFeedback');
+            let lineWords;
+
+            if (chosenIndex === correctIndex) {
+                tile.correct = true;
+                buttons[chosenIndex].classList.add('correct');
+                document.getElementById('quizWizardImg').src = '../assets/games/wizard_correct-answer-portal.png';
+                document.getElementById('quizTitle').textContent = 'The Wizard is Pleased!';
+                feedback.style.color = '#3A7A37';
+                lineWords = wizardLine(WIZARD_CORRECT_LINES).split(' ');
+                typewriterWords(feedback, lineWords);
+                applyQuizBoost(tile);
+            } else {
+                tile.correct = false;
+                buttons[chosenIndex].classList.add('wrong');
+                buttons[correctIndex].classList.add('correct');
+                document.getElementById('quizWizardImg').src = '../assets/games/wizard_wrong-answer-no-portal.png';
+                document.getElementById('quizTitle').textContent = 'The Wizard Shakes His Head...';
+                feedback.style.color = '#C13B31';
+                lineWords = wizardLine(WIZARD_WRONG_LINES).split(' ');
+                typewriterWords(feedback, lineWords);
+            }
+
+            // Long enough for every word to actually finish typing out at
+            // the slower, easier-to-read pace, plus a real pause afterward -
+            // not a flat delay, since the wizard's lines vary in length.
+            const readDelay = lineWords.length * WIZARD_WORD_DELAY_MS + 2200;
+            setTimeout(() => {
+                document.getElementById('quizModal').style.display = 'none';
+                quizActive = false;
+                resumeTimerAfterQuiz();
+                lastMoveTime = Date.now();
+            }, readDelay);
+        }
+
+        // Moves the ball up to ten cells along the shortest path to the
+        // exit, and marks that stretch blue on the maze.
+        function applyQuizBoost(tile) {
+            const startCell = maze[tile.row][tile.col];
+            const exitCell = maze[gridRows - 1][gridCols - 1];
+            const path = findShortestPath(startCell, exitCell);
+            const steps = path.slice(1, 11);
+            steps.forEach(cell => {
+                boostPath.push(cell);
+                visitedPath[cell.row][cell.col] = true;
+            });
+            const landing = steps.length ? steps[steps.length - 1] : startCell;
+            ball.x = landing.col * cellSize + cellSize / 2;
+            ball.y = landing.row * cellSize + cellSize / 2;
+        }
+
+        // --- Timer Functions ---
+
+        // Starts the game timer
+        function startTimer() {
+            startTime = Date.now(); // Record the start time
+            timerInterval = setInterval(updateTimer, 1000); // Update timer every second
+        }
+
+        // Stops the game timer
+        function stopTimer() {
+            clearInterval(timerInterval); // Clear the interval
+        }
+
+        // Pauses the clock for a quiz question without losing the time
+        // already elapsed, then picks the count back up where it left off.
+        function pauseTimerForQuiz() { stopTimer(); }
+        function resumeTimerAfterQuiz() {
+            startTime = Date.now() - elapsedTime * 1000;
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        // Updates the timer display
+        function updateTimer() {
+            elapsedTime = Math.floor((Date.now() - startTime) / 1000); // Calculate elapsed seconds
+            const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0'); // Format minutes
+            const seconds = (elapsedTime % 60).toString().padStart(2, '0'); // Format seconds
+            document.getElementById('timer-display').textContent = `${minutes}:${seconds}`; // Update display
+        }
+
+        // Helper to format time (seconds to MM:SS)
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const remainingSeconds = (seconds % 60).toString().padStart(2, '0');
+            return `${minutes}:${remainingSeconds}`;
+        }
+
+        // --- Hint Logic (Breadth-First Search for Shortest Path) ---
+
+        // Finds the shortest path between a start and end cell using BFS
+        function findShortestPath(startCell, endCell) {
+            let queue = [{ cell: startCell, path: [startCell] }]; // Queue for BFS: {current cell, path to current cell}
+            let visited = new Set(); // Set to keep track of visited cells to avoid cycles
+            visited.add(`${startCell.row},${startCell.col}`); // Add start cell to visited
+
+            while (queue.length > 0) {
+                let { cell, path } = queue.shift(); // Dequeue the first item
+
+                // If the end cell is reached, return the path
+                if (cell.col === endCell.col && cell.row === endCell.row) {
+                    return path;
+                }
+
+                // Define possible moves (dr: row change, dc: col change) and corresponding wall names
+                const moves = [
+                    { dr: -1, dc: 0, wall: 'top', oppWall: 'bottom' }, // Up
+                    { dr: 0, dc: 1, wall: 'right', oppWall: 'left' }, // Right
+                    { dr: 1, dc: 0, wall: 'bottom', oppWall: 'top' }, // Down
+                    { dr: 0, dc: -1, wall: 'left', oppWall: 'right' }  // Left
+                ];
+
+                for (const move of moves) {
+                    const nextRow = cell.row + move.dr;
+                    const nextCol = cell.col + move.dc;
+
+                    // Check if the next cell is within maze bounds
+                    if (nextRow >= 0 && nextRow < gridRows && nextCol >= 0 && nextCol < gridCols) {
+                        const nextCell = maze[nextRow][nextCol];
+                        const nextCellKey = `${nextRow},${nextCol}`; // Unique key for visited set
+
+                        // If the next cell has not been visited yet
+                        if (!visited.has(nextCellKey)) {
+                            // Check if there is no wall between the current cell and the next cell
+                            // (i.e., both sides of the "doorway" are open)
+                            if (!cell.walls[move.wall] && !nextCell.walls[move.oppWall]) {
+                                visited.add(nextCellKey); // Mark as visited
+                                queue.push({ cell: nextCell, path: [...path, nextCell] }); // Enqueue with updated path
+                            }
+                        }
+                    }
+                }
+            }
+            return []; // Return empty array if no path is found (should not happen in a valid maze)
+        }
+
+        // Event listener for the Hint button
+        document.getElementById('hint-button').addEventListener('click', () => {
+            const startCell = getBallCell(); // Ball's current cell
+            const endCell = maze[gridRows - 1][gridCols - 1]; // Maze exit cell
+            hintPath = findShortestPath(startCell, endCell); // Find the shortest path
+
+            if (hintPath.length > 1) { // If a path is found (more than just the current cell)
+                hintActive = true; // Activate hint display
+            } else {
+                console.log("No hint path found!"); // Log if no path (for debugging)
+            }
+        });
+
+
+        // --- Win Modal Functions ---
+
+        // Displays the "You Win" modal with personalized message
+        function showWinModal() {
+            stopTimer(); // Stop the timer
+            cancelAnimationFrame(animationFrameId); // Stop the game animation loop
+
+            // Get modal elements
+            const winModal = document.getElementById('winModal');
+            const winPhraseElement = document.getElementById('winPhrase');
+            const finalTimeElement = document.getElementById('finalTime');
+            const nextLevelBtn = document.getElementById('nextLevelBtn');
+
+            // Format elapsed time for display
+            const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
+            const seconds = (elapsedTime % 60).toString().padStart(2, '0');
+            finalTimeElement.textContent = `${minutes}:${seconds}`;
+
+            let phrase = "";
+            // Determine the "You Win" phrase based on completion time
+            if (elapsedTime <= 60) { // 30 seconds to 1 minute (assuming minimum completion time is 30s)
+                phrase = "AMAZING, THAT WAS FAST!";
+            } else if (elapsedTime > 60 && elapsedTime <= 180) { // 1 to 3 minutes
+                phrase = "WOW, AWESOME JOB!!";
+            } else if (elapsedTime > 180 && elapsedTime <= 300) { // 3 to 5 minutes
+                phrase = "YOU FINALLY DID IT!";
+            } else { // 5 minutes to 60 minutes (or more)
+                phrase = "THAT TOOK A WHILE BUT YOU DID IT!";
+            }
+            winPhraseElement.textContent = phrase;
+
+            // Configure the "Next Level" button or show leaderboard
+            if (currentLevel < 8) { // If not the last level
+                nextLevelBtn.textContent = `Level ${currentLevel + 1} Play Now!`;
+                nextLevelBtn.onclick = () => {
+                    winModal.style.display = 'none'; // Hide modal
+                    currentLevel++; // Increment level
+                    startGame(); // Start the next level
+                };
+            } else { // If all levels are completed (Level 8)
+                nextLevelBtn.textContent = "View Leaderboard"; // Change button text
+                nextLevelBtn.onclick = () => {
+                    winModal.style.display = 'none'; // Hide win modal
+                    showLeaderboardModal(); // Show the leaderboard
+                };
+            }
+
+            winModal.style.display = 'flex'; // Show the modal (using flex to center content)
+        }
+
+        // --- Leaderboard Functions ---
+        function showLeaderboardModal() {
+            const leaderboardModal = document.getElementById('leaderboardModal');
+            const leaderboardList = document.getElementById('leaderboard');
+            leaderboardList.innerHTML = ''; // Clear previous entries
+
+            // Convert levelTimes object to an array of {level, time} objects
+            const sortedTimes = Object.entries(levelTimes).map(([level, time]) => ({
+                level: parseInt(level),
+                time: time
+            }));
+
+            // Sort by time (fastest to slowest)
+            sortedTimes.sort((a, b) => a.time - b.time);
+
+            // Populate the leaderboard list
+            sortedTimes.forEach(entry => {
+                const listItem = document.createElement('li');
+                listItem.innerHTML = `<span>Level ${entry.level}:</span><span>${formatTime(entry.time)}</span>`;
+                leaderboardList.appendChild(listItem);
+            });
+
+            // Set up play again button
+            document.getElementById('playAgainBtn').onclick = () => {
+                leaderboardModal.style.display = 'none'; // Hide leaderboard
+                currentLevel = 1; // Reset to level 1 for replayability
+                levelTimes = {}; // Clear all previous times for a fresh start
+                startGame(); // Start game from level 1 again
+            };
+
+            leaderboardModal.style.display = 'flex'; // Show the leaderboard modal
+        }
+
+
+        // --- Game Loop ---
+
+        // The main game animation loop
+        function gameLoop() {
+            if (!quizActive) {
+                updateBallPosition(); // Update ball's position and check collisions
+            }
+            drawMaze(); // Redraw the maze (including visited path)
+            drawBall(); // Redraw the ball
+            if (hintActive) {
+                drawHintArrow(); // Draw hint arrow if active
+            }
+            if (!quizActive) {
+                checkQuizTrigger(); // A "?" tile reached mid-move pauses everything
+                checkWinCondition(); // Check if the player has won
+            }
+            animationFrameId = requestAnimationFrame(gameLoop); // Request next animation frame
+        }
+
+        // --- Event Listeners ---
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.key)) { // Check if the pressed key is a recognized control key
+                keys[e.key] = true; // Set key state to true (pressed)
+                hintActive = false; // Deactivate hint on any keyboard movement
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = false; // Set key state to false (released)
+                // Check if no movement keys are currently pressed to set isMoving flag
+                isMoving = !(keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight ||
+                             keys.w || keys.s || keys.a || keys.d);
+            }
+        });
+
+        // On-screen controls (Mouse events)
+        // For each button: on mousedown, set key state to true, set isMoving, deactivate hint.
+        // On mouseup/mouseleave, set key state to false, set isMoving.
+        document.getElementById('up').addEventListener('mousedown', () => { keys.ArrowUp = true; isMoving = true; hintActive = false; });
+        document.getElementById('up').addEventListener('mouseup', () => { keys.ArrowUp = false; isMoving = false; });
+        document.getElementById('up').addEventListener('mouseleave', () => { keys.ArrowUp = false; isMoving = false; });
+
+        document.getElementById('down').addEventListener('mousedown', () => { keys.ArrowDown = true; isMoving = true; hintActive = false; });
+        document.getElementById('down').addEventListener('mouseup', () => { keys.ArrowDown = false; isMoving = false; });
+        document.getElementById('down').addEventListener('mouseleave', () => { keys.ArrowDown = false; isMoving = false; });
+
+        document.getElementById('left').addEventListener('mousedown', () => { keys.ArrowLeft = true; isMoving = true; hintActive = false; });
+        document.getElementById('left').addEventListener('mouseup', () => { keys.ArrowLeft = false; isMoving = false; });
+        document.getElementById('left').addEventListener('mouseleave', () => { keys.ArrowLeft = false; isMoving = false; });
+
+        document.getElementById('right').addEventListener('mousedown', () => { keys.ArrowRight = true; isMoving = true; hintActive = false; });
+        document.getElementById('right').addEventListener('mouseup', () => { keys.ArrowRight = false; isMoving = false; });
+        document.getElementById('right').addEventListener('mouseleave', () => { keys.ArrowRight = false; isMoving = false; });
+
+        // On-screen controls (Touch events for mobile)
+        // Use preventDefault to stop default touch behavior (like scrolling)
+        document.getElementById('up').addEventListener('touchstart', (e) => { e.preventDefault(); keys.ArrowUp = true; isMoving = true; hintActive = false; });
+        document.getElementById('up').addEventListener('touchend', (e) => { e.preventDefault(); keys.ArrowUp = false; isMoving = false; });
+
+        document.getElementById('down').addEventListener('touchstart', (e) => { e.preventDefault(); keys.ArrowDown = true; isMoving = true; hintActive = false; });
+        document.getElementById('down').addEventListener('touchend', (e) => { e.preventDefault(); keys.ArrowDown = false; isMoving = false; });
+
+        document.getElementById('left').addEventListener('touchstart', (e) => { e.preventDefault(); keys.ArrowLeft = true; isMoving = true; hintActive = false; });
+        document.getElementById('left').addEventListener('touchend', (e) => { e.preventDefault(); keys.ArrowLeft = false; isMoving = false; });
+
+        document.getElementById('right').addEventListener('touchstart', (e) => { e.preventDefault(); keys.ArrowRight = true; isMoving = true; hintActive = false; });
+        document.getElementById('right').addEventListener('touchend', (e) => { e.preventDefault(); keys.ArrowRight = false; isMoving = false; });
+
+
+        // --- Game Initialization & Control ---
+
+        // Starts a new game or restarts the current level
+        function startGame() {
+            document.getElementById('level-display').textContent = currentLevel; // Update level display
+            elapsedTime = 0; // Reset timer
+            document.getElementById('timer-display').textContent = '00:00'; // Reset timer display
+            stopTimer(); // Clear any existing timer
+            cancelAnimationFrame(animationFrameId); // Stop any ongoing animation loop
+
+            generateMaze(); // Generate the maze for the current level (also places quiz tiles)
+            startTimer(); // Start the game timer
+            lastMoveTime = Date.now(); // Reset last move time for ball wiggle
+            isMoving = false; // Ensure ball starts idle
+            hintActive = false; // Ensure hint is off
+            quizActive = false; // No quiz open on a fresh level
+            movingSinceMs = null; // Speed ramp-up starts cold
+            speedMultiplier = 1;
+            document.getElementById('quizModal').style.display = 'none';
+            animationFrameId = requestAnimationFrame(gameLoop); // Start the main game loop
+        }
+
+        // Stops the game (timer and animation)
+        function stopGame() {
+            stopTimer();
+            cancelAnimationFrame(animationFrameId);
+            isMoving = false;
+            // Reset all key states to prevent phantom movement on restart
+            for (let key in keys) {
+                keys[key] = false;
+            }
+        }
+
+        // Start the game when the entire window content has loaded
+        window.onload = function () {
+            startGame();
+        };
+
+        // Handle window resizing to ensure canvas responsiveness
+        window.addEventListener('resize', () => {
+            // Re-draw the maze and ball to adapt to potential canvas size changes
+            // The canvas's actual drawing dimensions are set by generateMaze()
+            // and its visual size is handled by CSS max-width: 100%.
+            drawMaze();
+            drawBall();
+        });
+    </script>
+</body>
+</html>

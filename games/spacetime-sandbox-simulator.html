@@ -1,0 +1,2016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gravity & Space-Time: Solar System Simulator</title>
+    <!-- Tailwind CSS for UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls for camera movement -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- LaTeX Rendering via MathJax -->
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #010105;
+            color: #f3f4f6;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Hide scrollbars on sidebar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(31, 41, 55, 0.3);
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(156, 163, 175, 0.5);
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(156, 163, 175, 0.8);
+        }
+    </style>
+</head>
+<body class="relative">
+
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="absolute inset-0 bg-gray-950 z-50 flex flex-col items-center justify-center transition-opacity duration-1000">
+        <div class="relative w-40 h-40 flex items-center justify-center">
+            <div class="absolute inset-0 border-4 border-t-cyan-400 border-r-transparent border-b-indigo-500 border-l-transparent rounded-full animate-spin"></div>
+            <div class="absolute w-28 h-28 border-4 border-t-transparent border-r-fuchsia-500 border-b-transparent border-l-pink-500 rounded-full animate-spin" style="animation-direction: reverse; animation-duration: 1.5s;"></div>
+            <i class="fa-solid fa-sun text-4xl text-amber-400 animate-pulse"></i>
+        </div>
+        <h1 class="text-3xl font-extrabold tracking-wider mt-8 bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-indigo-500 bg-clip-text text-transparent font-mono">GRAVITY & SPACE-TIME</h1>
+        <p class="text-gray-400 mt-2 font-mono text-sm">Synthesizing Textures & Geodesic Mesh Layers...</p>
+        <div class="w-64 bg-gray-800 h-1.5 rounded-full mt-6 overflow-hidden">
+            <div class="bg-gradient-to-r from-cyan-400 to-fuchsia-600 h-full w-0" id="loading-progress"></div>
+        </div>
+    </div>
+
+    <!-- Background Stars & Particles Canvas fallback overlay if handled inside three.js -->
+    <div id="canvas-container" class="w-full h-full"></div>
+
+    <!-- UI Overlay -->
+    <!-- Top Header -->
+    <header class="absolute top-0 left-0 right-0 p-4 flex justify-between items-center pointer-events-none z-10">
+        <div class="flex items-center gap-3 pointer-events-auto bg-gray-950/85 backdrop-blur-md px-5 py-3 rounded-2xl border border-gray-800/80 shadow-2xl">
+            <div class="w-10 h-10 bg-cyan-500/10 rounded-xl flex items-center justify-center border border-cyan-500/30">
+                <i class="fa-solid fa-cube text-cyan-400 text-xl animate-pulse" style="animation-duration: 4s;"></i>
+            </div>
+            <div>
+                <h1 class="text-md font-bold text-gray-100 tracking-wide uppercase">Spacetime Sandbox</h1>
+                <p class="text-[10px] font-mono text-fuchsia-400">Extreme Gravitational Distortion Engine v5.0</p>
+            </div>
+        </div>
+
+        <!-- Simulation Speed & Global Controls -->
+        <div class="flex items-center gap-3 pointer-events-auto bg-gray-950/85 backdrop-blur-md px-4 py-2 rounded-2xl border border-gray-800/80 shadow-2xl text-xs font-mono">
+            <div class="flex items-center gap-1.5 mr-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                <span class="text-gray-300">Live Physics</span>
+            </div>
+            <button id="btn-speed-down" class="p-1.5 bg-gray-800 hover:bg-gray-700 rounded transition-all text-gray-300" title="Slow Down Speed">
+                <i class="fa-solid fa-backward"></i>
+            </button>
+            <span id="speed-indicator" class="w-20 text-center text-cyan-400 font-semibold">1.0x Speed</span>
+            <button id="btn-speed-up" class="p-1.5 bg-gray-800 hover:bg-gray-700 rounded transition-all text-gray-300" title="Speed Up Speed">
+                <i class="fa-solid fa-forward"></i>
+            </button>
+            <div class="h-4 w-px bg-gray-800 mx-1"></div>
+            <button id="btn-pause" class="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded transition-all text-gray-300 flex items-center gap-1.5" title="Pause / Resume Orbitals">
+                <i id="pause-icon" class="fa-solid fa-pause"></i>
+                <span id="pause-text">Pause</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Sidebar controls and Info Cards (Left Side) -->
+    <aside class="absolute top-24 left-4 bottom-4 w-80 flex flex-col gap-4 pointer-events-none z-10">
+        <!-- Dashboard / Control Center -->
+        <div class="bg-gray-950/85 backdrop-blur-md p-4 rounded-2xl border border-gray-800/60 shadow-2xl flex flex-col gap-3 pointer-events-auto">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                <h2 class="text-sm font-bold text-gray-200 tracking-wider flex items-center gap-2 uppercase">
+                    <i class="fa-solid fa-sliders text-cyan-400"></i> Engine Console
+                </h2>
+                <button id="btn-reset" class="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 bg-rose-950/30 px-2 py-1 rounded border border-rose-900/30 transition-all">
+                    <i class="fa-solid fa-rotate-right"></i> Reset System
+                </button>
+            </div>
+
+            <!-- Simulation Parameters -->
+            <div class="flex flex-col gap-3 text-xs">
+                <!-- Spacetime Fabric Toggle -->
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-300 flex items-center gap-1.5 font-semibold">
+                            <i class="fa-solid fa-border-all text-fuchsia-400 animate-pulse"></i> Swirling 3D Grid
+                        </span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="toggle-grid" class="sr-only peer" checked>
+                            <div class="w-8 h-4 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-fuchsia-500"></div>
+                        </label>
+                    </div>
+                    <p class="text-[10px] text-gray-400 leading-normal font-sans">Delicate volumetric filament lattice visualizes 3D gravitational frames. Coordinates warp, contract, and bend towards cores on all axes.</p>
+                </div>
+
+                <div class="h-px bg-gray-900"></div>
+
+                <!-- Speed Warp Adjuster Range Slider -->
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-gray-300 flex items-center gap-1.5 font-semibold">
+                            <i class="fa-solid fa-gauge-high text-cyan-400"></i> Speed Warp Slider
+                        </span>
+                        <span id="speed-indicator-val" class="text-cyan-400 font-mono font-bold">1.0x</span>
+                    </div>
+                    <input type="range" id="orbital-speed-slider" min="0" max="4" step="0.1" value="1.0" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                </div>
+
+                <div class="h-px bg-gray-900"></div>
+
+                <!-- Gravity Mode / Interaction Type -->
+                <div class="flex flex-col gap-1.5">
+                    <span class="text-gray-300 flex items-center gap-1.5 font-semibold">
+                        <i class="fa-solid fa-hand-pointer text-fuchsia-400"></i> Interaction Mode
+                    </span>
+                    <div class="grid grid-cols-2 gap-2 mt-1">
+                        <button id="mode-inspect" class="py-2 px-3 rounded-lg bg-cyan-950 border border-cyan-500 text-white font-medium flex flex-col items-center justify-center gap-1 shadow-md transition-all">
+                            <i class="fa-solid fa-circle-info text-sm text-cyan-400"></i>
+                            <span class="text-[10px]">Inspect Details</span>
+                        </button>
+                        <button id="mode-reposition" class="py-2 px-3 rounded-lg bg-gray-900 border border-gray-855 text-gray-400 hover:text-white hover:bg-gray-850 font-medium flex flex-col items-center justify-center gap-1 transition-all">
+                            <i class="fa-solid fa-arrows-up-down-left-right text-sm text-fuchsia-500"></i>
+                            <span class="text-[10px]">Warp Orbits (Drag)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="h-px bg-gray-900"></div>
+
+                <!-- Orbital Overlays -->
+                <div class="flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-ring text-amber-400"></i> Orbital Paths
+                        </span>
+                        <input type="checkbox" id="toggle-orbits" class="accent-fuchsia-500" checked>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-quote-left text-teal-400"></i> Display Labels
+                        </span>
+                        <input type="checkbox" id="toggle-labels" class="accent-fuchsia-500" checked>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-circle-dot text-emerald-400"></i> Scaled Sizes (Relative)
+                        </span>
+                        <input type="checkbox" id="toggle-scaled" class="accent-fuchsia-500">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Quick Travel Guide -->
+        <div class="bg-gray-950/85 backdrop-blur-md p-4 rounded-2xl border border-gray-800/60 shadow-2xl flex flex-col gap-2.5 pointer-events-auto flex-1 overflow-hidden">
+            <h2 class="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+                <i class="fa-solid fa-compass text-teal-400 animate-pulse"></i> Quick Travel Navigation
+            </h2>
+            <p class="text-[10px] text-gray-400 leading-normal">Click a destination to anchor the viewport cameras onto that celestial body.</p>
+            <div class="grid grid-cols-2 gap-1.5 overflow-y-auto custom-scrollbar pr-1" id="nav-planet-grid">
+                <!-- Nav buttons dynamically injected here -->
+            </div>
+        </div>
+    </aside>
+
+    <!-- Information Dashboard Panel (Right Side, appears when planet clicked) -->
+    <aside id="info-panel" class="absolute top-24 right-4 bottom-4 w-96 bg-gray-950/90 backdrop-blur-xl rounded-2xl border border-cyan-950/40 shadow-2xl flex flex-col p-5 pointer-events-auto transform translate-x-[420px] transition-transform duration-500 ease-out z-20">
+        <!-- Close Button -->
+        <button id="info-panel-close" class="absolute top-4 right-4 text-gray-400 hover:text-white bg-gray-900 hover:bg-gray-855 w-7 h-7 rounded-full flex items-center justify-center border border-gray-800/60 transition-all">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+
+        <!-- Body Header -->
+        <div class="flex items-center gap-4 mt-2">
+            <div id="info-body-color" class="w-12 h-12 rounded-full shadow-lg flex items-center justify-center border-2 border-white/10 text-white text-xl relative overflow-hidden">
+                <!-- Gradient or glow injected dynamically -->
+            </div>
+            <div>
+                <h3 id="info-body-name" class="text-2xl font-black tracking-wide bg-gradient-to-r from-gray-100 to-gray-300 bg-clip-text text-transparent">Mars</h3>
+                <span id="info-body-type" class="text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Terrestrial Planet</span>
+            </div>
+        </div>
+
+        <!-- Space-Time Metric Meter -->
+        <div class="bg-cyan-950/25 border border-cyan-500/10 rounded-xl p-3 my-4 flex flex-col gap-1.5">
+            <div class="flex justify-between items-center text-[10px] uppercase tracking-wider font-semibold">
+                <span class="text-cyan-400"><i class="fa-solid fa-clock"></i> Gravitational Dilution</span>
+                <span id="grav-warping-rating" class="text-fuchsia-400">Moderate Warp</span>
+            </div>
+            <div class="w-full bg-cyan-950 h-2 rounded-full overflow-hidden">
+                <div id="grav-warp-bar" class="h-full bg-gradient-to-r from-cyan-400 to-fuchsia-500" style="width: 45%;"></div>
+            </div>
+            <p id="grav-warp-desc" class="text-[9.5px] text-cyan-200/60 leading-normal font-mono">Time runs slower compared to deep void due to mass spacetime curvature.</p>
+        </div>
+
+        <!-- Detailed Stat Cards -->
+        <div class="grid grid-cols-2 gap-2 text-xs mb-4">
+            <div class="bg-gray-900/40 border border-gray-800/50 p-2.5 rounded-xl">
+                <span class="text-gray-400 block text-[10px] uppercase font-semibold">Gravity Pull</span>
+                <strong id="stat-gravity" class="text-sm text-gray-100">3.71 m/s²</strong>
+            </div>
+            <div class="bg-gray-900/40 border border-gray-800/50 p-2.5 rounded-xl">
+                <span class="text-gray-400 block text-[10px] uppercase font-semibold">Orbital Velocity</span>
+                <strong id="stat-velocity" class="text-sm text-gray-100">24.07 km/s</strong>
+            </div>
+            <div class="bg-gray-900/40 border border-gray-800/50 p-2.5 rounded-xl">
+                <span class="text-gray-400 block text-[10px] uppercase font-semibold">Radius</span>
+                <strong id="stat-radius" class="text-sm text-gray-100">3,389 km</strong>
+            </div>
+            <div class="bg-gray-900/40 border border-gray-800/50 p-2.5 rounded-xl">
+                <span class="text-gray-400 block text-[10px] uppercase font-semibold">Year Length</span>
+                <strong id="stat-year" class="text-sm text-gray-100">687 Earth Days</strong>
+            </div>
+        </div>
+
+        <!-- Description and Tabs -->
+        <div class="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-3 pr-1 text-xs">
+            <div class="flex border-b border-gray-900 gap-1">
+                <button id="tab-overview" class="py-1 px-3 border-b-2 border-cyan-500 text-cyan-400 font-bold text-[11px] uppercase tracking-wider">Overview</button>
+                <button id="tab-structure" class="py-1 px-3 text-gray-400 font-medium text-[11px] uppercase tracking-wider hover:text-gray-200">Moons & Structure</button>
+                <button id="tab-relativity" class="py-1 px-3 text-gray-400 font-medium text-[11px] uppercase tracking-wider hover:text-gray-200">Space-Time Warp</button>
+            </div>
+
+            <!-- Tab Content: Overview -->
+            <div id="tab-content-overview" class="flex flex-col gap-3">
+                <p id="info-description" class="text-gray-300 leading-relaxed text-xs">Mars is a dusty, cold, desert world with a very thin atmosphere.</p>
+                <div class="bg-cyan-950/20 border border-cyan-900/40 p-3 rounded-xl mt-1">
+                    <h4 class="text-[10px] font-bold text-cyan-400 uppercase tracking-wide flex items-center gap-1.5 mb-1">
+                        <i class="fa-solid fa-circle-info"></i> Cosmic Profile
+                    </h4>
+                    <p id="info-fun-fact" class="text-gray-300 text-[11px] leading-relaxed italic">"Olympus Mons stands three times taller than Mount Everest."</p>
+                </div>
+            </div>
+
+            <!-- Tab Content: Structural/Moons & Sliced Core Breakdown -->
+            <div id="tab-content-structure" class="hidden flex flex-col gap-3">
+                <!-- Sliced internal core visual breakdown -->
+                <div id="layer-composition-box" class="bg-gray-900/70 p-3 rounded-xl border border-amber-500/20 mb-2">
+                    <h4 class="text-[11px] font-bold text-amber-400 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                        <i class="fa-solid fa-layer-group"></i> Interior Geological Layers
+                    </h4>
+                    <div id="interior-layers-list" class="space-y-2 text-[11px] leading-relaxed">
+                        <!-- Sliced info injected dynamically -->
+                    </div>
+                </div>
+
+                <p class="text-gray-300 font-bold text-[10px] uppercase tracking-wider text-cyan-400 flex items-center gap-1"><i class="fa-solid fa-moon"></i> Moons & Rings</p>
+                <div id="moons-list" class="flex flex-col gap-1.5">
+                    <!-- Moon item slots dynamically filled -->
+                </div>
+            </div>
+
+            <!-- Tab Content: Relativity -->
+            <div id="tab-content-relativity" class="hidden flex flex-col gap-3 font-sans leading-relaxed">
+                <h4 class="font-bold text-gray-200">Einsteinian Mechanics</h4>
+                <p class="text-gray-300">Einstein's General Relativity equation models gravitational coordinates curving directly in all directions:</p>
+                <div class="p-2.5 bg-gray-900/70 rounded-lg text-center font-mono text-cyan-300 text-[11px] border border-gray-800">
+                    $$G_{\mu\nu} + \Lambda g_{\mu\nu} = \frac{8\pi G}{c^4} T_{\mu\nu}$$
+                </div>
+                <p class="text-gray-400 text-[11px] leading-relaxed mt-1">
+                    Massive bodies curve the volumetric filaments of spacetime. Objects do not experience a "pull", but are instead following the shortest paths (geodesics) through curved 3D coordinates.
+                </p>
+            </div>
+        </div>
+
+        <!-- Toggle Reposition & Slicing Controls -->
+        <div class="grid grid-cols-2 gap-2 mt-4">
+            <button id="btn-slice-toggle" class="py-2.5 bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-500 hover:to-rose-500 rounded-xl font-semibold text-xs text-white shadow-lg shadow-amber-900/20 flex items-center justify-center gap-2 transition-all">
+                <i class="fa-solid fa-scissors"></i> <span id="slice-btn-text">Slice Inside View</span>
+            </button>
+            <button id="btn-reposition-shortcut" class="py-2.5 bg-gradient-to-r from-fuchsia-600 to-cyan-600 hover:from-fuchsia-500 hover:to-cyan-500 rounded-xl font-semibold text-xs text-white shadow-lg shadow-fuchsia-900/20 flex items-center justify-center gap-2 transition-all">
+                <i class="fa-solid fa-arrows-up-down-left-right"></i> Move Planet Orbit
+            </button>
+        </div>
+    </aside>
+
+    <!-- Interactive Toast Alerts -->
+    <div id="toast-container" class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex flex-col gap-2 z-50 pointer-events-none"></div>
+
+    <!-- Controls / Action Overlay (Bottom Center/Right) -->
+    <div class="absolute bottom-4 right-4 flex items-center gap-3 pointer-events-auto z-10">
+        <!-- Help Toggle Icon -->
+        <button id="btn-help" class="w-10 h-10 bg-gray-900 hover:bg-gray-855 border border-gray-800 hover:border-gray-700 rounded-full flex items-center justify-center shadow-lg transition-all text-gray-300 hover:text-white" title="View Simulation Help">
+            <i class="fa-solid fa-question text-sm"></i>
+        </button>
+    </div>
+
+    <!-- Help Modal Panel Overlay -->
+    <div id="help-modal" class="hidden absolute inset-0 bg-black/70 backdrop-blur-md z-40 flex items-center justify-center p-6">
+        <div class="bg-gray-950 border border-gray-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div class="flex justify-between items-center border-b border-gray-900 pb-3">
+                <h3 class="text-lg font-extrabold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-user-astronaut"></i> Cosmic Pilot Manual
+                </h3>
+                <button id="btn-close-help" class="w-7 h-7 bg-gray-900 hover:bg-gray-855 rounded-full flex items-center justify-center text-gray-400 hover:text-white transition-all">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-col gap-4 text-xs leading-relaxed text-gray-300 font-sans">
+                <div>
+                    <h4 class="font-bold text-white mb-1 uppercase text-[11px] tracking-wider text-fuchsia-400">1. Swirling 3D Spacetime Grid</h4>
+                    <p class="text-gray-300 mb-2">Space is not static! In this upgraded physics model, spacetime is visualized as a lightweight, delicate three-dimensional filament web. As planets move, they exert a **frame-dragging force** that dynamically pulls, twists, and swirls the fabric of space-time around them in elegant gravitational vortex spirals.</p>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-white mb-1 uppercase text-[11px] tracking-wider text-amber-400">2. Slicing Inside Core View (New!)</h4>
+                    <p class="text-gray-300 mb-2">Select any planet and click <strong>"Slice Inside View"</strong>. The celestial body will be sliced open along a $270^\circ$ section, revealing nested, chemically distinct solid and liquid layers (crust, mantle, and cores) rotating dynamically in real time.</p>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-white mb-1 uppercase text-[11px] tracking-wider text-cyan-400">3. Navigation Controls</h4>
+                    <ul class="list-disc pl-5 flex flex-col gap-1 text-gray-300">
+                        <li><strong>Orbit Camera:</strong> Left-click and drag anywhere on the sky background.</li>
+                        <li><strong>Pan View:</strong> Right-click and drag (or hold Shift + Left drag).</li>
+                        <li><strong>Zoom:</strong> Use the scroll wheel to approach planets or inspect the solar system.</li>
+                        <li><strong>Quick Travel:</strong> Click names in the sidebar list to anchor camera tracking directly to that body.</li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-white mb-1 uppercase text-[11px] tracking-wider text-teal-400">4. Reposition Mode (Interactive Physics)</h4>
+                    <ol class="list-decimal pl-5 flex flex-col gap-1 text-gray-300">
+                        <li>Toggle interaction mode to <strong>"Warp Orbits (Drag)"</strong>.</li>
+                        <li>Click and drag any planet in space to warp its distance from the central star.</li>
+                        <li>Release to launch the planet in its new circularized trajectory!</li>
+                        <li>Observe how other planets react to gravity changes or reset if they go chaotic!</li>
+                    </ol>
+                </div>
+
+                <div class="bg-cyan-950/20 border border-cyan-900/30 p-3 rounded-xl mt-1 text-[11px]">
+                    <i class="fa-solid fa-lightbulb text-amber-400 mr-1 animate-pulse"></i>
+                    <strong>Educational Insight:</strong> Press "Scaled Sizes" to compare Jupiter to Mercury. We've scaled planet sizes by orders of magnitudes to let you view both details and colossal cosmic scales simultaneously.
+                </div>
+            </div>
+
+            <button id="btn-start-exploring" class="mt-2 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold uppercase text-xs tracking-wider transition-all shadow-md">
+                Launch Simulation
+            </button>
+        </div>
+    </div>
+
+    <!-- Interactive script -->
+    <script>
+        // --- CELESTIAL DATA WITH GEOLOGICAL CORE LAYERS & SEMI-REALISTIC EXPANSIVE SCALING ---
+        const CELESTIAL_BODIES = {
+            sun: {
+                id: 'sun',
+                name: 'The Sun',
+                type: 'Yellow Dwarf Star',
+                color: '#ffffff',
+                g1: '#ffffff',
+                g2: '#fffbeb',
+                baseRadius: 16.0,
+                scaledRadius: 32.0,
+                semiMajorAxis: 0,
+                baseOrbitSpeed: 0,
+                gravity: '274 m/s²',
+                velocity: '0 km/s',
+                actualRadius: '696,340 km',
+                yearLength: 'N/A',
+                description: 'The Sun accounts for 99.86% of the mass of the entire Solar System. It curves surrounding spacetime coordinates extremely deep on all vectors.',
+                funFact: 'Nuclear fusion at its core heats plasma to over 15 million degrees Celsius.',
+                dilution: 100.0,
+                dilutionDesc: 'Spacetime curves dramatically inward. Time ticks 0.0002% slower at the solar boundary.',
+                moons: [],
+                isSliced: false,
+                layers: [
+                    { name: "Thermonuclear Core", radius: 4.0, color: "#00ffff", desc: "Solid nuclear fusion core converting Hydrogen to Helium at 15 million °C." },
+                    { name: "Radiative Zone", radius: 9.0, color: "#ff8c00", desc: "Energy photons take over 100,000 years to slowly bounce through this dense plasma layer." },
+                    { name: "Convective Zone", radius: 13.5, color: "#e11d48", desc: "Superheated plasma flows upward in massive convective plumes carrying thermal energy." }
+                ]
+            },
+            mercury: {
+                id: 'mercury',
+                name: 'Mercury',
+                type: 'Terrestrial Planet',
+                color: '#9ca3af',
+                g1: '#e5e7eb',
+                g2: '#4b5563',
+                baseRadius: 2.2,
+                scaledRadius: 3.8,
+                semiMajorAxis: 25, // Semi-realistic inner scaling
+                baseOrbitSpeed: 0.04,
+                gravity: '3.7 m/s²',
+                velocity: '47.36 km/s',
+                actualRadius: '2,439 km',
+                yearLength: '88 Earth Days',
+                description: 'The smallest planet and closest to the Sun. Experiences severe temperature swings and minor orbit precessions due to deep solar wells.',
+                funFact: 'Its massive metallic core takes up over 60% of the planet\'s overall volume.',
+                dilution: 8.0,
+                dilutionDesc: 'Shallow gravitational coordinate dip due to low planetary mass.',
+                moons: [],
+                isSliced: false,
+                layers: [
+                    { name: "Solid Iron Core", radius: 0.8, color: "#f3f4f6", desc: "A dense, solid metallic sphere forming the gravitational anchor." },
+                    { name: "Liquid Outer Core", radius: 1.4, color: "#f59e0b", desc: "Molten liquid metal generating weak magnetic coordinate paths." },
+                    { name: "Silicate Mantle & Crust", radius: 1.9, color: "#78350f", desc: "Silicate rock mantle capped with a cratered graphite-rich surface." }
+                ]
+            },
+            venus: {
+                id: 'venus',
+                name: 'Venus',
+                type: 'Terrestrial Planet',
+                color: '#f59e0b',
+                g1: '#ffedd5',
+                g2: '#b45309',
+                baseRadius: 3.2,
+                scaledRadius: 6.8,
+                semiMajorAxis: 45,
+                baseOrbitSpeed: 0.015,
+                gravity: '8.87 m/s²',
+                velocity: '35.02 km/s',
+                actualRadius: '6,051 km',
+                yearLength: '225 Earth Days',
+                description: 'Earth\'s twin in size. Its toxic, thick carbon dioxide atmosphere acts as a runaway greenhouse thermal blanket.',
+                funFact: 'Venus rotates backward, meaning the Sun rises in the West and sets in the East.',
+                dilution: 12.0,
+                dilutionDesc: 'Moderate gravitational warp closely matching Earth\'s.',
+                moons: [],
+                isSliced: false,
+                layers: [
+                    { name: "Nickel-Iron Core", radius: 1.1, color: "#ffffff", desc: "Metallic core of similar composition but lower magnetic output than Earth." },
+                    { name: "Rocky Silicate Mantle", radius: 2.5, color: "#ea580c", desc: "Hot, semi-solid rocky layer supporting active volcanic coordinates." },
+                    { name: "Basalt Crust", radius: 2.9, color: "#451a03", desc: "Thin, dense basalt plate crust subject to intense thermal pressure." }
+                ]
+            },
+            earth: {
+                id: 'earth',
+                name: 'Earth',
+                type: 'Terrestrial Planet',
+                color: '#3b82f6',
+                g1: '#93c5fd',
+                g2: '#1d4ed8',
+                baseRadius: 3.5,
+                scaledRadius: 7.2,
+                semiMajorAxis: 65,
+                baseOrbitSpeed: 0.01,
+                gravity: '9.81 m/s²',
+                velocity: '29.78 km/s',
+                actualRadius: '6,371 km',
+                yearLength: '365.25 Days',
+                description: 'The only known world supporting liquid surface oceans and biological entities. Its atmosphere is rich in nitrogen and oxygen.',
+                funFact: 'Our magnetic field is generated by swirling liquid metal deep inside.',
+                dilution: 15.0,
+                dilutionDesc: 'Standard reference baseline (1G) for coordinate curvature comparison.',
+                moons: ['Luna (The Moon)'],
+                isSliced: false,
+                layers: [
+                    { name: "Solid Inner Core", radius: 0.9, color: "#ffffff", desc: "Crystallized solid Iron-Nickel core kept solid under immense pressure at 5400°C." },
+                    { name: "Liquid Outer Core", radius: 2.0, color: "#ff8200", desc: "Convecting liquid metals generating Earth's protective magnetosphere." },
+                    { name: "Silicate Mantle", radius: 3.0, color: "#b91c1c", desc: "Hot silicate rocks that flow like plastic over millions of years." }
+                ]
+            },
+            mars: {
+                id: 'mars',
+                name: 'Mars',
+                type: 'Terrestrial Planet',
+                color: '#ef4444',
+                g1: '#fca5a5',
+                g2: '#b91c1c',
+                baseRadius: 2.8,
+                scaledRadius: 5.5,
+                semiMajorAxis: 95,
+                baseOrbitSpeed: 0.008,
+                gravity: '3.71 m/s²',
+                velocity: '24.07 km/s',
+                actualRadius: '3,389 km',
+                yearLength: '687 Earth Days',
+                description: 'A cold, dusty desert world containing vast fields of oxidized iron, giving it its iconic rusty red color profile.',
+                funFact: 'Hosts the largest volcano in the system, Olympus Mons, standing three times taller than Mt. Everest.',
+                dilution: 9.0,
+                dilutionDesc: 'Relatively shallow gravity well owing to its low overall density.',
+                moons: ['Phobos', 'Deimos'],
+                isSliced: false,
+                layers: [
+                    { name: "Iron-Sulfur Core", radius: 1.0, color: "#fef08a", desc: "A core rich in Iron and Sulfur, entirely solid or partially liquid." },
+                    { name: "Rocky Mantle", radius: 2.1, color: "#c2410c", desc: "A solid silicate layer that is no longer seismically active." },
+                    { name: "Iron-Oxide Crust", radius: 2.5, color: "#7f1d1d", desc: "Rich in oxidized iron dust, forming a thin, cratered outer plate." }
+                ]
+            },
+            jupiter: {
+                id: 'jupiter',
+                name: 'Jupiter',
+                type: 'Gas Giant',
+                color: '#ea580c',
+                g1: '#fed7aa',
+                g2: '#ea580c',
+                baseRadius: 6.8,
+                scaledRadius: 18.0,
+                semiMajorAxis: 160, // Realistic spacing gap
+                baseOrbitSpeed: 0.005,
+                gravity: '24.79 m/s²',
+                velocity: '13.07 km/s',
+                actualRadius: '69,911 km',
+                yearLength: '12 Earth Years',
+                description: 'The largest gas giant. Its massive bulk curves outer space coordinates and redirects drifting asteroid paths.',
+                funFact: 'Its Great Red Spot is a giant anti-cyclonic storm wider than Earth.',
+                dilution: 50.0,
+                dilutionDesc: 'Deep secondary spacetime well. Bends coordinates far into outer boundaries.',
+                moons: ['Io', 'Europa', 'Ganymede', 'Callisto', '+ 91 minor moons'],
+                isSliced: false,
+                layers: [
+                    { name: "Rocky/Icy Core", radius: 1.8, color: "#4b5563", desc: "An ultra-dense core of heavy elements, rocks, and exotic ice." },
+                    { name: "Metallic Hydrogen", radius: 4.8, color: "#4f46e5", desc: "Hydrogen compressed so heavily it turns into a liquid electrical conductor." },
+                    { name: "Liquid Hydrogen Gas", radius: 6.2, color: "#f97316", desc: "Convecting molecular fluid hydrogen transitioning smoothly into atmosphere." }
+                ]
+            },
+            saturn: {
+                id: 'saturn',
+                name: 'Saturn',
+                type: 'Gas Giant (Ringed)',
+                color: '#ca8a04',
+                g1: '#fef08a',
+                g2: '#ca8a04',
+                baseRadius: 5.8,
+                scaledRadius: 15.0,
+                semiMajorAxis: 230, // Realistic outer gap
+                baseOrbitSpeed: 0.003,
+                gravity: '10.44 m/s²',
+                velocity: '9.68 km/s',
+                actualRadius: '58,232 km',
+                yearLength: '29 Earth Years',
+                description: 'Dazzling ringed giant. It consists primarily of hydrogen gas and is less dense than liquid water.',
+                funFact: 'Its ring systems are composed of millions of ice particles and rock fragments.',
+                dilution: 35.0,
+                dilutionDesc: 'Major outer gravity anchor locking a massive rings system.',
+                moons: ['Titan', 'Enceladus', 'Mimas', 'Dione', '+ 142 minor moons'],
+                isSliced: false,
+                layers: [
+                    { name: "Dense Rocky Core", radius: 1.4, color: "#374151", desc: "Heavy metals and rock layers at the exact center." },
+                    { name: "Liquid Metallic Hydrogen", radius: 3.8, color: "#3b82f6", desc: "Highly dense conductive layer under immense gas pressure." },
+                    { name: "Hydrogen Atmosphere", radius: 5.2, color: "#ca8a04", desc: "Convective gas layers turning into golden cloud bands." }
+                ]
+            },
+            uranus: {
+                id: 'uranus',
+                name: 'Uranus',
+                type: 'Ice Giant',
+                color: '#22d3ee',
+                g1: '#cffafe',
+                g2: '#0891b2',
+                baseRadius: 4.5,
+                scaledRadius: 10.5,
+                semiMajorAxis: 320,
+                baseOrbitSpeed: 0.0018,
+                gravity: '8.69 m/s²',
+                velocity: '6.80 km/s',
+                actualRadius: '25,362 km',
+                yearLength: '84 Earth Years',
+                description: 'An icy giant spinning on its side at an extreme 98-degree axial tilt, causing dramatic seasonal cycles.',
+                funFact: 'It was the first planet discovered with a telescope in modern history.',
+                dilution: 22.0,
+                dilutionDesc: 'Moderate ice giant gravity profile curving cold outer lanes.',
+                moons: ['Titania', 'Oberon', 'Ariel', 'Umbriel', 'Miranda'],
+                isSliced: false,
+                layers: [
+                    { name: "Silicate & Iron Core", radius: 1.1, color: "#52525b", desc: "Dense core consisting of iron, nickel, and silicate rocks." },
+                    { name: "Water-Ammonia Mantle", radius: 3.2, color: "#06b6d4", desc: "Hot, dense 'icy' mantle consisting of ionic water, ammonia, and methane." },
+                    { name: "Methane Clouds", radius: 4.0, color: "#22d3ee", desc: "Methane gas absorbing red light, giving the planet its cyan glow." }
+                ]
+            },
+            neptune: {
+                id: 'neptune',
+                name: 'Neptune',
+                type: 'Ice Giant',
+                color: '#1d4ed8',
+                g1: '#bfdbfe',
+                g2: '#1d4ed8',
+                baseRadius: 4.3,
+                scaledRadius: 10.0,
+                semiMajorAxis: 410, // Far outer boundary
+                baseOrbitSpeed: 0.0012,
+                gravity: '11.15 m/s²',
+                velocity: '5.43 km/s',
+                actualRadius: '24,622 km',
+                yearLength: '165 Earth Years',
+                description: 'The most distant planet, whipped by supersonic planetary winds up to 2,100 km/h.',
+                funFact: 'It was mathematically predicted by calculations before being seen.',
+                dilution: 24.0,
+                dilutionDesc: 'The furthest gravity well keeping Kuiper Belt bodies bound.',
+                moons: ['Triton', 'Nereid', 'Proteus'],
+                isSliced: false,
+                layers: [
+                    { name: "Iron-Silicate Core", radius: 1.1, color: "#1e293b", desc: "Central core containing solid silicates, iron, and nickel." },
+                    { name: "Ionic Ice Mantle", radius: 3.0, color: "#1d4ed8", desc: "Pressurized fluid water, methane, and ammonia molecules." },
+                    { name: "Atmosphere", radius: 3.9, color: "#3b82f6", desc: "Outer shell composed of Helium, Hydrogen, and trace methane." }
+                ]
+            },
+            asteroids: {
+                id: 'asteroids',
+                name: 'Asteroid Belt',
+                type: 'Minor Body Collection',
+                color: '#6b7280',
+                g1: '#9ca3af',
+                g2: '#374151',
+                baseRadius: 1.0,
+                scaledRadius: 1.0,
+                semiMajorAxis: 125, // Placed realistically between Mars and Jupiter
+                baseOrbitSpeed: 0.006,
+                gravity: 'Negligible',
+                velocity: '18 km/s (Avg)',
+                actualRadius: 'Circa 2.2 to 3.2 AU',
+                yearLength: '3 to 6 Earth Years',
+                description: 'A torus-shaped ring filled with millions of carbonaceous and metallic rocks orbiting between Mars and Jupiter.',
+                funFact: 'Ceres represents over one-third of the entire belt\'s mass.',
+                dilution: 1.0,
+                dilutionDesc: 'Dispersed mass; does not generate a single unified gravity dip.',
+                moons: ['Ceres (Dwarf Planet)', 'Vesta', 'Pallas', 'Hygiea'],
+                isSliced: false
+            },
+            kuiper: {
+                id: 'kuiper',
+                name: 'Kuiper Belt',
+                type: 'Trans-Neptunian Disc',
+                color: '#4f46e5',
+                g1: '#818cf8',
+                g2: '#312e81',
+                baseRadius: 1.0,
+                scaledRadius: 1.0,
+                semiMajorAxis: 460, // Extends beyond Neptune's 410
+                baseOrbitSpeed: 0.0008,
+                gravity: 'Negligible',
+                velocity: '4.5 km/s (Avg)',
+                actualRadius: '30 to 50 AU',
+                yearLength: '248+ Earth Years',
+                description: 'A vast expanse of icy bodies, cometary cores, and dwarf worlds locked in the frozen outer edge.',
+                funFact: 'Home to Pluto, Eris, Haumea, and thousands of other icy planetesimals.',
+                dilution: 0.5,
+                dilutionDesc: 'Cold expanse with negligible spacetime distortion.',
+                moons: ['Pluto', 'Eris', 'Haumea', 'Makemake'],
+                isSliced: false
+            }
+        };
+
+        // --- GLOBAL VARIABLES & STATE ---
+        let scene, camera, renderer, controls;
+        let starfield, gridMesh, gridVerticesCount;
+        let originalGridPositions = []; // Keeps absolute rest coordinates
+        let systemPaused = false;
+        let simSpeed = 1.0;
+        let showGrid = true;
+        let showOrbits = true;
+        let showLabels = true;
+        let useScaledSizes = false;
+        let interactionMode = 'inspect'; // 'inspect' or 'reposition'
+        let currentlySelected = null;
+        let trackedBodyId = null; // Camera tracking target
+
+        // Keep pointers to rendered meshes
+        const meshes = {};
+        const orbitLines = {};
+        const labels = [];
+        const dynamicPositions = {}; // Stores live radii and orbital angles
+
+        // For Drag-and-Drop orbital modification (Raycasting)
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let isDragging = false;
+        let draggedBodyId = null;
+        let dragPlane = null; // Invisible plane parallel to the orbital grid for calculations
+
+        // --- PROCEDURAL TEXTURE GENERATION ENGINE ---
+        function generateProceduralTexture(bodyId) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            
+            // Clear to default deep color
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, 512, 256);
+            
+            if (bodyId === 'mercury' || bodyId === 'luna') {
+                ctx.fillStyle = '#4c525c';
+                ctx.fillRect(0, 0, 512, 256);
+                
+                // Fine noise patches
+                for (let i = 0; i < 2000; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#373b43' : '#616975';
+                    ctx.fillRect(Math.random() * 512, Math.random() * 256, 3, 3);
+                }
+                
+                const craterCount = bodyId === 'luna' ? 35 : 20;
+                for (let i = 0; i < craterCount; i++) {
+                    const cx = Math.random() * 512;
+                    const cy = Math.random() * 256;
+                    const r = 4 + Math.random() * 15;
+                    
+                    ctx.strokeStyle = '#1d1f24';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                    ctx.stroke();
+                    
+                    ctx.strokeStyle = '#9ca3af';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(cx - 1, cy - 1, r, 0, Math.PI * 2);
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = '#555b66';
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, r - 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else if (bodyId === 'venus') {
+                let grad = ctx.createLinearGradient(0, 0, 0, 256);
+                grad.addColorStop(0, '#be8f3a');
+                grad.addColorStop(0.3, '#dfba6b');
+                grad.addColorStop(0.5, '#f5d996');
+                grad.addColorStop(0.7, '#be8f3a');
+                grad.addColorStop(1, '#865f1a');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 512, 256);
+                
+                ctx.strokeStyle = 'rgba(255, 248, 220, 0.28)';
+                for (let i = 0; i < 25; i++) {
+                    ctx.lineWidth = 4 + Math.random() * 16;
+                    let sy = Math.random() * 256;
+                    ctx.beginPath();
+                    ctx.moveTo(0, sy);
+                    ctx.bezierCurveTo(128, sy + 40, 384, sy - 40, 512, sy + 10);
+                    ctx.stroke();
+                }
+            } else if (bodyId === 'earth') {
+                ctx.fillStyle = '#112255';
+                ctx.fillRect(0, 0, 512, 256);
+                
+                ctx.fillStyle = '#1c4224'; // Forest Green
+                const continents = 6;
+                for (let c = 0; c < continents; c++) {
+                    let cx = Math.random() * 512;
+                    let cy = 60 + Math.random() * 136;
+                    let size = 50 + Math.random() * 70;
+                    
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.strokeStyle = '#2a6f40';
+                    ctx.lineWidth = 15;
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#5c4033'; 
+                    ctx.beginPath();
+                    ctx.arc(cx + (Math.random() - 0.5) * 30, cy + (Math.random() - 0.5) * 30, size * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#1c4224';
+                }
+                
+                // Polar caps
+                ctx.fillStyle = '#f8fafc';
+                ctx.fillRect(0, 0, 512, 25);
+                ctx.fillRect(0, 231, 512, 25);
+                
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+                for (let i = 0; i < 12; i++) {
+                    ctx.lineWidth = 6 + Math.random() * 14;
+                    let sy = 30 + Math.random() * 190;
+                    ctx.beginPath();
+                    ctx.moveTo(0, sy);
+                    ctx.bezierCurveTo(128, sy + 60, 384, sy - 60, 512, sy);
+                    ctx.stroke();
+                }
+            } else if (bodyId === 'mars') {
+                ctx.fillStyle = '#9c2a1b';
+                ctx.fillRect(0, 0, 512, 256);
+                
+                ctx.fillStyle = '#5a1309';
+                for (let i = 0; i < 15; i++) {
+                    ctx.beginPath();
+                    ctx.arc(Math.random() * 512, 60 + Math.random() * 130, 25 + Math.random() * 45, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ctx.fillStyle = '#f8fafc';
+                ctx.beginPath();
+                ctx.arc(256, 0, 35, 0, Math.PI);
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.arc(256, 256, 25, Math.PI, 0);
+                ctx.fill();
+            } else if (bodyId === 'jupiter') {
+                let grad = ctx.createLinearGradient(0, 0, 0, 256);
+                grad.addColorStop(0, '#581c0c');
+                grad.addColorStop(0.15, '#c2410c');
+                grad.addColorStop(0.3, '#ea580c');
+                grad.addColorStop(0.45, '#fed7aa');
+                grad.addColorStop(0.6, '#9a3412');
+                grad.addColorStop(0.75, '#fed7aa');
+                grad.addColorStop(0.9, '#ea580c');
+                grad.addColorStop(1, '#581c0c');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 512, 256);
+                
+                for (let b = 0; b < 22; b++) {
+                    ctx.strokeStyle = Math.random() > 0.5 ? 'rgba(254, 215, 170, 0.28)' : 'rgba(88, 28, 12, 0.28)';
+                    ctx.lineWidth = 3 + Math.random() * 9;
+                    let y = Math.random() * 256;
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.bezierCurveTo(128, y + (Math.random() - 0.5) * 45, 384, y + (Math.random() - 0.5) * 45, 512, y);
+                    ctx.stroke();
+                }
+                
+                ctx.fillStyle = '#7f1d1d';
+                ctx.beginPath();
+                ctx.ellipse(350, 175, 28, 16, 0.08, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#ea580c';
+                ctx.beginPath();
+                ctx.ellipse(350, 175, 18, 9, 0.08, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (bodyId === 'saturn') {
+                let grad = ctx.createLinearGradient(0, 0, 0, 256);
+                grad.addColorStop(0, '#451a03');
+                grad.addColorStop(0.2, '#ca8a04');
+                grad.addColorStop(0.4, '#fef08a');
+                grad.addColorStop(0.6, '#ca8a04');
+                grad.addColorStop(0.8, '#fef08a');
+                grad.addColorStop(1, '#451a03');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 512, 256);
+                
+                for (let i = 0; i < 12; i++) {
+                    ctx.fillStyle = 'rgba(254, 240, 138, 0.22)';
+                    ctx.fillRect(0, Math.random() * 256, 512, 8 + Math.random() * 14);
+                }
+            } else if (bodyId === 'uranus') {
+                let grad = ctx.createLinearGradient(0, 0, 0, 256);
+                grad.addColorStop(0, '#0e7490');
+                grad.addColorStop(0.5, '#22d3ee');
+                grad.addColorStop(1, '#0e7490');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 512, 256);
+                
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+                ctx.fillRect(0, 90, 512, 76);
+            } else if (bodyId === 'neptune') {
+                let grad = ctx.createLinearGradient(0, 0, 0, 256);
+                grad.addColorStop(0, '#1e3a8a');
+                grad.addColorStop(0.5, '#2563eb');
+                grad.addColorStop(1, '#1e3a8a');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 512, 256);
+                
+                ctx.fillStyle = '#172554';
+                ctx.beginPath();
+                ctx.ellipse(190, 115, 26, 15, 0.05, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+                ctx.lineWidth = 2;
+                for (let i = 0; i < 6; i++) {
+                    let y = 60 + Math.random() * 130;
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.bezierCurveTo(128, y + 10, 384, y - 10, 512, y);
+                    ctx.stroke();
+                }
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.ClampToEdgeWrapping;
+            return texture;
+        }
+
+        // --- CORE INITIALIZATION ---
+        function init() {
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += 10;
+                document.getElementById('loading-progress').style.width = `${progress}%`;
+                if (progress >= 100) {
+                    clearInterval(progressInterval);
+                    document.getElementById('loading-screen').classList.add('opacity-0');
+                    setTimeout(() => {
+                        document.getElementById('loading-screen').style.display = 'none';
+                    }, 1000);
+                }
+            }, 80);
+
+            // 1. Scene setup
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x010105, 0.0008);
+
+            // 2. Camera setting up to frame realistic expansive scales
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 4000);
+            camera.position.set(0, 280, 480);
+
+            // 3. WebGL Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // 4. Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxDistance = 1200; // expanded zoom capabilities
+            controls.minDistance = 10;
+            controls.maxPolarAngle = Math.PI / 1.95;
+
+            // 5. Light Source
+            const sunLight = new THREE.PointLight(0xfff8ee, 3.5, 1800, 0.5);
+            scene.add(sunLight);
+
+            const ambientLight = new THREE.AmbientLight(0x0f172a, 0.9);
+            scene.add(ambientLight);
+
+            // 6. Build Starfield & Volumetric Spacetime
+            createStarfield();
+            createSpacetimeGrid();
+
+            // 7. Populating bodies & systems
+            buildSolarSystem();
+            createAsteroidBelt();
+            createKuiperBelt();
+
+            // 8. Interactive Drag Plane for Repositioning Mode
+            const dragPlaneGeo = new THREE.PlaneGeometry(1600, 1600);
+            dragPlaneGeo.rotateX(-Math.PI / 2);
+            const dragPlaneMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
+            dragPlane = new THREE.Mesh(dragPlaneGeo, dragPlaneMat);
+            scene.add(dragPlane);
+
+            // 9. Connecting UI & Action Controllers
+            setupUI();
+
+            // 10. Direct User Input Event Listeners
+            window.addEventListener('resize', onWindowResize, false);
+            renderer.domElement.addEventListener('pointerdown', onPointerDown, false);
+            renderer.domElement.addEventListener('pointermove', onPointerMove, false);
+            renderer.domElement.addEventListener('pointerup', onPointerUp, false);
+
+            // 11. Run rendering loop
+            animate();
+        }
+
+        // --- MASIVE MASSIVE STARFIELD ---
+        function createStarfield() {
+            const starCount = 4500;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(starCount * 3);
+            const colors = new Float32Array(starCount * 3);
+
+            for (let i = 0; i < starCount; i++) {
+                const u = Math.random();
+                const v = Math.random();
+                const theta = u * 2.0 * Math.PI;
+                const phi = Math.acos(2.0 * v - 1.0);
+                const r = 1200 + Math.random() * 600;
+
+                positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+                positions[i * 3 + 2] = r * Math.cos(phi);
+
+                const rand = Math.random();
+                if (rand > 0.8) {
+                    colors[i * 3] = 0.6; colors[i * 3 + 1] = 0.8; colors[i * 3 + 2] = 1.0;
+                } else if (rand > 0.6) {
+                    colors[i * 3] = 1.0; colors[i * 3 + 1] = 0.9; colors[i * 3 + 2] = 0.7;
+                } else {
+                    colors[i * 3] = 1.0; colors[i * 3 + 1] = 1.0; colors[i * 3 + 2] = 1.0;
+                }
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 2.0,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.95
+            });
+
+            starfield = new THREE.Points(geometry, material);
+            scene.add(starfield);
+        }
+
+        // --- TIGHTER, LIGHTER, ENHANCED SPACETIME GRID ---
+        function createSpacetimeGrid() {
+            const dimX = 35; // Increased density for tight, high-res grid
+            const dimY = 8;  // Stretched vertically to wrap inside coordinate space
+            const dimZ = 35;
+
+            const sizeX = 900; // Expanded to span Neptune's semi-realistic orbits
+            const sizeY = 80;
+            const sizeZ = 900;
+
+            const vertices = [];
+            const indices = [];
+
+            // 1. Generate 3D grid vertices (rest positions)
+            for (let i = 0; i < dimX; i++) {
+                const pctX = i / (dimX - 1);
+                const x = (pctX - 0.5) * sizeX;
+
+                for (let j = 0; j < dimY; j++) {
+                    const pctY = j / (dimY - 1);
+                    const y = (pctY - 0.5) * sizeY;
+
+                    for (let k = 0; k < dimZ; k++) {
+                        const pctZ = k / (dimZ - 1);
+                        const z = (pctZ - 0.5) * sizeZ;
+
+                        vertices.push(x, y, z);
+                        originalGridPositions.push(new THREE.Vector3(x, y, z));
+                    }
+                }
+            }
+
+            const getIndex = (i, j, k) => (i * dimY * dimZ) + (j * dimZ) + k;
+
+            // Connect lines in 3D grid space
+            for (let i = 0; i < dimX; i++) {
+                for (let j = 0; j < dimY; j++) {
+                    for (let k = 0; k < dimZ; k++) {
+                        const idx = getIndex(i, j, k);
+                        if (i < dimX - 1) indices.push(idx, getIndex(i + 1, j, k));
+                        if (j < dimY - 1) indices.push(idx, getIndex(i, j + 1, k));
+                        if (k < dimZ - 1) indices.push(idx, getIndex(i, j, k + 1));
+                    }
+                }
+            }
+
+            gridVerticesCount = vertices.length / 3;
+
+            const gridGeo = new THREE.BufferGeometry();
+            gridGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            
+            const colors = new Float32Array(gridVerticesCount * 3);
+            for (let i = 0; i < gridVerticesCount; i++) {
+                colors[i * 3] = 0.05;    // R
+                colors[i * 3 + 1] = 0.55; // G
+                colors[i * 3 + 2] = 0.9;  // B
+            }
+            gridGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            gridGeo.setIndex(indices);
+
+            // Setting light, delicate material so grid does not obstruct background details
+            const gridMat = new THREE.LineBasicMaterial({
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.11, // Lighter, extremely clean coordinates
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+
+            gridMesh = new THREE.LineSegments(gridGeo, gridMat);
+            scene.add(gridMesh);
+        }
+
+        // Extremely optimized spacetime deformation using primitive operations in direct buffers
+        function updateSpacetimeDeformation() {
+            if (!showGrid) return;
+
+            const posAttr = gridMesh.geometry.attributes.position;
+            const colorAttr = gridMesh.geometry.attributes.color;
+            const count = posAttr.count;
+
+            const vBodies = [];
+            for (const key in CELESTIAL_BODIES) {
+                const data = CELESTIAL_BODIES[key];
+                if (key === 'asteroids' || key === 'kuiper') continue;
+
+                let pos;
+                if (key === 'sun') {
+                    pos = { x: 0, y: 0, z: 0 };
+                } else if (meshes[key]) {
+                    pos = { x: meshes[key].position.x, y: meshes[key].position.y, z: meshes[key].position.z };
+                }
+
+                if (pos) {
+                    // Elevated deformation indices to render warping extremely obvious
+                    const massStrength = data.dilution * 18.0; 
+                    vBodies.push({
+                        x: pos.x,
+                        y: pos.y,
+                        z: pos.z,
+                        strength: massStrength,
+                        radius: data.baseRadius
+                    });
+                }
+            }
+
+            const len = vBodies.length;
+            const posArray = posAttr.array;
+            const colorArray = colorAttr.array;
+
+            // Compute deformation for each spacetime coordinate node
+            for (let i = 0; i < count; i++) {
+                const orig = originalGridPositions[i];
+                const origX = orig.x;
+                const origY = orig.y;
+                const origZ = orig.z;
+
+                let currentX = origX;
+                let currentY = origY;
+                let currentZ = origZ;
+
+                let totalWarpScalar = 0;
+
+                for (let j = 0; j < len; j++) {
+                    const mc = vBodies[j];
+                    const dx = mc.x - origX;
+                    const dy = mc.y - origY;
+                    const dz = mc.z - origZ;
+                    
+                    const distSq = dx*dx + dy*dy + dz*dz;
+                    const dist = Math.sqrt(distSq);
+
+                    const softLimit = mc.radius * 0.15;
+                    const warpForce = mc.strength / (Math.pow(dist, 1.35) + softLimit);
+
+                    if (dist > 0.1) {
+                        // Inward attraction (Gravity Well)
+                        const maxAllowedPull = dist * 0.99;
+                        const pullAmount = Math.min(warpForce, maxAllowedPull);
+                        
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        const nz = dz / dist;
+
+                        currentX += nx * pullAmount;
+                        currentY += ny * pullAmount;
+                        currentZ += nz * pullAmount;
+
+                        // Frame dragging coordinate rotational swirl CCW
+                        const swirlAngle = -Math.min(warpForce * 0.22, 1.5);
+                        const cosA = Math.cos(swirlAngle);
+                        const sinA = Math.sin(swirlAngle);
+
+                        const relX = currentX - mc.x;
+                        const relZ = currentZ - mc.z;
+
+                        const rotatedX = relX * cosA - relZ * sinA;
+                        const rotatedZ = relX * sinA + relZ * cosA;
+
+                        currentX = mc.x + rotatedX;
+                        currentZ = mc.z + rotatedZ;
+                    }
+                    totalWarpScalar += warpForce;
+                }
+
+                const idx = i * 3;
+                posArray[idx] = currentX;
+                posArray[idx + 1] = currentY;
+                posArray[idx + 2] = currentZ;
+
+                // Color heats up dramatically into hot-fuchsia near deep wells
+                const warpRatio = Math.min(totalWarpScalar / 11.0, 1.0);
+                colorArray[idx] = 0.05 + (warpRatio * 0.95);
+                colorArray[idx + 1] = 0.55 - (warpRatio * 0.50);
+                colorArray[idx + 2] = 0.90 + (warpRatio * 0.10);
+            }
+
+            posAttr.needsUpdate = true;
+            colorAttr.needsUpdate = true;
+        }
+
+        // --- BUILD CELESTIAL BODIES ---
+        function buildSolarSystem() {
+            for (const key in CELESTIAL_BODIES) {
+                const body = CELESTIAL_BODIES[key];
+                if (key === 'asteroids' || key === 'kuiper') continue;
+
+                dynamicPositions[key] = {
+                    radius: body.semiMajorAxis,
+                    angle: Math.random() * Math.PI * 2
+                };
+
+                const geom = new THREE.SphereGeometry(body.baseRadius, 32, 32);
+                let mat;
+
+                if (key === 'sun') {
+                    mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+                    // Concentric corona overlays
+                    const corona1Geo = new THREE.SphereGeometry(body.baseRadius * 1.15, 32, 32);
+                    const corona1Mat = new THREE.MeshBasicMaterial({
+                        color: 0xffd23f,
+                        transparent: true,
+                        opacity: 0.45,
+                        side: THREE.BackSide,
+                        blending: THREE.AdditiveBlending
+                    });
+                    const corona1 = new THREE.Mesh(corona1Geo, corona1Mat);
+                    meshes['sun_corona1'] = corona1;
+                    scene.add(corona1);
+
+                    const corona2Geo = new THREE.SphereGeometry(body.baseRadius * 1.35, 32, 32);
+                    const corona2Mat = new THREE.MeshBasicMaterial({
+                        color: 0xff3f3f,
+                        transparent: true,
+                        opacity: 0.22,
+                        side: THREE.BackSide,
+                        blending: THREE.AdditiveBlending
+                    });
+                    const corona2 = new THREE.Mesh(corona2Geo, corona2Mat);
+                    meshes['sun_corona2'] = corona2;
+                    scene.add(corona2);
+
+                } else {
+                    const planetTexture = generateProceduralTexture(body.id);
+                    mat = new THREE.MeshPhongMaterial({
+                        map: planetTexture,
+                        shininess: 12,
+                        bumpScale: 0.05
+                    });
+                }
+
+                const mesh = new THREE.Mesh(geom, mat);
+                mesh.name = body.id;
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+
+                const dist = dynamicPositions[key].radius;
+                const ang = dynamicPositions[key].angle;
+                mesh.position.set(Math.cos(ang) * dist, 0, Math.sin(ang) * dist);
+
+                scene.add(mesh);
+                meshes[key] = mesh;
+
+                if (key === 'saturn') {
+                    const ringsGroup = new THREE.Group();
+                    const ringAGeo = new THREE.RingGeometry(8.5, 11.0, 64);
+                    ringAGeo.rotateX(-Math.PI / 2);
+                    const ringAMat = new THREE.MeshPhongMaterial({
+                        color: 0xca8a04,
+                        side: THREE.DoubleSide,
+                        transparent: true,
+                        opacity: 0.75
+                    });
+                    ringsGroup.add(new THREE.Mesh(ringAGeo, ringAMat));
+
+                    const ringBGeo = new THREE.RingGeometry(11.8, 14.5, 64);
+                    ringBGeo.rotateX(-Math.PI / 2);
+                    const ringBMat = new THREE.MeshPhongMaterial({
+                        color: 0x854d0e,
+                        side: THREE.DoubleSide,
+                        transparent: true,
+                        opacity: 0.45
+                    });
+                    ringsGroup.add(new THREE.Mesh(ringBGeo, ringBMat));
+
+                    mesh.add(ringsGroup);
+                    meshes['saturn_rings'] = ringsGroup;
+                }
+
+                if (key === 'earth') {
+                    const moonGeo = new THREE.SphereGeometry(0.65, 16, 16);
+                    const moonMat = new THREE.MeshPhongMaterial({ 
+                        map: generateProceduralTexture('luna'),
+                        shininess: 5
+                    });
+                    const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+                    moonMesh.position.set(5.5, 0.5, 0);
+                    mesh.add(moonMesh);
+                    meshes['luna'] = moonMesh;
+                }
+
+                if (key === 'jupiter') {
+                    const moonGeo = new THREE.SphereGeometry(0.55, 12, 12);
+                    const moonMat = new THREE.MeshPhongMaterial({ map: generateProceduralTexture('mercury') });
+                    const jMoon = new THREE.Mesh(moonGeo, moonMat);
+                    jMoon.position.set(9.5, 0, 0);
+                    mesh.add(jMoon);
+                    meshes['jupiter_moon'] = jMoon;
+                }
+
+                if (key === 'saturn') {
+                    const moonGeo = new THREE.SphereGeometry(0.48, 12, 12);
+                    const moonMat = new THREE.MeshPhongMaterial({ map: generateProceduralTexture('mercury') });
+                    const sMoon = new THREE.Mesh(moonGeo, moonMat);
+                    sMoon.position.set(16.5, 0, 0);
+                    mesh.add(sMoon);
+                    meshes['saturn_moon'] = sMoon;
+                }
+
+                if (key !== 'sun') {
+                    createOrbitLine(key, dist);
+                }
+
+                createWorldLabel(body);
+            }
+        }
+
+        // --- DYNAMIC QUARTER SLICE / CORE VIEW CREATION ---
+        function toggleSliceBody(id) {
+            const body = CELESTIAL_BODIES[id];
+            const mesh = meshes[id];
+            if (!mesh) return;
+
+            body.isSliced = !body.isSliced;
+
+            // Clean up any previously instantiated core layers inside child structure
+            const toRemove = [];
+            mesh.traverse(child => {
+                if (child !== mesh && child.name && child.name.includes('_layer')) {
+                    toRemove.push(child);
+                }
+            });
+            toRemove.forEach(child => {
+                child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                    else child.material.dispose();
+                }
+                mesh.remove(child);
+            });
+
+            if (body.isSliced) {
+                // Cut a 1/4 slice out using start angle (PI/2) and 270 degree sweep length (1.5 * PI)
+                mesh.geometry.dispose();
+                mesh.geometry = new THREE.SphereGeometry(body.baseRadius, 48, 48, Math.PI / 2, Math.PI * 1.5);
+                
+                // Allow double-sided rendering to see interior layers
+                mesh.material.side = THREE.DoubleSide;
+                mesh.material.needsUpdate = true;
+
+                // Instantiate concentric interior layer shells
+                createInternalLayers(id, mesh);
+                document.getElementById('slice-btn-text').innerText = "Restore Full Body";
+                showToast(`${body.name} sliced open. Switch to 'Moons & Structure' tab to inspect internal geological layers!`);
+            } else {
+                // Restore complete sphere
+                mesh.geometry.dispose();
+                mesh.geometry = new THREE.SphereGeometry(body.baseRadius, 32, 32);
+                mesh.material.side = THREE.FrontSide;
+                mesh.material.needsUpdate = true;
+                
+                document.getElementById('slice-btn-text').innerText = "Slice Inside View";
+                showToast(`${body.name} restored to solid sphere.`);
+            }
+
+            if (currentlySelected === id) {
+                updateInteriorLayersUI(id);
+            }
+        }
+
+        function createInternalLayers(id, mesh) {
+            const body = CELESTIAL_BODIES[id];
+            if (!body.layers) return;
+
+            body.layers.forEach((layer, index) => {
+                // Layers sliced precisely with the same angles as parent
+                const layerGeo = new THREE.SphereGeometry(layer.radius, 48, 48, Math.PI / 2, Math.PI * 1.5);
+                
+                let layerMat;
+                if (id === 'sun') {
+                    layerMat = new THREE.MeshBasicMaterial({
+                        color: layer.color,
+                        side: THREE.DoubleSide
+                    });
+                } else {
+                    layerMat = new THREE.MeshStandardMaterial({
+                        color: layer.color,
+                        side: THREE.DoubleSide,
+                        roughness: 0.5,
+                        metalness: layer.name.includes("Core") || layer.name.includes("Metallic") ? 0.9 : 0.1,
+                        emissive: layer.color,
+                        emissiveIntensity: layer.name.includes("Core") ? 0.5 : 0.05
+                    });
+                }
+
+                const layerMesh = new THREE.Mesh(layerGeo, layerMat);
+                layerMesh.name = `${id}_layer_${index}`;
+                layerMesh.castShadow = true;
+                layerMesh.receiveShadow = true;
+                
+                // Nest layer inside planet so it inherits orbital rotation automatically
+                mesh.add(layerMesh);
+            });
+        }
+
+        // --- ORBIT LINES ---
+        function createOrbitLine(key, radius) {
+            if (orbitLines[key]) {
+                scene.remove(orbitLines[key]);
+            }
+
+            const orbitPoints = [];
+            const segments = 128;
+            for (let i = 0; i <= segments; i++) {
+                const theta = (i / segments) * Math.PI * 2;
+                orbitPoints.push(new THREE.Vector3(Math.cos(theta) * radius, 0, Math.sin(theta) * radius));
+            }
+
+            const orbitGeo = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+            const orbitMat = new THREE.LineBasicMaterial({
+                color: CELESTIAL_BODIES[key].color,
+                transparent: true,
+                opacity: 0.25
+            });
+
+            const line = new THREE.Line(orbitGeo, orbitMat);
+            scene.add(line);
+            orbitLines[key] = line;
+        }
+
+        // --- ASTEROIDS & KUIPER BELTS ---
+        function createAsteroidBelt() {
+            const asteroidCount = 1400;
+            const geom = new THREE.BufferGeometry();
+            const positions = new Float32Array(asteroidCount * 3);
+            const beltPointers = [];
+
+            for (let i = 0; i < asteroidCount; i++) {
+                const radius = 120 + Math.random() * 15;
+                const angle = Math.random() * Math.PI * 2;
+                const yOffset = (Math.random() - 0.5) * 3;
+
+                positions[i * 3] = Math.cos(angle) * radius;
+                positions[i * 3 + 1] = yOffset;
+                positions[i * 3 + 2] = Math.sin(angle) * radius;
+
+                beltPointers.push({
+                    index: i,
+                    baseRadius: radius,
+                    angle: angle,
+                    speed: (0.003 + Math.random() * 0.003),
+                    y: yOffset
+                });
+            }
+
+            geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const mat = new THREE.PointsMaterial({ color: 0x857d75, size: 0.9, transparent: true, opacity: 0.7 });
+
+            const particles = new THREE.Points(geom, mat);
+            scene.add(particles);
+            meshes['asteroids'] = particles;
+            meshes['asteroids_data'] = beltPointers;
+        }
+
+        function createKuiperBelt() {
+            const count = 2000;
+            const geom = new THREE.BufferGeometry();
+            const positions = new Float32Array(count * 3);
+            const beltPointers = [];
+
+            for (let i = 0; i < count; i++) {
+                const radius = 445 + Math.random() * 40;
+                const angle = Math.random() * Math.PI * 2;
+                const yOffset = (Math.random() - 0.5) * 6;
+
+                positions[i * 3] = Math.cos(angle) * radius;
+                positions[i * 3 + 1] = yOffset;
+                positions[i * 3 + 2] = Math.sin(angle) * radius;
+
+                beltPointers.push({
+                    index: i,
+                    baseRadius: radius,
+                    angle: angle,
+                    speed: (0.0004 + Math.random() * 0.0006),
+                    y: yOffset
+                });
+            }
+
+            geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const mat = new THREE.PointsMaterial({ color: 0x5e72e4, size: 0.7, transparent: true, opacity: 0.65 });
+
+            const particles = new THREE.Points(geom, mat);
+            scene.add(particles);
+            meshes['kuiper'] = particles;
+            meshes['kuiper_data'] = beltPointers;
+        }
+
+        // --- LABELS ENGINE ---
+        function createWorldLabel(body) {
+            const labelDiv = document.createElement('div');
+            labelDiv.className = `absolute pointer-events-none font-mono text-[9px] font-bold px-1.5 py-0.5 rounded border bg-gray-950/90 shadow transition-opacity duration-300 pointer-events-auto cursor-pointer select-none`;
+            labelDiv.style.borderColor = `${body.color}50`;
+            labelDiv.style.color = body.color;
+            labelDiv.innerHTML = `<i class="fa-solid fa-location-crosshairs mr-1"></i>${body.name}`;
+            
+            labelDiv.addEventListener('click', () => {
+                selectCelestialBody(body.id);
+            });
+
+            document.body.appendChild(labelDiv);
+            labels.push({ element: labelDiv, bodyId: body.id });
+        }
+
+        function updateLabelsPosition() {
+            if (!showLabels) {
+                labels.forEach(l => l.element.style.opacity = '0');
+                return;
+            }
+
+            const tempV = new THREE.Vector3();
+            labels.forEach(l => {
+                const targetMesh = meshes[l.bodyId];
+                if (!targetMesh) return;
+
+                targetMesh.getWorldPosition(tempV);
+                tempV.project(camera);
+                if (tempV.z > 1) {
+                    l.element.style.opacity = '0';
+                    return;
+                }
+
+                const x = (tempV.x * .5 + .5) * window.innerWidth;
+                const y = (tempV.y * -.5 + .5) * window.innerHeight;
+
+                l.element.style.left = `${x}px`;
+                l.element.style.top = `${y - 20}px`;
+                l.element.style.opacity = '1';
+            });
+        }
+
+        // --- PHYSICS UPDATE LOOP ---
+        function updatePhysics() {
+            if (systemPaused) return;
+
+            const speedMultiplier = simSpeed;
+
+            for (const key in CELESTIAL_BODIES) {
+                const body = CELESTIAL_BODIES[key];
+                if (key === 'sun' || key === 'asteroids' || key === 'kuiper') continue;
+
+                // Spin individual planets on their axes
+                if (meshes[key]) {
+                    meshes[key].rotateY(0.005 * speedMultiplier);
+                }
+
+                // Update orbital coordinate angle
+                if (dynamicPositions[key] && !isDragging) {
+                    const orbitalFactor = Math.pow(body.semiMajorAxis / dynamicPositions[key].radius, 1.5);
+                    const angleDelta = body.baseOrbitSpeed * speedMultiplier * orbitalFactor;
+                    
+                    dynamicPositions[key].angle -= angleDelta; // CCW standard trajectory
+
+                    const radius = dynamicPositions[key].radius;
+                    const ang = dynamicPositions[key].angle;
+
+                    if (meshes[key]) {
+                        meshes[key].position.set(Math.cos(ang) * radius, 0, Math.sin(ang) * radius);
+                    }
+                }
+            }
+
+            if (meshes['luna']) {
+                meshes['luna'].rotateY(-0.015 * speedMultiplier);
+            }
+
+            if (meshes['jupiter_moon']) {
+                const time = Date.now() * 0.0015 * speedMultiplier;
+                meshes['jupiter_moon'].position.set(Math.cos(time) * 10, 0, Math.sin(time) * 10);
+                meshes['jupiter_moon'].rotateY(0.01 * speedMultiplier);
+            }
+
+            if (meshes['saturn_moon']) {
+                const time = Date.now() * 0.001 * speedMultiplier;
+                meshes['saturn_moon'].position.set(Math.cos(time) * 17, 0, Math.sin(time) * 17);
+                meshes['saturn_moon'].rotateY(0.01 * speedMultiplier);
+            }
+
+            // Asteroids and Kuiper belt drift
+            if (meshes['asteroids'] && meshes['asteroids_data']) {
+                const posAttr = meshes['asteroids'].geometry.attributes.position;
+                const data = meshes['asteroids_data'];
+                data.forEach(ast => {
+                    ast.angle -= ast.speed * speedMultiplier;
+                    const x = Math.cos(ast.angle) * ast.baseRadius;
+                    const z = Math.sin(ast.angle) * ast.baseRadius;
+                    posAttr.setXYZ(ast.index, x, ast.y, z);
+                });
+                posAttr.needsUpdate = true;
+            }
+
+            if (meshes['kuiper'] && meshes['kuiper_data']) {
+                const posAttr = meshes['kuiper'].geometry.attributes.position;
+                const data = meshes['kuiper_data'];
+                data.forEach(ast => {
+                    ast.angle -= ast.speed * speedMultiplier;
+                    const x = Math.cos(ast.angle) * ast.baseRadius;
+                    const z = Math.sin(ast.angle) * ast.baseRadius;
+                    posAttr.setXYZ(ast.index, x, ast.y, z);
+                });
+                posAttr.needsUpdate = true;
+            }
+        }
+
+        // --- CAMERA TRACKING ENGINE ---
+        function updateCameraTracking() {
+            if (trackedBodyId && meshes[trackedBodyId]) {
+                const targetPos = meshes[trackedBodyId].position.clone();
+                controls.target.copy(targetPos);
+            }
+        }
+
+        // --- USER INTERFACE HANDLERS ---
+        function setupUI() {
+            const navGrid = document.getElementById('nav-planet-grid');
+            const orderList = ['sun', 'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'asteroids', 'kuiper'];
+            
+            orderList.forEach(key => {
+                const body = CELESTIAL_BODIES[key];
+                const btn = document.createElement('button');
+                btn.className = "py-1.5 px-2.5 bg-gray-900/60 hover:bg-cyan-950/40 border border-gray-800/80 hover:border-cyan-500/30 text-left rounded-lg text-gray-300 hover:text-cyan-200 transition-all font-mono text-[11px] truncate flex items-center gap-1.5";
+                btn.innerHTML = `<span class="w-2.5 h-2.5 rounded-full inline-block" style="background-color:${body.color};"></span> ${body.name}`;
+                
+                btn.addEventListener('click', () => {
+                    selectCelestialBody(body.id);
+                    document.querySelectorAll('#nav-planet-grid button').forEach(b => b.classList.remove('border-cyan-500', 'bg-cyan-950/20'));
+                    btn.classList.add('border-cyan-500', 'bg-cyan-950/20');
+                });
+                navGrid.appendChild(btn);
+            });
+
+            document.getElementById('toggle-grid').addEventListener('change', (e) => {
+                showGrid = e.target.checked;
+                gridMesh.visible = showGrid;
+            });
+
+            document.getElementById('toggle-orbits').addEventListener('change', (e) => {
+                showOrbits = e.target.checked;
+                for (const k in orbitLines) {
+                    orbitLines[k].visible = showOrbits;
+                }
+            });
+
+            document.getElementById('toggle-labels').addEventListener('change', (e) => {
+                showLabels = e.target.checked;
+            });
+
+            document.getElementById('toggle-scaled').addEventListener('change', (e) => {
+                useScaledSizes = e.target.checked;
+                updateObjectSizes();
+                showToast(useScaledSizes ? "Aesthetic Scale Engaged: Planetary sizes scaled for core visibility comparison." : "Physical Scale Engaged: Bodies resized to basic standards.");
+            });
+
+            document.getElementById('btn-pause').addEventListener('click', () => {
+                systemPaused = !systemPaused;
+                document.getElementById('pause-icon').className = systemPaused ? "fa-solid fa-play" : "fa-solid fa-pause";
+                document.getElementById('pause-text').innerText = systemPaused ? "Resume" : "Pause";
+                showToast(systemPaused ? "Time frozen." : "Time flow resumed.");
+            });
+
+            document.getElementById('btn-reset').addEventListener('click', () => {
+                for (const key in CELESTIAL_BODIES) {
+                    const body = CELESTIAL_BODIES[key];
+                    if (dynamicPositions[key]) {
+                        dynamicPositions[key].radius = body.semiMajorAxis;
+                    }
+                    if (key !== 'sun' && key !== 'asteroids' && key !== 'kuiper') {
+                        createOrbitLine(key, body.semiMajorAxis);
+                    }
+                }
+                showToast("System returned to coordinate equilibrium.");
+            });
+
+            // Orbital speed warp adjustments
+            const speedSlider = document.getElementById('orbital-speed-slider');
+            const speedIndicatorVal = document.getElementById('speed-indicator-val');
+            
+            speedSlider.addEventListener('input', (e) => {
+                simSpeed = parseFloat(e.target.value);
+                speedIndicatorVal.innerText = `${simSpeed.toFixed(1)}x`;
+                document.getElementById('speed-indicator').innerText = `${simSpeed.toFixed(1)}x Speed`;
+            });
+
+            document.getElementById('btn-speed-up').addEventListener('click', () => {
+                if (simSpeed < 4.0) {
+                    simSpeed += 0.5;
+                    updateSpeedUI();
+                }
+            });
+            document.getElementById('btn-speed-down').addEventListener('click', () => {
+                if (simSpeed > 0.1) {
+                    simSpeed -= 0.25;
+                    updateSpeedUI();
+                }
+            });
+
+            document.getElementById('mode-inspect').addEventListener('click', () => setInteractionMode('inspect'));
+            document.getElementById('mode-reposition').addEventListener('click', () => setInteractionMode('reposition'));
+
+            document.getElementById('btn-help').addEventListener('click', () => document.getElementById('help-modal').classList.remove('hidden'));
+            document.getElementById('btn-close-help').addEventListener('click', () => document.getElementById('help-modal').classList.add('hidden'));
+            document.getElementById('btn-start-exploring').addEventListener('click', () => document.getElementById('help-modal').classList.add('hidden'));
+
+            document.getElementById('info-panel-close').addEventListener('click', () => {
+                document.getElementById('info-panel').classList.add('translate-x-[420px]');
+                trackedBodyId = null;
+                currentlySelected = null;
+            });
+
+            document.getElementById('tab-overview').addEventListener('click', () => switchTab('overview'));
+            document.getElementById('tab-structure').addEventListener('click', () => switchTab('structure'));
+            document.getElementById('tab-relativity').addEventListener('click', () => switchTab('relativity'));
+
+            // Core slicing trigger toggle
+            document.getElementById('btn-slice-toggle').addEventListener('click', () => {
+                if (currentlySelected) {
+                    toggleSliceBody(currentlySelected);
+                }
+            });
+
+            document.getElementById('btn-reposition-shortcut').addEventListener('click', () => {
+                setInteractionMode('reposition');
+                showToast(`Reposition mode enabled. Click & drag ${CELESTIAL_BODIES[currentlySelected].name} to relocate its orbit.`);
+            });
+        }
+
+        function updateSpeedUI() {
+            document.getElementById('speed-indicator').innerText = `${simSpeed.toFixed(1)}x Speed`;
+            const speedSlider = document.getElementById('orbital-speed-slider');
+            const speedIndicatorVal = document.getElementById('speed-indicator-val');
+            if (speedSlider) {
+                speedSlider.value = simSpeed;
+                speedIndicatorVal.innerText = `${simSpeed.toFixed(1)}x`;
+            }
+        }
+
+        function setInteractionMode(mode) {
+            interactionMode = mode;
+            const inspectBtn = document.getElementById('mode-inspect');
+            const repositionBtn = document.getElementById('mode-reposition');
+
+            if (mode === 'inspect') {
+                inspectBtn.className = "py-2 px-3 rounded-lg bg-cyan-950 border border-cyan-500 text-white font-medium flex flex-col items-center justify-center gap-1 shadow-md transition-all";
+                repositionBtn.className = "py-2 px-3 rounded-lg bg-gray-900 border border-gray-855 text-gray-400 hover:text-white hover:bg-gray-850 font-medium flex flex-col items-center justify-center gap-1 transition-all";
+                showToast("Mode Swapped: Inspect geological profiles.");
+            } else {
+                repositionBtn.className = "py-2 px-3 rounded-lg bg-fuchsia-600 border border-fuchsia-400 text-white font-medium flex flex-col items-center justify-center gap-1 shadow-md transition-all";
+                inspectBtn.className = "py-2 px-3 rounded-lg bg-gray-900 border border-gray-855 text-gray-400 hover:text-white hover:bg-gray-850 font-medium flex flex-col items-center justify-center gap-1 transition-all";
+                showToast("Warp Mode Swapped: Click & drag orbits to modify gravity grids.");
+            }
+        }
+
+        function updateObjectSizes() {
+            for (const key in CELESTIAL_BODIES) {
+                const body = CELESTIAL_BODIES[key];
+                if (key === 'asteroids' || key === 'kuiper') continue;
+
+                const mesh = meshes[key];
+                if (mesh) {
+                    const rad = useScaledSizes ? body.scaledRadius : body.baseRadius;
+                    mesh.scale.setScalar(rad / body.baseRadius);
+                }
+            }
+        }
+
+        // Inside geological core profile updates
+        function updateInteriorLayersUI(id) {
+            const body = CELESTIAL_BODIES[id];
+            const listEl = document.getElementById('interior-layers-list');
+            const boxEl = document.getElementById('layer-composition-box');
+
+            if (!body.layers || id === 'asteroids' || id === 'kuiper') {
+                boxEl.style.display = 'none';
+                return;
+            }
+
+            boxEl.style.display = 'block';
+            listEl.innerHTML = '';
+
+            body.layers.forEach(layer => {
+                const item = document.createElement('div');
+                item.className = "flex flex-col border-l-2 pl-2 border-gray-800 hover:border-amber-400 transition-all py-1";
+                item.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold" style="color: ${layer.color}">${layer.name}</span>
+                        <span class="text-[9px] font-mono text-gray-500">Thickness ≈ ${(layer.radius/body.baseRadius*100).toFixed(0)}%</span>
+                    </div>
+                    <p class="text-[10px] text-gray-400 leading-normal mt-0.5">${layer.desc}</p>
+                `;
+                listEl.appendChild(item);
+            });
+        }
+
+        function selectCelestialBody(id) {
+            currentlySelected = id;
+            trackedBodyId = id;
+            
+            const body = CELESTIAL_BODIES[id];
+
+            document.getElementById('info-body-name').innerText = body.name;
+            document.getElementById('info-body-type').innerText = body.type;
+            
+            const clrDiv = document.getElementById('info-body-color');
+            clrDiv.style.background = `radial-gradient(circle, ${body.g1} 0%, ${body.g2} 100%)`;
+            clrDiv.style.boxShadow = `0 0 15px ${body.color}80`;
+
+            document.getElementById('stat-gravity').innerText = body.gravity;
+            document.getElementById('stat-velocity').innerText = body.velocity;
+            document.getElementById('stat-radius').innerText = body.actualRadius;
+            document.getElementById('stat-year').innerText = body.yearLength;
+
+            document.getElementById('info-description').innerText = body.description;
+            document.getElementById('info-fun-fact').innerText = `"${body.funFact}"`;
+
+            document.getElementById('grav-warping-rating').innerText = body.dilution > 50 ? "Severe Warp" : (body.dilution > 10 ? "Moderate Warp" : "Negligible Warp");
+            document.getElementById('grav-warp-bar').style.width = `${body.dilution}%`;
+            document.getElementById('grav-warp-desc').innerText = body.dilutionDesc;
+
+            const btnSlice = document.getElementById('btn-slice-toggle');
+            if (id === 'asteroids' || id === 'kuiper') {
+                btnSlice.style.display = 'none';
+            } else {
+                btnSlice.style.display = 'flex';
+                btnSlice.innerHTML = body.isSliced ? `<i class="fa-solid fa-scissors"></i> <span id="slice-btn-text">Restore Full Body</span>` : `<i class="fa-solid fa-scissors"></i> <span id="slice-btn-text">Slice Inside View</span>`;
+            }
+
+            const moonList = document.getElementById('moons-list');
+            moonList.innerHTML = '';
+            if (body.moons && body.moons.length > 0) {
+                body.moons.forEach(moonName => {
+                    const item = document.createElement('div');
+                    item.className = "bg-gray-900/60 p-2 rounded-lg border border-gray-800/80 text-gray-300 flex items-center gap-2";
+                    item.innerHTML = `<i class="fa-solid fa-moon text-cyan-400"></i> <span>${moonName}</span>`;
+                    moonList.appendChild(item);
+                });
+            } else {
+                moonList.innerHTML = `<p class="text-gray-500 italic py-1 text-center">No major satellite captures locked in high orbit.</p>`;
+            }
+
+            // Injected layer descriptors inside visual UI
+            updateInteriorLayersUI(id);
+
+            switchTab('overview');
+            document.getElementById('info-panel').classList.remove('translate-x-[420px]');
+        }
+
+        function switchTab(tabId) {
+            const tabs = ['overview', 'structure', 'relativity'];
+            tabs.forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                const content = document.getElementById(`tab-content-${t}`);
+                if (t === tabId) {
+                    btn.className = "py-1 px-3 border-b-2 border-cyan-500 text-cyan-400 font-bold text-[11px] uppercase tracking-wider";
+                    content.classList.remove('hidden');
+                } else {
+                    btn.className = "py-1 px-3 text-gray-400 font-medium text-[11px] uppercase tracking-wider hover:text-gray-200";
+                    content.classList.add('hidden');
+                }
+            });
+        }
+
+        function showToast(message) {
+            const container = document.getElementById('toast-container');
+            const alert = document.createElement('div');
+            alert.className = "bg-gray-950/95 text-gray-100 px-4 py-2.5 rounded-xl border border-cyan-900/40 shadow-2xl flex items-center gap-2 text-xs font-mono pointer-events-auto transition-all duration-300 transform translate-y-2 opacity-0";
+            alert.innerHTML = `<i class="fa-solid fa-circle-info text-cyan-400"></i> ${message}`;
+            
+            container.appendChild(alert);
+            setTimeout(() => alert.classList.remove('translate-y-2', 'opacity-0'), 50);
+            setTimeout(() => {
+                alert.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => alert.remove(), 300);
+            }, 3500);
+        }
+
+        // --- MOUSE RAYCASTING & INTERACTION ---
+        function onPointerDown(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            if (event.target.tagName !== 'CANVAS') return;
+
+            const targetableMeshes = [];
+            for (const key in meshes) {
+                if (key !== 'saturn_rings' && key !== 'sun_corona1' && key !== 'sun_corona2' && key !== 'asteroids' && key !== 'kuiper' && !key.includes('_layer')) {
+                    targetableMeshes.push(meshes[key]);
+                }
+            }
+
+            const intersects = raycaster.intersectObjects(targetableMeshes);
+
+            if (intersects.length > 0) {
+                const hitObj = intersects[0].object;
+                const bodyId = hitObj.name;
+
+                if (interactionMode === 'inspect') {
+                    selectCelestialBody(bodyId);
+                } else if (interactionMode === 'reposition') {
+                    if (bodyId !== 'sun') {
+                        isDragging = true;
+                        draggedBodyId = bodyId;
+                        controls.enabled = false; // block orbital camera during dragging
+                        showToast(`Relocating orbital boundaries of ${CELESTIAL_BODIES[bodyId].name}...`);
+                    }
+                }
+            }
+        }
+
+        function onPointerMove(event) {
+            if (!isDragging || !draggedBodyId) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObject(dragPlane);
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                const distanceVec = new THREE.Vector3(point.x, 0, point.z);
+                const radialDistance = distanceVec.length();
+
+                // Expanded limit to fit semi-realistic distances
+                const constrainedRadius = Math.max(12, Math.min(radialDistance, 850));
+
+                dynamicPositions[draggedBodyId].radius = constrainedRadius;
+                dynamicPositions[draggedBodyId].angle = Math.atan2(point.z, point.x);
+
+                meshes[draggedBodyId].position.set(
+                    Math.cos(dynamicPositions[draggedBodyId].angle) * constrainedRadius,
+                    0,
+                    Math.sin(dynamicPositions[draggedBodyId].angle) * constrainedRadius
+                );
+
+                createOrbitLine(draggedBodyId, constrainedRadius);
+            }
+        }
+
+        function onPointerUp() {
+            if (isDragging) {
+                isDragging = false;
+                draggedBodyId = null;
+                controls.enabled = true;
+                showToast("System stabilized. New coordinate geodesic path locked.");
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- ANIMATION LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            controls.update();
+            updatePhysics();
+            updateCameraTracking();
+            updateSpacetimeDeformation();
+            updateLabelsPosition();
+
+            // Animate Coronas around the central white hot Sun mesh
+            const time = Date.now() * 0.001;
+            if (meshes['sun_corona1']) {
+                meshes['sun_corona1'].rotateY(0.003);
+                meshes['sun_corona1'].rotateX(-0.001);
+                const pulse = 1.0 + Math.sin(time * 2.0) * 0.015;
+                meshes['sun_corona1'].scale.setScalar(pulse);
+            }
+            if (meshes['sun_corona2']) {
+                meshes['sun_corona2'].rotateY(-0.002);
+                meshes['sun_corona2'].rotateZ(0.0015);
+                const pulse = 1.0 + Math.cos(time * 1.5) * 0.025;
+                meshes['sun_corona2'].scale.setScalar(pulse);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function() {
+            init();
+            setTimeout(() => {
+                document.getElementById('help-modal').classList.remove('hidden');
+            }, 2000);
+        };
+    </script>
+</body>
+</html>

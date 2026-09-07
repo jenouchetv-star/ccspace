@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plinko Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
+    <style>
+        /* Brought in line with the site's own palette (index.html :root) -
+           --slate, --berry, --leaf and --sun, rather than a one-off set of
+           colours invented for this game alone. */
+        :root {
+            --bg-color: #1B2A32;    /* --slate */
+            --peg-color: #0A5280;   /* --cyan-deep, the regular pegs */
+            --risk-color: #BC3229;  /* --berry, kept for warnings: the used-ball marker, slot dividers, risky slots and the 2x ball's ring */
+            --bouncer-peg-color: #3A7A37; /* --leaf, green for bouncer pegs */
+            --ball-color: #F2C230;  /* --sun */
+            --slot-color: #131F26;
+            --text-color: #ffffff;
+            --highlight-color: #263C46; /* --slate-2, still used behind the Game Over cheque */
+            --container-bg: #D7EDE8; /* --teal-soft - the frame around the dark pegboard */
+            --container-ink: #1B2A32; /* --slate, for text sitting on the light frame */
+            --button-bg: #BC3229;   /* --berry */
+            --button-hover: #96281F;
+            --cash-bg: #3A7A37;     /* --leaf */
+            --slot-divider-color: #8FD9A8; /* light green slot dividers */
+            --teal-ball: #1B9C93;   /* the 2x ball */
+            --green-ball: #3A7A37;  /* the 3x ball, --leaf */
+            /* Light/dark tints of each ball colour, for the 3D sphere shading
+               on the shop icons and the in-game ball (radial gradient +
+               shadow) - see https://tympanus.net/codrops/2012/05/22/creating-
+               an-animated-3d-bouncing-ball-with-css3/ for the technique. */
+            --ball-color-light: #FBE28A;
+            --ball-color-dark:  #C9931A;
+            --teal-ball-light:  #6FD6CC;
+            --teal-ball-dark:   #12655F;
+            --green-ball-light: #7BC177;
+            --green-ball-dark:  #244D22;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', 'Segoe UI', 'Helvetica Neue', Helvetica, sans-serif;
+            /* The site's own warm-cream ground and halftone wash (index.html
+               body) - the dark board keeps its own contrast on top of it. */
+            background: #FAF4E6;
+            background-image:
+                radial-gradient(circle at center, rgba(30,52,62,.09) 1px, transparent 1.2px),
+                linear-gradient(180deg, #E2EDEF 0%, #EEF4F3 26%, #FAF4E6 66%, #FDF8EC 100%);
+            background-size: 7px 7px, 100% 100%;
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+            background-color: var(--container-bg);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            /* Responsive adjustments - sized by the window's height first
+               (the board's aspect ratio decides its width from there), so
+               a tall desktop window gets a genuinely bigger board instead
+               of stopping at a small fixed width. */
+            margin: 32px;
+            height: 90vh;
+            max-height: calc(100vh - 64px); /* Prevent overflow with margin */
+            width: 100%;
+            max-width: 760px; /* Room to grow wide on a big desktop window */
+            /* A plain width:100% would size this flex item's hypothetical
+               (pre-clamp) main axis to the whole row, forcing the receipt
+               beside it to wrap onto its own line even though max-width
+               caps the rendered box well short of that - an explicit
+               flex-basis keeps the two side by side. */
+            flex: 0 1 760px;
+            box-sizing: border-box;
+            position: relative; /* For positioning child elements */
+        }
+
+        h1 {
+            color: var(--container-ink);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        #instructions {
+            position: absolute;
+            top: 16px;
+            left: 20px;
+            margin: 0;
+            color: var(--container-ink);
+            opacity: 0.75;
+            font-size: 11px;
+            text-align: left;
+        }
+
+        #gameCanvas {
+            background-color: var(--slot-color);
+            border-radius: 15px;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
+            cursor: pointer;
+        }
+
+        .controls {
+            margin-top: 20px;
+            margin-bottom: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: center;
+            align-items: stretch; /* Make items same height */
+            width: 100%;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            background: var(--slot-color);
+            padding: 10px 20px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .cash-stat {
+            background-color: var(--cash-bg);
+            padding: 5px 20px;
+        }
+
+        .bank-stat {
+            background-color: #FFFFFF;
+            color: var(--container-ink);
+            padding: 5px 20px;
+        }
+        .bank-stat #bankBalance { color: var(--container-ink); }
+
+        .bank-goal {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            width: 100%;
+            margin-top: 4px;
+        }
+        .bank-goal-track {
+            width: 100%;
+            min-width: 90px;
+            height: 6px;
+            border-radius: 4px;
+            background: rgba(27, 42, 50, 0.25);
+            overflow: hidden;
+        }
+        .bank-goal-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--cash-bg);
+            border-radius: 4px;
+            transition: width 0.4s ease;
+        }
+        .bank-goal-fill.reached { background: var(--button-bg); }
+        .bank-goal-label {
+            font-size: 11px;
+            font-weight: 700;
+            opacity: 0.85;
+            white-space: nowrap;
+        }
+
+        .shop-heading {
+            font-size: 1.3em;
+            font-weight: 700;
+            text-align: center;
+        }
+        .shop-subtext {
+            margin: 0;
+            opacity: 0.8;
+            font-size: 0.85em;
+            text-align: center;
+        }
+        .ball-shop-row {
+            display: flex;
+            gap: 24px;
+            justify-content: center;
+        }
+        .ball-shop-item {
+            background: none;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-color);
+            font-family: inherit;
+            padding: 0;
+        }
+        .ball-shop-item:disabled { opacity: 0.4; cursor: not-allowed; }
+        .shop-ball {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 0.95em;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+            position: relative;
+            /* A dark inset toward the lower-right (the sphere's shadowed
+               side), a soft light inset toward the upper-left (ambient
+               bounce light), and a grounded drop shadow underneath -
+               same three-layer idea as the Codrops ball, adapted to a
+               small flat icon instead of a big hero ball. */
+            box-shadow:
+                inset -8px -9px 14px rgba(0, 0, 0, 0.35),
+                inset 5px 6px 10px rgba(255, 255, 255, 0.5),
+                0 4px 8px rgba(0, 0, 0, 0.4);
+        }
+        /* The specular highlight - a small blurred white oval sitting where
+           an overhead light would catch the ball. Kept clear of the centre
+           so it never fights the "2x"/"3x" label for legibility. */
+        .shop-ball::before {
+            content: "";
+            position: absolute;
+            top: 16%; left: 20%;
+            width: 30%; height: 18%;
+            background: rgba(255, 255, 255, 0.65);
+            border-radius: 50%;
+            filter: blur(1.5px);
+            transform: rotate(-30deg);
+            pointer-events: none;
+        }
+        .shop-ball--normal { background: radial-gradient(circle at 34% 30%, var(--ball-color-light) 0%, var(--ball-color) 55%, var(--ball-color-dark) 100%); }
+        .shop-ball--2x { background: radial-gradient(circle at 34% 30%, var(--teal-ball-light) 0%, var(--teal-ball) 55%, var(--teal-ball-dark) 100%); }
+        .shop-ball--3x { background: radial-gradient(circle at 34% 30%, var(--green-ball-light) 0%, var(--green-ball) 55%, var(--green-ball-dark) 100%); }
+        .shop-ball-price { font-weight: 700; font-size: 0.95em; }
+        .ball-shop-item.bought .shop-ball { opacity: 0.35; }
+        .ball-shop-item.bought .shop-ball-price { opacity: 0.6; }
+
+        .button--berry {
+            background-color: var(--button-bg);
+            box-shadow: 0 4px 15px rgba(193, 59, 49, 0.4);
+        }
+        .button--berry:hover:not(:disabled) { background-color: var(--button-hover); }
+
+        .cash-label {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+
+        .game-counter {
+            color: var(--container-ink);
+            font-weight: 800;
+            font-size: 0.8em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            opacity: 0.8;
+            margin: 0;
+            line-height: 1;
+        }
+
+        #totalScore, #bankBalance {
+            font-size: 40px;
+            font-weight: bold;
+            line-height: 1.1;
+        }
+
+        #attempts-circles {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .attempt-circle {
+            width: 25px;
+            height: 25px;
+            background-color: var(--ball-color);
+            border-radius: 50%;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            transition: background-color 0.3s ease;
+        }
+
+        .attempt-circle.used {
+            background-color: var(--risk-color); /* Red background when used */
+        }
+
+        .attempt-circle.used::after {
+            content: 'X';
+            color: var(--text-color); /* White X */
+        }
+
+        .button {
+            background-color: var(--button-bg);
+            color: var(--text-color);
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(193, 59, 49, 0.4);
+        }
+
+        .button:hover:not(:disabled) {
+            background-color: var(--button-hover);
+            transform: translateY(-2px);
+        }
+
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .button--leaf {
+            background-color: var(--cash-bg);
+            box-shadow: 0 4px 15px rgba(58, 122, 55, 0.4);
+        }
+        .button--leaf:hover:not(:disabled) { background-color: #2F6B2C; }
+
+        .button--sm {
+            padding: 9px 18px;
+            font-size: 0.8em;
+        }
+
+        .gameover-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        /* A paper receipt beside the board - one line per ball as it
+           lands, then the same numbers restacked as a vertical addition
+           problem once all six are in, the way you'd add a column by
+           hand: each digit lined up, a rule, then the total underneath. */
+        .layout {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 22px;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            box-sizing: border-box;
+        }
+        /* The printer housing the paper feeds out of - a metal bar with a
+           dark slot, sitting above the receipt itself. */
+        #receipt-printer {
+            width: 214px;
+            height: 20px;
+            margin: 0 auto;
+            border-radius: 9px 9px 3px 3px;
+            background: linear-gradient(180deg, #E6E6E6 0%, #B9B9B9 55%, #9C9C9C 100%);
+            box-shadow: 0 3px 6px rgba(0,0,0,.4), inset 0 -2px 3px rgba(0,0,0,.2);
+            position: relative;
+            z-index: 2;
+        }
+        #receipt-printer::after {
+            content: "";
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            width: 78%; height: 5px;
+            background: #2B2B2B;
+            border-radius: 3px;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,.6);
+        }
+        #receipt {
+            width: 190px;
+            background: #FBF8F0;
+            color: #222;
+            font-family: 'Courier New', Courier, monospace;
+            padding: 16px 16px 22px;
+            box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+            border-radius: 0 0 2px 2px;
+            margin: -2px auto 0;
+            position: relative;
+            /* Feeds down out from behind the printer slot when it appears. */
+            transform-origin: top center;
+            animation: receiptFeed .45s ease both;
+        }
+        #receipt::after {
+            content: "";
+            position: absolute; left: 0; right: 0; bottom: -9px; height: 10px;
+            background:
+                linear-gradient(135deg, #FBF8F0 50%, transparent 50%) 0 0/10px 10px repeat-x,
+                linear-gradient(-135deg, #FBF8F0 50%, transparent 50%) 0 0/10px 10px repeat-x;
+        }
+        @keyframes receiptFeed {
+            from { transform: scaleY(0.15); opacity: .4; }
+            to { transform: scaleY(1); opacity: 1; }
+        }
+        @keyframes linePrint {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .receipt-head {
+            text-align: center;
+            font-weight: 700;
+            letter-spacing: 2px;
+            border-bottom: 1px dashed #999;
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+        }
+        .receipt-head small { display: block; font-weight: 400; letter-spacing: 1px; opacity: .7; margin-top: 3px; }
+        #receipt-lines { font-size: 13px; line-height: 1.9; }
+        .receipt-line { display: flex; justify-content: space-between; gap: 8px; animation: linePrint .3s ease both; }
+        #receipt-total {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dashed #999;
+            font-size: 13px;
+        }
+        #receipt-total .addrow {
+            display: flex;
+            justify-content: flex-end;
+            gap: 6px;
+            padding: 1px 0;
+            animation: linePrint .3s ease both;
+        }
+        #receipt-total .addrow .sign { width: 14px; text-align: left; opacity: .7; }
+        #receipt-total .addrow .amt { width: 54px; text-align: right; }
+        #receipt-total .addrule { border-top: 2px solid #222; margin: 4px 0 4px 14px; }
+        #receipt-total .addtotal {
+            display: flex; justify-content: flex-end; gap: 6px;
+            font-weight: 700; font-size: 15px;
+            animation: linePrint .3s ease both;
+            animation-delay: .35s;
+        }
+        #receipt-total .addtotal .amt { width: 54px; text-align: right; }
+        .receipt-note { text-align: center; font-size: 11px; opacity: .65; margin-top: 12px; }
+
+        /* On a phone there is no room for the receipt beside the board -
+           it stacks below instead, and stays out of the way until the
+           game actually ends, when it appears as the final summary. */
+        @media (max-width: 700px) {
+            .layout { flex-direction: column; align-items: center; }
+            .game-container { margin: 16px; max-height: calc(100vh - 32px); }
+            #receipt-unit { display: none; margin: 20px 0 0; }
+            #receipt-unit.mobile-reveal { display: block; }
+            #receipt { width: min(320px, 90vw); margin-left: auto; margin-right: auto; }
+            #receipt-printer { width: min(360px, 96vw); }
+            .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+            .bank-stat { grid-column: 1 / -1; }
+            .stat-item { padding: 6px 8px; }
+            .cash-label { font-size: 11px; }
+            .game-counter { font-size: 0.7em; }
+            #attempts-circles { gap: 5px; }
+            .attempt-circle { width: 18px; height: 18px; font-size: 0.9em; }
+            .bank-goal-track { min-width: 70px; }
+            .bank-goal-label { font-size: 10px; }
+        }
+
+        #gameOverScreen, #ballShopModal {
+            display: none;
+            position: absolute;
+            top: 200px;
+            left: 50%;
+            transform: translate(-50%, 0);
+            background-color: var(--highlight-color);
+            padding: 26px;
+            border-radius: 20px;
+            z-index: 10;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.6);
+            width: min(480px, 92vw);
+            box-sizing: border-box;
+        }
+
+        #finalScoreMessage {
+            font-size: 1.3em;
+            font-weight: 700;
+            text-align: center;
+        }
+        .run-result-quip {
+            display: block;
+            margin-top: 6px;
+            font-size: 0.6em;
+            font-weight: 600;
+            font-style: italic;
+            color: var(--ball-color);
+        }
+        .run-result-detail {
+            display: block;
+            margin-top: 8px;
+            font-size: 0.7em;
+            font-weight: 600;
+            opacity: 0.85;
+        }
+
+        /* A win gets a brighter frame and a bouncier message - the loss
+           screen stays exactly as understated as before. */
+        #gameOverScreen.is-win {
+            background-color: var(--teal-ball);
+            box-shadow: 0 0 0 4px var(--ball-color), 0 8px 25px rgba(0,0,0,0.6);
+        }
+        #gameOverScreen.is-win #finalScoreMessage {
+            font-size: 1.6em;
+            animation: win-pop .5s cubic-bezier(.2,1.6,.4,1);
+        }
+        @keyframes win-pop {
+            0%   { transform: scale(.4); opacity: 0; }
+            60%  { transform: scale(1.12); opacity: 1; }
+            100% { transform: scale(1); }
+        }
+
+        /* Confetti: a short burst of falling pieces, layered above
+           everything else, removed from the DOM once it finishes. */
+        #confettiLayer {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 20;
+            overflow: hidden;
+        }
+        .confetti-piece {
+            position: absolute;
+            top: -16px;
+            left: var(--x);
+            width: var(--size);
+            height: calc(var(--size) * 1.6);
+            background: var(--color);
+            border-radius: 2px;
+            opacity: 0;
+            animation: confetti-fall var(--duration) linear var(--delay) forwards;
+        }
+        @keyframes confetti-fall {
+            0%   { opacity: 1; transform: translate(0, 0) rotate(0deg); }
+            100% { opacity: 1; transform: translate(var(--drift), 100vh) rotate(var(--spin)); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #gameOverScreen.is-win #finalScoreMessage { animation: none; }
+            .confetti-piece { display: none; }
+        }
+
+        /* The payout, styled like a bank cheque made out to the player -
+           winnings feel like a prize instead of a plain number. */
+        #checkPayout {
+            width: 100%;
+            background: linear-gradient(135deg, #F3F7EC 0%, #EAF1DE 100%);
+            color: #1B2A32;
+            border: 2px solid #3A7A37;
+            border-radius: 10px;
+            padding: 16px 20px;
+            font-family: 'Courier New', Courier, monospace;
+            position: relative;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+            box-sizing: border-box;
+        }
+        #checkPayout::before {
+            content: "";
+            position: absolute; inset: 0;
+            background-image: repeating-linear-gradient(45deg, rgba(58,122,55,0.06) 0 2px, transparent 2px 7px);
+            border-radius: 8px;
+            pointer-events: none;
+        }
+        /* Same layout as the cheque, but styled as a genuine collections
+           statement rather than a cheque - shown instead of the cheque
+           whenever a round's cash lands below zero. */
+        #billPayout {
+            width: 100%;
+            background: linear-gradient(135deg, #F7ECEA 0%, #F1DEDE 100%);
+            color: #1B2A32;
+            border: 2px solid #BC3229;
+            border-radius: 10px;
+            padding: 16px 20px;
+            font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+            font-weight: 600;
+            position: relative;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        #billPayout::before {
+            content: "";
+            position: absolute; inset: 0;
+            background-image: repeating-linear-gradient(45deg, rgba(188,50,41,0.07) 0 2px, transparent 2px 7px);
+            border-radius: 8px;
+            pointer-events: none;
+        }
+        .bill-title {
+            font-size: .78em; font-weight: 600; text-transform: uppercase;
+            letter-spacing: .1em; color: #BC3229; margin-bottom: 10px;
+        }
+        .bill-amount-row {
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1.5px solid #1B2A32; padding-bottom: 8px; margin-bottom: 10px;
+        }
+        .bill-amount-box {
+            border-color: #BC3229; color: #BC3229;
+            font-size: 1.3em; padding: 4px 14px;
+        }
+        .bill-notice {
+            font-size: .74em; line-height: 1.4; opacity: .8; margin: 0 0 12px;
+            font-style: italic;
+        }
+        .bill-stamp {
+            position: absolute; top: 8px; right: 14px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 800; font-size: .78em; letter-spacing: .1em;
+            color: #BC3229; border: 3px solid #BC3229; border-radius: 6px;
+            padding: 2px 8px; transform: rotate(10deg);
+            opacity: .55; pointer-events: none;
+        }
+        .check-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; position: relative; }
+        .check-bank-name { font-family: Georgia, 'Times New Roman', serif; font-weight: 800; font-size: 1.1em; letter-spacing: .3px; }
+        .check-bank-sub { display: block; font-size: .62em; opacity: .75; font-weight: 400; letter-spacing: .05em; }
+        .check-number { font-size: .78em; opacity: .65; }
+        .check-date-row { display: flex; justify-content: flex-end; gap: 6px; font-size: .78em; margin-bottom: 12px; opacity: .8; position: relative; }
+        .check-payto-row { display: flex; align-items: center; gap: 8px; border-bottom: 1.5px solid #1B2A32; padding-bottom: 6px; margin-bottom: 6px; position: relative; }
+        .check-label { font-size: .68em; text-transform: uppercase; letter-spacing: .05em; opacity: .75; white-space: nowrap; }
+        .check-name-input {
+            flex: 1; min-width: 0; border: none; background: transparent; font-family: inherit;
+            font-size: 1em; font-weight: 700; color: #1B2A32; padding: 2px 4px;
+        }
+        .check-name-input::placeholder { color: #1B2A32; opacity: .55; font-weight: 700; }
+        .check-name-input:focus { outline: none; }
+        .check-amount-box {
+            border: 2px solid #1B2A32; border-radius: 4px; padding: 3px 10px;
+            font-weight: 800; font-size: 1.05em; background: #fff; white-space: nowrap;
+        }
+        .check-words-row {
+            display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+            border-bottom: 1.5px solid #1B2A32; padding-bottom: 6px; margin-bottom: 12px; font-size: .82em; position: relative;
+        }
+        #checkAmountWords { font-style: italic; text-transform: capitalize; }
+        .check-words-suffix { opacity: .7; white-space: nowrap; }
+        .check-memo-row { display: flex; justify-content: space-between; align-items: center; font-size: .74em; gap: 10px; position: relative; }
+        .check-signature { font-family: 'Dancing Script', 'Brush Script MT', 'Segoe Script', cursive; font-weight: 600; font-size: 1.7em; color: #1B2A32; }
+    </style>
+    <link rel="stylesheet" href="game-skin.css">
+</head>
+<body class="ccs-game ccs-ballinko">
+
+<div class="layout">
+<div class="game-container">
+    <h1>BALLINKO</h1>
+    <p id="instructions">Use &larr; &rarr; keys to move, &darr; or click to drop!</p>
+    <div class="controls">
+        <p class="game-counter">Game <span id="gameNumberText">1</span> of <span id="totalGamesText">6</span></p>
+        <div class="stats">
+            <div class="stat-item bank-stat">
+                <span class="cash-label">Bank</span>
+                <span id="bankBalance">$0</span>
+                <div class="bank-goal">
+                    <div class="bank-goal-track"><div id="bankGoalFill" class="bank-goal-fill"></div></div>
+                    <span class="bank-goal-label">Goal: <span id="bankGoalText">$0 / $1,000</span></span>
+                </div>
+            </div>
+            <div class="stat-item">
+                <span class="cash-label">Remaining Balls</span>
+                <div id="attempts-circles">
+                    <div class="attempt-circle"></div>
+                    <div class="attempt-circle"></div>
+                    <div class="attempt-circle"></div>
+                    <div class="attempt-circle"></div>
+                    <div class="attempt-circle"></div>
+                    <div class="attempt-circle"></div>
+                </div>
+            </div>
+            <div class="stat-item cash-stat">
+                <span class="cash-label">CASH</span>
+                <span id="totalScore">$0</span>
+            </div>
+        </div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="ballShopModal">
+        <div class="shop-heading">Buy extra balls?</div>
+        <p class="shop-subtext">One of each, at most. Buying never changes what the slots pay out.</p>
+        <div class="ball-shop-row">
+            <button class="ball-shop-item" data-type="normal" data-cost="25" type="button">
+                <span class="shop-ball shop-ball--normal"></span>
+                <span class="shop-ball-price">$25</span>
+            </button>
+            <button class="ball-shop-item" data-type="2x" data-cost="45" type="button">
+                <span class="shop-ball shop-ball--2x">2x</span>
+                <span class="shop-ball-price">$45</span>
+            </button>
+            <button class="ball-shop-item" data-type="3x" data-cost="75" type="button">
+                <span class="shop-ball shop-ball--3x">3x</span>
+                <span class="shop-ball-price">$75</span>
+            </button>
+        </div>
+        <div class="gameover-actions">
+            <button id="startRoundBtn" class="button button--leaf" type="button">Start Playing</button>
+        </div>
+    </div>
+    <div id="confettiLayer"></div>
+    <div id="gameOverScreen">
+        <div id="finalScoreMessage">Game Over!</div>
+        <div id="checkPayout">
+            <div class="check-top">
+                <div>
+                    <span class="check-bank-name">Ballinko Bank</span>
+                    <small class="check-bank-sub">of Chance &amp; Fortune</small>
+                </div>
+                <span class="check-number">No. 0001</span>
+            </div>
+            <div class="check-date-row"><span>Date</span><span id="checkDate"></span></div>
+            <div class="check-payto-row">
+                <span class="check-label">Pay to the order of</span>
+                <input id="checkName" class="check-name-input" type="text" placeholder="You" maxlength="24" autocomplete="off">
+                <span class="check-amount-box">$<span id="checkAmountNum">0</span></span>
+            </div>
+            <div class="check-words-row">
+                <span id="checkAmountWords">zero</span>
+                <span class="check-words-suffix">and 00/100 dollars</span>
+            </div>
+            <div class="check-memo-row">
+                <span><span class="check-label">Memo</span> six lucky balls</span>
+                <span class="check-signature">Ballinko</span>
+            </div>
+        </div>
+        <div id="billPayout" class="bill" style="display:none">
+            <div class="bill-stamp">PAST DUE</div>
+            <div class="check-top">
+                <div>
+                    <span class="check-bank-name">Ballinko Bank</span>
+                    <small class="check-bank-sub">Collections Department</small>
+                </div>
+                <span class="check-number">Acct. 0001</span>
+            </div>
+            <div class="bill-title">Statement of Account</div>
+            <div class="check-date-row"><span>Statement date</span><span id="billDate"></span></div>
+            <div class="check-date-row"><span>Payment due by</span><span id="billDueDate"></span></div>
+            <div class="check-payto-row">
+                <span class="check-label">Billed to</span>
+                <input id="billName" class="check-name-input" type="text" placeholder="You" maxlength="24" autocomplete="off">
+            </div>
+            <div class="bill-amount-row">
+                <span class="check-label">Amount due</span>
+                <span class="check-amount-box bill-amount-box">$<span id="billAmountNum">0</span></span>
+            </div>
+            <p class="bill-notice">This statement covers what six unlucky balls cost this round. Please settle up before your next visit to the board.</p>
+            <div class="check-memo-row">
+                <span><span class="check-label">Memo</span> six unlucky balls</span>
+                <span class="check-signature">Ballinko</span>
+            </div>
+        </div>
+        <div class="gameover-actions">
+            <button id="depositAndPlayAgainBtn" class="button button--leaf" type="button">Deposit &amp; Play Again</button>
+        </div>
+    </div>
+</div>
+
+<div id="receipt-unit">
+    <div id="receipt-printer"></div>
+    <div id="receipt">
+        <div class="receipt-head">BALLINKO<small>6 balls &middot; cash receipt</small></div>
+        <div id="receipt-lines"></div>
+        <div id="receipt-total" style="display:none"></div>
+        <div class="receipt-note">thanks for playing!</div>
+    </div>
+</div>
+</div>
+
+<script>
+    // Self-invoking function to encapsulate game logic
+    (function() {
+        // DOM Elements
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const depositAndPlayAgainBtn = document.getElementById('depositAndPlayAgainBtn');
+        const totalScoreSpan = document.getElementById('totalScore');
+        const finalScoreMessage = document.getElementById('finalScoreMessage');
+        const instructions = document.getElementById('instructions');
+        const attemptsCirclesContainer = document.getElementById('attempts-circles');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const bankBalanceSpan = document.getElementById('bankBalance');
+        const ballShopModal = document.getElementById('ballShopModal');
+        const startRoundBtn = document.getElementById('startRoundBtn');
+        const gameNumberText = document.getElementById('gameNumberText');
+        const bankGoalFill = document.getElementById('bankGoalFill');
+        const bankGoalText = document.getElementById('bankGoalText');
+        const receiptLines = document.getElementById('receipt-lines');
+        const receiptTotal = document.getElementById('receipt-total');
+        const checkPayoutEl = document.getElementById('checkPayout');
+        const checkDateEl = document.getElementById('checkDate');
+        const checkAmountNumEl = document.getElementById('checkAmountNum');
+        const checkAmountWordsEl = document.getElementById('checkAmountWords');
+        const checkNameInput = document.getElementById('checkName');
+        const billPayoutEl = document.getElementById('billPayout');
+        const billDateEl = document.getElementById('billDate');
+        const billDueDateEl = document.getElementById('billDueDate');
+        const billAmountNumEl = document.getElementById('billAmountNum');
+
+        /** Spells out a whole-dollar amount (0-600 in this game) the way a
+            cheque does - "one hundred seventy-five" rather than digits. */
+        function numberToWords(n) {
+            const ones = ['zero','one','two','three','four','five','six','seven','eight','nine','ten',
+                'eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+            const tens = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+            if (n < 20) return ones[n];
+            if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? '-' + ones[n % 10] : '');
+            if (n < 1000) return ones[Math.floor(n / 100)] + ' hundred' + (n % 100 ? ' ' + numberToWords(n % 100) : '');
+            return String(n);
+        }
+
+        // Game Constants
+        const PEGS_PER_ROW = 12;
+        // Peg/ball size scale with the board itself (set in setupCanvas)
+        // so a wider desktop board doesn't leave them looking tiny.
+        let PEG_RADIUS = 3;
+        let BALL_RADIUS = 8;
+        let boardScale = 1;
+        const SLOT_COUNT = 9;
+        const GRAVITY = 0.45;
+        const BOUNCE_DAMPING = 0.75;
+        const BOUNCER_PEG_DAMPING = 1.5; // Increased for much harder bounce
+        const KEYBOARD_MOVE_SPEED = 10;
+
+        // A run is six games long - each game is one round of buying,
+        // dropping and depositing. The player is trying to grow the bank
+        // to $1,000 by the time they've made their sixth deposit.
+        const TOTAL_GAMES = 6;
+        const FINAL_TARGET = 1000;
+        let gameNumber = 1;
+        let runOver = false;
+
+        // Game State
+        let pegs = [];
+        let balls = []; // Can now hold multiple balls
+        let animationId;
+        let attemptsLeft = 6;
+        let totalBalls = 6; // grows when the player buys extra balls
+        let totalScore = 0;
+        let mousePos = { x: 0, y: 0 };
+        let isGameOver = false;
+        let landedValues = [];
+        let depositedThisRound = false;
+        let roundStarted = false; // true once the first ball of the round drops
+        let shopOpen = false; // true while the pre-round ball shop is up
+
+        // Before each round the player may buy one of each ball type - a
+        // plain ball, a 2x ball, and a 3x ball. Buying never touches the
+        // money slots themselves; a bought multiplier just rides along
+        // with that one ball until it lands.
+        const SHOP_ITEMS = [
+            { type: "normal", cost: 25, mult: 1 },
+            { type: "2x",     cost: 45, mult: 2 },
+            { type: "3x",     cost: 75, mult: 3 }
+        ];
+        let boughtThisRound = { normal: false, "2x": false, "3x": false };
+        let pendingBoosts = []; // queue of multipliers (2 or 3) for bought balls not yet dropped
+
+        // Money the player has banked from past rounds - persists between
+        // visits, separate from the CASH won in the current round. The
+        // player's goal is to grow this to $1,000.
+        const BANK_GOAL = 1000;
+        const BANK_STORAGE_KEY = 'ballinkoBankBalance';
+        let bankBalance = 0;
+
+        function loadBank() {
+            try {
+                const stored = parseInt(localStorage.getItem(BANK_STORAGE_KEY), 10);
+                bankBalance = Number.isFinite(stored) ? stored : 0;
+            } catch (e) {
+                bankBalance = 0;
+            }
+        }
+
+        function saveBank() {
+            try {
+                localStorage.setItem(BANK_STORAGE_KEY, String(bankBalance));
+            } catch (e) { /* storage unavailable - balance still holds for this session */ }
+        }
+
+        // Slot scores never change no matter what the player buys.
+        const SLOT_SCORES = [50, 10, 25, -10, 100, -10, 25, 10, 50];
+
+        /**
+         * Sets up the canvas dimensions and scales it for high-DPI displays.
+         */
+        function setupCanvas() {
+            const container = canvas.parentElement;
+
+            // Room left over once the title, the hint line and the stats row
+            // have taken their share of the container.
+            const canvasMaxHeight = Math.max(220, container.clientHeight - 240);
+            const canvasMaxWidth = container.clientWidth;
+            const aspectRatio = 1.2;
+            const size = Math.min(canvasMaxWidth, canvasMaxHeight / aspectRatio);
+
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = size * dpr;
+            canvas.height = size * aspectRatio * dpr;
+            canvas.style.width = `${size}px`;
+            canvas.style.height = `${size * aspectRatio}px`;
+            ctx.scale(dpr, dpr);
+            mousePos.x = getCanvasWidth() / 2;
+
+            // 460px was the old fixed board width these sizes were tuned
+            // for - scale both against how much bigger or smaller today's
+            // board is, so the balls and pegs keep the same proportions.
+            const scale = size / 460;
+            boardScale = scale;
+            PEG_RADIUS = Math.max(2, 3 * scale);
+            BALL_RADIUS = Math.max(5, 8 * scale);
+        }
+
+        const getCanvasWidth = () => canvas.width / (window.devicePixelRatio || 1);
+        const getCanvasHeight = () => canvas.height / (window.devicePixelRatio || 1);
+
+        /**
+         * Creates a grid of pegs, with special bouncer pegs.
+         */
+        function createPegs() {
+            pegs = [];
+            const canvasWidth = getCanvasWidth();
+            const canvasHeight = getCanvasHeight();
+            const horizontalPadding = 2;
+            const effectiveWidth = canvasWidth - (2 * horizontalPadding);
+            const horizontalSpacing = effectiveWidth / (PEGS_PER_ROW - 0.5);
+
+            const topDropZoneHeight = canvasHeight * 0.15;
+            const pegsContainerHeight = canvasHeight * 0.70;
+
+            const desiredVerticalSpacing = 22 * boardScale;
+            const numRows = Math.floor(pegsContainerHeight / desiredVerticalSpacing);
+            const actualVerticalSpacing = pegsContainerHeight / (numRows - 1);
+
+            let bouncerRowCounter = 0;
+
+            for (let row = 0; row < numRows; row++) {
+                const rowOffset = (row % 2 === 0) ? horizontalSpacing / 2 : 0;
+                const y = topDropZoneHeight + (row * actualVerticalSpacing);
+
+                let isBouncerRow = false;
+                if (row % 3 === 0) {
+                    isBouncerRow = true;
+                    bouncerRowCounter++;
+                }
+
+                for (let col = 0; col < PEGS_PER_ROW; col++) {
+                    const x = horizontalPadding + (col * horizontalSpacing) + rowOffset;
+
+                    let isBouncer = false;
+                    if (isBouncerRow) {
+                        const startPeg = (bouncerRowCounter - 1) % 3;
+                        if ((col - startPeg) % 3 === 0) {
+                            isBouncer = true;
+                        }
+                    }
+                    pegs.push({ x, y, radius: PEG_RADIUS, isBouncer });
+                }
+            }
+        }
+
+        /**
+         * Draws all the pegs on the canvas.
+         */
+        function drawPegs() {
+            const bouncerColor = getComputedStyle(document.documentElement).getPropertyValue('--bouncer-peg-color').trim();
+            const regularColor = getComputedStyle(document.documentElement).getPropertyValue('--peg-color').trim();
+
+            pegs.forEach(peg => {
+                ctx.fillStyle = peg.isBouncer ? bouncerColor : regularColor;
+                ctx.beginPath();
+                ctx.arc(peg.x, peg.y, peg.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        /**
+         * Draws the slots at the bottom of the board.
+         */
+        function drawSlots() {
+            const canvasWidth = getCanvasWidth();
+            const canvasHeight = getCanvasHeight();
+            const slotWidth = canvasWidth / SLOT_COUNT;
+            const slotHeight = 40 * boardScale;
+            for (let i = 0; i < SLOT_COUNT; i++) {
+                const x = i * slotWidth;
+                ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--slot-divider-color').trim();
+                ctx.lineWidth = Math.max(2, 4 * boardScale);
+                ctx.beginPath();
+                ctx.moveTo(x, canvasHeight - slotHeight);
+                ctx.lineTo(x, canvasHeight);
+                ctx.stroke();
+                const slotValue = SLOT_SCORES[i];
+                ctx.fillStyle = slotValue < 0
+                    ? getComputedStyle(document.documentElement).getPropertyValue('--risk-color').trim()
+                    : getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim();
+                ctx.font = 'bold ' + Math.max(10, Math.round(16 * boardScale)) + 'px "Plus Jakarta Sans"';
+                ctx.textAlign = 'center';
+                const label = slotValue < 0 ? ('-$' + Math.abs(slotValue)) : ('$' + slotValue);
+                ctx.fillText(label, x + slotWidth / 2, canvasHeight - 15 * boardScale);
+            }
+        }
+
+        /**
+         * Draws the ball.
+         */
+        function ballColorVar(mult) {
+            if (mult === 2) return '--teal-ball';
+            if (mult === 3) return '--green-ball';
+            return '--ball-color';
+        }
+
+        /** Lightens (positive percent) or darkens (negative) a "#rrggbb"
+            colour by mixing it toward white or black - used to build the
+            radial-gradient sphere shading below from each ball's one base
+            colour, rather than hand-maintaining a light/dark pair per ball
+            the way the CSS custom properties do for the shop icons. */
+        function shadeColor(hex, percent) {
+            const h = hex.replace('#', '');
+            const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+            const target = percent < 0 ? 0 : 255;
+            const p = Math.min(1, Math.abs(percent));
+            const mix = c => Math.round(c + (target - c) * p);
+            return 'rgb(' + mix(r) + ',' + mix(g) + ',' + mix(b) + ')';
+        }
+
+        /** Same technique as the shop icons' CSS (see the :root comment
+            above): a radial gradient lit from the upper-left for the
+            sphere's own shading, a soft drop shadow for grounding, and a
+            small blurred highlight on top for shine - see
+            https://tympanus.net/codrops/2012/05/22/creating-an-animated-3d-bouncing-ball-with-css3/ */
+        function drawBall(ballToDraw, isPreview = false) {
+            if (!ballToDraw) return;
+            const mult = ballToDraw.mult || 1;
+            const r = ballToDraw.radius;
+            const baseColor = getComputedStyle(document.documentElement).getPropertyValue(ballColorVar(mult)).trim();
+            ctx.save();
+            if (isPreview) ctx.globalAlpha = 0.6;
+
+            const gradient = ctx.createRadialGradient(
+                ballToDraw.x - r * 0.35, ballToDraw.y - r * 0.35, r * 0.05,
+                ballToDraw.x, ballToDraw.y, r
+            );
+            gradient.addColorStop(0, shadeColor(baseColor, 0.55));
+            gradient.addColorStop(0.55, baseColor);
+            gradient.addColorStop(1, shadeColor(baseColor, -0.35));
+
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+            ctx.shadowBlur = r * 0.7;
+            ctx.shadowOffsetY = r * 0.3;
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(ballToDraw.x, ballToDraw.y, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            // The highlight and label sit on top and cast no shadow of their own.
+            ctx.shadowColor = 'transparent';
+            ctx.beginPath();
+            ctx.ellipse(ballToDraw.x - r * 0.32, ballToDraw.y - r * 0.35, r * 0.3, r * 0.18, -0.6, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+            ctx.fill();
+
+            if (mult > 1) {
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim();
+                ctx.font = 'bold ' + Math.max(8, Math.round(r)) + 'px "Plus Jakarta Sans"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(mult + 'x', ballToDraw.x, ballToDraw.y + 1);
+            }
+            ctx.restore();
+        }
+
+        /** A faint, fading trail of the ball's last few positions - drawn
+            behind the ball itself each frame so a fast drop or bounce
+            reads as motion rather than a series of teleports. Each point
+            is the same ball colour at falling opacity, oldest first. */
+        const TRAIL_LENGTH = 8;
+        function drawBallTrail(ballToDraw) {
+            const trail = ballToDraw.trail;
+            if (!trail || trail.length < 2) return;
+            const color = getComputedStyle(document.documentElement).getPropertyValue(ballColorVar(ballToDraw.mult || 1)).trim();
+            ctx.save();
+            for (let i = 0; i < trail.length; i++) {
+                const point = trail[i];
+                const age = (i + 1) / trail.length; // 0 (oldest) .. 1 (newest)
+                ctx.globalAlpha = age * 0.28;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, ballToDraw.radius * (0.4 + age * 0.5), 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        /** Lets balls in play bounce off each other instead of passing
+            through - pushes any overlapping pair apart and swaps their
+            velocities for a simple, cheap elastic collision. */
+        function resolveBallCollisions() {
+            for (let i = 0; i < balls.length; i++) {
+                for (let j = i + 1; j < balls.length; j++) {
+                    const a = balls[i];
+                    const b = balls[j];
+                    const dx = b.x - a.x;
+                    const dy = b.y - a.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const minDistance = a.radius + b.radius;
+                    if (distance > 0 && distance < minDistance) {
+                        const angle = Math.atan2(dy, dx);
+                        const overlap = (minDistance - distance) / 2;
+                        a.x -= Math.cos(angle) * overlap;
+                        a.y -= Math.sin(angle) * overlap;
+                        b.x += Math.cos(angle) * overlap;
+                        b.y += Math.sin(angle) * overlap;
+
+                        const tempVx = a.vx, tempVy = a.vy;
+                        a.vx = b.vx; a.vy = b.vy;
+                        b.vx = tempVx; b.vy = tempVy;
+                    }
+                }
+            }
+        }
+
+        /**
+         * The main game loop.
+         */
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPegs();
+            drawSlots();
+
+            resolveBallCollisions();
+
+            // Loop through all balls from back to front for safe removal
+            for (let i = balls.length - 1; i >= 0; i--) {
+                const currentBall = balls[i];
+
+                currentBall.vy += GRAVITY;
+                currentBall.y += currentBall.vy;
+                currentBall.x += currentBall.vx;
+                const canvasWidth = getCanvasWidth();
+                if (currentBall.x - currentBall.radius < 0 || currentBall.x + currentBall.radius > canvasWidth) {
+                    currentBall.vx *= -1;
+                    currentBall.x = Math.max(currentBall.radius, Math.min(canvasWidth - currentBall.radius, currentBall.x));
+                }
+                pegs.forEach(peg => {
+                    const dx = currentBall.x - peg.x;
+                    const dy = currentBall.y - peg.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const minDistance = currentBall.radius + peg.radius;
+                    if (distance < minDistance) {
+                        const angle = Math.atan2(dy, dx);
+                        const speed = Math.sqrt(currentBall.vx * currentBall.vx + currentBall.vy * currentBall.vy);
+                        const currentBounce = peg.isBouncer ? BOUNCER_PEG_DAMPING : BOUNCE_DAMPING;
+                        currentBall.vx = Math.cos(angle) * speed * currentBounce + (Math.random() - 0.5);
+                        currentBall.vy = Math.sin(angle) * speed * currentBounce;
+                        const overlap = minDistance - distance;
+                        currentBall.x += Math.cos(angle) * overlap;
+                        currentBall.y += Math.sin(angle) * overlap;
+                    }
+                });
+                if (!currentBall.trail) currentBall.trail = [];
+                currentBall.trail.push({ x: currentBall.x, y: currentBall.y });
+                if (currentBall.trail.length > TRAIL_LENGTH) currentBall.trail.shift();
+                drawBallTrail(currentBall);
+                drawBall(currentBall);
+                if (currentBall.y + currentBall.radius > getCanvasHeight() - 40 * boardScale) {
+                    landed(currentBall, i);
+                }
+            }
+
+            if (!isGameOver && !shopOpen) {
+                const nextMult = pendingBoosts.length ? pendingBoosts[0] : 1;
+                const previewBall = { x: mousePos.x, y: 20, radius: BALL_RADIUS, mult: nextMult };
+                drawBall(previewBall, true);
+            }
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        /**
+         * Handles when a ball lands.
+         */
+        function landed(landedBall, index) {
+            const slotWidth = getCanvasWidth() / SLOT_COUNT;
+            const slotIndex = Math.floor(landedBall.x / slotWidth);
+            const mult = landedBall.mult || 1;
+            const score = SLOT_SCORES[slotIndex >= 0 ? slotIndex : 0] * mult;
+            totalScore += score;
+            landedValues.push(score);
+            printReceiptLine(landedValues.length, score, mult);
+
+            balls.splice(index, 1); // Remove the landed ball
+            updateUI();
+
+            if (attemptsLeft === 0 && balls.length === 0) {
+                endGame();
+            }
+        }
+
+        /** Formats a slot or receipt amount as "$25" or, for the risky
+            slots and any loss, "-$50" rather than the un-signed "$-50". */
+        function fmtMoney(n) {
+            return n < 0 ? ('-$' + Math.abs(n)) : ('$' + n);
+        }
+
+        /** One line on the paper receipt per ball, printed the moment it
+            lands - "BALL 3 .......... $25". */
+        function printReceiptLine(ballNumber, score, mult) {
+            const row = document.createElement('div');
+            row.className = 'receipt-line';
+            const label = 'BALL ' + ballNumber + (mult > 1 ? ' (' + mult + 'x)' : '');
+            row.innerHTML = '<span>' + label + '</span><span>' + fmtMoney(score) + '</span>';
+            receiptLines.appendChild(row);
+        }
+
+        /** The same six numbers, restacked as a vertical addition problem -
+            each amount right-aligned, a rule under the last one, and the
+            total underneath, the way you'd add a column of numbers by hand. */
+        function printReceiptTotal() {
+            let html = '';
+            landedValues.forEach((v, i) => {
+                html += '<div class="addrow"><span class="sign">' + (i === 0 ? '' : '+') + '</span><span class="amt">' + fmtMoney(v) + '</span></div>';
+            });
+            html += '<div class="addrule"></div>';
+            html += '<div class="addtotal"><span>TOTAL</span><span class="amt">' + fmtMoney(totalScore) + '</span></div>';
+            receiptTotal.innerHTML = html;
+            receiptTotal.style.display = 'block';
+        }
+
+        /** Rebuilds the row of ball icons - one per ball still available
+            this round, plus one already-used (crossed out) circle per ball
+            already thrown, including any bought mid-round. */
+        function renderAttemptCircles() {
+            attemptsCirclesContainer.innerHTML = '';
+            for (let i = 0; i < totalBalls; i++) {
+                const circle = document.createElement('div');
+                circle.className = 'attempt-circle' + (i >= attemptsLeft ? ' used' : '');
+                attemptsCirclesContainer.appendChild(circle);
+            }
+        }
+
+        /**
+         * Updates the UI elements.
+         */
+        function updateUI() {
+            totalScoreSpan.textContent = '$' + totalScore;
+            bankBalanceSpan.textContent = '$' + bankBalance;
+            gameNumberText.textContent = Math.min(gameNumber, TOTAL_GAMES);
+            renderAttemptCircles();
+
+            const goalPct = Math.min(100, Math.round((bankBalance / BANK_GOAL) * 100));
+            bankGoalFill.style.width = goalPct + '%';
+            bankGoalFill.classList.toggle('reached', bankBalance >= BANK_GOAL);
+            bankGoalText.textContent = '$' + bankBalance.toLocaleString() + ' / $' + BANK_GOAL.toLocaleString();
+
+            if (shopOpen) refreshShopButtons();
+        }
+
+        /** Matches each shop button's disabled/bought state to the bank
+            balance and this round's purchases - called whenever either
+            changes while the shop is open. */
+        function refreshShopButtons() {
+            ballShopModal.querySelectorAll('.ball-shop-item').forEach(btn => {
+                const type = btn.dataset.type;
+                const cost = Number(btn.dataset.cost);
+                const bought = boughtThisRound[type];
+                btn.classList.toggle('bought', bought);
+                btn.disabled = bought || bankBalance < cost;
+            });
+        }
+
+        /** Spends the ball's cost from the bank for one extra ball this
+            round - only available before the round starts, at most one of
+            each type a round. The bought multiplier rides along with that
+            one ball; it never changes what the money slots pay out. */
+        function buyShopBall(item, btn) {
+            if (isGameOver || roundStarted || boughtThisRound[item.type] || bankBalance < item.cost) return;
+            bankBalance -= item.cost;
+            boughtThisRound[item.type] = true;
+            saveBank();
+            attemptsLeft++;
+            totalBalls++;
+            if (item.mult > 1) pendingBoosts.push(item.mult);
+            updateUI();
+        }
+
+        /** Shows the pre-round shop and refreshes its buttons for the
+            balance and purchases at this point in the round. */
+        function openBallShop() {
+            const cheapest = Math.min(...SHOP_ITEMS.map(i => i.cost));
+            if (bankBalance < cheapest) { closeBallShop(); return; }
+            shopOpen = true;
+            ballShopModal.style.display = 'flex';
+            refreshShopButtons();
+        }
+
+        function closeBallShop() {
+            shopOpen = false;
+            ballShopModal.style.display = 'none';
+        }
+
+        /** Moves this round's cheque amount into the bank, where it stays
+            for future rounds - can only be done once per cheque. */
+        function depositCheck() {
+            if (depositedThisRound) return;
+            bankBalance += totalScore;
+            saveBank();
+            depositedThisRound = true;
+            updateUI();
+        }
+
+        /**
+         * Ends the game.
+         */
+        function endGame() {
+            isGameOver = true;
+
+            /* The sixth and final round's own balls landing IS the end of
+               the run - go straight to the real win/lose result (message,
+               quip, confetti) instead of the generic per-round "Game
+               Over!" summary, which used to need one more click on
+               "Deposit & Play Again" before showing anything final. */
+            if (gameNumber >= TOTAL_GAMES) {
+                finishRun();
+                return;
+            }
+
+            gameOverScreen.style.display = 'flex';
+            finalScoreMessage.textContent = 'Game Over!';
+            instructions.style.display = 'none';
+            canvas.style.cursor = 'default';
+            printReceiptTotal();
+            document.getElementById('receipt-unit').classList.add('mobile-reveal');
+
+            // A round that lands in the red is a bill, not a cheque - the
+            // player owes Ballinko Bank rather than the other way round.
+            const owesMoney = totalScore < 0;
+            checkPayoutEl.style.display = owesMoney ? 'none' : '';
+            billPayoutEl.style.display = owesMoney ? '' : 'none';
+            depositAndPlayAgainBtn.textContent = owesMoney ? 'Pay & Play Again' : 'Deposit & Play Again';
+            depositAndPlayAgainBtn.classList.toggle('button--leaf', !owesMoney);
+            depositAndPlayAgainBtn.classList.toggle('button--berry', owesMoney);
+
+            const today = new Date().toLocaleDateString();
+            if (owesMoney) {
+                const dueDate = new Date();
+                dueDate.setDate(dueDate.getDate() + 7);
+                billDateEl.textContent = today;
+                billDueDateEl.textContent = dueDate.toLocaleDateString();
+                billAmountNumEl.textContent = Math.abs(totalScore);
+            } else {
+                // Made out to whatever name the player types, defaulting to "You".
+                checkDateEl.textContent = today;
+                checkAmountNumEl.textContent = totalScore;
+                checkAmountWordsEl.textContent = numberToWords(totalScore);
+            }
+        }
+
+        /** A one-line quip under the result, picked at random each run so
+            replaying doesn't say the same thing twice in a row. */
+        const WIN_QUIPS = [
+            "You're making it rain! Cha-ching!",
+            "Ka-ching! The bank thanks you.",
+            "Look at you, a real high roller.",
+            "The pegs like you today.",
+            "Straight to the piggy bank with that!"
+        ];
+        const LOSE_QUIPS = [
+            "Time to hustle. Don't quit your day job!",
+            "So close! The bank's still hiring.",
+            "Every great banker had an off day.",
+            "The pegs win this round.",
+            "Next drop's the lucky one."
+        ];
+        function pickQuip(won) {
+            const list = won ? WIN_QUIPS : LOSE_QUIPS;
+            return list[Math.floor(Math.random() * list.length)];
+        }
+
+        /** A short burst of falling confetti pieces for a win, in the
+            game's own palette. Plain DOM/CSS, no canvas or library - each
+            piece removes itself once its fall animation ends, and the
+            whole thing is skipped for prefers-reduced-motion (see CSS). */
+        const CONFETTI_COLORS = ['#F2C230', '#3A7A37', '#BC3229', '#1B9C93', '#D7EDE8', '#0A5280'];
+        function launchConfetti() {
+            const layer = document.getElementById('confettiLayer');
+            const count = 60;
+            for (let i = 0; i < count; i++) {
+                const piece = document.createElement('div');
+                piece.className = 'confetti-piece';
+                piece.style.setProperty('--x', (Math.random() * 100) + 'vw');
+                piece.style.setProperty('--size', (6 + Math.random() * 6) + 'px');
+                piece.style.setProperty('--color', CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)]);
+                piece.style.setProperty('--drift', ((Math.random() - 0.5) * 160) + 'px');
+                piece.style.setProperty('--spin', (Math.random() * 720 - 360) + 'deg');
+                piece.style.setProperty('--duration', (2.2 + Math.random() * 1.4) + 's');
+                piece.style.setProperty('--delay', (Math.random() * 0.4) + 's');
+                piece.addEventListener('animationend', () => piece.remove());
+                layer.appendChild(piece);
+            }
+        }
+
+        /** Called once the sixth deposit is in - the run is over, win or
+            lose, depending on whether the bank reached $1,000. Shows a
+            single, plain result screen: what they made, what they needed,
+            and a way to try again - not stacked on top of the ball shop. */
+        function finishRun() {
+            depositCheck(); // no-op if this round's cash is already banked
+            closeBallShop();
+            runOver = true;
+            isGameOver = true;
+            gameOverScreen.style.display = 'flex';
+            instructions.style.display = 'none';
+            canvas.style.cursor = 'default';
+            checkPayoutEl.style.display = 'none';
+            billPayoutEl.style.display = 'none';
+
+            const won = bankBalance >= FINAL_TARGET;
+            gameOverScreen.classList.toggle('is-win', won);
+            finalScoreMessage.innerHTML = (won ? 'You made it!' : 'Game over')
+                + '<span class="run-result-quip">' + pickQuip(won) + '</span>'
+                + '<span class="run-result-detail">You made ' + fmtMoney(bankBalance)
+                + ' &middot; needed $' + FINAL_TARGET + ' to win</span>';
+            depositAndPlayAgainBtn.textContent = 'Try Again';
+            depositAndPlayAgainBtn.classList.add('button--leaf');
+            depositAndPlayAgainBtn.classList.remove('button--berry');
+            if (won) launchConfetti();
+        }
+
+        /**
+         * Resets the game to its initial state.
+         */
+        function resetGame() {
+            cancelAnimationFrame(animationId);
+            attemptsLeft = 6;
+            totalBalls = 6;
+            totalScore = 0;
+            balls = [];
+            landedValues = [];
+            isGameOver = false;
+            roundStarted = false;
+            boughtThisRound = { normal: false, "2x": false, "3x": false };
+            pendingBoosts = [];
+            depositedThisRound = false;
+            updateUI();
+            gameOverScreen.style.display = 'none';
+            gameOverScreen.classList.remove('is-win');
+            document.getElementById('confettiLayer').innerHTML = '';
+            instructions.style.display = 'block';
+            canvas.style.cursor = 'pointer';
+            receiptLines.innerHTML = '';
+            receiptTotal.style.display = 'none';
+            receiptTotal.innerHTML = '';
+            document.getElementById('receipt-unit').classList.remove('mobile-reveal');
+            openBallShop();
+            gameLoop();
+        }
+
+        /**
+         * Triggers the ball drop.
+         */
+        function dropBall() {
+            if (attemptsLeft > 0 && !isGameOver && !shopOpen) {
+                roundStarted = true;
+                attemptsLeft--;
+                const ball = {
+                    x: mousePos.x,
+                    y: 20,
+                    radius: BALL_RADIUS,
+                    vx: (Math.random() - 0.5) * 3,
+                    vy: 0,
+                    mult: pendingBoosts.length ? pendingBoosts.shift() : 1,
+                    trail: [],
+                };
+                balls.push(ball);
+                updateUI();
+            }
+        }
+
+        /**
+         * (Re)builds the board - safe to call again on every resize since
+         * it only touches canvas sizing and round state, never event
+         * listeners (those are wired once in wireEvents, below - wiring
+         * them again on every resize would fire each click multiple times).
+         */
+        function setupBoard() {
+            loadBank();
+            setupCanvas();
+            createPegs();
+            resetGame();
+        }
+
+        /**
+         * Wires up input handling. Runs exactly once.
+         */
+        function wireEvents() {
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mousePos.x = e.clientX - rect.left;
+            });
+
+            canvas.addEventListener('click', dropBall);
+            depositAndPlayAgainBtn.addEventListener('click', () => {
+                if (runOver) {
+                    gameNumber = 1;
+                    runOver = false;
+                    bankBalance = 0;
+                    saveBank();
+                    resetGame();
+                    return;
+                }
+                depositCheck();
+                if (gameNumber >= TOTAL_GAMES) {
+                    finishRun();
+                } else {
+                    gameNumber++;
+                    resetGame();
+                }
+            });
+            ballShopModal.querySelectorAll('.ball-shop-item').forEach((btn, i) => {
+                btn.addEventListener('click', () => buyShopBall(SHOP_ITEMS[i], btn));
+            });
+            startRoundBtn.addEventListener('click', closeBallShop);
+
+            window.addEventListener('keydown', (e) => {
+                if (isGameOver) return;
+
+                if (e.key === 'ArrowLeft') {
+                    mousePos.x = Math.max(BALL_RADIUS, mousePos.x - KEYBOARD_MOVE_SPEED);
+                } else if (e.key === 'ArrowRight') {
+                    mousePos.x = Math.min(getCanvasWidth() - BALL_RADIUS, mousePos.x + KEYBOARD_MOVE_SPEED);
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault(); // Prevent page scrolling
+                    dropBall();
+                }
+            });
+
+            window.addEventListener('resize', setupBoard);
+        }
+
+        // Start the game
+        setupBoard();
+        wireEvents();
+    })();
+</script>
+
+</body>
+</html>

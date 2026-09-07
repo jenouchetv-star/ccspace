@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DropBlox</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* General Body Styles */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #1B2A32;
+            color: #e0e0e0;
+            font-family: 'Poppins', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* Deep-space wash drawn in CSS, so there is no missing-image request. */
+            background-image:
+                radial-gradient(circle at 18% 12%, rgba(122, 74, 134, .30), transparent 46%),
+                radial-gradient(circle at 82% 78%, rgba(193, 59, 49, .24), transparent 52%);
+            background-attachment: fixed;
+        }
+
+        /* Main Game Container */
+        .game-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+            width: 100%;
+            height: 88%;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        /* Wrapper for Canvas and Overlays */
+        .game-area-wrapper {
+            position: relative;
+            height: 100%;
+            aspect-ratio: 1 / 2;
+            max-width: 45vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Game Canvases */
+        canvas {
+            background-color: #131F26;
+            border: 2px solid #35545F;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        }
+
+        #tetris-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI Panels (Score, Next Piece) */
+        .ui-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: rgba(15, 15, 26, 0.8);
+            border-radius: 8px;
+            min-width: 150px;
+        }
+
+        .ui-panel h2 {
+            margin: 0 0 10px 0;
+            color: #A9E4EE;
+            font-weight: 700;
+            font-size: 1.1em;
+        }
+
+        .ui-panel p {
+            margin: 0 0 20px 0;
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        #next-canvas {
+            width: 120px;
+            height: 120px;
+            background-color: #131F26;
+            border-radius: 5px;
+        }
+
+        /* Controls Info Box */
+        .controls-info {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #35545F;
+            border-radius: 5px;
+            background-color: #22343D;
+            width: 100%;
+        }
+
+        .controls-info h3 {
+            margin-top: 0;
+            text-align: center;
+            color: #A9E4EE;
+        }
+
+        .controls-info p {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            margin: 5px 0;
+        }
+
+        .controls-info span {
+            background-color: #35545F;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        /* Master Brick - a bar of all five colours in a shuffled order.
+           The first swatch is the current target: clear a line of that
+           colour for a bonus, and the bar reshuffles to a new target. */
+        #master-bar {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            margin-top: 4px;
+        }
+        .master-swatch {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            border: 2px solid rgba(255,255,255,0.15);
+            box-shadow: inset 0 0 4px rgba(0,0,0,0.4);
+        }
+        .master-swatch.is-target {
+            border-color: #F5B921;
+            box-shadow: 0 0 8px #F5B921, inset 0 0 4px rgba(0,0,0,0.4);
+            transform: scale(1.15);
+        }
+        #master-color-name {
+            font-weight: 700;
+        }
+
+        /* Overlay Messages (Start, Game Over, Pause) */
+        .hidden {
+            display: none !important;
+        }
+
+        #start-screen, #game-over-message, #pause-message {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            border-radius: 5px;
+            z-index: 10;
+        }
+
+        #start-screen h1 {
+             color: #ffffff;
+             text-shadow: 2px 2px 4px #000;
+             margin-bottom: 20px;
+        }
+
+        #game-over-message h1, #pause-message h1 {
+            color: #C13B31;
+            text-shadow: 2px 2px 4px #000;
+        }
+
+        #pause-message h1 {
+            color: #F5B921;
+        }
+
+        #start-button, #restart-button {
+            padding: 12px 25px;
+            font-size: 1.2em;
+            font-weight: 700;
+            color: white;
+            background-color: #3A7A37;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        #start-button:hover, #restart-button:hover {
+            background-color: #2F6B2C;
+            transform: scale(1.05);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .game-container {
+                flex-direction: column;
+                align-items: center;
+                height: 100%;
+                gap: 10px;
+            }
+
+            .game-area-wrapper {
+                 order: 0;
+                 width: 90%;
+                 max-width: 400px;
+                 height: auto;
+            }
+
+            .ui-panel {
+                flex-direction: row;
+                justify-content: space-around;
+                width: 90%;
+                padding: 10px;
+                min-width: unset;
+            }
+
+            .left-panel { order: 2; }
+            .right-panel { order: 1; }
+            .controls-info { display: none; }
+        }
+    </style>
+    <link rel="stylesheet" href="game-skin.css">
+</head>
+<body class="ccs-game ccs-blox">
+    <div class="game-container">
+        <div class="ui-panel left-panel">
+            <h2>LINES CLEARED</h2>
+            <p id="lines-cleared">0</p>
+            <h2>LEVEL</h2>
+            <p id="level">1</p>
+            <div class="controls-info" id="master-brick-panel">
+                <h3>Master Brick</h3>
+                <div id="master-bar"></div>
+                <p style="text-align:center;font-size:.78em;margin:8px 0 0;opacity:.9">
+                    Clear a <span id="master-color-name">?</span> line for a bonus!
+                </p>
+            </div>
+             <div class="controls-info">
+                <h3>Controls</h3>
+                <p><span>&larr;</span><span>&rarr;</span> : Move</p>
+                <p><span>&uarr;</span> / Z : Rotate</p>
+                <p><span>&darr;</span> : Soft Drop</p>
+                <p><span>Space</span> : Hard Drop</p>
+                <p><span>P</span> : Pause</p>
+                <p><span>R</span> : Restart</p>
+            </div>
+        </div>
+
+        <div class="game-area-wrapper">
+            <canvas id="tetris-canvas"></canvas>
+            <div id="start-screen">
+                <h1>DropBlox</h1>
+                <button id="start-button">Start Game</button>
+            </div>
+            <div id="pause-message" class="hidden">
+                <h1>PAUSED</h1>
+            </div>
+            <div id="game-over-message" class="hidden">
+                <h1>GAME OVER</h1>
+                <button id="restart-button">Play Again</button>
+            </div>
+        </div>
+
+        <div class="ui-panel right-panel">
+            <h2>NEXT</h2>
+            <canvas id="next-canvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const canvas = document.getElementById('tetris-canvas');
+            const context = canvas.getContext('2d');
+            const nextCanvas = document.getElementById('next-canvas');
+            const nextContext = nextCanvas.getContext('2d');
+            const linesClearedElement = document.getElementById('lines-cleared');
+            const levelElement = document.getElementById('level');
+            const masterBarElement = document.getElementById('master-bar');
+            const masterColorNameElement = document.getElementById('master-color-name');
+
+            // Overlays and Buttons
+            const startScreen = document.getElementById('start-screen');
+            const startButton = document.getElementById('start-button');
+            const gameOverMessage = document.getElementById('game-over-message');
+            const pauseMessage = document.getElementById('pause-message');
+            const restartButton = document.getElementById('restart-button');
+
+            // --- Game Constants ---
+            const COLS = 10;
+            const ROWS = 20;
+            const BLOCK_SIZE = 30;
+            const NEXT_BOX_SIZE = 4;
+            const CLEAR_LINE_REQ = 6;
+            const ANIMATION_DURATION = 400; // ms
+
+            const COLORS = ['#f00000', '#00f000', '#0000f0', '#f0f000', '#a000f0']; // Red, Green, Blue, Yellow, Purple
+            const COLOR_NAMES = { '#f00000':'RED', '#00f000':'GREEN', '#0000f0':'BLUE', '#f0f000':'YELLOW', '#a000f0':'PURPLE' };
+            const SHAPES = { 'I': [[1, 1, 1, 1]], 'O': [[1, 1], [1, 1]], 'T': [[0, 1, 0], [1, 1, 1]], 'S': [[0, 1, 1], [1, 1, 0]], 'Z': [[1, 1, 0], [0, 1, 1]], 'J': [[1, 0, 0], [1, 1, 1]], 'L': [[0, 0, 1], [1, 1, 1]] };
+            const PIECE_KEYS = 'IOTZJLS';
+
+            // --- Game State ---
+            let grid, currentPiece, nextPiece;
+            let level, totalLinesCleared;
+            let masterOrder = COLORS.slice();
+            let targetColor = masterOrder[0];
+            let pieceCount = 0;
+            const MASTER_BRICK_EVERY = 5;
+            let isGameOver, isPaused, gameStarted = false, isAnimating = false;
+            let fallCounter, fallInterval, lastTime;
+            let animationFrameId;
+
+            // --- Main Game Flow ---
+            function init() {
+                canvas.width = COLS * BLOCK_SIZE;
+                canvas.height = ROWS * BLOCK_SIZE;
+                nextCanvas.width = NEXT_BOX_SIZE * BLOCK_SIZE;
+                nextCanvas.height = NEXT_BOX_SIZE * BLOCK_SIZE;
+                context.scale(BLOCK_SIZE, BLOCK_SIZE);
+                nextContext.scale(BLOCK_SIZE, BLOCK_SIZE);
+
+                startButton.addEventListener('click', startGame);
+                restartButton.addEventListener('click', startGame);
+                document.addEventListener('keydown', handleKeyPress);
+            }
+
+            function startGame() {
+                if (isAnimating) return;
+                if (!gameStarted) gameStarted = true;
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
+                grid = createEmptyGrid();
+                level = 1;
+                totalLinesCleared = 0;
+                isGameOver = false;
+                isPaused = false;
+                fallInterval = 1000;
+
+                lastTime = performance.now();
+                fallCounter = 0;
+                pieceCount = 0;
+                reshuffleMasterBrick();
+
+                startScreen.classList.add('hidden');
+                gameOverMessage.classList.add('hidden');
+                pauseMessage.classList.add('hidden');
+
+                spawnNewPiece();
+                updateUI();
+
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+
+            function gameLoop(timestamp) {
+                if (isGameOver) {
+                    cancelAnimationFrame(animationFrameId);
+                    return;
+                }
+
+                if (!lastTime) lastTime = timestamp;
+                const deltaTime = timestamp - lastTime;
+                lastTime = timestamp;
+
+                if (!isPaused && !isAnimating) {
+                    fallCounter += deltaTime;
+                    if (fallCounter >= fallInterval) {
+                        movePiece(0, 1);
+                        fallCounter = 0;
+                    }
+                }
+
+                draw();
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+
+            // --- Piece Management ---
+            function createEmptyGrid() { return Array.from({ length: ROWS }, () => Array(COLS).fill(null)); }
+            function createRandomPiece() {
+                pieceCount++;
+                const type = PIECE_KEYS[Math.floor(Math.random() * PIECE_KEYS.length)];
+                const shape = SHAPES[type];
+                const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+                const piece = { x: Math.floor(COLS / 2) - Math.floor(shape[0].length / 2), y: 0, shape, color };
+
+                // Every few pieces, hand the player a "master brick" carrying
+                // every colour at once instead of one solid colour, so each
+                // of its blocks can be aimed at a different line.
+                if (pieceCount % MASTER_BRICK_EVERY === 0) {
+                    piece.isMaster = true;
+                    let ci = 0;
+                    piece.cellColors = shape.map(row => row.map(v => v ? COLORS[ci++ % COLORS.length] : null));
+                }
+                return piece;
+            }
+            function spawnNewPiece() {
+                if (!nextPiece) nextPiece = createRandomPiece();
+                currentPiece = nextPiece;
+                nextPiece = createRandomPiece();
+
+                if (!isValid(currentPiece)) {
+                    isGameOver = true;
+                    showGameOver();
+                }
+                drawNextPiece();
+            }
+
+            // --- Drawing ---
+            function shadeColor(color, percent) {
+                let f=parseInt(color.slice(1),16),t=percent<0?0:255,p=percent<0?percent*-1:percent,R=f>>16,G=f>>8&0x00FF,B=f&0x0000FF;
+                return "#"+(0x1000000+(Math.round((t-R)*p)+R)*0x10000+(Math.round((t-G)*p)+G)*0x100+(Math.round((t-B)*p)+B)).toString(16).slice(1);
+            }
+
+            function draw() {
+                context.clearRect(0, 0, canvas.width, canvas.height);
+                drawGrid();
+                if (currentPiece) drawPiece(currentPiece, context);
+            }
+            function drawGrid() {
+                for (let y = 0; y < ROWS; y++) {
+                    for (let x = 0; x < COLS; x++) {
+                        const cell = grid[y][x];
+                        if (cell) {
+                            if (typeof cell === 'string') {
+                                drawBlock(x, y, cell, context);
+                            } else if (cell.state === 'clearing') {
+                                const elapsed = performance.now() - cell.startTime;
+                                const progress = Math.min(elapsed / ANIMATION_DURATION, 1);
+                                const alpha = 1 - progress;
+                                const scale = 1 + progress * 0.5;
+                                drawBlock(x, y, cell.originalColor, context, alpha, scale);
+                            }
+                        }
+                    }
+                }
+            }
+            function drawPiece(piece, ctx) {
+                piece.shape.forEach((row, y) => row.forEach((value, x) => {
+                    if (value) {
+                        const color = piece.isMaster ? piece.cellColors[y][x] : piece.color;
+                        drawBlock(piece.x + x, piece.y + y, color, ctx, 1, 1, piece.isMaster);
+                    }
+                }));
+            }
+            function drawNextPiece() {
+                nextContext.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+                const offsetX = (NEXT_BOX_SIZE - nextPiece.shape[0].length) / 2;
+                const offsetY = (NEXT_BOX_SIZE - nextPiece.shape.length) / 2;
+                drawPiece({ ...nextPiece, x: offsetX, y: offsetY }, nextContext);
+            }
+            function drawBlock(x, y, color, ctx, alpha = 1, scale = 1, special = false) {
+                ctx.save();
+                ctx.globalAlpha = alpha;
+
+                const centerX = x + 0.5;
+                const centerY = y + 0.5;
+                ctx.translate(centerX, centerY);
+                ctx.scale(scale, scale);
+                ctx.translate(-centerX, -centerY);
+
+                const lightColor = shadeColor(color, 0.3);
+                const darkColor = shadeColor(color, -0.4);
+                const bevel = 0.1;
+
+                // Main face
+                ctx.fillStyle = color;
+                ctx.fillRect(x, y, 1, 1);
+
+                // Highlight
+                ctx.fillStyle = lightColor;
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + 1, y);
+                ctx.lineTo(x + 1 - bevel, y + bevel);
+                ctx.lineTo(x + bevel, y + bevel);
+                ctx.lineTo(x + bevel, y + 1 - bevel);
+                ctx.lineTo(x, y + 1);
+                ctx.closePath();
+                ctx.fill();
+
+                // Shadow
+                ctx.fillStyle = darkColor;
+                ctx.beginPath();
+                ctx.moveTo(x + 1, y + 1);
+                ctx.lineTo(x, y + 1);
+                ctx.lineTo(x + bevel, y + 1 - bevel);
+                ctx.lineTo(x + 1 - bevel, y + 1 - bevel);
+                ctx.lineTo(x + 1 - bevel, y + bevel);
+                ctx.lineTo(x + 1, y);
+                ctx.closePath();
+                ctx.fill();
+
+                if (special) {
+                    ctx.strokeStyle = '#F2C230';
+                    ctx.lineWidth = 0.08;
+                    ctx.strokeRect(x + 0.04, y + 0.04, 0.92, 0.92);
+                }
+
+                ctx.restore();
+            }
+            function updateUI() {
+                linesClearedElement.textContent = totalLinesCleared;
+                levelElement.textContent = level;
+            }
+
+            /** Shuffles the five colours into a new order and makes the
+                first one the target - called at the start of every game
+                and again each time the current target gets cleared. */
+            function reshuffleMasterBrick() {
+                masterOrder = COLORS.slice();
+                for (let i = masterOrder.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [masterOrder[i], masterOrder[j]] = [masterOrder[j], masterOrder[i]];
+                }
+                targetColor = masterOrder[0];
+                drawMasterBrick();
+            }
+            function drawMasterBrick() {
+                masterBarElement.innerHTML = '';
+                masterOrder.forEach((color, i) => {
+                    const sw = document.createElement('div');
+                    sw.className = 'master-swatch' + (i === 0 ? ' is-target' : '');
+                    sw.style.backgroundColor = color;
+                    masterBarElement.appendChild(sw);
+                });
+                masterColorNameElement.textContent = COLOR_NAMES[targetColor] || '?';
+                masterColorNameElement.style.color = targetColor;
+            }
+
+            // --- Game Logic & Collision ---
+            function movePiece(dx, dy) {
+                if (isPaused || isGameOver || isAnimating) return;
+                const newPiece = { ...currentPiece, x: currentPiece.x + dx, y: currentPiece.y + dy };
+                if (isValid(newPiece)) currentPiece = newPiece;
+                else if (dy > 0) lockPiece();
+            }
+            function rotatePiece() {
+                if (isPaused || isGameOver || isAnimating) return;
+                const shape = currentPiece.shape;
+                const newShape = shape[0].map((_, colIndex) => shape.map(row => row[colIndex]).reverse());
+                const newPiece = { ...currentPiece, shape: newShape };
+                if (currentPiece.isMaster) {
+                    const cc = currentPiece.cellColors;
+                    newPiece.cellColors = cc[0].map((_, colIndex) => cc.map(row => row[colIndex]).reverse());
+                }
+
+                let kickOffset = 0;
+                if (!isValid(newPiece)) kickOffset = newPiece.x < COLS / 2 ? 1 : -1;
+                newPiece.x += kickOffset;
+
+                if (!isValid(newPiece)) newPiece.x -= kickOffset;
+                if (!isValid(newPiece) && newPiece.shape.length > 2) {
+                    newPiece.x += kickOffset * 2;
+                    if(!isValid(newPiece)) newPiece.x -= kickOffset * 2;
+                }
+
+                if (isValid(newPiece)) currentPiece = newPiece;
+            }
+            function hardDrop() {
+                if (isPaused || isGameOver || isAnimating) return;
+                while(isValid({ ...currentPiece, y: currentPiece.y + 1 })) currentPiece.y++;
+                lockPiece();
+            }
+            function isValid(piece) {
+                for (let y = 0; y < piece.shape.length; y++) for (let x = 0; x < piece.shape[y].length; x++) {
+                    if (piece.shape[y][x]) {
+                        const boardX = piece.x + x, boardY = piece.y + y;
+                        if (boardX < 0 || boardX >= COLS || boardY >= ROWS || (boardY >= 0 && grid[boardY][boardX])) return false;
+                    }
+                }
+                return true;
+            }
+            async function lockPiece() {
+                currentPiece.shape.forEach((row, y) => row.forEach((value, x) => {
+                    if (value && currentPiece.y + y >= 0) {
+                        grid[currentPiece.y + y][currentPiece.x + x] = currentPiece.isMaster ? currentPiece.cellColors[y][x] : currentPiece.color;
+                    }
+                }));
+                currentPiece = null;
+                await handleLineClears();
+                if (!isGameOver) {
+                    spawnNewPiece();
+                    updateLevel();
+                    updateUI();
+                    fallCounter = 0;
+                }
+            }
+
+            // --- Line Clearing ---
+            async function handleLineClears() {
+                isAnimating = true;
+                let cleared;
+                do {
+                    const { blocksToClear, linesFound, lineColors } = findMatchingLines();
+                    cleared = linesFound > 0;
+                    if (cleared) {
+                        totalLinesCleared += linesFound;
+
+                        // A line in the master brick's current target
+                        // colour counts double, and hands the target on
+                        // to a freshly reshuffled colour.
+                        const bonusLines = lineColors.filter(c => c === targetColor).length;
+                        if (bonusLines > 0) {
+                            totalLinesCleared += bonusLines;
+                            reshuffleMasterBrick();
+                        }
+
+                        const clearStartTime = performance.now();
+                        blocksToClear.forEach(p => {
+                            if (grid[p.y] && typeof grid[p.y][p.x] === 'string') {
+                                grid[p.y][p.x] = { originalColor: grid[p.y][p.x], state: 'clearing', startTime: clearStartTime };
+                            }
+                        });
+
+                        await new Promise(res => setTimeout(res, ANIMATION_DURATION));
+
+                        blocksToClear.forEach(p => { if(grid[p.y]) grid[p.y][p.x] = null; });
+
+                        updateUI();
+                        applyGravity();
+                        await new Promise(res => setTimeout(res, 100));
+                    }
+                } while (cleared);
+                isAnimating = false;
+            }
+
+            function findMatchingLines() {
+                const blocksToRemove = new Set();
+                let linesFound = 0;
+                const lineColors = [];
+
+                // Check for horizontal lines
+                for (let y = 0; y < ROWS; y++) {
+                    for (let x = 0; x <= COLS - CLEAR_LINE_REQ; x++) {
+                        const color = grid[y][x];
+                        if (!color || typeof color !== 'string') continue;
+
+                        let match = true;
+                        for (let i = 1; i < CLEAR_LINE_REQ; i++) {
+                            if (grid[y][x + i] !== color) {
+                                match = false;
+                                break;
+                            }
+                        }
+
+                        if (match) {
+                            linesFound++;
+                            lineColors.push(color);
+                            for (let i = 0; i < CLEAR_LINE_REQ; i++) {
+                                blocksToRemove.add(JSON.stringify({ x: x + i, y }));
+                            }
+                        }
+                    }
+                }
+
+                // Check for vertical lines
+                for (let x = 0; x < COLS; x++) {
+                    for (let y = 0; y <= ROWS - CLEAR_LINE_REQ; y++) {
+                        const color = grid[y][x];
+                        if (!color || typeof color !== 'string') continue;
+
+                        let match = true;
+                        for (let i = 1; i < CLEAR_LINE_REQ; i++) {
+                            if (grid[y + i][x] !== color) {
+                                match = false;
+                                break;
+                            }
+                        }
+
+                        if (match) {
+                            linesFound++;
+                            lineColors.push(color);
+                            for (let i = 0; i < CLEAR_LINE_REQ; i++) {
+                                blocksToRemove.add(JSON.stringify({ x, y: y + i }));
+                            }
+                        }
+                    }
+                }
+
+                const blocksToClear = Array.from(blocksToRemove).map(str => JSON.parse(str));
+                return { blocksToClear, linesFound, lineColors };
+            }
+
+            function applyGravity() {
+                for (let x = 0; x < COLS; x++) {
+                    let emptyRow = ROWS - 1;
+                    for (let y = ROWS - 1; y >= 0; y--) {
+                        if (grid[y][x]) {
+                            if(y !== emptyRow){
+                                grid[emptyRow][x] = grid[y][x];
+                                grid[y][x] = null;
+                            }
+                            emptyRow--;
+                        }
+                    }
+                }
+            }
+
+            // --- Game State & Controls ---
+            function updateLevel() {
+                const newLevel = Math.floor(totalLinesCleared / 10) + 1;
+                if (newLevel > level) {
+                    level = newLevel;
+                    fallInterval = Math.max(100, 1000 - (level - 1) * 50);
+                }
+            }
+            function togglePause() {
+                if (!gameStarted || isGameOver || isAnimating) return;
+                isPaused = !isPaused;
+                pauseMessage.classList.toggle('hidden', !isPaused);
+                if (!isPaused) lastTime = performance.now();
+            }
+            function showGameOver() {
+                cancelAnimationFrame(animationFrameId);
+                gameOverMessage.classList.remove('hidden');
+            }
+            function handleKeyPress(event) {
+                if (!gameStarted || isGameOver) {
+                    if (event.key === 'r' || event.key === 'R') startGame();
+                    return;
+                }
+                if (event.key === 'p' || event.key === 'P') togglePause();
+                if (isPaused || isAnimating) return;
+
+                switch (event.key) {
+                    case 'ArrowLeft': movePiece(-1, 0); break;
+                    case 'ArrowRight': movePiece(1, 0); break;
+                    case 'ArrowDown': movePiece(0, 1); fallCounter = 0; break;
+                    case 'ArrowUp': case 'z': case 'Z': rotatePiece(); break;
+                    case ' ': event.preventDefault(); hardDrop(); break;
+                    case 'r': case 'R': startGame(); break;
+                }
+            }
+
+            // --- Initializer Call ---
+            init();
+        });
+    </script>
+</body>
+</html>

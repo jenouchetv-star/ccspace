@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BrickBuilder 3D - Interactive LEGO App</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1B2A32;
+            color: white;
+            user-select: none;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let clicks pass through to canvas */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .panel {
+            background: rgba(27, 42, 50, 0.92);
+            backdrop-filter: blur(5px);
+            padding: 15px;
+            border-radius: 12px;
+            margin: 20px;
+            pointer-events: auto;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* Header */
+        #header {
+            align-self: flex-start;
+        }
+        h1 { margin: 0; font-size: 1.2rem; color: #F5B921; text-transform: uppercase; letter-spacing: 1px; }
+        p { margin: 5px 0 0; font-size: 0.85rem; color: #aaa; }
+
+        /* Controls Sidebar */
+        #controls {
+            position: absolute;
+            top: 80px;
+            left: 0;
+            width: 220px;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #888;
+            margin-bottom: 10px;
+            font-weight: bold;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+
+        /* Color Grid */
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .color-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: transform 0.2s;
+            box-shadow: inset 0 -2px 5px rgba(0,0,0,0.3);
+        }
+        .color-btn.active {
+            border-color: white;
+            transform: scale(1.1);
+        }
+        .color-btn:hover { transform: scale(1.1); }
+
+        /* Brick Grid */
+        .brick-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .brick-btn {
+            background: #22343D;
+            border: 1px solid #35545F;
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: left;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .brick-btn:hover { background: #2C424C; }
+        .brick-btn.active { background: #F5B921; color: #111; border-color: #F5B921; font-weight: bold; }
+        .brick-preview {
+            width: 20px;
+            height: 20px;
+            background: currentColor;
+            opacity: 0.5;
+            border-radius: 2px;
+        }
+
+        /* Action Buttons */
+        .action-btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 10px;
+            background: #22343D;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            transition: background 0.2s;
+        }
+        .action-btn:hover { background: #2C424C; }
+        .action-btn.primary { background: #17B3CE; }
+        .action-btn.primary:hover { background: #0C7387; }
+        .action-btn.danger { background: #C13B31; }
+        .action-btn.danger:hover { background: #9E3028; }
+
+        /* Instructions Overlay */
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            text-align: right;
+        }
+        .key-hint {
+            display: inline-block;
+            background: #444;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+            margin: 0 2px;
+            border-bottom: 2px solid #222;
+        }
+
+        /* Toast Notification */
+        #toast {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(193, 59, 49, 0.92);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+    </style>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <link rel="stylesheet" href="game-skin.css">
+</head>
+<body class="ccs-game ccs-brick">
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <div id="header" class="panel">
+            <h1>BrickBuilder 3D</h1>
+            <p>Interactive Voxel Construction</p>
+        </div>
+
+        <div id="controls" class="panel">
+            <div class="section-title">Colors</div>
+            <div class="color-grid" id="color-palette"></div>
+
+            <div class="section-title">Bricks</div>
+            <div class="brick-list" id="brick-list"></div>
+
+            <div class="section-title">Actions</div>
+            <button class="action-btn primary" onclick="rotateCurrentBrick()">Rotate (R)</button>
+            <button class="action-btn danger" onclick="clearBoard()">Clear All</button>
+        </div>
+
+        <div id="instructions" class="panel">
+            <div style="margin-bottom: 5px;"><b>Controls</b></div>
+            <div>Left Click / Enter: Place Brick</div>
+            <div>Shift + Click: Delete Brick</div>
+            <div>Right Click / Drag: Rotate Camera</div>
+            <div>Scroll: Zoom</div>
+            <div><span class="key-hint">R</span> Rotate Brick</div>
+        </div>
+
+        <div id="toast">Cannot place here!</div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const UNIT_SIZE = 10; // Size of 1x1 stud area
+        const PLATE_HEIGHT = 3.2; // Standard plate height relative to width
+        const BRICK_HEIGHT = 9.6; // Standard brick height (3 plates)
+        const STUD_RADIUS = 2.4;
+        const STUD_HEIGHT = 1.7;
+        const GRID_SIZE = 200; // 20x20 units
+
+        // Standard LEGO Colors
+        const COLORS = [
+            { name: 'Red', hex: 0xB40000 },
+            { name: 'Blue', hex: 0x1E5AA8 },
+            { name: 'Green', hex: 0x00852B },
+            { name: 'Yellow', hex: 0xFAC80A },
+            { name: 'White', hex: 0xFFFFFF },
+            { name: 'Black', hex: 0x111111 },
+            { name: 'Grey', hex: 0x9BA19D },
+            { name: 'Orange', hex: 0xD67923 },
+            { name: 'Purple', hex: 0x81007B },
+            { name: 'Lime', hex: 0xBBE90B },
+        ];
+
+        // Brick Definitions (Width x Depth in studs)
+        const BRICK_TYPES = [
+            { name: '1x1 Brick', w: 1, d: 1 },
+            { name: '1x2 Brick', w: 1, d: 2 },
+            { name: '1x3 Brick', w: 1, d: 3 },
+            { name: '1x4 Brick', w: 1, d: 4 },
+            { name: '2x2 Brick', w: 2, d: 2 },
+            { name: '2x3 Brick', w: 2, d: 3 },
+            { name: '2x4 Brick', w: 2, d: 4 },
+        ];
+
+        // --- STATE ---
+        let scene, camera, renderer, controls;
+        let raycaster, mouse;
+        let plane; // The ground plane for raycasting
+        let rollOverMesh, rollOverMaterial; // The ghost brick
+        let placedBricks = []; // Array to store placed mesh data for logic
+
+        let currentColor = COLORS[0].hex;
+        let currentBrickType = BRICK_TYPES[4]; // Default 2x2
+        let isRotated = false; // false = normal, true = rotated 90 deg
+        let isShiftDown = false;
+
+        // --- INITIALIZATION ---
+        function init() {
+            // Scene Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xFAF4E6);
+            scene.fog = new THREE.Fog(0xFAF4E6, 200, 1000);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
+            camera.position.set(150, 200, 150);
+            camera.lookAt(0, 0, 0);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0x606060);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff);
+            directionalLight.position.set(1, 0.75, 0.5).normalize();
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            // Grid Helper
+            const gridHelper = new THREE.GridHelper(GRID_SIZE * 2, 40, 0xCDDFE4, 0xE6F0F2);
+            scene.add(gridHelper);
+
+            // Raycasting Plane (Invisible ground)
+            const geometry = new THREE.PlaneGeometry(1000, 1000);
+            geometry.rotateX(-Math.PI / 2);
+            // FIX: Changed from {visible: false} to transparent so Raycaster can detect it
+            plane = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ visible: true, opacity: 0, transparent: true, depthWrite: false }));
+            scene.add(plane);
+
+            // Raycaster
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; // Don't go below ground
+
+            // UI Initialization
+            initUI();
+            updateRollOver(); // Create initial ghost brick
+
+            // Event Listeners
+            document.addEventListener('mousemove', onDocumentMouseMove, false);
+            document.addEventListener('mousedown', onDocumentMouseDown, false);
+            document.addEventListener('keydown', onDocumentKeyDown, false);
+            document.addEventListener('keyup', onDocumentKeyUp, false);
+            window.addEventListener('resize', onWindowResize, false);
+
+            // Start Loop
+            animate();
+        }
+
+        // --- GEOMETRY FACTORY ---
+        function createLegoGeometry(widthStuds, depthStuds) {
+            const totalWidth = widthStuds * UNIT_SIZE;
+            const totalDepth = depthStuds * UNIT_SIZE;
+
+            // Base block
+            const baseGeometry = new THREE.BoxGeometry(totalWidth, BRICK_HEIGHT, totalDepth);
+
+            // Shift geometry so origin is at bottom-center (makes placement math easier)
+            baseGeometry.translate(0, BRICK_HEIGHT / 2, 0);
+
+            // Create a merged geometry for studs
+            // Note: In recent Three.js, merging is different, but we'll use a Group or simple mesh addition for simplicity
+            // For performance in a single file, we will create a single mesh by merging BufferGeometries.
+
+            // However, for this specific demo, keeping studs as children of the base mesh is easier to manage
+            // without importing MergeUtils.
+
+            // To make it a single geometry (better for raycasting), we'd normally merge.
+            // Hack: We will return a Group. Raycaster works recursively on groups.
+
+            // Re-approach: Geometry merging manually
+            // We'll use a slightly inefficient but reliable way: Group.
+
+            // Actually, let's create one reusable function that returns a Group containing the base and studs.
+            const group = new THREE.Group();
+
+            const baseMesh = new THREE.Mesh(baseGeometry); // Material will be applied later
+            baseMesh.castShadow = true;
+            baseMesh.receiveShadow = true;
+            group.add(baseMesh);
+
+            // Studs
+            const studGeo = new THREE.CylinderGeometry(STUD_RADIUS, STUD_RADIUS, STUD_HEIGHT, 16);
+            studGeo.translate(0, STUD_HEIGHT/2, 0); // Pivot at bottom
+
+            for (let i = 0; i < widthStuds; i++) {
+                for (let j = 0; j < depthStuds; j++) {
+                    const stud = new THREE.Mesh(studGeo);
+                    // Calculate position:
+                    // Start from -width/2, add half unit, add i units
+                    const x = (i * UNIT_SIZE) - (totalWidth / 2) + (UNIT_SIZE / 2);
+                    const z = (j * UNIT_SIZE) - (totalDepth / 2) + (UNIT_SIZE / 2);
+                    const y = BRICK_HEIGHT;
+
+                    stud.position.set(x, y, z);
+                    group.add(stud);
+                }
+            }
+
+            return group;
+        }
+
+        function createGhostMaterial(colorHex, valid) {
+            const opacity = valid ? 0.5 : 0.5;
+            const color = valid ? colorHex : 0xff0000;
+            return new THREE.MeshBasicMaterial({
+                color: color,
+                opacity: opacity,
+                transparent: true,
+                depthTest: false
+            });
+        }
+
+        function createSolidMaterial(colorHex) {
+            return new THREE.MeshStandardMaterial({
+                color: colorHex,
+                roughness: 0.2,
+                metalness: 0.1
+            });
+        }
+
+        // --- GAME LOGIC ---
+
+        function updateRollOver() {
+            if (rollOverMesh) scene.remove(rollOverMesh);
+
+            const w = isRotated ? currentBrickType.d : currentBrickType.w;
+            const d = isRotated ? currentBrickType.w : currentBrickType.d;
+
+            // Generate visual
+            const group = createLegoGeometry(w, d);
+
+            // Apply ghost material to all children
+            rollOverMaterial = createGhostMaterial(currentColor, true);
+            group.children.forEach(child => {
+                child.material = rollOverMaterial;
+            });
+
+            rollOverMesh = group;
+            scene.add(rollOverMesh);
+        }
+
+        function getIntersects(event, objects) {
+            mouse.set(
+                (event.clientX / window.innerWidth) * 2 - 1,
+                -(event.clientY / window.innerHeight) * 2 + 1
+            );
+            raycaster.setFromCamera(mouse, camera);
+            return raycaster.intersectObjects(objects, true); // Recursive for Groups
+        }
+
+        function checkCollision(x, y, z, w, d) {
+            // Very naive collision: check if any placed brick overlaps
+            // Since bricks are grid aligned, we check voxel occupation
+            // A better way for this scale: Check bounding boxes
+
+            const buffer = 0.1; // slight buffer
+            const myMinX = x - (w * UNIT_SIZE)/2 + buffer;
+            const myMaxX = x + (w * UNIT_SIZE)/2 - buffer;
+            const myMinZ = z - (d * UNIT_SIZE)/2 + buffer;
+            const myMaxZ = z + (d * UNIT_SIZE)/2 - buffer;
+            const myMinY = y;
+            const myMaxY = y + BRICK_HEIGHT - buffer;
+
+            for (let b of placedBricks) {
+                const bw = b.userData.w;
+                const bd = b.userData.d;
+                const bx = b.position.x;
+                const by = b.position.y;
+                const bz = b.position.z;
+
+                const bMinX = bx - (bw * UNIT_SIZE)/2;
+                const bMaxX = bx + (bw * UNIT_SIZE)/2;
+                const bMinZ = bz - (bd * UNIT_SIZE)/2;
+                const bMaxZ = bz + (bd * UNIT_SIZE)/2;
+                const bMinY = by;
+                const bMaxY = by + BRICK_HEIGHT;
+
+                // AABB Collision
+                if (myMinX < bMaxX && myMaxX > bMinX &&
+                    myMinY < bMaxY && myMaxY > bMinY &&
+                    myMinZ < bMaxZ && myMaxZ > bMinZ) {
+                    return true; // Collision detected
+                }
+            }
+            return false;
+        }
+
+        function checkSupport(x, y, z, w, d) {
+            if (Math.abs(y) < 0.1) return true; // On ground
+
+            // If not on ground, must be on top of another brick
+            // Check area directly below
+            const checkY = y - BRICK_HEIGHT;
+
+            // We need to find at least one brick immediately below us
+            // that intersects our footprint
+            const myMinX = x - (w * UNIT_SIZE)/2;
+            const myMaxX = x + (w * UNIT_SIZE)/2;
+            const myMinZ = z - (d * UNIT_SIZE)/2;
+            const myMaxZ = z + (d * UNIT_SIZE)/2;
+
+            for (let b of placedBricks) {
+                // Check vertical alignment (must be exactly one brick height below)
+                if (Math.abs(b.position.y - checkY) > 0.5) continue;
+
+                const bw = b.userData.w;
+                const bd = b.userData.d;
+                const bx = b.position.x;
+                const bz = b.position.z;
+
+                const bMinX = bx - (bw * UNIT_SIZE)/2;
+                const bMaxX = bx + (bw * UNIT_SIZE)/2;
+                const bMinZ = bz - (bd * UNIT_SIZE)/2;
+                const bMaxZ = bz + (bd * UNIT_SIZE)/2;
+
+                // Check horizontal overlap
+                if (myMinX < bMaxX && myMaxX > bMinX &&
+                    myMinZ < bMaxZ && myMaxZ > bMinZ) {
+                    return true; // Supported
+                }
+            }
+
+            return false;
+        }
+
+        function onDocumentMouseMove(event) {
+            event.preventDefault();
+
+            // Objects to intersect: Plane + Placed Bricks
+            // To raycast against groups correctly, we pass the group array
+            const intersectTargets = [plane, ...placedBricks];
+
+            const intersects = getIntersects(event, intersectTargets);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+
+                // Normal helps us stack
+                const normal = intersect.face.normal;
+
+                // If we hit a stud (Cylinder), the normal might be weird,
+                // but generally we want to align to grid.
+
+                // Raw position
+                let vect = new THREE.Vector3().copy(intersect.point).add(intersect.face.normal);
+
+                // If we clicked a wall (normal.y == 0), we offset differently
+                // But simplified: Just Snap to Grid
+
+                // Adjust for brick center based on odd/even width
+                // 1x1 (width 10) center is at 5. 2x2 (width 20) center is at 10.
+
+                const w = isRotated ? currentBrickType.d : currentBrickType.w;
+                const d = isRotated ? currentBrickType.w : currentBrickType.d;
+
+                // Calculate grid snap
+                // We want the corner to align to grid lines
+                // Center = Round(Point / 10) * 10 + (Size%2 == 0 ? 0 : 0) ...
+                // Actually simpler:
+                // Position = Math.floor(pos / 10) * 10 + 5 (center of cell)
+
+                // However, if width is 2 units (20), center is on a grid line.
+                // If width is 1 unit (10), center is offset by 5.
+
+                const offsetX = (w % 2 === 0) ? 0 : UNIT_SIZE / 2;
+                const offsetZ = (d % 2 === 0) ? 0 : UNIT_SIZE / 2;
+
+                // If we are stacking on top of a mesh, ensure precise Y
+                let targetY = 0;
+
+                // Detect if we hit the ground or an object
+                if (intersect.object !== plane) {
+                    // Find the root group of the object we hit
+                    let obj = intersect.object;
+                    while(obj.parent && obj.parent.type !== 'Scene') {
+                        obj = obj.parent;
+                    }
+                    // Stack on top
+                    // We simply take the intersected point.y.
+                    // If normal is up, y + 0.
+                    // But simpler logic: use Math.round to nearest brick height layer
+                    targetY = Math.floor((intersect.point.y + 0.1) / BRICK_HEIGHT) * BRICK_HEIGHT;
+                    // If hitting top face, go up one level
+                    if (Math.abs(normal.y) > 0.9) {
+                         // If point is near top of existing brick
+                         targetY = obj.position.y + BRICK_HEIGHT;
+                    }
+                }
+
+                rollOverMesh.position.x = Math.floor(intersect.point.x / UNIT_SIZE) * UNIT_SIZE + offsetX;
+                rollOverMesh.position.z = Math.floor(intersect.point.z / UNIT_SIZE) * UNIT_SIZE + offsetZ;
+                rollOverMesh.position.y = Math.max(0, targetY); // Cannot go below ground
+
+                // Correction: Hitting side of brick
+                if (intersect.object !== plane && Math.abs(normal.y) < 0.5) {
+                    // We are hitting the side. Adjust X/Z based on normal
+                     if (Math.abs(normal.x) > 0.5) {
+                         rollOverMesh.position.x += normal.x * UNIT_SIZE;
+                     }
+                     if (Math.abs(normal.z) > 0.5) {
+                         rollOverMesh.position.z += normal.z * UNIT_SIZE;
+                     }
+                     // Keep same Y as neighbor
+                     // Find object Y
+                     let obj = intersect.object;
+                     while(obj.parent && obj.parent.type !== 'Scene') obj = obj.parent;
+                     rollOverMesh.position.y = obj.position.y;
+                }
+
+                // Validation Check
+                const isValid = !checkCollision(rollOverMesh.position.x, rollOverMesh.position.y, rollOverMesh.position.z, w, d)
+                             && checkSupport(rollOverMesh.position.x, rollOverMesh.position.y, rollOverMesh.position.z, w, d);
+
+                // Update Color
+                rollOverMesh.children.forEach(child => {
+                    child.material.color.setHex(isValid ? currentColor : 0xff0000);
+                    child.material.opacity = 0.6;
+                });
+                rollOverMesh.userData.isValid = isValid;
+            }
+        }
+
+        function onDocumentMouseDown(event) {
+            // FIX: Improved UI blocking check to ensure clicks on buttons don't trigger canvas placement
+            if (event.target.closest('.panel') || event.target.closest('.action-btn')) return;
+
+            if (event.button !== 0) return; // Only left click
+
+            // Handle Delete (Shift + Click)
+            if (isShiftDown) {
+                const intersects = getIntersects(event, placedBricks);
+                if (intersects.length > 0) {
+                    let obj = intersects[0].object;
+                    while(obj.parent && obj.parent.type !== 'Scene') obj = obj.parent;
+
+                    // Remove
+                    scene.remove(obj);
+                    placedBricks.splice(placedBricks.indexOf(obj), 1);
+                }
+                return;
+            }
+
+            // Handle Place
+            placeBrick();
+        }
+
+        function placeBrick() {
+            if (rollOverMesh.userData.isValid) {
+                const w = isRotated ? currentBrickType.d : currentBrickType.w;
+                const d = isRotated ? currentBrickType.w : currentBrickType.d;
+
+                // Create visual instance
+                const group = createLegoGeometry(w, d);
+                const mat = createSolidMaterial(currentColor);
+
+                group.children.forEach(child => {
+                    child.material = mat;
+                });
+
+                group.position.copy(rollOverMesh.position);
+
+                // Store metadata for logic
+                group.userData = { w: w, d: d }; // Store dimensions for collision checks
+
+                scene.add(group);
+                placedBricks.push(group);
+
+                // Optional: Sound effect here
+            } else {
+                showToast();
+            }
+        }
+
+        function onDocumentKeyDown(event) {
+            switch (event.keyCode) {
+                case 16: isShiftDown = true; document.body.style.cursor = 'not-allowed'; break; // Shift
+                case 82: rotateCurrentBrick(); break; // R
+                case 13: placeBrick(); break; // Enter
+            }
+        }
+
+        function onDocumentKeyUp(event) {
+            switch (event.keyCode) {
+                case 16: isShiftDown = false; document.body.style.cursor = 'default'; break; // Shift
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- UI FUNCTIONS ---
+        function initUI() {
+            // Colors
+            const palette = document.getElementById('color-palette');
+            COLORS.forEach((col, index) => {
+                const btn = document.createElement('div');
+                btn.className = `color-btn ${index === 0 ? 'active' : ''}`;
+                btn.style.backgroundColor = '#' + col.hex.toString(16).padStart(6, '0');
+                btn.onclick = () => selectColor(col.hex, btn);
+                palette.appendChild(btn);
+            });
+
+            // Bricks
+            const list = document.getElementById('brick-list');
+            BRICK_TYPES.forEach((brick, index) => {
+                const btn = document.createElement('div');
+                btn.className = `brick-btn ${index === 4 ? 'active' : ''}`; // Default 2x2
+
+                const preview = document.createElement('div');
+                preview.className = 'brick-preview';
+                preview.style.width = (brick.w * 10) + 'px';
+                preview.style.height = (brick.d * 10) + 'px';
+
+                btn.innerHTML = `<span>${brick.name}</span>`;
+                btn.prepend(preview);
+
+                btn.onclick = () => selectBrick(brick, btn);
+                list.appendChild(btn);
+            });
+        }
+
+        function selectColor(hex, btn) {
+            currentColor = hex;
+            document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            updateRollOver();
+
+            // Update preview boxes in list
+            document.querySelectorAll('.brick-preview').forEach(el => el.style.color = '#' + hex.toString(16).padStart(6, '0'));
+        }
+
+        function selectBrick(brickType, btn) {
+            currentBrickType = brickType;
+            document.querySelectorAll('.brick-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            updateRollOver();
+        }
+
+        function rotateCurrentBrick() {
+            isRotated = !isRotated;
+            updateRollOver();
+        }
+
+        function clearBoard() {
+            if(confirm("Clear all bricks?")) {
+                placedBricks.forEach(b => scene.remove(b));
+                placedBricks = [];
+            }
+        }
+
+        function showToast() {
+            const toast = document.getElementById('toast');
+            toast.style.opacity = '1';
+            setTimeout(() => { toast.style.opacity = '0'; }, 1500);
+        }
+
+        // Start
+        init();
+
+    </script>
+</body>
+</html>

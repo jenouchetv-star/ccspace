@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Voxel Builder Game</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #1B2A32;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .ui-panel {
+            position: absolute;
+            background: rgba(27, 42, 50, 0.88);
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            backdrop-filter: blur(4px);
+        }
+
+        .controls {
+            top: 16px;
+            left: 16px;
+        }
+
+        .tools {
+            top: 16px;
+            right: 16px;
+        }
+
+        .color-palette {
+            bottom: 16px;
+            left: 16px;
+            text-align: center;
+        }
+
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .color-button {
+            width: 32px;
+            height: 32px;
+            border: 2px solid #35545F;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .color-button.selected {
+            border-color: white;
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+        }
+
+        .tool-button {
+            padding: 8px 16px;
+            margin: 0 4px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        .tool-button.active {
+            background: #17B3CE;
+            color: white;
+        }
+
+        .tool-button.inactive {
+            background: #35545F;
+            color: white;
+        }
+
+        .tool-button.break.active {
+            background: #C13B31;
+        }
+
+        .current-color {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 2px solid white;
+            border-radius: 4px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        p {
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+    </style>
+    <link rel="stylesheet" href="game-skin.css">
+</head>
+<body class="ccs-game ccs-voxel">
+    <div id="gameContainer">
+        <div class="ui-panel controls">
+            <h3>Controls</h3>
+            <p>WASD: Move horizontally</p>
+            <p>Up/Down arrows: Move up/down</p>
+            <p>Right Click + Drag: Rotate camera</p>
+            <p>Left Click: Use selected tool</p>
+            <p>U: Undo</p>
+            <p>R: Redo</p>
+            <p id="currentTool">Current Tool: Place Block</p>
+        </div>
+
+        <div class="ui-panel tools">
+            <h3>Tools</h3>
+            <button id="placeTool" class="tool-button active">Place</button>
+            <button id="breakTool" class="tool-button inactive break">Break</button>
+        </div>
+
+        <div class="ui-panel color-palette">
+            <h3>Color Palette</h3>
+            <div class="palette-grid" id="colorGrid"></div>
+            <div style="margin-top: 8px;">
+                <span id="selectedColorDisplay" class="current-color"></span>
+                <span id="selectedColorText">#4CAF50</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game state
+        let scene, camera, renderer, controls;
+        let world = new Map();
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+        let keys = {};
+        let player = { x: 0, y: 5, z: 0 };
+        let undoStack = [];
+        let redoStack = [];
+        let selectedColor = '#4CAF50';
+        let selectedTool = 'place';
+        let isMouseDown = false;
+        let isDragging = false;
+        let isRightMouseDown = false;
+        let cameraRotation = { x: 0, y: 0 };
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        // Color palette (5x5 grid)
+        const colorPalette = [
+            '#FF0000', '#FF4500', '#FF8C00', '#FFD700', '#FFFF00',
+            '#ADFF2F', '#00FF00', '#00FF7F', '#00FFFF', '#0080FF',
+            '#0000FF', '#4169E1', '#8A2BE2', '#FF00FF', '#FF1493',
+            '#8B4513', '#D2691E', '#CD853F', '#F4A460', '#DEB887',
+            '#808080', '#A9A9A9', '#C0C0C0', '#FFFFFF', '#000000'
+        ];
+
+        // Create gradient sky
+        function createGradientSky() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            // Create gradient from light sky blue to sky blue
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#87CEEB'); // Light sky blue at top
+            gradient.addColorStop(1, '#00BFFF'); // Sky blue at bottom
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            scene.background = texture;
+        }
+
+        // Utility functions
+        function getVoxelKey(x, y, z) {
+            return `${x},${y},${z}`;
+        }
+
+        function createCube(x, y, z, color) {
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshLambertMaterial({ color });
+            const cube = new THREE.Mesh(geometry, material);
+
+            // Add lighter outline
+            const edges = new THREE.EdgesGeometry(geometry);
+            const lineMaterial = new THREE.LineBasicMaterial({ color: 0x444444, linewidth: 2 });
+            const outline = new THREE.LineSegments(edges, lineMaterial);
+            cube.add(outline);
+
+            cube.position.set(x, y, z);
+            cube.userData = { x, y, z, color };
+            return cube;
+        }
+
+        function addVoxel(x, y, z, color, skipHistory = false) {
+            const key = getVoxelKey(x, y, z);
+            if (!world.has(key)) {
+                const cube = createCube(x, y, z, color);
+                world.set(key, cube);
+                scene.add(cube);
+
+                if (!skipHistory) {
+                    undoStack.push({ type: 'add', x, y, z, color });
+                    redoStack.length = 0;
+                }
+                return true;
+            }
+            return false;
+        }
+
+        function removeVoxel(x, y, z, skipHistory = false) {
+            const key = getVoxelKey(x, y, z);
+            const cube = world.get(key);
+            if (cube) {
+                const color = cube.userData.color;
+                scene.remove(cube);
+                world.delete(key);
+
+                if (!skipHistory) {
+                    undoStack.push({ type: 'remove', x, y, z, color });
+                    redoStack.length = 0;
+                }
+                return true;
+            }
+            return false;
+        }
+
+        function isValidPlacement(x, y, z) {
+            const key = getVoxelKey(x, y, z);
+            if (world.has(key)) return false;
+
+            if (y === 0) return true;
+
+            const adjacentPositions = [
+                { x: x + 1, y, z },
+                { x: x - 1, y, z },
+                { x, y: y + 1, z },
+                { x, y: y - 1, z },
+                { x, y, z: z + 1 },
+                { x, y, z: z - 1 }
+            ];
+
+            for (const pos of adjacentPositions) {
+                const adjKey = getVoxelKey(pos.x, pos.y, pos.z);
+                if (world.has(adjKey)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function undoAction() {
+            if (undoStack.length > 0) {
+                const action = undoStack.pop();
+                redoStack.push(action);
+
+                if (action.type === 'add') {
+                    removeVoxel(action.x, action.y, action.z, true);
+                } else if (action.type === 'remove') {
+                    addVoxel(action.x, action.y, action.z, action.color, true);
+                }
+            }
+        }
+
+        function redoAction() {
+            if (redoStack.length > 0) {
+                const action = redoStack.pop();
+                undoStack.push(action);
+
+                if (action.type === 'add') {
+                    addVoxel(action.x, action.y, action.z, action.color, true);
+                } else if (action.type === 'remove') {
+                    removeVoxel(action.x, action.y, action.z, true);
+                }
+            }
+        }
+
+        // World creation functions
+        function createGround() {
+            for (let x = -20; x <= 20; x++) {
+                for (let z = -20; z <= 20; z++) {
+                    addVoxel(x, -1, z, '#4CAF50', true);
+                }
+            }
+        }
+
+        function createTrees() {
+            // Tree 1
+            const tree1X = -5, tree1Z = -5;
+            for (let y = 0; y < 4; y++) {
+                addVoxel(tree1X, y, tree1Z, '#8B4513', true);
+            }
+            for (let x = -1; x <= 1; x++) {
+                for (let z = -1; z <= 1; z++) {
+                    for (let y = 3; y <= 5; y++) {
+                        if (!(x === 0 && z === 0 && y === 3)) {
+                            addVoxel(tree1X + x, y, tree1Z + z, '#228B22', true);
+                        }
+                    }
+                }
+            }
+
+            // Tree 2
+            const tree2X = 8, tree2Z = 3;
+            for (let y = 0; y < 3; y++) {
+                addVoxel(tree2X, y, tree2Z, '#8B4513', true);
+            }
+            for (let x = -1; x <= 1; x++) {
+                for (let z = -1; z <= 1; z++) {
+                    for (let y = 2; y <= 4; y++) {
+                        if (!(x === 0 && z === 0 && y === 2)) {
+                            addVoxel(tree2X + x, y, tree2Z + z, '#228B22', true);
+                        }
+                    }
+                }
+            }
+        }
+
+        function createClouds() {
+            // Cloud 1
+            const cloud1X = -10, cloud1Y = 15, cloud1Z = -8;
+            for (let x = 0; x < 4; x++) {
+                for (let z = 0; z < 3; z++) {
+                    addVoxel(cloud1X + x, cloud1Y, cloud1Z + z, '#FFFFFF', true);
+                }
+            }
+            addVoxel(cloud1X + 1, cloud1Y + 1, cloud1Z + 1, '#FFFFFF', true);
+            addVoxel(cloud1X + 2, cloud1Y + 1, cloud1Z + 1, '#FFFFFF', true);
+
+            // Cloud 2
+            const cloud2X = 12, cloud2Y = 18, cloud2Z = 5;
+            for (let x = 0; x < 3; x++) {
+                for (let z = 0; z < 4; z++) {
+                    addVoxel(cloud2X + x, cloud2Y, cloud2Z + z, '#FFFFFF', true);
+                }
+            }
+            addVoxel(cloud2X + 1, cloud2Y + 1, cloud2Z + 2, '#FFFFFF', true);
+        }
+
+        // Event handlers
+        function onMouseMove(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            // Handle camera rotation
+            if (isRightMouseDown) {
+                isDragging = true;
+                const deltaX = event.clientX - lastMouseX;
+                const deltaY = event.clientY - lastMouseY;
+
+                cameraRotation.y += deltaX * 0.01;
+                cameraRotation.x += deltaY * 0.01;
+
+                // Limit vertical rotation
+                cameraRotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, cameraRotation.x));
+
+                lastMouseX = event.clientX;
+                lastMouseY = event.clientY;
+            }
+        }
+
+        function onMouseDown(event) {
+            if (event.button === 0) { // Left click
+                isMouseDown = true;
+                isDragging = false;
+
+                // Give a small delay to distinguish between click and drag
+                setTimeout(() => {
+                    if (isMouseDown && !isDragging) {
+                        handleVoxelAction();
+                    }
+                }, 100);
+            } else if (event.button === 2) { // Right click
+                isRightMouseDown = true;
+                isDragging = false;
+                lastMouseX = event.clientX;
+                lastMouseY = event.clientY;
+            }
+        }
+
+        function handleVoxelAction() {
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(Array.from(world.values()));
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                const point = intersect.point;
+                const normal = intersect.face.normal;
+
+                if (selectedTool === 'place') {
+                    const voxelPosition = point.clone().add(normal.clone().multiplyScalar(0.5));
+                    const x = Math.floor(voxelPosition.x + 0.5);
+                    const y = Math.floor(voxelPosition.y + 0.5);
+                    const z = Math.floor(voxelPosition.z + 0.5);
+
+                    if (y >= 0 && isValidPlacement(x, y, z)) {
+                        addVoxel(x, y, z, selectedColor);
+                    }
+                } else if (selectedTool === 'break') {
+                    const cube = intersect.object;
+                    if (cube.userData && cube.userData.y >= 0) {
+                        removeVoxel(cube.userData.x, cube.userData.y, cube.userData.z);
+                    }
+                }
+            }
+        }
+
+        function onMouseUp(event) {
+            if (event.button === 0) {
+                isMouseDown = false;
+            } else if (event.button === 2) {
+                isRightMouseDown = false;
+            }
+        }
+
+        function onKeyDown(event) {
+            const key = event.key.toLowerCase();
+            keys[key] = true;
+
+            if (key === 'u') {
+                undoAction();
+            } else if (key === 'r') {
+                redoAction();
+            }
+        }
+
+        function onKeyUp(event) {
+            keys[event.key.toLowerCase()] = false;
+        }
+
+        function updateCamera() {
+            const moveSpeed = 0.5;
+
+            if (keys['w']) player.z -= moveSpeed;
+            if (keys['s']) player.z += moveSpeed;
+            if (keys['a']) player.x -= moveSpeed;
+            if (keys['d']) player.x += moveSpeed;
+            if (keys['arrowup']) player.y += moveSpeed;
+            if (keys['arrowdown']) {
+                // Don't go below the surface (y = 0)
+                if (player.y > 0) {
+                    player.y -= moveSpeed;
+                    if (player.y < 0) player.y = 0;
+                }
+            }
+
+            // Update camera position based on rotation
+            const distance = 15;
+            const x = player.x + Math.sin(cameraRotation.y) * Math.cos(cameraRotation.x) * distance;
+            const y = player.y + Math.sin(cameraRotation.x) * distance;
+            const z = player.z + Math.cos(cameraRotation.y) * Math.cos(cameraRotation.x) * distance;
+
+            camera.position.set(x, y, z);
+            camera.lookAt(player.x, player.y, player.z);
+        }
+
+        // UI setup
+        function setupUI() {
+            // Color palette
+            const colorGrid = document.getElementById('colorGrid');
+            colorPalette.forEach((color, index) => {
+                const button = document.createElement('button');
+                button.className = 'color-button';
+                if (color === selectedColor) button.classList.add('selected');
+                button.style.backgroundColor = color;
+                button.onclick = () => selectColor(color, button);
+                colorGrid.appendChild(button);
+            });
+
+            // Tool buttons
+            document.getElementById('placeTool').onclick = () => selectTool('place');
+            document.getElementById('breakTool').onclick = () => selectTool('break');
+
+            updateUI();
+        }
+
+        function selectColor(color, button) {
+            selectedColor = color;
+            document.querySelectorAll('.color-button').forEach(btn => btn.classList.remove('selected'));
+            if (button) button.classList.add('selected');
+            document.getElementById('selectedColorDisplay').style.backgroundColor = color;
+            document.getElementById('selectedColorText').textContent = color;
+        }
+
+        function selectTool(tool) {
+            selectedTool = tool;
+            updateUI();
+        }
+
+        function updateUI() {
+            const placeBtn = document.getElementById('placeTool');
+            const breakBtn = document.getElementById('breakTool');
+
+            if (selectedTool === 'place') {
+                placeBtn.className = 'tool-button active';
+                breakBtn.className = 'tool-button inactive break';
+                document.getElementById('currentTool').textContent = 'Current Tool: Place Block';
+            } else {
+                placeBtn.className = 'tool-button inactive';
+                breakBtn.className = 'tool-button active break';
+                document.getElementById('currentTool').textContent = 'Current Tool: Break Block';
+            }
+
+            document.getElementById('selectedColorDisplay').style.backgroundColor = selectedColor;
+            document.getElementById('selectedColorText').textContent = selectedColor;
+        }
+
+        // Initialize game
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 10);
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            // Create gradient sky
+            createGradientSky();
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(50, 50, 50);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            // Create world
+            createGround();
+            createTrees();
+            createClouds();
+
+            // Event listeners
+            renderer.domElement.addEventListener('mousemove', onMouseMove);
+            renderer.domElement.addEventListener('mousedown', onMouseDown);
+            renderer.domElement.addEventListener('mouseup', onMouseUp);
+            renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+
+            window.addEventListener('keydown', onKeyDown);
+            window.addEventListener('keyup', onKeyUp);
+            window.addEventListener('resize', onResize);
+
+            // Setup UI
+            setupUI();
+
+            // Mount renderer
+            document.getElementById('gameContainer').appendChild(renderer.domElement);
+
+            // Start animation loop
+            animate();
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updateCamera();
+            renderer.render(scene, camera);
+        }
+
+        // Start the game when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
