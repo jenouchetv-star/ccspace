@@ -1936,6 +1936,12 @@ h1.admin-page-title{ font-size:1.7rem; }
 .story-builder__pagethumb-preview{ position:absolute; inset:0; }
 .story-builder__pagethumb-num{ position:absolute; bottom:4px; left:4px; background:rgba(0,0,0,.55); color:#fff; font-size:10px; padding:1px 5px; border-radius:3px; }
 .story-builder__pagethumb-del{ position:absolute; top:2px; right:2px; }
+.story-builder__canvas-wrap{ padding:16px; }
+.story-builder__canvas{ position:relative; width:min(420px,100%); aspect-ratio:1/1.44; margin:0 auto; border-radius:8px; overflow:hidden; border:1px solid var(--admin-border); }
+.story-builder__layer{ position:absolute; cursor:move; box-sizing:border-box; }
+.story-builder__layer.is-selected{ outline:2px solid var(--admin-accent); outline-offset:2px; }
+.story-builder__layer.is-locked{ cursor:not-allowed; }
+.story-builder__layer.is-locked.is-selected{ outline-color:#999; }
 
 /* -- Chips + status badges (icon is the signal, never a border) -- */
 .admin-chip{
@@ -5704,6 +5710,41 @@ function bgToCSS(bg){
       + "background-size:cover;background-position:center";
   }
   return "background-color:#FFF6E2";
+}
+function currentBuilderPage(){
+  const sb = AppState.admin.storyBuilder;
+  return sb.pages && sb.pages.find(p => p.id === sb.selectedPageId);
+}
+
+const TEXT_STYLE_CSS = {
+  heading: "font-family:'Poppins',sans-serif;font-weight:700;font-size:clamp(20px,4.5vw,2.2em);line-height:1.18",
+  body:    "font-weight:600;font-size:clamp(13px,2.2vw,1.3em);line-height:1.5",
+  quote:   "font-weight:600;font-style:italic;font-size:clamp(13px,2.2vw,1.3em);line-height:1.5",
+  tag:     "display:inline-block;font-weight:700;font-size:0.72em;letter-spacing:.08em;text-transform:uppercase;color:#7A1F19;background:rgba(255,255,255,.6);padding:6px 14px;border-radius:999px"
+};
+const IMAGE_PLACEMENT_CSS = {
+  "full-bg":      "left:0;top:0;width:100%;height:100%;object-fit:cover",
+  "top-half":     "left:0;top:0;width:100%;height:50%;object-fit:cover",
+  "bottom-half":  "left:0;top:50%;width:100%;height:50%;object-fit:cover",
+  "inset-left":   "left:4%;top:30%;width:44%;height:40%;object-fit:contain",
+  "inset-right":  "left:52%;top:30%;width:44%;height:40%;object-fit:contain",
+  "inset-center": "left:20%;top:30%;width:60%;height:40%;object-fit:contain"
+};
+
+function layerToBuilderHTML(layer, selected){
+  const sel = selected ? " is-selected" : "";
+  const lockedCls = layer.locked ? " is-locked" : "";
+  if (layer.type === "text"){
+    return '<div class="story-builder__layer story-builder__layer--text' + sel + lockedCls + '"'
+      + ' data-act="story-build-select-layer" data-layer-id="' + E(layer.id) + '"'
+      + ' style="left:' + layer.x + '%;top:' + layer.y + '%;width:' + layer.w + '%;height:' + layer.h + '%;'
+      + 'text-align:' + E(layer.align) + ';color:' + E(layer.color || "inherit") + ';' + TEXT_STYLE_CSS[layer.style] + '">'
+      + E(layer.content) + '</div>';
+  }
+  return '<img class="story-builder__layer story-builder__layer--image' + sel + lockedCls + '"'
+    + ' data-act="story-build-select-layer" data-layer-id="' + E(layer.id) + '"'
+    + ' src="' + E(layer.src) + '" alt="' + E(layer.alt) + '"'
+    + ' style="position:absolute;' + (IMAGE_PLACEMENT_CSS[layer.placement] || IMAGE_PLACEMENT_CSS["inset-center"]) + '">';
 }
 
 const PUBLIC_NAV = [
@@ -12449,7 +12490,24 @@ function storyBuilderFilmstrip(sb){
 }
 
 function storyBuilderCanvas(page){
-  return '<div class="story-builder__canvas admin-card"><p class="tiny mute">Canvas - Task 4</p></div>';
+  return '<div class="story-builder__canvas-wrap admin-card">'
+    + '<div class="row" style="gap:10px;margin-bottom:12px;flex-wrap:wrap">'
+    + '<select class="admin-select" data-act="story-build-bg-type" style="width:auto">'
+    + ["color","gradient","image","gif"].map(t => '<option value="' + t + '"' + (page.background.type === t ? " selected" : "") + '>' + titleCase(t) + '</option>').join("")
+    + '</select>'
+    + (page.background.type === "color" || page.background.type === "gradient"
+        ? '<input class="admin-input" type="text" style="width:220px" placeholder="'
+          + (page.background.type === "color" ? "#RRGGBB" : "#c1,#c2,angle") + '"'
+          + ' value="' + E(page.background.value) + '" data-act="story-build-bg-value">'
+        : '<button type="button" class="admin-btn admin-btn--ghost" data-act="story-build-bg-pick">' + ic("upload") + ' Choose image/GIF</button>'
+          + (page.background.value ? '<span class="tiny mute">' + E(page.background.value.split("/").pop()) + '</span>' : ""))
+    + '</div>'
+    + '<div class="story-builder__canvas" id="story-canvas" style="' + E(bgToCSS(page.background)) + '">'
+    + page.layers.map(ly => layerToBuilderHTML(ly, ly.id === AppState.admin.storyBuilder.selectedLayerId)).join("")
+    + '</div>'
+    + '<button type="button" class="admin-btn admin-btn--ghost" style="margin-top:10px" data-act="story-build-add-text">' + ic("plus") + ' Add text</button>'
+    + '<button type="button" class="admin-btn admin-btn--ghost" style="margin-top:10px" data-act="story-build-add-image">' + ic("image") + ' Add image</button>'
+    + '</div>';
 }
 function storyBuilderLayersPanel(page){
   return '<div class="story-builder__layers admin-card"><p class="tiny mute">Layers panel - Task 6</p></div>';
@@ -15527,6 +15585,44 @@ const ACTIONS = {
     navigate("#/admin/stories");
   },
 
+  "story-build-bg-type": (el) => {
+    const page = currentBuilderPage();
+    if (!page) return;
+    page.background = { type: el.value, value: el.value === "color" ? "#FDECEA" : el.value === "gradient" ? "#8C2620,#5E1712,160" : "" };
+    AppState.admin.storyBuilder.dirty = true;
+    rerender();
+  },
+  "story-build-bg-value": (el) => {
+    const page = currentBuilderPage();
+    if (!page) return;
+    page.background.value = el.value;
+    AppState.admin.storyBuilder.dirty = true;
+    const canvas = $("#story-canvas");
+    if (canvas) canvas.style.cssText += ";" + bgToCSS(page.background);
+  },
+  "story-build-bg-pick": () => {
+    const page = currentBuilderPage();
+    if (!page) return;
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "image/*,.gif";
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      try {
+        const url = await uploadToStorage(file, "story-pages");
+        page.background = { type: file.type === "image/gif" ? "gif" : "image", value: url };
+        AppState.admin.storyBuilder.dirty = true;
+        rerender();
+      } catch(err){ toast("Upload failed: " + err.message, "bad"); }
+    };
+    input.click();
+  },
+  "story-build-select-layer": (el, ev) => {
+    ev.stopPropagation();
+    AppState.admin.storyBuilder.selectedLayerId = el.getAttribute("data-layer-id");
+    rerender();
+  },
+
   "nav-toggle": () => {
     if (AppState.navOpen) closeNavDrawer();
     else { AppState.navOpen = true; rerender(); }
@@ -17197,6 +17293,8 @@ document.addEventListener("input", (ev) => {
   } else if (act === "launch-search"){
     AppState.launchFilter.q = el.value;
     restoreFocusAfter(() => rerender(), "#launch-q");
+  } else if (act === "story-build-bg-value"){
+    ACTIONS["story-build-bg-value"](el);
   } else if (el.id === "nl-subject" && el.closest("#nl-form")){
     /* Keeps AppState in sync with what's actually typed, with no rerender
        of its own - typing here must not be one. Without this, the
@@ -17230,6 +17328,10 @@ document.addEventListener("change", (ev) => {
   if (el.type === "checkbox" && el.closest && el.closest("[data-chipgroup]")){
     const label = el.closest("label");
     if (label) label.setAttribute("aria-pressed", el.checked ? "true" : "false");
+  }
+  if (el.getAttribute && el.getAttribute("data-act") === "story-build-bg-type"){
+    ACTIONS["story-build-bg-type"](el);
+    return;
   }
   if (el.getAttribute && el.getAttribute("data-act") === "launch-toggle-complete"){
     const id = el.getAttribute("data-id");
