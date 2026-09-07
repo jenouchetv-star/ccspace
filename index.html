@@ -15742,7 +15742,24 @@ const ACTIONS = {
     const id = el.getAttribute("data-id");
     if (AppState.admin.storyBuilder.dirty && !confirm("You have unsaved changes. Leave without saving?")) return;
     AppState.admin.storyBuilder.storyId = null;
+    AppState.admin.storyBuilder.dirty = false;
     navigate("#/admin/stories");
+  },
+  "story-build-save": async (el) => {
+    const id = el.getAttribute("data-id");
+    const sb = AppState.admin.storyBuilder;
+    const snapshot = JSON.parse(JSON.stringify(sb.pages));
+    el.disabled = true;
+    try {
+      await db.update("stories", id, { pages: snapshot });
+      if (JSON.stringify(sb.pages) === JSON.stringify(snapshot)) sb.dirty = false;
+      toast("Pages saved.");
+      rerender();
+    } catch(_e) {
+      return;
+    } finally {
+      el.disabled = false;
+    }
   },
 
   "story-build-bg-type": (el) => {
@@ -17653,6 +17670,12 @@ window.addEventListener("popstate", () => { AppState.navOpen = false; AppState.a
 window.addEventListener("scroll", () => Parallax.onScroll(), { passive:true });
 window.addEventListener("scroll", () => BackToTop.onScroll(), { passive:true });
 window.addEventListener("resize", () => Parallax.refresh());
+window.addEventListener("beforeunload", (e) => {
+  if (AppState.admin.storyBuilder.dirty){
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
 window.matchMedia("(prefers-reduced-motion: reduce)").addEventListener
   && window.matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => Parallax.refresh());
 
