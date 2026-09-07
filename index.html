@@ -5660,6 +5660,40 @@ const BOOKS = [
 ];
 const findBook = id => BOOKS.find(b => b.id === id) || null;
 
+/* A book page = one background fill + an ordered stack of layers drawn on
+   top of it (array order IS z-order, bottom to top). Coordinates on a
+   layer are percentages of the page box, not pixels - the page box itself
+   already scales as one unit at every size (the thumbnail modal proves
+   this today, rendering pages at transform:scale(0.2)), so percentage
+   layers scale for free the same way a PowerPoint/Canva slide does. */
+function blankBookPage(){
+  return { id: uid("pg"), background: { type:"color", value:"#FDECEA" }, layers: [] };
+}
+function blankTextLayer(){
+  return { id: uid("ly"), type:"text", content:"New text", x:10, y:40, w:80, h:20,
+    style:"body", align:"left", color:"", locked:false };
+}
+function blankImageLayer(src, alt){
+  return { id: uid("ly"), type:"image", src: src || "", alt: alt || "", placement:"inset-center" };
+}
+/* "c1,c2,angle" - kept as one string (not three fields) so it round-trips
+   through a single text/color input pair in the builder without a bespoke
+   three-part form control. */
+function bgToCSS(bg){
+  if (!bg) return "background-color:#FFF6E2";
+  if (bg.type === "color") return "background-color:" + (bg.value || "#FFF6E2");
+  if (bg.type === "gradient"){
+    const parts = String(bg.value || "").split(",");
+    const c1 = parts[0] || "#8C2620", c2 = parts[1] || "#5E1712", angle = parts[2] || "160";
+    return "background-image:linear-gradient(" + angle + "deg, " + c1 + " 0%, " + c2 + " 100%)";
+  }
+  if (bg.type === "image" || bg.type === "gif"){
+    return "background-image:url('" + String(bg.value || "").replace(/'/g, "%27") + "');"
+      + "background-size:cover;background-position:center";
+  }
+  return "background-color:#FFF6E2";
+}
+
 const PUBLIC_NAV = [
   { hash:"#/",           label:"Home",       icon:"house" },
   { hash:"#/create",     label:"Create",     icon:"wand-sparkles" },
@@ -9300,7 +9334,7 @@ const BLANKS = {
   pages:      () => ({ title:"", key:"", nav:"Public site", eyebrow:"", heading:"", highlight:"", tone:"sun", intro:"", image:{src:"",alt:""}, body:"", status:"draft" }),
   articles:   () => ({ title:"", slug:"", kind:"news", blurb:"", readMinutes:4, body:[], image:{src:"",alt:""}, status:"draft", featured:false, at:nowISO() }),
   subscribers:() => ({ email:"", source:"admin", status:"published", at:nowISO() }),
-  stories:    () => ({ title:"", slug:"", character:"chike", readMinutes:5, ageMin:4, ageMax:9, blurb:"", opening:"", learning:"", value:"kindness", linkedActivity:"", image:{src:"",alt:""}, status:"draft", featured:false }),
+  stories:    () => ({ title:"", slug:"", character:"chike", readMinutes:5, ageMin:4, ageMax:9, blurb:"", opening:"", learning:"", value:"kindness", linkedActivity:"", image:{src:"",alt:""}, status:"draft", featured:false, pages:[] }),
   characters: () => ({ name:"", slug:"", relationship:"", strength:"", storyValue:"", outlet:"", tagline:"", type:"build", loves:[], order:99, image:{src:"",alt:""}, status:"draft", featured:false }),
   products:   () => ({ title:"", slug:"", format:"PDF", pages:0, priceUSD:0, blurb:"", includes:[], ageRange:"5-10", access:"paid", file:{label:"",path:""}, image:{src:"",alt:""}, status:"draft", featured:false }),
   amazonProducts: () => ({ title:"", category:"materials", why:"", forActivities:[], priceBand:"$", url:"https://www.amazon.com/s?k=", linkType:"search-placeholder", cover:"", status:"draft", featured:false, ours:false }),
@@ -13194,6 +13228,32 @@ const TEST_SUITE = [
     db.save();
     const after = db.get().meta.updatedAt;
     return after !== before || new Date(after).getTime() > 0 ? T.pass("Stamped " + fmtDate(after, true)) : T.fail("Timestamp not updated");
+  }},
+
+  /* ---------- Story pages ---------- */
+  { group:"Story pages", name:"A blank page has a background and no layers", blocking:false, run(){
+    const p = blankBookPage();
+    const ok = p.background && p.background.type === "color" && Array.isArray(p.layers) && p.layers.length === 0;
+    return ok ? T.pass("Blank page created") : T.fail("Unexpected shape: " + JSON.stringify(p));
+  }},
+  { group:"Story pages", name:"A blank text layer stays within the page's percentage bounds and starts unlocked", blocking:false, run(){
+    const ly = blankTextLayer();
+    const inBounds = ly.x >= 0 && ly.x <= 100 && ly.y >= 0 && ly.y <= 100 && ly.w > 0 && ly.w <= 100 && ly.h > 0 && ly.h <= 100;
+    return (inBounds && ly.locked === false && ly.type === "text")
+      ? T.pass("Text layer created")
+      : T.fail("Unexpected shape: " + JSON.stringify(ly));
+  }},
+  { group:"Story pages", name:"bgToCSS renders all four background types without throwing", blocking:false, run(){
+    const kinds = [
+      { type:"color", value:"#FDECEA" },
+      { type:"gradient", value:"#8C2620,#5E1712,160" },
+      { type:"image", value:"/assets/characters/zech.jpg" },
+      { type:"gif", value:"/assets/characters/zech.gif" }
+    ];
+    const outputs = kinds.map(bgToCSS);
+    const allStrings = outputs.every(o => typeof o === "string" && o.length > 0);
+    const gradientHasAngle = outputs[1].indexOf("160deg") >= 0;
+    return (allStrings && gradientHasAngle) ? T.pass("All four backgrounds rendered") : T.fail("Got: " + JSON.stringify(outputs));
   }},
 
   /* ---------- CRUD ---------- */

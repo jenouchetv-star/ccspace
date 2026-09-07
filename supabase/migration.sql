@@ -60,6 +60,12 @@ begin
   end loop;
 end $$;
 
+-- stories.data also carries an optional "pages" array as of the admin
+-- book builder (see docs/superpowers/specs/2026-09-07-book-builder-design.md):
+--   pages: [{ id, background:{type,value}, layers:[{id,type,...}] }, ...]
+-- No column change needed - this is just documentation for a key inside
+-- the existing jsonb "data" column.
+
 -- ---------------------------------------------------------------------
 -- Launch Readiness Checklist (added after the initial migration above) -
 -- one more table, same id/data/RLS pattern, for the launchReadiness
