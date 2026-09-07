@@ -1926,6 +1926,17 @@ h1.admin-page-title{ font-size:1.7rem; }
 }
 .admin-card--flat{ box-shadow:none; background:var(--admin-surface-2); }
 
+/* -- Book builder: page filmstrip + three-column layout -- */
+.story-builder{ display:grid; grid-template-columns:180px 1fr 260px; gap:16px; align-items:start; }
+@media (max-width:960px){ .story-builder{ grid-template-columns:1fr; } }
+.story-builder__filmstrip{ padding:12px; }
+.story-builder__pagelist{ display:flex; flex-direction:column; gap:8px; max-height:70vh; overflow-y:auto; }
+.story-builder__pagethumb{ position:relative; border:2px solid var(--admin-border); border-radius:8px; aspect-ratio:1/1.44; cursor:grab; overflow:hidden; }
+.story-builder__pagethumb.is-selected{ border-color:var(--admin-accent); box-shadow:0 0 0 2px var(--admin-accent-soft, rgba(0,0,0,.08)); }
+.story-builder__pagethumb-preview{ position:absolute; inset:0; }
+.story-builder__pagethumb-num{ position:absolute; bottom:4px; left:4px; background:rgba(0,0,0,.55); color:#fff; font-size:10px; padding:1px 5px; border-radius:3px; }
+.story-builder__pagethumb-del{ position:absolute; top:2px; right:2px; }
+
 /* -- Chips + status badges (icon is the signal, never a border) -- */
 .admin-chip{
   display:inline-flex; align-items:center; gap:5px; font-family:var(--admin-font-mono);
@@ -12385,7 +12396,91 @@ function viewAdmin(section, id, sub){
 }
 
 function adminStoryBuilder(id){
-  return '<section class="section"><div class="shell"><p class="tiny mute">Book builder for story ' + E(id) + ' - coming in the next task.</p></div></section>';
+  const story = db.find("stories", id);
+  if (!story) return '<section class="section"><div class="shell"><div class="empty">'
+    + '<h2>Story not found</h2><a class="admin-btn admin-btn--ghost" href="#/admin/stories">Back to Stories</a></div></div></section>';
+
+  const sb = AppState.admin.storyBuilder;
+  if (sb.storyId !== id){
+    sb.storyId = id;
+    sb.pages = (story.pages && story.pages.length) ? JSON.parse(JSON.stringify(story.pages)) : [blankBookPage()];
+    sb.selectedPageId = sb.pages[0].id;
+    sb.selectedLayerId = "";
+    sb.dirty = false;
+  }
+
+  const page = sb.pages.find(p => p.id === sb.selectedPageId) || sb.pages[0];
+
+  return '<section class="section admin-scope" style="font-family:var(--admin-font-body);color:var(--admin-ink)">'
+    + '<div class="shell">'
+    + '<div class="admin-topbar" style="margin-bottom:16px">'
+    + '<div><span class="admin-eyebrow">Book builder</span>'
+    + '<h1 class="admin-section-title" style="margin-top:2px">' + E(story.title || "Untitled story") + '</h1></div>'
+    + '<div class="row" style="gap:10px">'
+    + (sb.dirty ? '<span class="admin-badge admin-badge--warn">' + ic("pencil") + ' Unsaved</span>' : "")
+    + '<button type="button" class="admin-btn admin-btn--ghost" data-act="story-build-close" data-id="' + E(id) + '">Close</button>'
+    + '<button type="button" class="admin-btn admin-btn--primary" data-act="story-build-save" data-id="' + E(id) + '">' + ic("save") + ' Save</button>'
+    + '</div></div>'
+    + '<div class="story-builder">'
+    + storyBuilderFilmstrip(sb)
+    + storyBuilderCanvas(page)
+    + storyBuilderLayersPanel(page)
+    + '</div></div></section>';
+}
+
+function storyBuilderFilmstrip(sb){
+  return '<div class="story-builder__filmstrip admin-card">'
+    + '<p class="admin-eyebrow" style="margin:0 0 10px">Pages</p>'
+    + '<div class="story-builder__pagelist">'
+    + sb.pages.map((p, i) => {
+        const on = p.id === sb.selectedPageId;
+        return '<div class="story-builder__pagethumb' + (on ? ' is-selected' : '') + '" draggable="true"'
+          + ' data-act="story-build-select-page" data-page-id="' + E(p.id) + '">'
+          + '<div class="story-builder__pagethumb-preview" style="' + E(bgToCSS(p.background)) + '"></div>'
+          + '<div class="story-builder__pagethumb-num">' + (i + 1) + '</div>'
+          + '<button type="button" class="admin-btn admin-btn--icon admin-btn--ghost story-builder__pagethumb-del" data-act="story-build-delete-page" data-page-id="' + E(p.id) + '" aria-label="Delete page">' + ic("trash-2") + '</button>'
+          + '</div>';
+      }).join("")
+    + '</div>'
+    + '<div class="row" style="gap:8px;margin-top:10px">'
+    + '<button type="button" class="admin-btn admin-btn--ghost" data-act="story-build-add-page">' + ic("plus") + ' Blank page</button>'
+    + '<button type="button" class="admin-btn admin-btn--ghost" data-act="story-build-duplicate-page">' + ic("copy") + ' Duplicate</button>'
+    + '</div></div>';
+}
+
+function storyBuilderCanvas(page){
+  return '<div class="story-builder__canvas admin-card"><p class="tiny mute">Canvas - Task 4</p></div>';
+}
+function storyBuilderLayersPanel(page){
+  return '<div class="story-builder__layers admin-card"><p class="tiny mute">Layers panel - Task 6</p></div>';
+}
+
+/* Plain HTML5 Drag and Drop API (no external library) - used only here to
+   reorder book-builder page thumbnails. Safely no-ops on every route that
+   isn't the builder via the `if (!list) return;` guard below, the same way
+   Parallax.mount() (called right next to this) no-ops off its own route. */
+function mountStoryBuilderDrag(){
+  const list = $(".story-builder__pagelist");
+  if (!list) return;
+  let dragId = null;
+  list.querySelectorAll(".story-builder__pagethumb").forEach(el => {
+    el.addEventListener("dragstart", () => { dragId = el.getAttribute("data-page-id"); el.classList.add("is-dragging"); });
+    el.addEventListener("dragend", () => { el.classList.remove("is-dragging"); });
+    el.addEventListener("dragover", (e) => e.preventDefault());
+    el.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const overId = el.getAttribute("data-page-id");
+      if (!dragId || dragId === overId) return;
+      const sb = AppState.admin.storyBuilder;
+      const from = sb.pages.findIndex(p => p.id === dragId);
+      const to = sb.pages.findIndex(p => p.id === overId);
+      if (from < 0 || to < 0) return;
+      const [moved] = sb.pages.splice(from, 1);
+      sb.pages.splice(to, 0, moved);
+      sb.dirty = true;
+      rerender();
+    });
+  });
 }
 
 
@@ -15319,6 +15414,7 @@ function render(){
 
   drawIcons();
   Parallax.mount();
+  mountStoryBuilderDrag();
 
   /* html has scroll-behavior:smooth for in-page anchors, which Chrome also
      applies to a plain scrollTop assignment - without behavior:"instant"
@@ -15384,6 +15480,51 @@ const ACTIONS = {
     const id = el.getAttribute("data-id");
     closeModal();
     navigate("#/admin/stories/" + id + "/build");
+  },
+
+  "story-build-select-page": (el) => {
+    AppState.admin.storyBuilder.selectedPageId = el.getAttribute("data-page-id");
+    AppState.admin.storyBuilder.selectedLayerId = "";
+    rerender();
+  },
+  "story-build-add-page": () => {
+    const sb = AppState.admin.storyBuilder;
+    const p = blankBookPage();
+    sb.pages.push(p);
+    sb.selectedPageId = p.id;
+    sb.dirty = true;
+    rerender();
+  },
+  "story-build-duplicate-page": () => {
+    const sb = AppState.admin.storyBuilder;
+    const current = sb.pages.find(p => p.id === sb.selectedPageId);
+    if (!current) return;
+    const copy = JSON.parse(JSON.stringify(current));
+    copy.id = uid("pg");
+    copy.layers.forEach(ly => { ly.id = uid("ly"); });
+    const idx = sb.pages.findIndex(p => p.id === current.id);
+    sb.pages.splice(idx + 1, 0, copy);
+    sb.selectedPageId = copy.id;
+    sb.dirty = true;
+    rerender();
+  },
+  "story-build-delete-page": (el, ev) => {
+    ev.stopPropagation();
+    const sb = AppState.admin.storyBuilder;
+    const pid = el.getAttribute("data-page-id");
+    if (sb.pages.length <= 1){ toast("A book needs at least one page.", "bad"); return; }
+    confirmDelete("this page", () => {
+      sb.pages = sb.pages.filter(p => p.id !== pid);
+      if (sb.selectedPageId === pid) sb.selectedPageId = sb.pages[0].id;
+      sb.dirty = true;
+      rerender();
+    });
+  },
+  "story-build-close": (el) => {
+    const id = el.getAttribute("data-id");
+    if (AppState.admin.storyBuilder.dirty && !confirm("You have unsaved changes. Leave without saving?")) return;
+    AppState.admin.storyBuilder.storyId = null;
+    navigate("#/admin/stories");
   },
 
   "nav-toggle": () => {
