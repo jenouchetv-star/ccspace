@@ -5595,6 +5595,7 @@ const AppState = {
       subject:"", previewText:"", heroLabel:"", headline:"", heroImage:{src:"",alt:""}, intro:"",
       details:{}, ctaLabel:"", ctaUrl:"", secondaryLabel:"", secondaryText:"", footerNote:"" },
     lastNewsletterId:null,
+    storyBuilder:{ storyId:null, pages:null, selectedPageId:"", selectedLayerId:"", dirty:false },
     notifOpen:false },
   launchFilter: { q:"", status:"", gateOnly:false, flaggedOnly:false },
   launchOpenCategories: {},
@@ -5847,7 +5848,7 @@ function parseRoute(address){
   }
   const seg = raw.split("/").filter(Boolean).map(decodeURIComponent);
   if (!seg.length) return { name:"home", params:{}, query:query };
-  if (seg[0] === "admin") return { name:"admin", params:{ section: seg[1] || "dashboard", id: seg[2] || "" }, query:query };
+  if (seg[0] === "admin") return { name:"admin", params:{ section: seg[1] || "dashboard", id: seg[2] || "", sub: seg[3] || "" }, query:query };
   if (seg[0] === "test")  return { name:"test", params:{}, query:query };
   if (seg[0] === "about" || seg[0] === "grown-ups") return { name:seg[0], params:{ sub: seg[1] || "" }, query:query };
   if (seg[0] === "play"){
@@ -9470,6 +9471,9 @@ function openEditor(col, id, overlay){
     + '</div>'
     + '<div class="modal__foot">'
     + '<button type="button" class="admin-btn admin-btn--ghost" data-act="close-modal">Cancel</button>'
+    + (col === "stories" && id
+        ? '<button type="button" class="admin-btn admin-btn--ghost" data-act="story-build-pages" data-id="' + E(id) + '">' + ic("layers") + ' Build pages</button>'
+        : "")
     + '<button type="submit" class="admin-btn admin-btn--primary">' + ic("save") + ' Save</button>'
     + '</div></form></div>',
     null, "modal--sheet modal--full admin-modal"
@@ -12286,7 +12290,7 @@ function adminNotifications(){
         : '<div class="admin-callout admin-callout--info">' + ic("info") + '<span>Nothing yet - this fills up as things like unsubscribes happen.</span></div>');
 }
 
-function viewAdmin(section, id){
+function viewAdmin(section, id, sub){
   if (section === "accept-invite") return adminAcceptInviteView();
   if (!isAuthed() || !isActiveAdmin()) return adminLoginView();
   const routeHash = section === "dashboard" ? "#/admin" : "#/admin/" + section;
@@ -12349,6 +12353,7 @@ function viewAdmin(section, id){
   else if (section === "send-newsletter") body = id ? adminNewsletterCompose(id) : adminNewsletterList();
   else if (section === "notifications") body = adminNotifications();
   else if (section === "subscribers") body = adminList(section);
+  else if (section === "stories" && id && sub === "build") body = adminStoryBuilder(id);
   else if (CONTENT_COLS.indexOf(section) >= 0) body = adminList(section);
   else body = '<div class="empty">Unknown admin section.</div>';
 
@@ -12377,6 +12382,10 @@ function viewAdmin(section, id){
     + '<div class="admin-content">' + body + '</div>'
     + '</div>'
     + '</div>';
+}
+
+function adminStoryBuilder(id){
+  return '<section class="section"><div class="shell"><p class="tiny mute">Book builder for story ' + E(id) + ' - coming in the next task.</p></div></section>';
 }
 
 
@@ -15267,7 +15276,7 @@ function renderRoute(route){
     case "shop":              return (p.sub === "printables" && !SHOP_PRINTABLES_ENABLED) ? shopPrintablesUnavailable() : viewShop(p.sub === "printables" ? "printables" : "amazon");
     case "product-detail":    return SHOP_PRINTABLES_ENABLED ? viewProduct(p.id) : shopPrintablesUnavailable();
     case "unsubscribe":       return viewUnsubscribe(p.id);
-    case "admin":             return viewAdmin(p.section === "dashboard" || !p.section ? "dashboard" : p.section, p.id);
+    case "admin":             return viewAdmin(p.section === "dashboard" || !p.section ? "dashboard" : p.section, p.id, p.sub);
     case "test":              return viewTest();
     default:                  return notFound("page");
   }
@@ -15369,6 +15378,12 @@ const ACTIONS = {
   "go": (el) => {
     const hash = el.getAttribute("data-hash");
     if (hash) navigate(hash);
+  },
+
+  "story-build-pages": (el) => {
+    const id = el.getAttribute("data-id");
+    closeModal();
+    navigate("#/admin/stories/" + id + "/build");
   },
 
   "nav-toggle": () => {
