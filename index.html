@@ -1944,6 +1944,8 @@ h1.admin-page-title{ font-size:1.7rem; }
 .story-builder__layer.is-locked.is-selected{ outline-color:#999; }
 .story-builder__resize-handle{ position:absolute; right:-6px; bottom:-6px; width:14px; height:14px; background:var(--admin-accent); border:2px solid #fff; border-radius:50%; cursor:nwse-resize; }
 .story-builder__layer:not(.is-selected) .story-builder__resize-handle{ display:none; }
+.story-builder__layerrow{ display:flex; align-items:center; gap:6px; padding:6px; border:1px solid var(--admin-border); border-radius:6px; margin-bottom:6px; cursor:grab; }
+.story-builder__layerrow.is-selected{ border-color:var(--admin-accent); }
 
 /* -- Chips + status badges (icon is the signal, never a border) -- */
 .admin-chip{
@@ -12512,7 +12514,31 @@ function storyBuilderCanvas(page){
     + '</div>';
 }
 function storyBuilderLayersPanel(page){
-  return '<div class="story-builder__layers admin-card"><p class="tiny mute">Layers panel - Task 6</p></div>';
+  if (!page.layers.length){
+    return '<div class="story-builder__layers admin-card"><p class="admin-eyebrow" style="margin:0 0 10px">Layers</p>'
+      + '<p class="tiny mute">No layers yet - add text or an image on the canvas.</p></div>';
+  }
+  const sel = AppState.admin.storyBuilder.selectedLayerId;
+  /* Top of the list = front-most, i.e. reverse array order (array order is
+     bottom-to-top z-order, per the data model in Task 1). */
+  const rows = page.layers.slice().reverse().map(ly => {
+    const isSel = ly.id === sel;
+    return '<div class="story-builder__layerrow' + (isSel ? " is-selected" : "") + '" draggable="true"'
+      + ' data-act="story-build-select-layer" data-layer-id="' + E(ly.id) + '">'
+      + '<button type="button" class="admin-btn admin-btn--icon admin-btn--ghost" data-act="story-build-toggle-lock" data-layer-id="' + E(ly.id) + '" aria-label="' + (ly.locked ? "Unlock" : "Lock") + '">'
+      + ic(ly.locked ? "lock" : "lock-open") + '</button>'
+      + '<span class="tiny" style="flex:1">' + (ly.type === "text" ? E(ly.content).slice(0, 24) : "Image") + '</span>'
+      + (ly.type === "text"
+          ? '<select class="admin-select" style="width:auto" data-act="story-build-set-style" data-layer-id="' + E(ly.id) + '">'
+            + ["heading","body","quote","tag"].map(s => '<option value="' + s + '"' + (ly.style === s ? " selected" : "") + '>' + titleCase(s) + '</option>').join("")
+            + '</select>'
+          : '<select class="admin-select" style="width:auto" data-act="story-build-set-placement" data-layer-id="' + E(ly.id) + '">'
+            + ["full-bg","top-half","bottom-half","inset-left","inset-right","inset-center"].map(pl => '<option value="' + pl + '"' + (ly.placement === pl ? " selected" : "") + '>' + titleCase(pl.replace("-"," ")) + '</option>').join("")
+            + '</select>')
+      + '<button type="button" class="admin-btn admin-btn--icon admin-btn--ghost" data-act="story-build-delete-layer" data-layer-id="' + E(ly.id) + '" aria-label="Delete layer">' + ic("trash-2") + '</button>'
+      + '</div>';
+  }).join("");
+  return '<div class="story-builder__layers admin-card"><p class="admin-eyebrow" style="margin:0 0 10px">Layers</p>' + rows + '</div>';
 }
 
 /* Plain HTML5 Drag and Drop API (no external library) - used only here to
@@ -12541,6 +12567,29 @@ function mountStoryBuilderDrag(){
       rerender();
     });
   });
+
+  const layerList = $(".story-builder__layers");
+  if (layerList){
+    let dragLayerId = null;
+    layerList.querySelectorAll(".story-builder__layerrow").forEach(el => {
+      el.addEventListener("dragstart", () => { dragLayerId = el.getAttribute("data-layer-id"); });
+      el.addEventListener("dragover", (e) => e.preventDefault());
+      el.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const overId = el.getAttribute("data-layer-id");
+        if (!dragLayerId || dragLayerId === overId) return;
+        const page = currentBuilderPage();
+        if (!page) return;
+        const from = page.layers.findIndex(l => l.id === dragLayerId);
+        const to = page.layers.findIndex(l => l.id === overId);
+        if (from < 0 || to < 0) return;
+        const [moved] = page.layers.splice(from, 1);
+        page.layers.splice(to, 0, moved);
+        AppState.admin.storyBuilder.dirty = true;
+        rerender();
+      });
+    });
+  }
 }
 
 /* Freeform drag/resize for text layers, via raw Pointer Events attached
@@ -15753,6 +15802,45 @@ const ACTIONS = {
       rerender();
     });
   },
+  "story-build-toggle-lock": (el, ev) => {
+    ev.stopPropagation();
+    const page = currentBuilderPage();
+    const ly = page && page.layers.find(l => l.id === el.getAttribute("data-layer-id"));
+    if (!ly) return;
+    ly.locked = !ly.locked;
+    AppState.admin.storyBuilder.dirty = true;
+    rerender();
+  },
+  "story-build-set-style": (el, ev) => {
+    ev.stopPropagation();
+    const page = currentBuilderPage();
+    const ly = page && page.layers.find(l => l.id === el.getAttribute("data-layer-id"));
+    if (!ly) return;
+    ly.style = el.value;
+    AppState.admin.storyBuilder.dirty = true;
+    rerender();
+  },
+  "story-build-set-placement": (el, ev) => {
+    ev.stopPropagation();
+    const page = currentBuilderPage();
+    const ly = page && page.layers.find(l => l.id === el.getAttribute("data-layer-id"));
+    if (!ly) return;
+    ly.placement = el.value;
+    AppState.admin.storyBuilder.dirty = true;
+    rerender();
+  },
+  "story-build-delete-layer": (el, ev) => {
+    ev.stopPropagation();
+    const page = currentBuilderPage();
+    if (!page) return;
+    const lid = el.getAttribute("data-layer-id");
+    confirmDelete("this layer", () => {
+      page.layers = page.layers.filter(l => l.id !== lid);
+      if (AppState.admin.storyBuilder.selectedLayerId === lid) AppState.admin.storyBuilder.selectedLayerId = "";
+      AppState.admin.storyBuilder.dirty = true;
+      rerender();
+    });
+  },
 
   "nav-toggle": () => {
     if (AppState.navOpen) closeNavDrawer();
@@ -17462,6 +17550,14 @@ document.addEventListener("change", (ev) => {
   }
   if (el.getAttribute && el.getAttribute("data-act") === "story-build-bg-type"){
     ACTIONS["story-build-bg-type"](el);
+    return;
+  }
+  if (el.getAttribute && el.getAttribute("data-act") === "story-build-set-style"){
+    ACTIONS["story-build-set-style"](el, ev);
+    return;
+  }
+  if (el.getAttribute && el.getAttribute("data-act") === "story-build-set-placement"){
+    ACTIONS["story-build-set-placement"](el, ev);
     return;
   }
   if (el.getAttribute && el.getAttribute("data-act") === "launch-toggle-complete"){
