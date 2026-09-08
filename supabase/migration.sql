@@ -869,3 +869,22 @@ select cron.schedule(
 
 -- Verify the job is scheduled before relying on it.
 select jobname, schedule, active from cron.job where jobname = 'send-scheduled-newsletters';
+
+-- ---------------------------------------------------------------------
+-- Storage RLS for the "uploads" bucket (used by uploadToStorage() in
+-- index.html - book builder backgrounds, media library uploads, and
+-- generic file/media fields in the admin editor). This bucket predates
+-- the real-auth cutover above and was left on an "anon full access"
+-- policy the whole time - once admins started signing in for real (as
+-- the "authenticated" role, not "anon"), every upload started failing
+-- with "new row violates row-level security policy", since no policy
+-- ever existed for "authenticated". Every call site that uploads here
+-- is admin-only (confirmed by reading every uploadToStorage() call in
+-- index.html), so this replaces the anon policy rather than adding
+-- alongside it - matching every other admin-write resource in this
+-- project, not leaving a redundant anon-write hole next to it.
+drop policy if exists "anon full access" on storage.objects;
+create policy "active admin full access" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'uploads' and is_active_admin())
+  with check (bucket_id = 'uploads' and is_active_admin());

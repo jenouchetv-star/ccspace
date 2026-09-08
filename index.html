@@ -1600,6 +1600,7 @@ body.is-admin .rt{ background:#FFFFFF; }
   cursor:pointer; font-weight:800; font-size:.82rem; color:var(--ink);
 }
 .rt__btn:hover{ background:rgba(30,40,46,.1); }
+.rt__btn.is-active{ background:var(--admin-accent-soft,rgba(30,40,46,.14)); border-color:var(--admin-accent,transparent); }
 .rt__btn svg{ width:17px; height:17px; }
 .rt__sep{ width:2px; height:22px; background:rgba(30,40,46,.16); margin:0 5px; border-radius:2px; }
 .rt__area{
@@ -1944,8 +1945,14 @@ h1.admin-page-title{ font-size:1.7rem; }
 .story-builder__layer.is-locked.is-selected{ outline-color:#999; }
 .story-builder__resize-handle{ position:absolute; right:-6px; bottom:-6px; width:14px; height:14px; background:var(--admin-accent); border:2px solid #fff; border-radius:50%; cursor:nwse-resize; }
 .story-builder__layer:not(.is-selected) .story-builder__resize-handle{ display:none; }
-.story-builder__layerrow{ display:block; padding:6px; border:1px solid var(--admin-border); border-radius:6px; margin-bottom:6px; cursor:grab; }
+.story-builder__layerrow{ display:block; padding:6px; border:1px solid var(--admin-border); border-radius:6px; margin-bottom:6px; cursor:grab; transition:box-shadow .15s ease; }
 .story-builder__layerrow.is-selected{ border-color:var(--admin-accent); }
+.story-builder__layerrow:hover{ box-shadow:0 4px 14px rgba(0,0,0,.14); }
+.story-builder__layerrow-grip{ display:flex; align-items:center; flex-shrink:0; color:var(--admin-faint); opacity:0; transition:opacity .15s ease; }
+.story-builder__layerrow:hover .story-builder__layerrow-grip{ opacity:1; }
+@media (prefers-reduced-motion: reduce){
+  .story-builder__layerrow, .story-builder__layerrow-grip{ transition:none; }
+}
 
 /* -- Chips + status badges (icon is the signal, never a border) -- */
 .admin-chip{
@@ -5611,7 +5618,7 @@ const AppState = {
   storyFilter: { character:"", q:"" },
   storyFilterDraft: null,
   watchPage: 1,
-  admin: { q:"", status:"", invalid:false, sort:"updatedAt", dir:"desc", openGroup:null, lastSection:null, selected:{ col:null, ids:[] }, mediaTab:"manage", quickUpdate:{ log:[], panelOpen:false, selectedRegion:null },
+  admin: { q:"", status:"", invalid:false, sort:"updatedAt", dir:"desc", openGroup:null, lastSection:null, selected:{ col:null, ids:[] }, mediaTab:"manage", mediaFolder:"", quickUpdate:{ log:[], panelOpen:false, selectedRegion:null },
     newsletterCompose:{ editingId:null, templateId:null, mode:"now", scheduledAt:"",
       subject:"", previewText:"", heroLabel:"", headline:"", heroImage:{src:"",alt:""}, intro:"",
       details:{}, ctaLabel:"", ctaUrl:"", secondaryLabel:"", secondaryText:"", footerNote:"" },
@@ -5693,10 +5700,11 @@ function blankBookPage(){
 }
 function blankTextLayer(){
   return { id: uid("ly"), type:"text", content:"New text", x:10, y:40, w:80, h:20,
-    style:"body", align:"left", color:"", locked:false };
+    style:"body", align:"left", color:"", fontSize:"", locked:false };
 }
 function blankImageLayer(src, alt){
-  return { id: uid("ly"), type:"image", src: src || "", alt: alt || "", placement:"inset-center" };
+  return { id: uid("ly"), type:"image", src: src || "", alt: alt || "", placement:"inset-center",
+    x:20, y:30, w:60, h:40, fit:"contain", locked:false };
 }
 /* "c1,c2,angle" - kept as one string (not three fields) so it round-trips
    through a single text/color input pair in the builder without a bespoke
@@ -5748,6 +5756,45 @@ const IMAGE_PLACEMENT_CSS = {
   "inset-right":  "left:52%;top:30%;width:44%;height:40%;object-fit:contain",
   "inset-center": "left:20%;top:30%;width:60%;height:40%;object-fit:contain"
 };
+/* Numeric equivalent of IMAGE_PLACEMENT_CSS, used to give an image layer
+   real x/y/w/h/fit the first time it's dragged or resized - an image
+   saved before free positioning existed only has a "placement" preset,
+   so this derives the same geometry that preset already renders as,
+   rather than the image jumping somewhere new the moment it's touched. */
+const IMAGE_PLACEMENT_RECT = {
+  "full-bg":      { x:0,  y:0,  w:100, h:100, fit:"cover" },
+  "top-half":     { x:0,  y:0,  w:100, h:50,  fit:"cover" },
+  "bottom-half":  { x:0,  y:50, w:100, h:50,  fit:"cover" },
+  "inset-left":   { x:4,  y:30, w:44,  h:40,  fit:"contain" },
+  "inset-right":  { x:52, y:30, w:44,  h:40,  fit:"contain" },
+  "inset-center": { x:20, y:30, w:60,  h:40,  fit:"contain" }
+};
+/** An image layer's actual geometry - its own x/y/w/h/fit once it has
+    been positioned directly, otherwise derived from its placement preset. */
+function imageLayerRect(layer){
+  if (typeof layer.x === "number") return { x:layer.x, y:layer.y, w:layer.w, h:layer.h, fit: layer.fit || "cover" };
+  return IMAGE_PLACEMENT_RECT[layer.placement] || IMAGE_PLACEMENT_RECT["inset-center"];
+}
+/** Sizes a freshly-added image layer's box to the photo's own aspect
+    ratio (keeping its width, deriving height) instead of leaving it at
+    the generic inset-center default, which almost never matches a real
+    photo's proportions and made it look shrunk/letterboxed inside its
+    box. Async (the image has to actually load to know its dimensions),
+    so it re-renders once it resolves rather than blocking on it. */
+function fitImageLayerToNaturalSize(layer){
+  const probe = new Image();
+  probe.onload = () => {
+    const canvas = $("#story-canvas");
+    if (!canvas || !probe.naturalWidth || !probe.naturalHeight) return;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const pixelW = rect.width * layer.w / 100;
+    const pixelH = pixelW * (probe.naturalHeight / probe.naturalWidth);
+    layer.h = Math.max(5, Math.min(100 - layer.y, pixelH / rect.height * 100));
+    rerender();
+  };
+  probe.src = layer.src;
+}
 
 function layerToBuilderHTML(layer, selected){
   const sel = selected ? " is-selected" : "";
@@ -5756,13 +5803,15 @@ function layerToBuilderHTML(layer, selected){
     return '<div class="story-builder__layer story-builder__layer--text' + sel + lockedCls + '"'
       + ' data-act="story-build-select-layer" data-layer-id="' + E(layer.id) + '"'
       + ' style="left:' + layer.x + '%;top:' + layer.y + '%;width:' + layer.w + '%;height:' + layer.h + '%;'
-      + 'text-align:' + E(layer.align) + ';color:' + E(layer.color || "inherit") + ';' + TEXT_STYLE_CSS[layer.style] + '">'
-      + E(layer.content) + '</div>';
+      + 'text-align:' + E(layer.align) + ';color:' + E(layer.color || "inherit") + ';' + TEXT_STYLE_CSS[layer.style]
+      + (layerFontSizeCSS(layer) ? ';' + layerFontSizeCSS(layer) : '') + '">'
+      + sanitizeHTML(layer.content) + '</div>';
   }
+  const rect = imageLayerRect(layer);
   return '<img class="story-builder__layer story-builder__layer--image' + sel + lockedCls + '"'
     + ' data-act="story-build-select-layer" data-layer-id="' + E(layer.id) + '"'
     + ' src="' + E(layer.src) + '" alt="' + E(layer.alt) + '"'
-    + ' style="position:absolute;' + (IMAGE_PLACEMENT_CSS[layer.placement] || IMAGE_PLACEMENT_CSS["inset-center"]) + '">';
+    + ' style="position:absolute;left:' + rect.x + '%;top:' + rect.y + '%;width:' + rect.w + '%;height:' + rect.h + '%;object-fit:' + rect.fit + '">';
 }
 /* A true small-scale rendering for the filmstrip thumbnails - not just a
    background swatch. Text can't reuse TEXT_STYLE_CSS here: those sizes are
@@ -5778,10 +5827,12 @@ const THUMB_TEXT_STYLE_CSS = {
 function layerToThumbnailHTML(layer){
   if (layer.type === "text"){
     return '<div style="position:absolute;overflow:hidden;left:' + layer.x + '%;top:' + layer.y + '%;width:' + layer.w + '%;height:' + layer.h + '%;'
-      + 'text-align:' + E(layer.align) + ';color:' + E(layer.color || "inherit") + ';' + (THUMB_TEXT_STYLE_CSS[layer.style] || THUMB_TEXT_STYLE_CSS.body) + '">'
-      + E(layer.content) + '</div>';
+      + 'text-align:' + E(layer.align) + ';color:' + E(layer.color || "inherit") + ';' + (THUMB_TEXT_STYLE_CSS[layer.style] || THUMB_TEXT_STYLE_CSS.body)
+      + (layerThumbFontSizeCSS(layer) ? ';' + layerThumbFontSizeCSS(layer) : '') + '">'
+      + E(richTextToText(layer.content)) + '</div>';
   }
-  return '<img src="' + E(layer.src) + '" alt="" style="position:absolute;' + (IMAGE_PLACEMENT_CSS[layer.placement] || IMAGE_PLACEMENT_CSS["inset-center"]) + '">';
+  const rect = imageLayerRect(layer);
+  return '<img src="' + E(layer.src) + '" alt="" style="position:absolute;left:' + rect.x + '%;top:' + rect.y + '%;width:' + rect.w + '%;height:' + rect.h + '%;object-fit:' + rect.fit + '">';
 }
 
 const PUBLIC_NAV = [
@@ -8312,6 +8363,17 @@ function bookCard(b){
     + '</div></article>';
 }
 
+/** The book's actual cover art, straight from its own page 1 in the book
+    builder - not a separate "cover image" field an admin has to remember
+    to keep in sync by hand. Prefers the page's full-bg image (the real
+    background art), falling back to whatever image is on the page first. */
+function storyCoverFromPages(s){
+  const page1 = s.pages && s.pages[0];
+  if (!page1 || !page1.layers) return null;
+  const bg = page1.layers.find(l => l.type === "image" && l.placement === "full-bg" && l.src);
+  const any = bg || page1.layers.find(l => l.type === "image" && l.src);
+  return any ? { src: any.src, alt: any.alt || "" } : null;
+}
 function storyCard(s){
   /* Every published short story now has a matching book, sharing its id,
      so it turns pages like the space adventure instead of opening a plain
@@ -8326,7 +8388,7 @@ function storyCard(s){
     return bookListCard(Object.assign({}, book, {
       title: s.title || book.title,
       blurb: s.blurb || book.blurb,
-      cover: (s.image && s.image.src) ? s.image : book.cover
+      cover: storyCoverFromPages(s) || (s.image && s.image.src ? s.image : book.cover)
     }));
   }
 
@@ -9401,10 +9463,11 @@ const FIELDS = {
   ],
   mediaAssets: [
     { key:"preview", srcKey:"path", label:"Preview", type:"imagePreview", wide:true },
-    { key:"path", label:"File path", type:"text", wide:true },
+    { key:"path", label:"File path", type:"text", wide:true, uploadable:true },
+    { key:"folder", label:"Folder", type:"text", help:"A short name to group related media, e.g. “Characters” or “Hero images”." },
     { key:"alt", label:"Alt text", type:"text", wide:true },
     { key:"usage", label:"Where it is used", type:"text", wide:true },
-    { key:"kind", label:"Kind", type:"select", options:() => [{value:"illustration",label:"Illustration"},{value:"photograph",label:"Photograph"},{value:"printable",label:"Printable"}] }
+    { key:"kind", label:"Kind", type:"select", options:() => [{value:"illustration",label:"Illustration"},{value:"photograph",label:"Photograph"},{value:"printable",label:"Printable"},{value:"video",label:"Video"}] }
   ],
   issues: [
     { key:"title", label:"Title", type:"text", wide:true },
@@ -9429,7 +9492,7 @@ const BLANKS = {
   products:   () => ({ title:"", slug:"", format:"PDF", pages:0, priceUSD:0, blurb:"", includes:[], ageRange:"5-10", access:"paid", file:{label:"",path:""}, image:{src:"",alt:""}, status:"draft", featured:false }),
   amazonProducts: () => ({ title:"", category:"materials", why:"", forActivities:[], priceBand:"$", url:"https://www.amazon.com/s?k=", linkType:"search-placeholder", cover:"", status:"draft", featured:false, ours:false }),
   collections:() => ({ title:"", slug:"", blurb:"", icon:"layers", items:[], status:"draft", featured:false }),
-  mediaAssets:() => ({ path:"", alt:"", usage:"", kind:"illustration", status:"draft" }),
+  mediaAssets:() => ({ path:"", folder:"", alt:"", usage:"", kind:"illustration", status:"draft" }),
   issues:     () => ({ title:"", area:"platform", severity:"normal", state:"open", detail:"", status:"published" })
 };
 
@@ -9447,9 +9510,11 @@ function fieldControl(f, rec){
     control = mediaControl(f, rec);
   } else if (f.type === "imagePreview"){
     const src = getPath(rec, f.srcKey || f.key) || "";
-    control = src
-      ? '<img src="' + E(src) + '" alt="" style="max-width:260px;max-height:180px;object-fit:cover;border-radius:10px;border:1px solid var(--admin-border);display:block">'
-      : '<span class="tiny mute">No image at this path yet</span>';
+    control = '<div id="' + id + '">' + (src
+      ? (rec.kind === "video"
+          ? '<video src="' + E(src) + '" controls style="max-width:260px;max-height:180px;border-radius:10px;border:1px solid var(--admin-border);display:block"></video>'
+          : '<img src="' + E(src) + '" alt="" style="max-width:260px;max-height:180px;object-fit:cover;border-radius:10px;border:1px solid var(--admin-border);display:block">')
+      : '<span class="tiny mute">No file at this path yet</span>') + '</div>';
   } else if (f.type === "file"){
     control = fileFieldControl(f, rec);
   } else if (f.type === "textarea"){
@@ -9477,6 +9542,11 @@ function fieldControl(f, rec){
       + options.map(o => '<label class="admin-filter-chip" style="cursor:pointer"' + (arr.indexOf(o.value) >= 0 ? ' aria-pressed="true"' : ' aria-pressed="false"') + '>'
           + '<input type="checkbox" name="' + E(f.key) + '" value="' + E(o.value) + '"' + (arr.indexOf(o.value) >= 0 ? " checked" : "") + ' style="margin-right:6px">'
           + E(o.label) + '</label>').join("")
+      + '</div>';
+  } else if (f.uploadable){
+    control = '<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">'
+      + '<input class="admin-input" id="' + id + '" name="' + E(f.key) + '" value="' + E(val === undefined ? "" : val) + '" placeholder=" " spellcheck="true" style="flex:1;min-width:160px">'
+      + '<button type="button" class="admin-btn admin-btn--sm" data-act="field-upload" data-target="' + E(f.key) + '">' + ic("upload") + ' Upload</button>'
       + '</div>';
   } else if (f.key === "youtubeId"){
     control = '<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">'
@@ -9934,7 +10004,7 @@ const LIST_COLS = {
     { key:"duration", label:"Length" }
   ],
   stories: [
-    { key:"thumb", label:"", html:true, render:r => thumbCell(r.image && r.image.src) },
+    { key:"thumb", label:"", html:true, render:r => thumbCell((storyCoverFromPages(r) || r.image || {}).src) },
     { key:"title", label:"Title", main:true },
     { key:"character", label:"Character", render:r => charName(r.character) },
     { key:"readMinutes", label:"Read", render:r => r.readMinutes + " min" }
@@ -12019,26 +12089,61 @@ function adminBrand(){
     + '</form></div>';
 }
 
+/* A folder is just a short label on the record (see FIELDS.mediaAssets) -
+   no real folder hierarchy or storage reorganization, since every asset's
+   actual location (assets/ on disk, or a Supabase Storage URL) never
+   moves when its folder label changes. Existing assets predate this
+   field, so anything without one is grouped by its path's own directory
+   segment instead of dumping every legacy item into "Uncategorized". */
+function mediaFolderOf(m){
+  if (!isBlank(m.folder)) return m.folder;
+  const parts = String(m.path || "").replace(/^\/+/, "").split("/");
+  if (parts.length > 2 && parts[0] === "assets") return titleCase(parts[1]);
+  return "Uncategorized";
+}
+
+function mediaCard(m){
+  return '<div class="admin-card admin-card--flat" style="padding:0;overflow:hidden">'
+    + (m.kind === "video"
+        ? '<video src="' + E(m.path) + '" controls style="width:100%;aspect-ratio:16/10;object-fit:cover;border-bottom:1px solid var(--admin-border)"></video>'
+        : '<img src="' + E(m.path) + '" alt="' + E(m.alt) + '" style="width:100%;aspect-ratio:16/10;object-fit:cover;border-bottom:1px solid var(--admin-border)" loading="lazy">')
+    + '<div style="padding:12px"><p style="font-size:.82rem;margin:0;word-break:break-all"><b>' + E(m.path) + '</b></p>'
+    + '<p class="admin-meta" style="margin:6px 0 0">' + E(m.alt) + '</p></div></div>';
+}
+
 function adminMedia(){
   const items = db.list("mediaAssets");
   const missingAlt = items.filter(m => isBlank(m.alt)).length;
   const tab = AppState.admin.mediaTab === "reference" ? "reference" : "manage";
 
-  const tabs = '<div class="row" style="gap:8px;margin-bottom:22px">'
+  const tabs = '<div class="row-between" style="gap:8px;margin-bottom:22px;flex-wrap:wrap">'
+    + '<div class="row" style="gap:8px">'
     + '<button class="admin-filter-chip" data-act="media-tab" data-value="manage" aria-pressed="' + (tab === "manage" ? "true" : "false") + '">' + ic("list") + ' Manage media</button>'
     + '<button class="admin-filter-chip" data-act="media-tab" data-value="reference" aria-pressed="' + (tab === "reference" ? "true" : "false") + '">' + ic("image") + ' Media Reference</button>'
+    + '</div>'
+    + '<button type="button" class="admin-btn admin-btn--primary" data-act="media-upload">' + ic("upload") + ' Upload image or video</button>'
     + '</div>';
 
   if (tab === "reference"){
+    const folder = AppState.admin.mediaFolder || "";
+    const folders = Array.from(new Set(items.map(mediaFolderOf))).sort();
+    const shown = folder ? items.filter(m => mediaFolderOf(m) === folder) : items;
+    const byFolder = {};
+    shown.forEach(m => { const f = mediaFolderOf(m); (byFolder[f] = byFolder[f] || []).push(m); });
+
     return tabs
-      + '<p class="admin-meta" style="margin:0 0 18px">Paths only. The files themselves live in the <code>assets/</code> folder next to this page.</p>'
+      + '<p class="admin-meta" style="margin:0 0 14px">Uploaded files live in Supabase Storage; anything else here is just a path into the <code>assets/</code> folder next to this page. Set a record’s Folder field to group it here.</p>'
       + (missingAlt ? '<div class="admin-callout" style="margin-bottom:18px">' + ic("triangle-alert") + '<span>' + plural(missingAlt,"reference") + ' still needs alt text.</span></div>' : "")
-      + '<div class="grid g-3" style="gap:14px">'
-      + items.map(m => '<div class="admin-card admin-card--flat" style="padding:0;overflow:hidden">'
-          + '<img src="' + E(m.path) + '" alt="' + E(m.alt) + '" style="width:100%;aspect-ratio:16/10;object-fit:cover;border-bottom:1px solid var(--admin-border)" loading="lazy">'
-          + '<div style="padding:12px"><p style="font-size:.82rem;margin:0;word-break:break-all"><b>' + E(m.path) + '</b></p>'
-          + '<p class="admin-meta" style="margin:6px 0 0">' + E(m.alt) + '</p></div></div>').join("")
-      + '</div>';
+      + '<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:20px">'
+      + '<button class="admin-filter-chip" data-act="media-folder-filter" data-value="" aria-pressed="' + (folder === "" ? "true" : "false") + '">All (' + items.length + ')</button>'
+      + folders.map(f => '<button class="admin-filter-chip" data-act="media-folder-filter" data-value="' + E(f) + '" aria-pressed="' + (folder === f ? "true" : "false") + '">' + E(f) + ' (' + items.filter(m => mediaFolderOf(m) === f).length + ')</button>').join("")
+      + '</div>'
+      + (folder
+          ? '<div class="grid g-3" style="gap:14px">' + shown.map(mediaCard).join("") + '</div>'
+          : Object.keys(byFolder).sort().map(f => '<div style="margin-bottom:26px">'
+              + '<h3 class="admin-section-title" style="font-size:.95rem;margin-bottom:12px">' + E(f) + '</h3>'
+              + '<div class="grid g-3" style="gap:14px">' + byFolder[f].map(mediaCard).join("") + '</div>'
+              + '</div>').join(""));
   }
 
   return tabs + adminList("mediaAssets");
@@ -12494,7 +12599,7 @@ function adminStoryBuilder(id){
     + '<div><span class="admin-eyebrow">Book builder</span>'
     + '<h1 class="admin-section-title" style="margin-top:2px">' + E(story.title || "Untitled story") + '</h1></div>'
     + '<div class="row" style="gap:10px">'
-    + (sb.dirty ? '<span class="admin-badge admin-badge--warn">' + ic("pencil") + ' Unsaved</span>' : "")
+    + (sb.dirty ? '<span class="admin-status"><span class="admin-badge admin-badge--sm admin-badge--warn">' + ic("pencil") + '</span>Unsaved</span>' : "")
     + '<button type="button" class="admin-btn admin-btn--ghost" data-act="story-build-close" data-id="' + E(id) + '">Close</button>'
     + '<button type="button" class="admin-btn admin-btn--primary" data-act="story-build-save" data-id="' + E(id) + '">' + ic("save") + ' Save</button>'
     + '</div></div>'
@@ -12575,13 +12680,77 @@ function storyBuilderCanvas(page){
    content, wired through the "change" event (not "input") so a full
    rerender doesn't steal focus mid-keystroke - the canvas updates once
    the field loses focus. */
+/* A short, curated formatting toolbar for a story caption - not the full
+   RT_TOOLS set (headings/lists/links belong to long-form page body copy,
+   not a picture-book caption), and "Add a link" is skipped entirely since
+   it depends on window.prompt(), which is unreliable here (see above). */
+const LAYER_RT_TOOLS = [
+  { cmd:"bold",      label:"Bold",      icon:"bold" },
+  { cmd:"italic",    label:"Italic",    icon:"italic" },
+  { cmd:"underline", label:"Underline", icon:"underline" },
+  { sep:true },
+  { cmd:"removeFormat", label:"Clear formatting", icon:"eraser" }
+];
+/* Alignment and font size are layer-level properties (layer.align,
+   layer.fontSize), not per-character formatting - they're applied to the
+   whole caption box, the same way layer.style already is, not through
+   document.execCommand on a text selection. */
+const LAYER_ALIGN_OPTIONS = [
+  { value:"left",   label:"Align left",   icon:"align-left" },
+  { value:"center", label:"Align center", icon:"align-center" },
+  { value:"right",  label:"Align right",  icon:"align-right" }
+];
+const LAYER_FONT_SIZES = [14, 18, 24, 32, 40];
+/* Matches TEXT_STYLE_CSS's own clamp(minPx, Nvw, capPx) shape (the same
+   fixed-min / viewport-relative-middle / px-cap ratios as its "heading"
+   style) so a chosen custom size scales fluidly with the book exactly
+   like the built-in heading/body/quote/tag sizes already do, rather than
+   sitting at one frozen pixel size that would only look right at a
+   single screen width. */
+function layerFontSizeCSS(layer){
+  const n = parseInt(layer.fontSize, 10);
+  if (!LAYER_FONT_SIZES.includes(n)) return "";
+  return "font-size:clamp(" + Math.round(n * 0.57) + "px," + (n * 0.128).toFixed(2) + "vw," + n + "px)";
+}
+/* Thumbnails are a deliberately fixed miniature, not a responsive
+   surface (see THUMB_TEXT_STYLE_CSS above) - a flat scaled-down px value
+   here, not a clamp(), matches that same reasoning. */
+function layerThumbFontSizeCSS(layer){
+  const n = parseInt(layer.fontSize, 10);
+  if (!LAYER_FONT_SIZES.includes(n)) return "";
+  return "font-size:" + Math.max(3, Math.round(n * 0.25)) + "px";
+}
 function storyBuilderTextEditor(page){
   const sel = page.layers.find(l => l.id === AppState.admin.storyBuilder.selectedLayerId && l.type === "text");
   if (!sel) return "";
+  const hex = safeHex(sel.color, "#000000");
+  const html = sanitizeHTML(sel.content) || "<p></p>";
+  const align = ["left","center","right"].indexOf(sel.align) >= 0 ? sel.align : "left";
   return '<div class="admin-field" style="margin-top:14px">'
-    + '<label for="story-edit-text">Edit selected text</label>'
-    + '<textarea class="admin-textarea" id="story-edit-text" rows="4" data-act="story-build-edit-text" data-layer-id="' + E(sel.id) + '">' + E(sel.content) + '</textarea>'
-    + '</div>';
+    + '<span class="admin-eyebrow" id="story-edit-text-label" style="display:block;margin-bottom:6px">Edit selected text</span>'
+    + '<div class="rt">'
+    + '<div class="rt__bar" role="toolbar" aria-label="Formatting">'
+    + LAYER_RT_TOOLS.map(t => t.sep
+        ? '<span class="rt__sep" aria-hidden="true"></span>'
+        : '<button type="button" class="rt__btn" data-act="rt-cmd" data-cmd="' + E(t.cmd) + '" title="' + E(t.label) + '" aria-label="' + E(t.label) + '">' + ic(t.icon) + '</button>').join("")
+    + '<span class="rt__sep" aria-hidden="true"></span>'
+    + LAYER_ALIGN_OPTIONS.map(o => '<button type="button" class="rt__btn' + (align === o.value ? " is-active" : "") + '" data-act="story-build-set-align" data-value="' + o.value + '" data-layer-id="' + E(sel.id) + '" title="' + E(o.label) + '" aria-label="' + E(o.label) + '" aria-pressed="' + (align === o.value) + '">' + ic(o.icon) + '</button>').join("")
+    + '<span class="rt__sep" aria-hidden="true"></span>'
+    + '<select class="admin-select" style="width:auto;height:36px" data-act="story-build-set-fontsize" data-layer-id="' + E(sel.id) + '" aria-label="Font size">'
+    + '<option value=""' + (!sel.fontSize ? " selected" : "") + '>Default size</option>'
+    + LAYER_FONT_SIZES.map(n => '<option value="' + n + '"' + (parseInt(sel.fontSize, 10) === n ? " selected" : "") + '>' + n + 'px</option>').join("")
+    + '</select>'
+    + '</div>'
+    + '<div class="rt__area" style="min-height:90px;max-height:220px;font-size:.92rem;text-align:' + align + '" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="story-edit-text-label" spellcheck="true"'
+    + ' data-rt-for="story-layer:' + E(sel.id) + '">' + html + '</div>'
+    + '</div>'
+    + '</div>'
+    + '<div class="admin-field" style="margin-top:10px">'
+    + '<label for="story-edit-text-color">Text color</label>'
+    + '<div class="row" style="gap:8px;align-items:center">'
+    + '<input type="color" class="admin-input" style="width:44px;height:38px;padding:2px;cursor:pointer" id="story-edit-text-color" value="' + hex + '" data-act="story-build-set-text-color" data-layer-id="' + E(sel.id) + '">'
+    + '<span class="tiny mute">' + hex + '</span>'
+    + '</div></div>';
 }
 function storyBuilderLayersPanel(page){
   if (!page.layers.length){
@@ -12596,6 +12765,7 @@ function storyBuilderLayersPanel(page){
     return '<div class="story-builder__layerrow' + (isSel ? " is-selected" : "") + '" draggable="true"'
       + ' data-act="story-build-select-layer" data-layer-id="' + E(ly.id) + '">'
       + '<div class="row" style="gap:6px;align-items:center">'
+      + '<span class="story-builder__layerrow-grip" aria-hidden="true">' + ic("grip-vertical", "i") + '</span>'
       + '<button type="button" class="admin-btn admin-btn--icon admin-btn--ghost" data-act="story-build-toggle-lock" data-layer-id="' + E(ly.id) + '" aria-label="' + (ly.locked ? "Unlock" : "Lock") + '">'
       + ic(ly.locked ? "lock" : "lock-open") + '</button>'
       + (ly.type === "text"
@@ -12603,7 +12773,7 @@ function storyBuilderLayersPanel(page){
           : (ly.src
               ? '<img src="' + E(ly.src) + '" alt="" style="width:28px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0">'
               : '<span title="Image layer" style="flex-shrink:0;display:flex;color:var(--admin-faint)">' + ic("image","i") + '</span>'))
-      + '<span class="tiny" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ly.type === "text" ? E(ly.content).slice(0, 24) : "Image") + '</span>'
+      + '<span class="tiny" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ly.type === "text" ? E(richTextToText(ly.content).slice(0, 24)) : "Image") + '</span>'
       + '<button type="button" class="admin-btn admin-btn--icon admin-btn--ghost" data-act="story-build-delete-layer" data-layer-id="' + E(ly.id) + '" aria-label="Delete layer">' + ic("trash-2") + '</button>'
       + '</div>'
       + (ly.type === "text"
@@ -12612,7 +12782,9 @@ function storyBuilderLayersPanel(page){
             + '</select>'
           : '<select class="admin-select" style="width:100%;margin-top:6px" data-act="story-build-set-placement" data-layer-id="' + E(ly.id) + '">'
             + ["full-bg","top-half","bottom-half","inset-left","inset-right","inset-center"].map(pl => '<option value="' + pl + '"' + (ly.placement === pl ? " selected" : "") + '>' + titleCase(pl.replace("-"," ")) + '</option>').join("")
-            + '</select>')
+            + '</select>'
+            + '<button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" style="width:100%;margin-top:6px" data-act="story-build-fit-image" data-layer-id="' + E(ly.id) + '" title="Resize the box to this photo’s real proportions">'
+            + ic("scan", "i") + ' Fit to actual size</button>')
       + '</div>';
   }).join("");
   return '<div class="story-builder__layers admin-card"><p class="admin-eyebrow" style="margin:0 0 10px">Layers</p>' + rows + '</div>';
@@ -12669,11 +12841,105 @@ function mountStoryBuilderDrag(){
   }
 }
 
-/* Freeform drag/resize for text layers, via raw Pointer Events attached
-   directly to the rendered DOM elements after each render (not routed
-   through ACTIONS/data-act, which is for discrete click actions, not
-   continuous pixel-tracking). Image layers use placement presets chosen
-   elsewhere and are intentionally left out of this mechanism. */
+/* Freeform drag/resize, via raw Pointer Events attached directly to the
+   rendered DOM elements after each render (not routed through
+   ACTIONS/data-act, which is for discrete click actions, not continuous
+   pixel-tracking). Shared between text and image layers - both are
+   positioned as x/y/w/h percentages of the canvas, per imageLayerRect()
+   for images (which resolves an old placement-only image's geometry the
+   first time it's touched, so nothing jumps until it's actually dragged). */
+function mountLayerDragResize(el, layer, layerId, canvas, sb, lockAspect){
+  el.addEventListener("pointerdown", (e) => {
+    if (e.target.classList.contains("story-builder__resize-handle")) return;
+    e.preventDefault();
+    sb.selectedLayerId = layerId;
+    el.setPointerCapture(e.pointerId);
+    const rect = canvas.getBoundingClientRect();
+    const startX = e.clientX, startY = e.clientY;
+    const startLX = layer.x, startLY = layer.y;
+    const onMove = (mv) => {
+      if (mv.pointerId !== e.pointerId) return;
+      const dxPct = (mv.clientX - startX) / rect.width * 100;
+      const dyPct = (mv.clientY - startY) / rect.height * 100;
+      layer.x = Math.max(0, Math.min(100 - layer.w, startLX + dxPct));
+      layer.y = Math.max(0, Math.min(100 - layer.h, startLY + dyPct));
+      el.style.left = layer.x + "%";
+      el.style.top = layer.y + "%";
+    };
+    const cleanup = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onCancel);
+    };
+    const onUp = (up) => {
+      if (up.pointerId !== e.pointerId) return;
+      cleanup();
+      if (layer.x !== startLX || layer.y !== startLY) sb.dirty = true;
+      rerender();
+    };
+    const onCancel = (cn) => {
+      if (cn.pointerId !== e.pointerId) return;
+      cleanup();
+      if (layer.x !== startLX || layer.y !== startLY) sb.dirty = true;
+      rerender();
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onCancel);
+  });
+
+  const handle = document.createElement("div");
+  handle.className = "story-builder__resize-handle";
+  handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handle.setPointerCapture(e.pointerId);
+    const rect = canvas.getBoundingClientRect();
+    const startX = e.clientX, startY = e.clientY;
+    const startW = layer.w, startH = layer.h;
+    /* An image's own aspect ratio only means something in real pixels, not
+       in percent-of-canvas (the canvas itself usually isn't square) - so
+       the ratio is captured once, in pixels, at the moment the drag
+       starts, then reapplied in pixels on every move before converting
+       back to the percentages the data model stores. */
+    const pixelAspect = (rect.width * startW / 100) / (rect.height * startH / 100);
+    const onMove = (mv) => {
+      if (mv.pointerId !== e.pointerId) return;
+      const dwPct = (mv.clientX - startX) / rect.width * 100;
+      const dhPct = (mv.clientY - startY) / rect.height * 100;
+      layer.w = Math.max(5, Math.min(100 - layer.x, startW + dwPct));
+      if (lockAspect){
+        const pixelW = rect.width * layer.w / 100;
+        layer.h = Math.max(5, Math.min(100 - layer.y, (pixelW / pixelAspect) / rect.height * 100));
+      } else {
+        layer.h = Math.max(5, Math.min(100 - layer.y, startH + dhPct));
+      }
+      el.style.width = layer.w + "%";
+      el.style.height = layer.h + "%";
+    };
+    const cleanup = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onCancel);
+    };
+    const onUp = (up) => {
+      if (up.pointerId !== e.pointerId) return;
+      cleanup();
+      if (layer.w !== startW || layer.h !== startH) sb.dirty = true;
+      rerender();
+    };
+    const onCancel = (cn) => {
+      if (cn.pointerId !== e.pointerId) return;
+      cleanup();
+      if (layer.w !== startW || layer.h !== startH) sb.dirty = true;
+      rerender();
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onCancel);
+  });
+  el.appendChild(handle);
+}
 function mountStoryBuilderCanvasDrag(){
   const canvas = $("#story-canvas");
   if (!canvas) return;
@@ -12688,92 +12954,31 @@ function mountStoryBuilderCanvasDrag(){
 
     el.addEventListener("dblclick", (e) => {
       e.stopPropagation();
-      const next = prompt("Edit text:", layer.content);
+      const next = prompt("Edit text:", richTextToText(layer.content));
       if (next === null) return;
-      layer.content = next;
+      layer.content = sanitizeHTML(next);
       sb.dirty = true;
       rerender();
     });
 
-    el.addEventListener("pointerdown", (e) => {
-      if (e.target.classList.contains("story-builder__resize-handle")) return;
-      e.preventDefault();
-      sb.selectedLayerId = layerId;
-      el.setPointerCapture(e.pointerId);
-      const rect = canvas.getBoundingClientRect();
-      const startX = e.clientX, startY = e.clientY;
-      const startLX = layer.x, startLY = layer.y;
-      const onMove = (mv) => {
-        if (mv.pointerId !== e.pointerId) return;
-        const dxPct = (mv.clientX - startX) / rect.width * 100;
-        const dyPct = (mv.clientY - startY) / rect.height * 100;
-        layer.x = Math.max(0, Math.min(100 - layer.w, startLX + dxPct));
-        layer.y = Math.max(0, Math.min(100 - layer.h, startLY + dyPct));
-        el.style.left = layer.x + "%";
-        el.style.top = layer.y + "%";
-      };
-      const cleanup = () => {
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-        document.removeEventListener("pointercancel", onCancel);
-      };
-      const onUp = (up) => {
-        if (up.pointerId !== e.pointerId) return;
-        cleanup();
-        if (layer.x !== startLX || layer.y !== startLY) sb.dirty = true;
-        rerender();
-      };
-      const onCancel = (cn) => {
-        if (cn.pointerId !== e.pointerId) return;
-        cleanup();
-        if (layer.x !== startLX || layer.y !== startLY) sb.dirty = true;
-        rerender();
-      };
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
-      document.addEventListener("pointercancel", onCancel);
-    });
+    mountLayerDragResize(el, layer, layerId, canvas, sb, false);
+  });
 
-    const handle = document.createElement("div");
-    handle.className = "story-builder__resize-handle";
-    handle.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      handle.setPointerCapture(e.pointerId);
-      const rect = canvas.getBoundingClientRect();
-      const startX = e.clientX, startY = e.clientY;
-      const startW = layer.w, startH = layer.h;
-      const onMove = (mv) => {
-        if (mv.pointerId !== e.pointerId) return;
-        const dwPct = (mv.clientX - startX) / rect.width * 100;
-        const dhPct = (mv.clientY - startY) / rect.height * 100;
-        layer.w = Math.max(5, Math.min(100 - layer.x, startW + dwPct));
-        layer.h = Math.max(5, Math.min(100 - layer.y, startH + dhPct));
-        el.style.width = layer.w + "%";
-        el.style.height = layer.h + "%";
-      };
-      const cleanup = () => {
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-        document.removeEventListener("pointercancel", onCancel);
-      };
-      const onUp = (up) => {
-        if (up.pointerId !== e.pointerId) return;
-        cleanup();
-        if (layer.w !== startW || layer.h !== startH) sb.dirty = true;
-        rerender();
-      };
-      const onCancel = (cn) => {
-        if (cn.pointerId !== e.pointerId) return;
-        cleanup();
-        if (layer.w !== startW || layer.h !== startH) sb.dirty = true;
-        rerender();
-      };
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
-      document.addEventListener("pointercancel", onCancel);
-    });
-    el.appendChild(handle);
+  canvas.querySelectorAll(".story-builder__layer--image").forEach(el => {
+    const layerId = el.getAttribute("data-layer-id");
+    const layer = page.layers.find(l => l.id === layerId);
+    if (!layer || layer.locked) return;
+
+    /* An image saved before free positioning existed only has a
+       "placement" preset - resolve it to real x/y/w/h/fit now, the
+       instant it's touched, so the drag math below has real numbers to
+       work from and the image stays exactly where it already looked. */
+    if (typeof layer.x !== "number") Object.assign(layer, imageLayerRect(layer));
+
+    /* Locked aspect ratio for images, unlike text boxes - dragging the
+       handle scales the image proportionally instead of stretching or
+       letterboxing it away from the photo's own proportions. */
+    mountLayerDragResize(el, layer, layerId, canvas, sb, true);
   });
 }
 
@@ -15881,11 +16086,29 @@ const ACTIONS = {
     AppState.admin.storyBuilder.selectedLayerId = el.getAttribute("data-layer-id");
     rerender();
   },
-  "story-build-edit-text": (el) => {
+  "story-build-set-text-color": (el) => {
     const page = currentBuilderPage();
     const ly = page && page.layers.find(l => l.id === el.getAttribute("data-layer-id"));
     if (!ly) return;
-    ly.content = el.value;
+    ly.color = el.value;
+    AppState.admin.storyBuilder.dirty = true;
+    rerender();
+  },
+  "story-build-set-align": (el) => {
+    const page = currentBuilderPage();
+    const ly = page && page.layers.find(l => l.id === el.getAttribute("data-layer-id"));
+    if (!ly) return;
+    const value = el.getAttribute("data-value");
+    if (["left","center","right"].indexOf(value) < 0) return;
+    ly.align = value;
+    AppState.admin.storyBuilder.dirty = true;
+    rerender();
+  },
+  "story-build-set-fontsize": (el) => {
+    const page = currentBuilderPage();
+    const ly = page && page.layers.find(l => l.id === el.getAttribute("data-layer-id"));
+    if (!ly) return;
+    ly.fontSize = el.value;
     AppState.admin.storyBuilder.dirty = true;
     rerender();
   },
@@ -15907,6 +16130,7 @@ const ACTIONS = {
       AppState.admin.storyBuilder.selectedLayerId = ly.id;
       AppState.admin.storyBuilder.dirty = true;
       rerender();
+      fitImageLayerToNaturalSize(ly);
     });
   },
   "story-build-toggle-lock": (el, ev) => {
@@ -15933,8 +16157,22 @@ const ACTIONS = {
     const ly = page && page.layers.find(l => l.id === el.getAttribute("data-layer-id"));
     if (!ly) return;
     ly.placement = el.value;
+    /* A preset is a "snap to this layout" shortcut, not just a label - it
+       has to actually move/resize the image even after it's been freely
+       dragged, or picking a different preset here would silently do
+       nothing (imageLayerRect() always prefers real x/y/w/h once set). */
+    Object.assign(ly, IMAGE_PLACEMENT_RECT[el.value] || IMAGE_PLACEMENT_RECT["inset-center"]);
     AppState.admin.storyBuilder.dirty = true;
     rerender();
+  },
+  "story-build-fit-image": (el, ev) => {
+    ev.stopPropagation();
+    const page = currentBuilderPage();
+    const ly = page && page.layers.find(l => l.id === el.getAttribute("data-layer-id"));
+    if (!ly) return;
+    if (typeof ly.x !== "number") Object.assign(ly, imageLayerRect(ly));
+    AppState.admin.storyBuilder.dirty = true;
+    fitImageLayerToNaturalSize(ly);
   },
   "story-build-delete-layer": (el, ev) => {
     ev.stopPropagation();
@@ -16634,6 +16872,29 @@ const ACTIONS = {
   },
   "admin-select-clear": () => { AppState.admin.selected = { col: null, ids: [] }; rerender(); },
   "media-tab": (el) => { AppState.admin.mediaTab = el.getAttribute("data-value"); rerender(); },
+  "media-folder-filter": (el) => { AppState.admin.mediaFolder = el.getAttribute("data-value"); rerender(); },
+  "media-upload": () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,video/*";
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      const isVideo = file.type.indexOf("video") === 0;
+      try {
+        const url = await uploadToStorage(file, "media-library");
+        const rec = await db.add("mediaAssets", {
+          path: url, alt: "", usage: "",
+          kind: isVideo ? "video" : "illustration",
+          status: "draft"
+        });
+        toast("Uploaded. Add alt text and where it's used below.");
+        rerender();
+        openEditor("mediaAssets", rec.id);
+      } catch(err){ toast("Upload failed: " + err.message, "bad"); }
+    };
+    input.click();
+  },
   "admin-bulk-delete": (el) => {
     const col = el.getAttribute("data-col");
     const ids = AppState.admin.selected.ids.slice();
@@ -16808,6 +17069,38 @@ const ACTIONS = {
     if (altEl) altEl.value = "";
     const preview = el.closest(".media-field").querySelector(".media-field__preview");
     if (preview) preview.innerHTML = '<span class="tiny mute">No image</span>';
+  },
+  "field-upload": (el) => {
+    const form = el.closest("form");
+    const targetKey = el.getAttribute("data-target");
+    if (!form || !targetKey) return;
+    const targetEl = form.querySelector('[name="' + targetKey + '"]');
+    if (!targetEl) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,video/*";
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      const original = el.innerHTML;
+      el.setAttribute("disabled", "true");
+      el.innerHTML = ic("refresh-cw") + " Uploading...";
+      try {
+        const url = await uploadToStorage(file, "media-library");
+        targetEl.value = url;
+        const kindEl = form.querySelector('[name="kind"]');
+        if (kindEl && file.type.indexOf("video") === 0) kindEl.value = "video";
+        const preview = form.querySelector('[id="f-preview"]');
+        if (preview){
+          preview.innerHTML = file.type.indexOf("video") === 0
+            ? '<video src="' + E(url) + '" controls style="max-width:260px;max-height:180px;border-radius:10px;border:1px solid var(--admin-border);display:block"></video>'
+            : '<img src="' + E(url) + '" alt="" style="max-width:260px;max-height:180px;object-fit:cover;border-radius:10px;border:1px solid var(--admin-border);display:block">';
+        }
+        toast("Uploaded.");
+      } catch(err){ toast("Upload failed: " + err.message, "bad"); }
+      finally { el.removeAttribute("disabled"); el.innerHTML = original; }
+    };
+    input.click();
   },
   "yt-generate": async (el) => {
     const form = el.closest("form");
@@ -17558,6 +17851,18 @@ document.addEventListener("click", (ev) => {
   if (!el) return;
   const act = el.getAttribute("data-act");
   if (el.tagName === "FORM") return;
+  /* A <select> only ever acts on "change" (every data-act select in this
+     app already has its own change-listener branch) - a click here is
+     just the browser opening its native dropdown. Firing the action on
+     click too would rerender mid-click, replacing the select's DOM node
+     and snapping the dropdown shut the instant it opened. Same story for
+     an <input type="color"> (and any other type whose click opens its own
+     native picker, e.g. date/time) - the click that opens the OS color
+     picker isn't a committed choice yet, only "change" is, and rerendering
+     out from under it closes the picker before a color can be chosen
+     (reported as "unable to change/select another color"). */
+  if (el.tagName === "SELECT") return;
+  if (el.tagName === "INPUT" && ["color","date","time","datetime-local","month","week"].indexOf(el.type) >= 0) return;
 
   if (ACTIONS[act]){
     /* Let real links behave like links when the user wants a new tab. */
@@ -17633,6 +17938,27 @@ document.addEventListener("input", (ev) => {
     AppState.admin.newsletterCompose.scheduledAt = localDatetimeToISO(el.value);
   } else if (el.getAttribute("data-rt-for") === "intro" && el.closest("#nl-form")){
     AppState.admin.newsletterCompose.intro = sanitizeHTML(el.innerHTML);
+  } else if (el.getAttribute("data-rt-for") && el.getAttribute("data-rt-for").indexOf("story-layer:") === 0){
+    /* Same reasoning as the newsletter intro branch above: sync the model
+       quietly on every keystroke with no rerender, so a full rerender
+       never steals focus out of the contenteditable mid-type. The canvas
+       preview is patched directly instead of waiting for a rerender. */
+    const layerId = el.getAttribute("data-rt-for").slice("story-layer:".length);
+    const page = currentBuilderPage();
+    const ly = page && page.layers.find(l => l.id === layerId);
+    if (ly){
+      ly.content = sanitizeHTML(el.innerHTML);
+      AppState.admin.storyBuilder.dirty = true;
+      const canvasLayer = document.querySelector('.story-builder__layer[data-layer-id="' + layerId + '"]');
+      if (canvasLayer){
+        /* The resize handle is a JS-appended child (mountStoryBuilderCanvasDrag),
+           not part of this markup - preserve the same node (and its bound
+           listeners) rather than letting innerHTML wipe it out. */
+        const handleEl = canvasLayer.querySelector(".story-builder__resize-handle");
+        canvasLayer.innerHTML = ly.content;
+        if (handleEl) canvasLayer.appendChild(handleEl);
+      }
+    }
   } else if (el.closest("#nl-form") && el.name){
     /* Every other compose field (hero label/headline/image, CTA,
        optional note, per-template detail rows) shares this one generic
@@ -17683,8 +18009,12 @@ document.addEventListener("change", (ev) => {
     ACTIONS["story-build-set-placement"](el, ev);
     return;
   }
-  if (el.getAttribute && el.getAttribute("data-act") === "story-build-edit-text"){
-    ACTIONS["story-build-edit-text"](el);
+  if (el.getAttribute && el.getAttribute("data-act") === "story-build-set-text-color"){
+    ACTIONS["story-build-set-text-color"](el);
+    return;
+  }
+  if (el.getAttribute && el.getAttribute("data-act") === "story-build-set-fontsize"){
+    ACTIONS["story-build-set-fontsize"](el);
     return;
   }
   if (el.getAttribute && el.getAttribute("data-act") === "launch-toggle-complete"){

@@ -404,8 +404,14 @@
         /* SINGLE-PAGE MOBILE READER
            Below 768px, every .front/.back across every paper occupies the
            same box (their 3D transforms are neutralised) and only the
-           current one is shown - one physical page per tap, never a
-           left/right spread. */
+           current one is shown - one physical page per tap or swipe,
+           never a left/right spread. A 3D flip was tried here to match
+           the desktop page-turn, but rotating a single flat face on its
+           own (mobile shows one page at a time, not one two-sided sheet
+           the way desktop's .paper does) never reads as a real page
+           turning - just a plain crossfade instead, which looks correct
+           for what it is rather than an unconvincing imitation of the
+           desktop motion. */
         @media (max-width: 768px) {
             .book-container.opened .book-wrapper { transform: none; }
             .paper, .paper.flipped, .paper.turning { transform: none !important; transition: none; }
@@ -468,29 +474,58 @@
     quote:   "font-weight:600;font-style:italic;font-size:clamp(13px,2.2vw,1.3em);line-height:1.5",
     tag:     "display:inline-block;font-weight:700;font-size:0.72em;letter-spacing:.08em;text-transform:uppercase;color:#7A1F19;background:rgba(255,255,255,.6);padding:6px 14px;border-radius:999px"
   };
-  const IMAGE_PLACEMENT_CSS = {
-    "full-bg":      "left:0;top:0;width:100%;height:100%;object-fit:cover",
-    "top-half":     "left:0;top:0;width:100%;height:50%;object-fit:cover",
-    "bottom-half":  "left:0;top:50%;width:100%;height:50%;object-fit:cover",
-    "inset-left":   "left:4%;top:30%;width:44%;height:40%;object-fit:contain",
-    "inset-right":  "left:52%;top:30%;width:44%;height:40%;object-fit:contain",
-    "inset-center": "left:20%;top:30%;width:60%;height:40%;object-fit:contain"
+  /* Numeric fallback geometry for an image saved before free positioning
+     existed (only a "placement" preset, no x/y/w/h/fit of its own) - kept
+     in sync with IMAGE_PLACEMENT_RECT in index.html's book builder. */
+  const IMAGE_PLACEMENT_RECT = {
+    "full-bg":      { x:0,  y:0,  w:100, h:100, fit:"cover" },
+    "top-half":     { x:0,  y:0,  w:100, h:50,  fit:"cover" },
+    "bottom-half":  { x:0,  y:50, w:100, h:50,  fit:"cover" },
+    "inset-left":   { x:4,  y:30, w:44,  h:40,  fit:"contain" },
+    "inset-right":  { x:52, y:30, w:44,  h:40,  fit:"contain" },
+    "inset-center": { x:20, y:30, w:60,  h:40,  fit:"contain" }
   };
+  function imageLayerRect(layer){
+    if (typeof layer.x === "number") return { x:layer.x, y:layer.y, w:layer.w, h:layer.h, fit: layer.fit || "cover" };
+    return IMAGE_PLACEMENT_RECT[layer.placement] || IMAGE_PLACEMENT_RECT["inset-center"];
+  }
+  const LAYER_FONT_SIZES = [14, 18, 24, 32, 40];
+  /* Matches TEXT_STYLE_CSS's own clamp(minPx, Nvw, capPx) shape (index.html,
+     book builder) so a custom size scales fluidly with the book exactly
+     like the built-in heading/body/quote/tag sizes already do, instead of
+     sitting at one frozen pixel size that would only look right on
+     whatever screen it happened to be picked on. */
+  function layerFontSizeCSS(layer){
+    const n = parseInt(layer.fontSize, 10);
+    if (LAYER_FONT_SIZES.indexOf(n) < 0) return "";
+    return "font-size:clamp(" + Math.round(n * 0.57) + "px," + (n * 0.128).toFixed(2) + "vw," + n + "px)";
+  }
 
   function layerToReaderHTML(layer){
     if (layer.type === "text"){
       return '<div style="position:absolute;left:' + layer.x + '%;top:' + layer.y + '%;width:' + layer.w + '%;height:' + layer.h + '%;'
-        + 'text-align:' + esc(layer.align) + ';color:' + esc(layer.color || "inherit") + ';' + (TEXT_STYLE_CSS[layer.style] || TEXT_STYLE_CSS.body) + '">'
-        + esc(layer.content) + '</div>';
+        + 'text-align:' + esc(layer.align) + ';color:' + esc(layer.color || "inherit") + ';' + (TEXT_STYLE_CSS[layer.style] || TEXT_STYLE_CSS.body)
+        + (layerFontSizeCSS(layer) ? ';' + layerFontSizeCSS(layer) : '') + '">'
+        /* Sanitized once already in the admin book builder before it's ever
+           saved (sanitizeHTML(), index.html) - the same trust boundary as
+           every other admin-authored CMS field this site renders as raw
+           HTML. Rendered as HTML (not escaped) so bold/italic/underline
+           formatting actually shows up for readers instead of literal tags. */
+        + String(layer.content || "") + '</div>';
     }
+    const rect = imageLayerRect(layer);
     return '<img src="' + esc(layer.src) + '" alt="' + esc(layer.alt) + '"'
-      + ' style="position:absolute;' + (IMAGE_PLACEMENT_CSS[layer.placement] || IMAGE_PLACEMENT_CSS["inset-center"]) + '">';
+      + ' style="position:absolute;left:' + rect.x + '%;top:' + rect.y + '%;width:' + rect.w + '%;height:' + rect.h + '%;object-fit:' + rect.fit + '">';
   }
 
   function pageContentHTML(page, faceId, pageNum){
+    /* The cover (page 1) isn't counted - it carries no number at all, and
+       the first real content page starts the visible count over at 1,
+       the standard picture-book convention. */
     return '<div class="page-content" id="' + faceId + '" style="' + esc(bgToCSS(page.background)) + '">'
       + page.layers.map(layerToReaderHTML).join("")
-      + '<div class="page-number">' + pageNum + '</div></div>';
+      + (pageNum > 1 ? '<div class="page-number">' + (pageNum - 1) + '</div>' : '')
+      + '</div>';
   }
 
   /* Builds the .paper sheets from a flat pages[] array. Physical papers are
@@ -604,12 +639,64 @@ document.addEventListener('DOMContentLoaded', async function () {
   closeModalBtn.addEventListener('click', closeThumbnailView);
   thumbnailModal.addEventListener('click', function(e) { if (e.target === thumbnailModal) closeThumbnailView(); });
 
+  /* On mobile only one page is ever on screen, so "front = forward, back =
+     back" (the correct rule for a two-page desktop spread, where the front
+     face is always the right-hand page) doesn't apply - a .back page is
+     just as often the one currently showing, and tapping it would send the
+     reader backward instead of turning to the next page. Tap zones (left
+     half = previous, right half = next) match how every other single-page
+     mobile reader works instead. */
+  function navigateFromTapX(clientX){
+    const rect = bookContainer.getBoundingClientRect();
+    if ((clientX - rect.left) < rect.width / 2) mobilePrev(); else mobileNext();
+  }
+  function mobileTapHandler(e){
+    e.stopPropagation();
+    /* Real touch input is handled entirely by touchend below, which is
+       authoritative on mobile - a tap doesn't reliably produce a
+       follow-up "click" in every environment (this was the actual cause
+       of "clicking doesn't turn the page" - not every touch fires a
+       synthetic click at all), so this click path only matters for a
+       mouse in a narrow/mobile-emulated viewport, where no touch events
+       fire in the first place and lastTouchHandled is never set. */
+    if (lastTouchHandled){ lastTouchHandled = false; return; }
+    navigateFromTapX(e.clientX);
+  }
   papers.forEach(paper => {
     const front = paper.querySelector('.front');
     const back = paper.querySelector('.back');
-    if (front) front.addEventListener('click', (e) => { e.stopPropagation(); if (isMobileBook()) mobileNext(); else goNextPage(); });
-    if (back) back.addEventListener('click', (e) => { e.stopPropagation(); if (isMobileBook()) mobilePrev(); else goPrevPage(); });
+    if (front) front.addEventListener('click', (e) => { if (isMobileBook()) mobileTapHandler(e); else { e.stopPropagation(); goNextPage(); } });
+    if (back) back.addEventListener('click', (e) => { if (isMobileBook()) mobileTapHandler(e); else { e.stopPropagation(); goPrevPage(); } });
   });
+
+  /* Tap or swipe, handled directly from touch events rather than waiting
+     for a synthetic "click" - touchend fires reliably for both, and
+     deciding here (tap zone for a short touch, direction of travel for a
+     real swipe) covers page-turning for every touch device in one place.
+     Attached once on the book container rather than per-page, since the
+     touch still bubbles up through whichever page face is currently on
+     top. lastTouchHandled tells the click handler above to stand down
+     when a browser does also synthesize a click after this. */
+  let touchStartX = 0, touchStartY = 0, lastTouchHandled = false;
+  const SWIPE_THRESHOLD_PX = 40;
+  bookContainer.addEventListener('touchstart', (e) => {
+    if (!isMobileBook() || !e.touches[0]) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  bookContainer.addEventListener('touchend', (e) => {
+    if (!isMobileBook() || !e.changedTouches[0]) return;
+    const endX = e.changedTouches[0].clientX;
+    const dx = endX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    e.preventDefault();
+    lastTouchHandled = true;
+    if (Math.abs(dx) > SWIPE_THRESHOLD_PX && Math.abs(dx) > Math.abs(dy)){
+      if (dx < 0) mobileNext(); else mobilePrev();
+    } else {
+      navigateFromTapX(endX);
+    }
+  }, { passive: false });
 
   document.addEventListener('keydown', function(e) {
     if (thumbnailModal.classList.contains('show')) { if (e.key === 'Escape') closeThumbnailView(); return; }
