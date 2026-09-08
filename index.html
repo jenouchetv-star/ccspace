@@ -1927,7 +1927,7 @@ h1.admin-page-title{ font-size:1.7rem; }
 .admin-card--flat{ box-shadow:none; background:var(--admin-surface-2); }
 
 /* -- Book builder: page filmstrip + three-column layout -- */
-.story-builder{ display:grid; grid-template-columns:180px 1fr 260px; gap:16px; align-items:start; }
+.story-builder{ display:grid; grid-template-columns:200px 1fr 360px; gap:16px; align-items:start; }
 @media (max-width:960px){ .story-builder{ grid-template-columns:1fr; } }
 .story-builder__filmstrip{ padding:12px; }
 .story-builder__pagelist{ display:flex; flex-direction:column; gap:8px; max-height:70vh; overflow-y:auto; }
@@ -1944,7 +1944,7 @@ h1.admin-page-title{ font-size:1.7rem; }
 .story-builder__layer.is-locked.is-selected{ outline-color:#999; }
 .story-builder__resize-handle{ position:absolute; right:-6px; bottom:-6px; width:14px; height:14px; background:var(--admin-accent); border:2px solid #fff; border-radius:50%; cursor:nwse-resize; }
 .story-builder__layer:not(.is-selected) .story-builder__resize-handle{ display:none; }
-.story-builder__layerrow{ display:flex; align-items:center; gap:6px; padding:6px; border:1px solid var(--admin-border); border-radius:6px; margin-bottom:6px; cursor:grab; }
+.story-builder__layerrow{ display:block; padding:6px; border:1px solid var(--admin-border); border-radius:6px; margin-bottom:6px; cursor:grab; }
 .story-builder__layerrow.is-selected{ border-color:var(--admin-accent); }
 
 /* -- Chips + status badges (icon is the signal, never a border) -- */
@@ -5719,6 +5719,20 @@ function currentBuilderPage(){
   const sb = AppState.admin.storyBuilder;
   return sb.pages && sb.pages.find(p => p.id === sb.selectedPageId);
 }
+/* A gradient background is one "c1,c2,angle" string (see bgToCSS) so it
+   round-trips through a single field with no bespoke 3-part control - the
+   three color/color/angle pickers in the UI each just replace their own
+   slot in that string and write the whole thing back. */
+function updateGradientPart(idx, value){
+  const page = currentBuilderPage();
+  if (!page) return;
+  const parts = String(page.background.value || "#8C2620,#5E1712,160").split(",");
+  parts[idx] = value;
+  page.background.value = parts.join(",");
+  AppState.admin.storyBuilder.dirty = true;
+  const canvas = $("#story-canvas");
+  if (canvas) canvas.style.cssText += ";" + bgToCSS(page.background);
+}
 
 const TEXT_STYLE_CSS = {
   heading: "font-family:'Poppins',sans-serif;font-weight:700;font-size:clamp(20px,4.5vw,2.2em);line-height:1.18",
@@ -5749,6 +5763,25 @@ function layerToBuilderHTML(layer, selected){
     + ' data-act="story-build-select-layer" data-layer-id="' + E(layer.id) + '"'
     + ' src="' + E(layer.src) + '" alt="' + E(layer.alt) + '"'
     + ' style="position:absolute;' + (IMAGE_PLACEMENT_CSS[layer.placement] || IMAGE_PLACEMENT_CSS["inset-center"]) + '">';
+}
+/* A true small-scale rendering for the filmstrip thumbnails - not just a
+   background swatch. Text can't reuse TEXT_STYLE_CSS here: those sizes are
+   clamp()ed against viewport width (vw), so at thumbnail scale they'd
+   render at nearly full legible size and overflow a 180px-wide box. Fixed
+   small px sizes instead give an actually-miniature, proportionate result. */
+const THUMB_TEXT_STYLE_CSS = {
+  heading: "font-family:'Poppins',sans-serif;font-weight:700;font-size:7px;line-height:1.15",
+  body:    "font-weight:600;font-size:5px;line-height:1.25",
+  quote:   "font-weight:600;font-style:italic;font-size:5px;line-height:1.25",
+  tag:     "font-weight:700;font-size:4px;letter-spacing:.04em;text-transform:uppercase;color:#7A1F19;background:rgba(255,255,255,.6);padding:1px 3px;border-radius:4px;display:inline-block"
+};
+function layerToThumbnailHTML(layer){
+  if (layer.type === "text"){
+    return '<div style="position:absolute;overflow:hidden;left:' + layer.x + '%;top:' + layer.y + '%;width:' + layer.w + '%;height:' + layer.h + '%;'
+      + 'text-align:' + E(layer.align) + ';color:' + E(layer.color || "inherit") + ';' + (THUMB_TEXT_STYLE_CSS[layer.style] || THUMB_TEXT_STYLE_CSS.body) + '">'
+      + E(layer.content) + '</div>';
+  }
+  return '<img src="' + E(layer.src) + '" alt="" style="position:absolute;' + (IMAGE_PLACEMENT_CSS[layer.placement] || IMAGE_PLACEMENT_CSS["inset-center"]) + '">';
 }
 
 const PUBLIC_NAV = [
@@ -12442,8 +12475,8 @@ function viewAdmin(section, id, sub){
 
 function adminStoryBuilder(id){
   const story = db.find("stories", id);
-  if (!story) return '<section class="section"><div class="shell"><div class="empty">'
-    + '<h2>Story not found</h2><a class="admin-btn admin-btn--ghost" href="#/admin/stories">Back to Stories</a></div></div></section>';
+  if (!story) return '<div class="empty">'
+    + '<h2>Story not found</h2><a class="admin-btn admin-btn--ghost" href="#/admin/stories">Back to Stories</a></div>';
 
   const sb = AppState.admin.storyBuilder;
   if (sb.storyId !== id){
@@ -12456,8 +12489,7 @@ function adminStoryBuilder(id){
 
   const page = sb.pages.find(p => p.id === sb.selectedPageId) || sb.pages[0];
 
-  return '<section class="section admin-scope" style="font-family:var(--admin-font-body);color:var(--admin-ink)">'
-    + '<div class="shell">'
+  return '<div class="admin-scope" style="font-family:var(--admin-font-body);color:var(--admin-ink)">'
     + '<div class="admin-topbar" style="margin-bottom:16px">'
     + '<div><span class="admin-eyebrow">Book builder</span>'
     + '<h1 class="admin-section-title" style="margin-top:2px">' + E(story.title || "Untitled story") + '</h1></div>'
@@ -12470,7 +12502,7 @@ function adminStoryBuilder(id){
     + storyBuilderFilmstrip(sb)
     + storyBuilderCanvas(page)
     + storyBuilderLayersPanel(page)
-    + '</div></div></section>';
+    + '</div></div>';
 }
 
 function storyBuilderFilmstrip(sb){
@@ -12481,7 +12513,9 @@ function storyBuilderFilmstrip(sb){
         const on = p.id === sb.selectedPageId;
         return '<div class="story-builder__pagethumb' + (on ? ' is-selected' : '') + '" draggable="true"'
           + ' data-act="story-build-select-page" data-page-id="' + E(p.id) + '">'
-          + '<div class="story-builder__pagethumb-preview" style="' + E(bgToCSS(p.background)) + '"></div>'
+          + '<div class="story-builder__pagethumb-preview" style="' + E(bgToCSS(p.background)) + '">'
+          + p.layers.map(layerToThumbnailHTML).join("")
+          + '</div>'
           + '<div class="story-builder__pagethumb-num">' + (i + 1) + '</div>'
           + '<button type="button" class="admin-btn admin-btn--icon admin-btn--ghost story-builder__pagethumb-del" data-act="story-build-delete-page" data-page-id="' + E(p.id) + '" aria-label="Delete page">' + ic("trash-2") + '</button>'
           + '</div>';
@@ -12493,24 +12527,60 @@ function storyBuilderFilmstrip(sb){
     + '</div></div>';
 }
 
+/* A safe hex fallback for <input type="color">, which rejects anything
+   that isn't exactly #rrggbb - unlike the free-text field this replaces,
+   which happily held a blank/partial/invalid value mid-edit. */
+function safeHex(v, fallback){ return /^#[0-9a-fA-F]{6}$/.test(v || "") ? v : fallback; }
+
+function storyBuilderBgControls(page){
+  if (page.background.type === "color"){
+    const hex = safeHex(page.background.value, "#ffffff");
+    return '<input type="color" class="admin-input" style="width:44px;height:38px;padding:2px;cursor:pointer" value="' + E(hex) + '" data-act="story-build-bg-color-pick" title="Background color">'
+      + '<span class="tiny mute" id="story-bg-hex-label" style="align-self:center">' + E(hex) + '</span>';
+  }
+  if (page.background.type === "gradient"){
+    const parts = String(page.background.value || "#8C2620,#5E1712,160").split(",");
+    const c1 = safeHex(parts[0], "#8C2620"), c2 = safeHex(parts[1], "#5E1712"), angle = parts[2] || "160";
+    return '<input type="color" class="admin-input" style="width:44px;height:38px;padding:2px;cursor:pointer" value="' + E(c1) + '" data-act="story-build-bg-grad-c1" title="First color">'
+      + '<input type="color" class="admin-input" style="width:44px;height:38px;padding:2px;cursor:pointer" value="' + E(c2) + '" data-act="story-build-bg-grad-c2" title="Second color">'
+      + '<input type="number" class="admin-input" style="width:70px" min="0" max="360" value="' + E(angle) + '" data-act="story-build-bg-grad-angle" title="Angle in degrees">'
+      + '<span class="tiny mute" style="align-self:center">degrees</span>';
+  }
+  return '<button type="button" class="admin-btn admin-btn--ghost" data-act="story-build-bg-pick">' + ic("upload") + ' Choose image/GIF</button>'
+    + (page.background.value ? '<span class="tiny mute">' + E(page.background.value.split("/").pop()) + '</span>' : "");
+}
+
 function storyBuilderCanvas(page){
   return '<div class="story-builder__canvas-wrap admin-card">'
     + '<div class="row" style="gap:10px;margin-bottom:12px;flex-wrap:wrap">'
     + '<select class="admin-select" data-act="story-build-bg-type" style="width:auto">'
     + ["color","gradient","image","gif"].map(t => '<option value="' + t + '"' + (page.background.type === t ? " selected" : "") + '>' + titleCase(t) + '</option>').join("")
     + '</select>'
-    + (page.background.type === "color" || page.background.type === "gradient"
-        ? '<input class="admin-input" type="text" style="width:220px" placeholder="'
-          + (page.background.type === "color" ? "#RRGGBB" : "#c1,#c2,angle") + '"'
-          + ' value="' + E(page.background.value) + '" data-act="story-build-bg-value">'
-        : '<button type="button" class="admin-btn admin-btn--ghost" data-act="story-build-bg-pick">' + ic("upload") + ' Choose image/GIF</button>'
-          + (page.background.value ? '<span class="tiny mute">' + E(page.background.value.split("/").pop()) + '</span>' : ""))
+    + storyBuilderBgControls(page)
     + '</div>'
     + '<div class="story-builder__canvas" id="story-canvas" style="' + E(bgToCSS(page.background)) + '">'
     + page.layers.map(ly => layerToBuilderHTML(ly, ly.id === AppState.admin.storyBuilder.selectedLayerId)).join("")
     + '</div>'
     + '<button type="button" class="admin-btn admin-btn--ghost" style="margin-top:10px" data-act="story-build-add-text">' + ic("plus") + ' Add text</button>'
     + '<button type="button" class="admin-btn admin-btn--ghost" style="margin-top:10px" data-act="story-build-add-image">' + ic("image") + ' Add image</button>'
+    + storyBuilderTextEditor(page)
+    + '</div>';
+}
+/* Double-clicking a text layer on the canvas also opens a native
+   window.prompt() (see mountStoryBuilderCanvasDrag) - kept as a quick
+   path for anyone it works for, but it's not reliable everywhere
+   (embedded views and some browsers silently suppress prompt()/confirm()
+   dialogs, which looked from the outside like "editing does nothing").
+   This field is the real, always-available way to edit a text layer's
+   content, wired through the "change" event (not "input") so a full
+   rerender doesn't steal focus mid-keystroke - the canvas updates once
+   the field loses focus. */
+function storyBuilderTextEditor(page){
+  const sel = page.layers.find(l => l.id === AppState.admin.storyBuilder.selectedLayerId && l.type === "text");
+  if (!sel) return "";
+  return '<div class="admin-field" style="margin-top:14px">'
+    + '<label for="story-edit-text">Edit selected text</label>'
+    + '<textarea class="admin-textarea" id="story-edit-text" rows="4" data-act="story-build-edit-text" data-layer-id="' + E(sel.id) + '">' + E(sel.content) + '</textarea>'
     + '</div>';
 }
 function storyBuilderLayersPanel(page){
@@ -12525,17 +12595,24 @@ function storyBuilderLayersPanel(page){
     const isSel = ly.id === sel;
     return '<div class="story-builder__layerrow' + (isSel ? " is-selected" : "") + '" draggable="true"'
       + ' data-act="story-build-select-layer" data-layer-id="' + E(ly.id) + '">'
+      + '<div class="row" style="gap:6px;align-items:center">'
       + '<button type="button" class="admin-btn admin-btn--icon admin-btn--ghost" data-act="story-build-toggle-lock" data-layer-id="' + E(ly.id) + '" aria-label="' + (ly.locked ? "Unlock" : "Lock") + '">'
       + ic(ly.locked ? "lock" : "lock-open") + '</button>'
-      + '<span class="tiny" style="flex:1">' + (ly.type === "text" ? E(ly.content).slice(0, 24) : "Image") + '</span>'
       + (ly.type === "text"
-          ? '<select class="admin-select" style="width:auto" data-act="story-build-set-style" data-layer-id="' + E(ly.id) + '">'
+          ? '<span title="Text layer" style="flex-shrink:0;display:flex;color:var(--admin-faint)">' + ic("type","i") + '</span>'
+          : (ly.src
+              ? '<img src="' + E(ly.src) + '" alt="" style="width:28px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0">'
+              : '<span title="Image layer" style="flex-shrink:0;display:flex;color:var(--admin-faint)">' + ic("image","i") + '</span>'))
+      + '<span class="tiny" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ly.type === "text" ? E(ly.content).slice(0, 24) : "Image") + '</span>'
+      + '<button type="button" class="admin-btn admin-btn--icon admin-btn--ghost" data-act="story-build-delete-layer" data-layer-id="' + E(ly.id) + '" aria-label="Delete layer">' + ic("trash-2") + '</button>'
+      + '</div>'
+      + (ly.type === "text"
+          ? '<select class="admin-select" style="width:100%;margin-top:6px" data-act="story-build-set-style" data-layer-id="' + E(ly.id) + '">'
             + ["heading","body","quote","tag"].map(s => '<option value="' + s + '"' + (ly.style === s ? " selected" : "") + '>' + titleCase(s) + '</option>').join("")
             + '</select>'
-          : '<select class="admin-select" style="width:auto" data-act="story-build-set-placement" data-layer-id="' + E(ly.id) + '">'
+          : '<select class="admin-select" style="width:100%;margin-top:6px" data-act="story-build-set-placement" data-layer-id="' + E(ly.id) + '">'
             + ["full-bg","top-half","bottom-half","inset-left","inset-right","inset-center"].map(pl => '<option value="' + pl + '"' + (ly.placement === pl ? " selected" : "") + '>' + titleCase(pl.replace("-"," ")) + '</option>').join("")
             + '</select>')
-      + '<button type="button" class="admin-btn admin-btn--icon admin-btn--ghost" data-act="story-build-delete-layer" data-layer-id="' + E(ly.id) + '" aria-label="Delete layer">' + ic("trash-2") + '</button>'
       + '</div>';
   }).join("");
   return '<div class="story-builder__layers admin-card"><p class="admin-eyebrow" style="margin:0 0 10px">Layers</p>' + rows + '</div>';
@@ -15769,14 +15846,19 @@ const ACTIONS = {
     AppState.admin.storyBuilder.dirty = true;
     rerender();
   },
-  "story-build-bg-value": (el) => {
+  "story-build-bg-color-pick": (el) => {
     const page = currentBuilderPage();
     if (!page) return;
     page.background.value = el.value;
     AppState.admin.storyBuilder.dirty = true;
     const canvas = $("#story-canvas");
     if (canvas) canvas.style.cssText += ";" + bgToCSS(page.background);
+    const label = $("#story-bg-hex-label");
+    if (label) label.textContent = el.value;
   },
+  "story-build-bg-grad-c1": (el) => { updateGradientPart(0, el.value); },
+  "story-build-bg-grad-c2": (el) => { updateGradientPart(1, el.value); },
+  "story-build-bg-grad-angle": (el) => { updateGradientPart(2, el.value); },
   "story-build-bg-pick": () => {
     const page = currentBuilderPage();
     if (!page) return;
@@ -15797,6 +15879,14 @@ const ACTIONS = {
   "story-build-select-layer": (el, ev) => {
     ev.stopPropagation();
     AppState.admin.storyBuilder.selectedLayerId = el.getAttribute("data-layer-id");
+    rerender();
+  },
+  "story-build-edit-text": (el) => {
+    const page = currentBuilderPage();
+    const ly = page && page.layers.find(l => l.id === el.getAttribute("data-layer-id"));
+    if (!ly) return;
+    ly.content = el.value;
+    AppState.admin.storyBuilder.dirty = true;
     rerender();
   },
   "story-build-add-text": () => {
@@ -17569,12 +17659,32 @@ document.addEventListener("change", (ev) => {
     ACTIONS["story-build-bg-type"](el);
     return;
   }
+  if (el.getAttribute && el.getAttribute("data-act") === "story-build-bg-color-pick"){
+    ACTIONS["story-build-bg-color-pick"](el);
+    return;
+  }
+  if (el.getAttribute && el.getAttribute("data-act") === "story-build-bg-grad-c1"){
+    ACTIONS["story-build-bg-grad-c1"](el);
+    return;
+  }
+  if (el.getAttribute && el.getAttribute("data-act") === "story-build-bg-grad-c2"){
+    ACTIONS["story-build-bg-grad-c2"](el);
+    return;
+  }
+  if (el.getAttribute && el.getAttribute("data-act") === "story-build-bg-grad-angle"){
+    ACTIONS["story-build-bg-grad-angle"](el);
+    return;
+  }
   if (el.getAttribute && el.getAttribute("data-act") === "story-build-set-style"){
     ACTIONS["story-build-set-style"](el, ev);
     return;
   }
   if (el.getAttribute && el.getAttribute("data-act") === "story-build-set-placement"){
     ACTIONS["story-build-set-placement"](el, ev);
+    return;
+  }
+  if (el.getAttribute && el.getAttribute("data-act") === "story-build-edit-text"){
+    ACTIONS["story-build-edit-text"](el);
     return;
   }
   if (el.getAttribute && el.getAttribute("data-act") === "launch-toggle-complete"){
