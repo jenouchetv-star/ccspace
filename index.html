@@ -2783,10 +2783,21 @@ function renderLockScreen(){
    just a path prefix inside it ("games/", "media/", "printables/"), not a
    separate bucket per file type. */
 const UPLOAD_BUCKET = "uploads";
+/* A 30MB+ "looping" GIF used as a full-page background is exactly what
+   blew through this project's Supabase egress quota in a single day
+   (see the "why am I over my usage limit" investigation) - this rejects
+   the file client-side, before it's ever sent anywhere, rather than
+   silently letting the same thing happen again on the next upload. */
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 /** Uploads a File to Supabase Storage under folder/, returning its public
     URL. Filenames are timestamp-prefixed so two uploads never collide. */
 async function uploadToStorage(file, folder){
+  if (file.size > MAX_UPLOAD_BYTES){
+    throw new Error("That file is " + (file.size / (1024*1024)).toFixed(1) + " MB - please keep uploads "
+      + "under " + (MAX_UPLOAD_BYTES / (1024*1024)) + " MB. Try a shorter clip, a smaller export, "
+      + "or converting an animated GIF to a compressed MP4.");
+  }
   const safeName = file.name.replace(/[^\w.-]/g, "-");
   const path = folder.replace(/\/$/, "") + "/" + Date.now() + "-" + safeName;
   const { error } = await sb.storage.from(UPLOAD_BUCKET).upload(path, file, {
@@ -5618,7 +5629,7 @@ const AppState = {
   storyFilter: { character:"", q:"" },
   storyFilterDraft: null,
   watchPage: 1,
-  admin: { q:"", status:"", invalid:false, sort:"updatedAt", dir:"desc", openGroup:null, lastSection:null, selected:{ col:null, ids:[] }, mediaTab:"manage", mediaFolder:"", quickUpdate:{ log:[], panelOpen:false, selectedRegion:null },
+  admin: { q:"", status:"", invalid:false, sort:"updatedAt", dir:"desc", openGroup:null, lastSection:null, selected:{ col:null, ids:[] }, mediaTab:"manage", mediaFolder:"", mediaSortBySize:false, quickUpdate:{ log:[], panelOpen:false, selectedRegion:null },
     newsletterCompose:{ editingId:null, templateId:null, mode:"now", scheduledAt:"",
       subject:"", previewText:"", heroLabel:"", headline:"", heroImage:{src:"",alt:""}, intro:"",
       details:{}, ctaLabel:"", ctaUrl:"", secondaryLabel:"", secondaryText:"", footerNote:"" },
@@ -5922,6 +5933,21 @@ const ADMIN_NAV = [
 /* Change this when the site is deployed into a subfolder. */
 const SITE_BASE = "/";
 
+/* Supabase's invite/recovery emails redirect to a URL like
+   "...#/admin/accept-invite#access_token=eyJ...", because GoTrue
+   appends its own session fragment with a second literal "#" rather
+   than joining it onto an existing one with "&". A real app route never
+   contains a literal "#" itself, so anything from a second "#" onward
+   here is that Supabase fragment, not a route - cut it off before
+   parsing, or the whole trailing token ends up glued onto the last path
+   segment and nothing matches (this is exactly what "Unknown admin
+   section" on the accept-invite link was). supabase-js reads the
+   untouched window.location.hash directly for its own session
+   detection, so trimming this local copy doesn't affect that. */
+function stripAuthFragment(route){
+  const i = route.indexOf("#");
+  return i >= 0 ? route.slice(0, i) : route;
+}
 const Router = {
   /* Clean paths need a server that can serve index.html for unknown
      paths. Off the disk there is none, so hash routing takes over. */
@@ -5934,10 +5960,10 @@ const Router = {
       if (path.indexOf(SITE_BASE) === 0) path = path.slice(SITE_BASE.length);
       path = path.replace(/^\/+/, "").replace(/index\.html$/, "");
       /* an old hash link still lands in the right place */
-      if (!path && location.hash) path = location.hash.replace(/^#\/?/, "");
+      if (!path && location.hash) path = stripAuthFragment(location.hash.replace(/^#\/?/, ""));
       return path + (location.search || "");
     }
-    return location.hash.replace(/^#\/?/, "");
+    return stripAuthFragment(location.hash.replace(/^#\/?/, ""));
   },
 
   /** Turn an authored "#/about/vision" into the right link for this mode. */
@@ -9492,7 +9518,7 @@ const BLANKS = {
   products:   () => ({ title:"", slug:"", format:"PDF", pages:0, priceUSD:0, blurb:"", includes:[], ageRange:"5-10", access:"paid", file:{label:"",path:""}, image:{src:"",alt:""}, status:"draft", featured:false }),
   amazonProducts: () => ({ title:"", category:"materials", why:"", forActivities:[], priceBand:"$", url:"https://www.amazon.com/s?k=", linkType:"search-placeholder", cover:"", status:"draft", featured:false, ours:false }),
   collections:() => ({ title:"", slug:"", blurb:"", icon:"layers", items:[], status:"draft", featured:false }),
-  mediaAssets:() => ({ path:"", folder:"", alt:"", usage:"", kind:"illustration", status:"draft" }),
+  mediaAssets:() => ({ path:"", folder:"", alt:"", usage:"", kind:"illustration", status:"draft", sizeBytes:0 }),
   issues:     () => ({ title:"", area:"platform", severity:"normal", state:"open", detail:"", status:"published" })
 };
 
@@ -9970,6 +9996,15 @@ function buildDbPatch(existing, leaves){
   return patch;
 }
 
+/** A static assets/... file has no known size (no upload record to read
+    it from) - shown as "-" rather than a misleading 0 B. */
+function formatBytes(n){
+  if (!n) return "—";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / (1024 * 1024)).toFixed(1) + " MB";
+}
+
 /* ============================================================
    25. ADMIN LISTS
    ============================================================ */
@@ -10071,7 +10106,8 @@ const LIST_COLS = {
     { key:"thumb", label:"", html:true, render:r => thumbCell(r.path) },
     { key:"path", label:"File", main:true },
     { key:"kind", label:"Kind", render:r => titleCase(r.kind) },
-    { key:"usage", label:"Used for" }
+    { key:"usage", label:"Used for" },
+    { key:"sizeBytes", label:"Size", render:r => formatBytes(r.sizeBytes) }
   ]
 };
 
@@ -12108,7 +12144,8 @@ function mediaCard(m){
         ? '<video src="' + E(m.path) + '" controls style="width:100%;aspect-ratio:16/10;object-fit:cover;border-bottom:1px solid var(--admin-border)"></video>'
         : '<img src="' + E(m.path) + '" alt="' + E(m.alt) + '" style="width:100%;aspect-ratio:16/10;object-fit:cover;border-bottom:1px solid var(--admin-border)" loading="lazy">')
     + '<div style="padding:12px"><p style="font-size:.82rem;margin:0;word-break:break-all"><b>' + E(m.path) + '</b></p>'
-    + '<p class="admin-meta" style="margin:6px 0 0">' + E(m.alt) + '</p></div></div>';
+    + '<p class="admin-meta" style="margin:6px 0 0">' + E(m.alt) + '</p>'
+    + '<p class="admin-meta" style="margin:4px 0 0;font-family:monospace">' + E(formatBytes(m.sizeBytes)) + '</p></div></div>';
 }
 
 function adminMedia(){
@@ -12126,19 +12163,26 @@ function adminMedia(){
 
   if (tab === "reference"){
     const folder = AppState.admin.mediaFolder || "";
+    const byLargest = !!AppState.admin.mediaSortBySize;
     const folders = Array.from(new Set(items.map(mediaFolderOf))).sort();
-    const shown = folder ? items.filter(m => mediaFolderOf(m) === folder) : items;
+    let shown = folder ? items.filter(m => mediaFolderOf(m) === folder) : items;
+    if (byLargest) shown = shown.slice().sort((a,b) => (b.sizeBytes||0) - (a.sizeBytes||0));
     const byFolder = {};
     shown.forEach(m => { const f = mediaFolderOf(m); (byFolder[f] = byFolder[f] || []).push(m); });
 
     return tabs
       + '<p class="admin-meta" style="margin:0 0 14px">Uploaded files live in Supabase Storage; anything else here is just a path into the <code>assets/</code> folder next to this page. Set a record’s Folder field to group it here.</p>'
       + (missingAlt ? '<div class="admin-callout" style="margin-bottom:18px">' + ic("triangle-alert") + '<span>' + plural(missingAlt,"reference") + ' still needs alt text.</span></div>' : "")
-      + '<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:20px">'
+      + '<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:20px;align-items:center">'
       + '<button class="admin-filter-chip" data-act="media-folder-filter" data-value="" aria-pressed="' + (folder === "" ? "true" : "false") + '">All (' + items.length + ')</button>'
       + folders.map(f => '<button class="admin-filter-chip" data-act="media-folder-filter" data-value="' + E(f) + '" aria-pressed="' + (folder === f ? "true" : "false") + '">' + E(f) + ' (' + items.filter(m => mediaFolderOf(m) === f).length + ')</button>').join("")
+      + '<button class="admin-filter-chip" data-act="media-sort-size" aria-pressed="' + byLargest + '" style="margin-left:auto">' + ic("arrow-down-wide-narrow","i") + ' Largest first</button>'
       + '</div>'
-      + (folder
+      + (folder || byLargest
+          /* "Largest first" needs one flat, truly-global ranking - sorting
+             only within each folder's own little group would still hide
+             the single biggest offenders behind whichever folder happens
+             to sort first. */
           ? '<div class="grid g-3" style="gap:14px">' + shown.map(mediaCard).join("") + '</div>'
           : Object.keys(byFolder).sort().map(f => '<div style="margin-bottom:26px">'
               + '<h3 class="admin-section-title" style="font-size:.95rem;margin-bottom:12px">' + E(f) + '</h3>'
@@ -16873,6 +16917,7 @@ const ACTIONS = {
   "admin-select-clear": () => { AppState.admin.selected = { col: null, ids: [] }; rerender(); },
   "media-tab": (el) => { AppState.admin.mediaTab = el.getAttribute("data-value"); rerender(); },
   "media-folder-filter": (el) => { AppState.admin.mediaFolder = el.getAttribute("data-value"); rerender(); },
+  "media-sort-size": () => { AppState.admin.mediaSortBySize = !AppState.admin.mediaSortBySize; rerender(); },
   "media-upload": () => {
     const input = document.createElement("input");
     input.type = "file";
@@ -16886,7 +16931,7 @@ const ACTIONS = {
         const rec = await db.add("mediaAssets", {
           path: url, alt: "", usage: "",
           kind: isVideo ? "video" : "illustration",
-          status: "draft"
+          status: "draft", sizeBytes: file.size
         });
         toast("Uploaded. Add alt text and where it's used below.");
         rerender();

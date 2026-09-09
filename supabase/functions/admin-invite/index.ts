@@ -87,11 +87,22 @@ Deno.serve(async (req) => {
   // Step 4: the actual invite. The database trigger (handle_new_user, see
   // migration.sql) creates the matching profiles row from this metadata -
   // this function never inserts into profiles directly.
+  //
+  // redirectTo is a fixed constant, not built from the request's Origin
+  // header - that header isn't reliably present on every call path (this
+  // is exactly what broke the first real invite: the link Supabase sent
+  // out had redirect_to=<bare Site URL> with no /#/admin/accept-invite
+  // suffix at all, because the header this used to build that path came
+  // back empty). SITE_URL must also be listed in Supabase Auth's
+  // Redirect URLs allowlist (Studio -> Authentication -> URL
+  // Configuration) - Supabase silently falls back to the bare Site URL,
+  // dropping the path, for any redirectTo that isn't on that list.
+  const SITE_URL = "https://www.chikescreativespace.com";
   const { data: inviteData, error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(
     email,
     {
       data: { name },
-      redirectTo: `${req.headers.get("origin") ?? ""}/#/admin/accept-invite`,
+      redirectTo: `${SITE_URL}/#/admin/accept-invite`,
     }
   );
 

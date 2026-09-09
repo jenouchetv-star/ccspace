@@ -9,7 +9,7 @@
    the whole update mechanism: a new version number means a new cache name,
    which means install() re-fetches everything and activate() deletes the
    old caches, so nobody is left running stale HTML against a new build. */
-const CACHE_VERSION = "ccs-v1";
+const CACHE_VERSION = "ccs-v2";
 const SHELL_CACHE = CACHE_VERSION + "-shell";
 const RUNTIME_CACHE = CACHE_VERSION + "-runtime";
 
