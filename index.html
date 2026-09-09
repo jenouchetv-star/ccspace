@@ -2550,6 +2550,7 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 }
 .callout--warn{ border-left-color:var(--berry); background:rgba(216,68,58,.11); }
 .callout--info{ border-left-color:var(--cyan); background:rgba(23,179,206,.13); }
+.callout--good{ border-left-color:var(--leaf); background:rgba(58,122,55,.12); }
 
 .pill-count{
   display:inline-grid; place-items:center; min-width:22px; height:22px; padding:0 7px;
@@ -5634,6 +5635,12 @@ const AppState = {
   storyFilter: { character:"", q:"" },
   storyFilterDraft: null,
   watchPage: 1,
+  /* Which contact forms just sent successfully, in this page view - each
+     form renders an inline "Message sent" panel in place of itself while
+     its flag is set, rather than relying on the toast alone (which is
+     small, timed, and not anchored to the form the visitor was just
+     looking at). Reset to false to show the form again. */
+  contactFormSent: { ticket:false, business:false },
   admin: { q:"", status:"", invalid:false, sort:"updatedAt", dir:"desc", openGroup:null, lastSection:null, selected:{ col:null, ids:[] }, mediaTab:"manage", mediaFolder:"", mediaSortBySize:false,
     storageUsage:{ status:"idle", totalBytes:0, fileCount:0, largest:[] }, quickUpdate:{ log:[], panelOpen:false, selectedRegion:null },
     newsletterCompose:{ editingId:null, templateId:null, mode:"now", scheduledAt:"",
@@ -8881,6 +8888,14 @@ function viewGrownUps(sub){
 }
 
 function contactForm(){
+  if (AppState.contactFormSent.ticket){
+    return '<div class="panel"><div class="callout callout--good" style="text-align:center">'
+      + '<div style="display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:var(--leaf);color:#fff;margin:0 auto 12px">' + ic("check", "i") + '</div>'
+      + '<h3 style="margin:0 0 6px">Message sent!</h3>'
+      + '<p class="mute" style="margin:0 0 18px">Thanks for reaching out - we’ll reply to the email you gave us.</p>'
+      + '<button type="button" class="btn btn--ghost" data-act="contact-form-reset">' + ic("arrow-left","i") + ' Send another message</button>'
+      + '</div></div>';
+  }
   CONTACT_FORM_OPENED = Date.now();
   return '<form class="panel" data-act="ticket-submit">'
     + '<div class="trap" aria-hidden="true">'
@@ -8905,6 +8920,14 @@ function contactForm(){
 }
 
 function businessContactForm(){
+  if (AppState.contactFormSent.business){
+    return '<div class="panel"><div class="callout callout--good" style="text-align:center">'
+      + '<div style="display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:var(--leaf);color:#fff;margin:0 auto 12px">' + ic("check", "i") + '</div>'
+      + '<h3 style="margin:0 0 6px">Inquiry sent!</h3>'
+      + '<p class="mute" style="margin:0 0 18px">Thanks for reaching out - we’ll reply to the email you gave us.</p>'
+      + '<button type="button" class="btn btn--ghost" data-act="business-form-reset">' + ic("arrow-left","i") + ' Send another inquiry</button>'
+      + '</div></div>';
+  }
   BUSINESS_FORM_OPENED = Date.now();
   return '<form class="panel" data-act="business-ticket-submit">'
     + '<div class="trap" aria-hidden="true">'
@@ -16096,6 +16119,9 @@ const ACTIONS = {
     if (hash) navigate(hash);
   },
 
+  "contact-form-reset": () => { AppState.contactFormSent.ticket = false; rerender(); },
+  "business-form-reset": () => { AppState.contactFormSent.business = false; rerender(); },
+
   "story-build-pages": (el) => {
     const id = el.getAttribute("data-id");
     closeModal();
@@ -17832,8 +17858,7 @@ async function handleSubmit(form, act){
         priority: "normal", state: "open", at: nowISO(), status:"published"
       });
     } catch(_e){ return; }
-    form.reset();
-    toast("Sent to the business inbox");
+    AppState.contactFormSent.business = true;
     rerender();
     return;
   }
@@ -17854,8 +17879,7 @@ async function handleSubmit(form, act){
         priority: "normal", state: "open", at: nowISO(), status:"published"
       });
     } catch(_e){ return; }
-    form.reset();
-    toast("Added to the support queue");
+    AppState.contactFormSent.ticket = true;
     rerender();
     return;
   }
