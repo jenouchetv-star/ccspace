@@ -2636,6 +2636,11 @@ const DB_VERSION = 1;
 const SUPABASE_URL = "https://wdctkfhwygwwulipwnys.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+/* For the dashboard's "check exact egress" link only - Supabase doesn't
+   expose billing-quota numbers (egress used vs. plan limit) through any
+   documented, stable API, so that one number can only ever be checked on
+   Supabase's own usage page, not computed here. */
+const SUPABASE_ORG_SLUG = "rzrlumtywgfiqafdwphu";
 
 /* Real auth state, replacing the old code-based AdminGate. `session` is
    Supabase's own auth session; `profile` is that user's row in `profiles`
@@ -5629,7 +5634,8 @@ const AppState = {
   storyFilter: { character:"", q:"" },
   storyFilterDraft: null,
   watchPage: 1,
-  admin: { q:"", status:"", invalid:false, sort:"updatedAt", dir:"desc", openGroup:null, lastSection:null, selected:{ col:null, ids:[] }, mediaTab:"manage", mediaFolder:"", mediaSortBySize:false, quickUpdate:{ log:[], panelOpen:false, selectedRegion:null },
+  admin: { q:"", status:"", invalid:false, sort:"updatedAt", dir:"desc", openGroup:null, lastSection:null, selected:{ col:null, ids:[] }, mediaTab:"manage", mediaFolder:"", mediaSortBySize:false,
+    storageUsage:{ status:"idle", totalBytes:0, fileCount:0, largest:[] }, quickUpdate:{ log:[], panelOpen:false, selectedRegion:null },
     newsletterCompose:{ editingId:null, templateId:null, mode:"now", scheduledAt:"",
       subject:"", previewText:"", heroLabel:"", headline:"", heroImage:{src:"",alt:""}, intro:"",
       details:{}, ctaLabel:"", ctaUrl:"", secondaryLabel:"", secondaryText:"", footerNote:"" },
@@ -10478,6 +10484,69 @@ async function runContentHealthCheck(){
   return { altGaps: altGaps.length, fileGaps: fileGaps.length };
 }
 
+/* Storage usage, for the dashboard's early-warning card. This reads real
+   numbers straight from the Storage API (sb.storage...list(), the same
+   client already used for uploads) rather than Supabase's billing/usage
+   system - there's no documented, stable API for the exact egress-vs-quota
+   percentage that actually caused the last overage, so this instead
+   surfaces the leading indicator that's actually knowable: how much is
+   sitting in Storage right now, and which files are the biggest - since a
+   large file is exactly what turns into repeat egress every time a page
+   loads it. */
+const STORAGE_QUOTA_BYTES = 1024 * 1024 * 1024; /* 1 GB, Supabase Free plan */
+async function loadStorageUsage(){
+  AppState.admin.storageUsage.status = "loading";
+  rerender();
+  try {
+    const { data, error } = await sb.storage.from(UPLOAD_BUCKET).list("media-library", {
+      limit: 1000, sortBy: { column: "name", order: "asc" }
+    });
+    if (error) throw error;
+    const files = (data || []).filter(f => f.id); /* list() also returns folder placeholders with no id */
+    const totalBytes = files.reduce((sum, f) => sum + (f.metadata && f.metadata.size || 0), 0);
+    const largest = files.map(f => ({ name: f.name, size: (f.metadata && f.metadata.size) || 0 }))
+      .sort((a,b) => b.size - a.size).slice(0, 5);
+    AppState.admin.storageUsage = { status:"loaded", totalBytes:totalBytes, fileCount:files.length, largest:largest };
+  } catch(err){
+    AppState.admin.storageUsage = { status:"error", totalBytes:0, fileCount:0, largest:[], error: err.message };
+  }
+  rerender();
+}
+function storageUsageCardHTML(){
+  const su = AppState.admin.storageUsage;
+  if (su.status === "idle") loadStorageUsage();
+  const ratio = su.totalBytes / STORAGE_QUOTA_BYTES;
+  const level = ratio >= 0.9 ? "bad" : ratio >= 0.7 ? "warn" : "good";
+  const pct = Math.min(100, ratio * 100);
+  return '<div class="admin-card" style="margin-bottom:20px">'
+    + '<div class="row-between" style="flex-wrap:wrap;gap:10px">'
+    + '<div class="row" style="gap:10px;align-items:center">'
+    + '<span class="admin-badge' + (su.status === "loaded" ? " admin-badge--" + level : "") + '">' + ic(su.status === "loaded" && level !== "good" ? "triangle-alert" : "database") + '</span>'
+    + '<h3 class="admin-section-title" style="font-size:1rem">Storage usage</h3></div>'
+    + '<button class="admin-btn admin-btn--sm admin-btn--ghost" data-act="refresh-storage-usage">' + ic("refresh-cw") + ' Refresh</button>'
+    + '</div>'
+    + (su.status === "loading" || su.status === "idle" ? '<p class="admin-meta" style="margin-top:12px">Checking Supabase Storage...</p>'
+      : su.status === "error" ? '<p class="admin-meta" style="margin-top:12px">Could not check storage usage: ' + E(su.error || "unknown error") + '</p>'
+      : '<div style="margin-top:12px">'
+        + '<div class="row-between" style="margin-bottom:5px">'
+        + '<span style="font-size:.82rem;font-weight:600">' + E(formatBytes(su.totalBytes)) + ' of 1 GB</span>'
+        + '<span class="t-mono" style="color:var(--admin-mute)">' + pct.toFixed(1) + '%</span></div>'
+        + '<div class="admin-progress-track"><div class="admin-progress-fill" style="width:' + pct.toFixed(1) + '%;background:' + (level === "good" ? "var(--admin-good)" : level === "warn" ? "var(--admin-warn)" : "var(--admin-bad)") + '"></div></div>'
+        + '<p class="admin-meta" style="margin-top:10px">' + E(plural(su.fileCount, "file")) + ' in your media library. '
+        + 'Supabase doesn’t expose exact monthly egress through any API - check the real number on your '
+        + '<a href="https://supabase.com/dashboard/org/' + SUPABASE_ORG_SLUG + '/usage" target="_blank" rel="noopener">Supabase usage page</a>.</p>'
+        + (su.largest.length
+            ? '<div class="stack" style="gap:6px;margin-top:12px">'
+              + '<p class="admin-meta" style="margin:0;font-weight:600">Largest files</p>'
+              + su.largest.map(f => '<div class="row-between" style="font-size:.82rem;gap:10px">'
+                  + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(f.name) + '</span>'
+                  + '<span class="t-mono" style="flex-shrink:0;color:var(--admin-mute)">' + E(formatBytes(f.size)) + '</span></div>').join("")
+              + '</div>'
+            : "")
+        + '</div>')
+    + '</div>';
+}
+
 function adminDashboard(){
   const d = db.get();
   const total     = countAll(() => true);
@@ -10542,6 +10611,8 @@ function adminDashboard(){
           + '</div>'
         : '<p class="admin-meta" style="margin-top:12px">Every record passes publication validation.</p>')
     + '</div>'
+
+    + storageUsageCardHTML()
 
     /* 3. The state of the library, for orientation rather than action. */
     + '<div class="kpi-grid" style="margin-bottom:20px">'
@@ -16918,6 +16989,7 @@ const ACTIONS = {
   "media-tab": (el) => { AppState.admin.mediaTab = el.getAttribute("data-value"); rerender(); },
   "media-folder-filter": (el) => { AppState.admin.mediaFolder = el.getAttribute("data-value"); rerender(); },
   "media-sort-size": () => { AppState.admin.mediaSortBySize = !AppState.admin.mediaSortBySize; rerender(); },
+  "refresh-storage-usage": () => { loadStorageUsage(); },
   "media-upload": () => {
     const input = document.createElement("input");
     input.type = "file";
