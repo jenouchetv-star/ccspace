@@ -19,7 +19,8 @@
 // Deploy: npx supabase functions deploy submit-ticket
 // Secrets required: TURNSTILE_SECRET, SUPABASE_SERVICE_ROLE_KEY
 //   (see supabase/functions/submit-ticket/README.md)
-// Table required: blocked_senders, admin-only RLS (see supabase/migration.sql)
+// Tables required: blocked_senders, moderation_terms - both admin-only RLS,
+//   both manageable from #/admin/moderation (see supabase/migration.sql)
 
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
@@ -77,7 +78,15 @@ function normalizeForFilter(s: string): string {
     .trim();
 }
 
-function containsBannedContent(text: string): boolean {
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** terms is BANNED_TERMS plus whatever admins have added via
+    #/admin/moderation (moderation_terms) - admin-supplied text isn't
+    guaranteed regex-safe, so every term is escaped before use here,
+    unlike the hand-written BANNED_TERMS above which never needed it. */
+function containsBannedContent(text: string, terms: string[]): boolean {
   const normalized = normalizeForFilter(text);
   if (!normalized) return false;
   // catches letters spaced/punctuated apart to dodge a whole-word match,
@@ -85,16 +94,31 @@ function containsBannedContent(text: string): boolean {
   // substring check on anything shorter risks false positives (e.g. "ass"
   // inside "class") that \b word-boundary matching below already avoids.
   const collapsed = normalized.replace(/\s+/g, "");
-  for (const term of BANNED_TERMS) {
-    const words = term.split(" ");
+  for (const raw of terms) {
+    const term = normalizeForFilter(raw);
+    if (!term) continue;
+    const words = term.split(" ").map(escapeRegExp);
     if (words.length > 1) {
       if (new RegExp("\\b" + words.join("\\s+") + "\\b").test(normalized)) return true;
     } else {
-      if (new RegExp("\\b" + term + "\\b").test(normalized)) return true;
+      if (new RegExp("\\b" + words[0] + "\\b").test(normalized)) return true;
       if (term.length >= 4 && collapsed.includes(term)) return true;
     }
   }
   return false;
+}
+
+/** Extra terms added from #/admin/moderation, on top of the fixed
+    BANNED_TERMS baseline above (never exposed to the browser - this table
+    is admin-only and read here with the service-role client, same as
+    blocked_senders). A read failure (e.g. the table not existing yet)
+    degrades to "no extra terms" rather than failing the whole request. */
+async function loadCustomTerms(client: SupabaseClient): Promise<string[]> {
+  const { data } = await client.from("moderation_terms").select("data");
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((r: { data?: { term?: string } }) => String(r?.data?.term ?? "").trim())
+    .filter(Boolean);
 }
 
 // --- Blocked senders -------------------------------------------------------
@@ -175,7 +199,8 @@ Deno.serve(async (req) => {
   const message = String(body.message ?? "").trim();
   const org = String(body.org ?? "").trim();
   const combined = [subject, message, org].join(" ");
-  if (containsBannedContent(combined)) {
+  const customTerms = await loadCustomTerms(adminClient);
+  if (containsBannedContent(combined, BANNED_TERMS.concat(customTerms))) {
     await recordBlock(adminClient, email, ip, "disallowed language", subject, message);
     return json({
       error: "We couldn't send that message because it contains language we don't allow on our forms. This form is no longer available to you.",

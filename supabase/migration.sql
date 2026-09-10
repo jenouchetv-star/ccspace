@@ -911,9 +911,36 @@ grant select, insert, update, delete on blocked_senders to authenticated;
 drop policy if exists "admin only" on blocked_senders;
 create policy "admin only" on blocked_senders for all to authenticated using (is_active_admin()) with check (is_active_admin());
 
+-- Both blocked_senders and moderation_terms below are managed from the
+-- live admin portal (#/admin/moderation - block/unblock a sender by hand,
+-- add/remove an extra banned term) by any signed-in active admin, not just
+-- from the SQL Editor - is_active_admin() is exactly the same check that
+-- gates every other admin-only table, so an invited admin who has never
+-- touched Supabase directly can manage both from the app itself. The SQL
+-- below is a fallback/inspection path, not the primary way to use these.
+
 -- To unblock someone (e.g. a false positive), run this in the SQL Editor:
 --   delete from blocked_senders where data->>'email' = 'someone@example.com';
 -- To review current blocks:
 --   select data->>'email' as email, data->>'ip' as ip, data->>'reason' as reason,
 --          data->>'subject' as subject, created_at
 --   from blocked_senders order by created_at desc;
+
+-- ---------------------------------------------------------------------
+-- moderation_terms - admin-added banned words/phrases, on top of
+-- submit-ticket's own fixed, in-code baseline filter (BANNED_TERMS in
+-- supabase/functions/submit-ticket/index.ts, never exposed to the
+-- browser). submit-ticket reads this table with the service-role key on
+-- every request and merges it into that baseline before checking a
+-- message - same admin-only category and access pattern as
+-- blocked_senders above.
+create table if not exists moderation_terms (
+  id text primary key,
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table moderation_terms enable row level security;
+grant select, insert, update, delete on moderation_terms to authenticated;
+drop policy if exists "admin only" on moderation_terms;
+create policy "admin only" on moderation_terms for all to authenticated using (is_active_admin()) with check (is_active_admin());

@@ -2863,7 +2863,9 @@ const COLLECTION_TABLE = {
   mediaAssets: "media_assets",
   supportTickets: "support_tickets",
   auditLog: "audit_log",
-  launchReadiness: "launch_readiness"
+  launchReadiness: "launch_readiness",
+  blockedSenders: "blocked_senders",
+  moderationTerms: "moderation_terms"
 };
 function tableFor(col){ return COLLECTION_TABLE[col] || col; }
 
@@ -2882,7 +2884,8 @@ const PUBLIC_COLLECTIONS = ["activities","pages","articles","games","videos","st
    records. Fetched and realtime-subscribed only once someone is actually
    signed in as an admin; everyone else simply never asks for these. */
 const ADMIN_ONLY_COLLECTIONS = ["subscribers","supportTickets",
-  "auditLog","issues","launchReadiness","newsletters","notifications"];
+  "auditLog","issues","launchReadiness","newsletters","notifications",
+  "blockedSenders","moderationTerms"];
 const BACKED_COLLECTIONS = PUBLIC_COLLECTIONS.concat(ADMIN_ONLY_COLLECTIONS);
 
 const BRAND = {
@@ -5990,6 +5993,7 @@ const ADMIN_NAV = [
   { hash:"#/admin/subscribers",    label:"Subscribers",     icon:"mail",         col:"subscribers" },
   { hash:"#/admin/support",        label:"Support queue",   icon:"life-buoy" },
   { hash:"#/admin/issues",         label:"Issues",          icon:"triangle-alert" },
+  { hash:"#/admin/moderation",     label:"Moderation",      icon:"shield-alert", col:"blockedSenders" },
   { hash:"#/admin/audit",          label:"Audit log",       icon:"scroll-text" },
   { hash:"#/admin/settings",       label:"Settings & data", icon:"settings" },
 
@@ -12029,6 +12033,70 @@ function adminIssues(){
     + '</div>';
 }
 
+/** Blocking someone here and the automatic block submit-ticket applies on
+    a filter match both write the exact same blocked_senders table - this
+    page just gives a human a manual way in, for cases the filter never
+    sees (e.g. abuse reported by email rather than through the form
+    itself). Terms added here are additional to submit-ticket's own
+    built-in filter, which stays fixed in code and isn't shown here - only
+    the extras this site's admins have added are editable. */
+function adminModeration(){
+  const blocked = db.list("blockedSenders").slice()
+    .sort((a, b) => new Date(b.blockedAt || b.createdAt) - new Date(a.blockedAt || a.createdAt));
+  const terms = db.list("moderationTerms").slice()
+    .sort((a, b) => (a.term || "").localeCompare(b.term || ""));
+
+  return '<div style="margin-bottom:20px"><span class="admin-eyebrow">Operations</span>'
+    + '<h1 class="admin-page-title" style="text-transform:none;font-size:1.5rem">Moderation</h1>'
+    + '<p class="admin-meta">Every contact-form message is already checked against a standard filter for profanity, slurs, and violent language before it can send - a match blocks that sender automatically. Use this page to add your own extra terms, or to block someone by hand.</p></div>'
+
+    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;align-items:start">'
+
+    + '<div class="admin-card">'
+    + '<h3 class="admin-section-title" style="font-size:.98rem">' + ic("ban") + ' Blocked senders</h3>'
+    + '<p class="admin-meta">Blocked by email or IP can no longer send through either contact form.</p>'
+    + '<form data-act="block-sender" class="stack" style="gap:10px;margin:14px 0">'
+    + '<div class="admin-field"><label for="mod-block-email">Email</label>'
+    + '<input class="admin-input" id="mod-block-email" name="email" type="email" placeholder="someone@example.com"></div>'
+    + '<div class="admin-field"><label for="mod-block-ip">IP address (optional)</label>'
+    + '<input class="admin-input" id="mod-block-ip" name="ip" type="text" placeholder="203.0.113.4"></div>'
+    + '<div class="admin-field"><label for="mod-block-reason">Reason</label>'
+    + '<input class="admin-input" id="mod-block-reason" name="reason" type="text" placeholder="Why are you blocking this sender?"></div>'
+    + '<button type="submit" class="admin-btn admin-btn--primary">' + ic("ban") + ' Block</button>'
+    + '</form>'
+    + (blocked.length
+        ? '<div class="stack" style="gap:8px">' + blocked.map(b =>
+            '<div class="row-between" style="gap:10px;padding:10px;border:1px solid var(--admin-border);border-radius:10px;align-items:flex-start">'
+            + '<div style="min-width:0">'
+            + '<div style="font-weight:600;font-size:.88rem;word-break:break-all">' + E(b.email || "(no email)") + '</div>'
+            + (b.ip ? '<div class="admin-meta" style="font-family:monospace">' + E(b.ip) + '</div>' : "")
+            + '<div class="admin-meta">' + E(b.reason || "") + '</div>'
+            + '<div class="admin-meta">' + E(fmtDate(b.blockedAt || b.createdAt, true)) + '</div>'
+            + '</div>'
+            + '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--icon" data-act="del-record" data-col="blockedSenders" data-id="' + E(b.id) + '" aria-label="Unblock" title="Unblock">' + ic("rotate-ccw") + '</button>'
+            + '</div>'
+          ).join("") + '</div>'
+        : '<p class="admin-meta">No one is currently blocked.</p>')
+    + '</div>'
+
+    + '<div class="admin-card">'
+    + '<h3 class="admin-section-title" style="font-size:.98rem">' + ic("flag") + ' Extra banned terms</h3>'
+    + '<p class="admin-meta">On top of the standard filter, which is always on and isn’t editable here. Add slurs, profanity, or phrases specific to what you’re seeing.</p>'
+    + '<form data-act="add-moderation-term" class="row" style="gap:8px;margin:14px 0">'
+    + '<input class="admin-input" name="term" type="text" placeholder="A word or phrase to block" style="flex:1">'
+    + '<button type="submit" class="admin-btn admin-btn--primary">' + ic("plus") + ' Add</button>'
+    + '</form>'
+    + (terms.length
+        ? '<div class="row" style="gap:8px;flex-wrap:wrap">' + terms.map(t =>
+            '<span class="admin-chip">' + E(t.term)
+            + '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--icon" data-act="del-record" data-col="moderationTerms" data-id="' + E(t.id) + '" aria-label="Remove" style="margin-left:6px">' + ic("x") + '</button></span>'
+          ).join("") + '</div>'
+        : '<p class="admin-meta">No extra terms added yet.</p>')
+    + '</div>'
+
+    + '</div>';
+}
+
 const LAUNCH_STATUS_LABELS = {
   not_started:"Not started", in_progress:"In progress", needs_review:"Needs review",
   complete:"Complete", blocked:"Blocked", not_applicable:"Not applicable"
@@ -12742,6 +12810,7 @@ function viewAdmin(section, id, sub){
   else if (section === "homepage") body = adminHomepage();
   else if (section === "support")  body = adminSupport();
   else if (section === "issues")   body = adminIssues();
+  else if (section === "moderation") body = adminModeration();
   else if (section === "audit")    body = adminAudit();
   else if (section === "settings") body = adminSettings();
   else if (section === "brand")    body = adminBrand();
@@ -17942,6 +18011,33 @@ async function handleSubmit(form, act){
     resetTurnstileWidget("contact");
     if (error){ toast(error, "bad"); return; }
     AppState.contactFormSent.ticket = true;
+    rerender();
+    return;
+  }
+
+  if (act === "block-sender"){
+    const email = form.elements["email"].value.trim().toLowerCase();
+    const ip = form.elements["ip"].value.trim();
+    const reason = form.elements["reason"].value.trim() || "Manually blocked by admin";
+    if (!email && !ip){ toast("Enter an email or an IP address to block.", "bad"); return; }
+    try {
+      await db.add("blockedSenders", {
+        title: email || ip, email, ip, reason,
+        subject: "", message: "", blockedAt: nowISO()
+      });
+    } catch(_e){ return; }
+    toast("Blocked - they can no longer submit the contact forms.");
+    rerender();
+    return;
+  }
+  if (act === "add-moderation-term"){
+    const term = form.elements["term"].value.trim().toLowerCase();
+    if (!term){ toast("Enter a word or phrase to add.", "bad"); return; }
+    if (db.list("moderationTerms").some(t => t.term === term)){ toast("That term is already on the list.", "bad"); return; }
+    try {
+      await db.add("moderationTerms", { title: term, term });
+    } catch(_e){ return; }
+    toast("Added to the banned terms list.");
     rerender();
     return;
   }
