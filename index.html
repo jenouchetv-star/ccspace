@@ -18589,6 +18589,25 @@ window.matchMedia("(prefers-reduced-motion: reduce)").addEventListener
    is playing. */
 function hasPlayingEmbed(){ return !!document.querySelector(".embed iframe"); }
 
+/* Same problem as hasPlayingEmbed() above, different casualty: a plain
+   <input>/<textarea> (a contact form, the admin sign-in fields, ticketGate()'s
+   honeypot aside) keeps whatever the visitor typed only in the DOM node
+   itself, not in AppState - nothing re-supplies that value after
+   render() replaces #app's innerHTML. Background sync used to wipe it
+   without warning, mid-sentence, on nothing the visitor did themselves;
+   this only guards those automatic triggers, never a rerender the
+   visitor's own action (submitting, clicking) asked for. */
+function isEditingForm(){
+  const el = document.activeElement;
+  if (!el) return false;
+  if (el.tagName === "TEXTAREA") return true;
+  if (el.tagName === "INPUT"){
+    const type = (el.type || "text").toLowerCase();
+    return ["text","email","tel","url","search","password","number"].indexOf(type) >= 0;
+  }
+  return false;
+}
+
 function subscribeRealtimeCol(col){
   const table = tableFor(col);
   return sb.channel("sync-" + table)
@@ -18612,7 +18631,7 @@ function subscribeRealtimeCol(col){
         const i = cache[col].findIndex(r => r.id === rec.id);
         if (i >= 0) cache[col][i] = rec; else cache[col].unshift(rec);
       }
-      if (!hasPlayingEmbed()) rerender();
+      if (!hasPlayingEmbed() && !isEditingForm()) rerender();
     })
     .subscribe();
 }
@@ -18628,7 +18647,7 @@ function startPublicRealtimeSync(){
   PUBLIC_COLLECTIONS.forEach(col => subscribeRealtimeCol(col));
   setInterval(() => {
     if (db !== realDb) return;
-    realDb.hydrate().then(() => { if (!hasPlayingEmbed()) rerender(); }).catch(() => {});
+    realDb.hydrate().then(() => { if (!hasPlayingEmbed() && !isEditingForm()) rerender(); }).catch(() => {});
   }, 30000);
 }
 
