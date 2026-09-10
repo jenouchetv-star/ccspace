@@ -810,8 +810,6 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
 .pwa-install__copy{ flex:1; min-width:220px; }
 .pwa-install__copy h3{ margin:0 0 4px; font-size:1.05rem; }
 .pwa-install__copy p{ margin:0; }
-.pwa-install__close{ position:absolute; top:10px; right:10px; border-radius:50%; }
-@media (max-width:640px){ .pwa-install{ padding-right:38px; } }
 
 /* reveal-on-load stagger */
 .rise{ opacity:0; transform:translateY(26px); animation:rise .74s cubic-bezier(.16,.84,.3,1) forwards; }
@@ -7685,14 +7683,13 @@ function homeSectionFor(key){
   return pageListItems("home", "sections").find(s => s.key === key) || {};
 }
 
-/** Renders nothing at all once installed, dismissed, or on a browser that
-    can neither prompt for install nor guide a manual one - never a dead
+/** Renders nothing at all once installed, or on a browser that can
+    neither prompt for install nor guide a manual one - never a dead
     button. See the beforeinstallprompt/appinstalled listeners and
-    isIOSDevice()/pwaInstallDismissed() near the service worker
-    registration at the bottom of this file. */
+    isIOSDevice() near the service worker registration at the bottom of
+    this file. */
 function pwaInstallCard(){
-  if (PWA_INSTALLED || pwaInstallDismissed()) return "";
-  const closeBtn = '<button type="button" class="btn btn--sm btn--ghost pwa-install__close" data-act="pwa-install-dismiss" aria-label="Dismiss">' + ic("x") + '</button>';
+  if (PWA_INSTALLED) return "";
   let body = "";
   if (DEFERRED_INSTALL_PROMPT){
     body = '<div class="pwa-install__icon">' + ic("download") + '</div>'
@@ -7707,7 +7704,7 @@ function pwaInstallCard(){
     return "";
   }
   return '<section class="section" style="padding-top:0"><div class="shell">'
-    + '<div class="panel panel--flat pwa-install">' + closeBtn + body + '</div>'
+    + '<div class="panel panel--flat pwa-install">' + body + '</div>'
     + '</div></section>';
 }
 
@@ -17289,10 +17286,6 @@ const ACTIONS = {
     } catch(_e){}
     rerender();
   },
-  "pwa-install-dismiss": () => {
-    try { localStorage.setItem("ccs_pwa_install_dismissed", "1"); } catch(_e){}
-    rerender();
-  },
   "refresh-storage-usage": () => { loadStorageUsage(); },
   "media-upload": () => {
     const input = document.createElement("input");
@@ -18751,9 +18744,6 @@ window.addEventListener("appinstalled", () => {
   rerender();
 });
 function isIOSDevice(){ return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream; }
-function pwaInstallDismissed(){
-  try { return localStorage.getItem("ccs_pwa_install_dismissed") === "1"; } catch(_e){ return false; }
-}
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
   window.addEventListener("load", () => {
