@@ -32,10 +32,19 @@ const PRECACHE_URLS = [
 ];
 
 self.addEventListener("install", (event) => {
+  /* No self.skipWaiting() here - a new worker installing while someone
+     is mid-form on an old page must sit in "waiting" until that page
+     opts in (the "Refresh" button below, or SKIP_WAITING). Calling it
+     unconditionally on every install is what caused a silent
+     controllerchange -> location.reload() at a random moment on any
+     open tab, wiping in-progress form input with no warning - the exact
+     thing the message-handler comment below already documented as
+     unwanted, but this line was doing anyway. A brand-new visitor with
+     no prior service worker is unaffected: the browser activates a
+     first install on its own with nothing else to wait for. */
   event.waitUntil(
     caches.open(SHELL_CACHE)
       .then((cache) => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting())
   );
 });
 
