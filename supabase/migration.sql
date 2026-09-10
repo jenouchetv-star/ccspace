@@ -888,3 +888,32 @@ create policy "active admin full access" on storage.objects
   for all to authenticated
   using (bucket_id = 'uploads' and is_active_admin())
   with check (bucket_id = 'uploads' and is_active_admin());
+
+-- ---------------------------------------------------------------------
+-- blocked_senders - the submit-ticket Edge Function's moderation blocklist.
+-- A contact/business message that matches its deterministic profanity/
+-- slur/violent-language filter is rejected and never reaches
+-- support_tickets; that sender's email and IP are recorded here, and every
+-- future call checks this table first (before Turnstile even runs) and
+-- refuses outright. Admin-only, same category as newsletters/audit_log -
+-- never anon-readable or anon-writable. submit-ticket itself reads/writes
+-- this table with the service-role key (see SUPABASE_SERVICE_ROLE_KEY in
+-- its README), not the anon key, since a visitor's own request must never
+-- be able to read or forge the blocklist.
+create table if not exists blocked_senders (
+  id text primary key,
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table blocked_senders enable row level security;
+grant select, insert, update, delete on blocked_senders to authenticated;
+drop policy if exists "admin only" on blocked_senders;
+create policy "admin only" on blocked_senders for all to authenticated using (is_active_admin()) with check (is_active_admin());
+
+-- To unblock someone (e.g. a false positive), run this in the SQL Editor:
+--   delete from blocked_senders where data->>'email' = 'someone@example.com';
+-- To review current blocks:
+--   select data->>'email' as email, data->>'ip' as ip, data->>'reason' as reason,
+--          data->>'subject' as subject, created_at
+--   from blocked_senders order by created_at desc;

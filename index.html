@@ -2622,6 +2622,11 @@ if (typeof window.supabase === "undefined") {
   document.currentScript.parentNode.insertBefore(s2, document.currentScript);
 }
 </script>
+<!-- Cloudflare Turnstile: bot protection for admin sign-in and the two
+     contact forms. Genuinely third-party (unlike Lucide/Supabase above,
+     it has no self-hostable bundle - the widget is served live from
+     Cloudflare's own edge), so there's no self-host-first fallback here. -->
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script>
 "use strict";
 
@@ -2795,6 +2800,40 @@ const UPLOAD_BUCKET = "uploads";
    the file client-side, before it's ever sent anywhere, rather than
    silently letting the same thing happen again on the next upload. */
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+/* Cloudflare Turnstile - one widget, registered for localhost/127.0.0.1/
+   the production domain, reused at every protected surface with a
+   different data-action per surface (verified server-side, so a token
+   minted for one form can't be replayed against another). */
+const TURNSTILE_SITEKEY = "0x4AAAAAAEuXo1F4-NJmNcsf";
+const SUBMIT_TICKET_URL = SUPABASE_URL + "/functions/v1/submit-ticket";
+const TURNSTILE_WIDGET_IDS = {}; /* action -> widget id, so each surface can reset only its own widget */
+
+/** Renders any not-yet-mounted .cf-turnstile div found in the current DOM.
+    Called after every render() - Turnstile's own script only auto-scans
+    the page once on load, so a div that appears later (this app replaces
+    #app's innerHTML wholesale on every route change) needs an explicit
+    render() call or it stays blank forever. */
+function mountTurnstileWidgets(){
+  if (!window.turnstile) return;
+  $$(".cf-turnstile[data-sitekey]:not([data-ts-mounted])").forEach(el => {
+    el.setAttribute("data-ts-mounted", "1");
+    const action = el.getAttribute("data-action") || "";
+    const widgetId = window.turnstile.render(el, { sitekey: el.getAttribute("data-sitekey"), action: action });
+    if (action) TURNSTILE_WIDGET_IDS[action] = widgetId;
+  });
+}
+function turnstileToken(action){
+  const id = TURNSTILE_WIDGET_IDS[action];
+  return (window.turnstile && id != null) ? window.turnstile.getResponse(id) : "";
+}
+/* Tokens are single-use - a form that stays on screen after a submit
+   attempt (success or failure) needs a fresh one before it can submit
+   again, same reasoning as any other one-time code. */
+function resetTurnstileWidget(action){
+  const id = TURNSTILE_WIDGET_IDS[action];
+  if (window.turnstile && id != null) window.turnstile.reset(id);
+}
 
 /** Uploads a File to Supabase Storage under folder/, returning its public
     URL. Filenames are timestamp-prefixed so two uploads never collide. */
@@ -5002,6 +5041,27 @@ function isFakeEmail(email){
   /* the same character (or pair) repeated the whole way through, e.g. "aaaa" or "xyxyxy" */
   if (/^(.)\1{2,}$/.test(local) || /^(..)\1{2,}$/.test(local)) return true;
   return false;
+}
+
+/** Posts to the submit-ticket Edge Function (Turnstile-gated) rather than
+    writing to support_tickets directly - see supabase/functions/submit-ticket.
+    Returns "" on success, or a user-facing error message otherwise (the
+    server's own validation/rate-limit/Turnstile messages, or a generic
+    fallback if the function couldn't be reached at all). */
+async function submitTicket(payload){
+  let res, result;
+  try {
+    res = await fetch(SUBMIT_TICKET_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    result = await res.json();
+  } catch(_e){
+    return "Could not reach the server. Check your connection and try again.";
+  }
+  if (!res.ok || !result.ok) return result.error || "Something went wrong. Please try again.";
+  return "";
 }
 
 /** What is stopping this signup from being added, if anything. */
@@ -8915,6 +8975,7 @@ function contactForm(){
     + '<span class="hint">So we can reply. Never shown publicly.</span></div>'
     + '<div class="field"><label for="t-body">Your message</label>'
     + '<textarea class="txt" id="t-body" name="body" required maxlength="600" placeholder="Tell us what you need."></textarea></div>'
+    + '<div class="cf-turnstile" data-sitekey="' + E(TURNSTILE_SITEKEY) + '" data-action="contact"></div>'
     + '<button class="btn btn--lg btn--cyan btn--block" type="submit">' + ic("send") + ' Send message</button>'
     + '</div></form>';
 }
@@ -8947,6 +9008,7 @@ function businessContactForm(){
     + '<span class="hint">So we can reply. Never shown publicly.</span></div>'
     + '<div class="field"><label for="b-body">Your message</label>'
     + '<textarea class="txt" id="b-body" name="body" required maxlength="800" placeholder="Tell us what you have in mind."></textarea></div>'
+    + '<div class="cf-turnstile" data-sitekey="' + E(TURNSTILE_SITEKEY) + '" data-action="business_contact"></div>'
     + '<button class="btn btn--lg btn--cyan btn--block" type="submit">' + ic("send") + ' Send inquiry</button>'
     + '</div></form>';
 }
@@ -16058,6 +16120,7 @@ function render(){
   Parallax.mount();
   mountStoryBuilderDrag();
   mountStoryBuilderCanvasDrag();
+  mountTurnstileWidgets();
 
   /* html has scroll-behavior:smooth for in-page anchors, which Chrome also
      applies to a plain scrollTop assignment - without behavior:"instant"
@@ -17847,17 +17910,15 @@ async function handleSubmit(form, act){
     if (!subject || !body){ toast("Add a subject and a message.", "bad"); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast("That email doesn't look quite right.", "bad"); return; }
     if (isFakeEmail(email)){ toast("Please use a real email address, not a placeholder or test one.", "bad"); return; }
-    const org = form.elements["org"].value.trim();
-    try {
-      await db.add("supportTickets", {
-        subject: subject + (org ? " (" + org + ")" : ""),
-        body: body,
-        email: email,
-        from: "business",
-        type: form.elements["kind"].value,
-        priority: "normal", state: "open", at: nowISO(), status:"published"
-      });
-    } catch(_e){ return; }
+    const token = turnstileToken("business_contact");
+    if (!token){ toast("Please complete the verification.", "bad"); return; }
+    const error = await submitTicket({
+      kind: "business", turnstileToken: token,
+      subject: subject, message: body, email: email,
+      org: form.elements["org"].value.trim(), ticketKind: form.elements["kind"].value
+    });
+    resetTurnstileWidget("business_contact");
+    if (error){ toast(error, "bad"); return; }
     AppState.contactFormSent.business = true;
     rerender();
     return;
@@ -17871,14 +17932,15 @@ async function handleSubmit(form, act){
     if (!subject || !body){ toast("Add a subject and a message.", "bad"); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast("That email doesn't look quite right.", "bad"); return; }
     if (isFakeEmail(email)){ toast("Please use a real email address, not a placeholder or test one.", "bad"); return; }
-    try {
-      await db.add("supportTickets", {
-        subject: subject, body: body, email: email,
-        from: form.elements["from"].value,
-        type: form.elements["type"].value,
-        priority: "normal", state: "open", at: nowISO(), status:"published"
-      });
-    } catch(_e){ return; }
+    const token = turnstileToken("contact");
+    if (!token){ toast("Please complete the verification.", "bad"); return; }
+    const error = await submitTicket({
+      kind: "contact", turnstileToken: token,
+      subject: subject, message: body, email: email,
+      from: form.elements["from"].value, ticketKind: form.elements["type"].value
+    });
+    resetTurnstileWidget("contact");
+    if (error){ toast(error, "bad"); return; }
     AppState.contactFormSent.ticket = true;
     rerender();
     return;
@@ -18368,6 +18430,17 @@ async function boot(){
       tries += 1;
       if (window.lucide){ drawIcons(); clearInterval(t); }
       if (tries > 40) clearInterval(t);
+    }, 100);
+  }
+  /* Turnstile loads async - if the very first render() ran before it was
+     ready, its .cf-turnstile divs would otherwise stay blank forever
+     (nothing else re-triggers a mount pass once the script does arrive). */
+  if (!window.turnstile){
+    let tsTries = 0;
+    const tsT = setInterval(() => {
+      tsTries += 1;
+      if (window.turnstile){ mountTurnstileWidgets(); clearInterval(tsT); }
+      if (tsTries > 40) clearInterval(tsT);
     }, 100);
   }
 }
