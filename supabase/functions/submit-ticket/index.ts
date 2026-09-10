@@ -19,8 +19,9 @@
 // Deploy: npx supabase functions deploy submit-ticket
 // Secrets required: TURNSTILE_SECRET, SUPABASE_SERVICE_ROLE_KEY
 //   (see supabase/functions/submit-ticket/README.md)
-// Tables required: blocked_senders, moderation_terms - both admin-only RLS,
-//   both manageable from #/admin/moderation (see supabase/migration.sql)
+// Tables required: blocked_senders, moderation_terms, moderation_settings -
+//   all admin-only RLS, all manageable from #/admin/moderation
+//   (see supabase/migration.sql)
 
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
@@ -50,13 +51,36 @@ const BANNED_TERMS = [
   // profanity
   "fuck", "shit", "bitch", "asshole", "bastard", "cunt", "dick", "cock",
   "pussy", "piss", "slut", "whore",
-  // violent language / threats
+  // violent language / threats (aimed at someone else - a message aimed
+  // at the SENDER's own life goes through SELF_HARM_TERMS below instead,
+  // flagged for review rather than blocked outright)
   "murder", "rape", "molest", "pedophile", "terrorist", "massacre", "behead",
-  "kill you", "kill him", "kill her", "kill them", "kill myself", "gonna kill",
+  "kill you", "kill him", "kill her", "kill them", "gonna kill",
   "shoot up", "shoot you", "stab you", "bomb threat", "burn it down",
   // slurs / derogatory
   "nigger", "nigga", "faggot", "retard", "chink", "spic", "kike", "gook",
   "wetback", "tranny", "dyke",
+];
+
+// Self-harm disclosures are handled differently from everything else this
+// filter catches: a threat toward someone else, or plain abuse, gets
+// blocked outright because there's no legitimate reason to let it
+// through. A message about hurting ONESELF might be a real person in
+// crisis reaching out - rejecting it and permanently locking them out of
+// the only contact channel on the site would be the wrong call. These
+// terms are checked separately (see Deno.serve below): a match here never
+// blocks the message or the sender - it still saves normally and still
+// requires Turnstile like any other message, just flagged so an admin
+// sees it immediately instead of it sitting in the ordinary queue.
+const SELF_HARM_TERMS = [
+  "kill myself", "kill herself", "kill himself",
+  "hurt myself", "hurt herself", "hurt himself",
+  "cut myself", "cut herself", "cut himself",
+  "end my life", "end her life", "end his life",
+  "want to die", "wanna die", "wants to die",
+  "hang myself", "hang herself", "hang himself",
+  "suicidal", "suicide", "self harm",
+  "no reason to live", "better off dead",
 ];
 
 /** Lowercases, undoes common leetspeak substitutions, strips punctuation
@@ -148,6 +172,18 @@ async function loadCustomTerms(client: SupabaseClient): Promise<string[]> {
     .filter(Boolean);
 }
 
+/** The #/admin/moderation "Auto-block on a filter match" switch
+    (moderation_settings, row id "global"). A missing row or a read
+    failure both default to enabled - fail toward the stricter behavior,
+    never toward silently turning protection off. Turning it off never
+    lets a banned-content message through, it only stops that match from
+    also locking the sender out (see Deno.serve below). */
+async function isAutoBlockEnabled(client: SupabaseClient): Promise<boolean> {
+  const { data: row } = await client.from("moderation_settings").select("data").eq("id", "global").maybeSingle();
+  const settings = row?.data as { autoBlockEnabled?: boolean } | undefined;
+  return !settings || settings.autoBlockEnabled !== false;
+}
+
 // --- Blocked senders -------------------------------------------------------
 // A single flagged submission permanently blocks that sender - by email
 // AND by IP - from ever reaching this function's Turnstile/insert steps
@@ -182,7 +218,7 @@ async function recordBlock(
 ) {
   await client.from("blocked_senders").insert({
     id: "block-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6),
-    data: { email, ip, reason, subject, message, blockedAt: new Date().toISOString() },
+    data: { email, ip, reason, subject, message, source: "auto", blockedAt: new Date().toISOString() },
   });
 }
 
@@ -219,19 +255,34 @@ Deno.serve(async (req) => {
     return json({ error: "This form is no longer available to you." }, 403);
   }
 
-  // Step 2: deterministic moderation. A match blocks this sender going
-  // forward and rejects the message outright - it never reaches
-  // support_tickets or a Turnstile check.
+  // Step 2: deterministic moderation. A self-harm match is checked FIRST
+  // and, if found, skips the block/reject check entirely below - flagged
+  // is carried through to the inserted ticket instead (Step 5), so the
+  // message still reaches a human rather than being silently rejected.
+  // Otherwise, a banned-content match blocks this sender going forward
+  // and rejects the message outright - it never reaches support_tickets
+  // or a Turnstile check.
   const subject = String(body.subject ?? "").trim();
   const message = String(body.message ?? "").trim();
   const org = String(body.org ?? "").trim();
   const combined = [subject, message, org].join(" ");
-  const customTerms = await loadCustomTerms(adminClient);
-  if (containsBannedContent(combined, BANNED_TERMS.concat(customTerms))) {
-    await recordBlock(adminClient, email, ip, "Violating our terms of use.", subject, message);
-    return json({
-      error: "We couldn't send that message because it contains language we don't allow on our forms. This form is no longer available to you.",
-    }, 403);
+  const flagged = containsBannedContent(combined, SELF_HARM_TERMS);
+  if (!flagged) {
+    const customTerms = await loadCustomTerms(adminClient);
+    if (containsBannedContent(combined, BANNED_TERMS.concat(customTerms))) {
+      // The message is rejected either way - only whether this ALSO locks
+      // the sender out is controlled by the admin's own switch.
+      const autoBlock = await isAutoBlockEnabled(adminClient);
+      if (autoBlock) {
+        await recordBlock(adminClient, email, ip, "Violating our terms of use.", subject, message);
+        return json({
+          error: "We couldn't send that message because it contains language we don't allow on our forms. This form is no longer available to you.",
+        }, 403);
+      }
+      return json({
+        error: "We couldn't send that message because it contains language we don't allow on our forms. Please revise it and try again.",
+      }, 403);
+    }
   }
 
   // Step 3: verify the Turnstile token before touching the database.
@@ -265,19 +316,28 @@ Deno.serve(async (req) => {
   // Step 5: the actual write - same anon key + same table the browser
   // used directly before, so RLS and the rate-limit/fake-email triggers
   // on support_tickets still run exactly as they did.
+  const flagFields = flagged
+    ? { flagged: true, flagReason: "Possible self-harm language - please review as soon as possible." }
+    : {};
+  // ip is stored on every ticket, not just blocked_senders, so an admin
+  // reviewing an ordinary message in #/admin/support has something to
+  // manually block by IP if it comes to that - before this, IP only ever
+  // showed up after a block had already happened.
   const record = kind === "business"
     ? {
         subject: subject + (org ? " (" + org + ")" : ""),
-        body: message, email,
+        body: message, email, ip,
         from: "business",
         type: String(body.ticketKind ?? "other"),
         priority: "normal", state: "open", at: new Date().toISOString(), status: "published",
+        ...flagFields,
       }
     : {
-        subject, body: message, email,
+        subject, body: message, email, ip,
         from: String(body.from ?? "other"),
         type: String(body.ticketKind ?? "question"),
         priority: "normal", state: "open", at: new Date().toISOString(), status: "published",
+        ...flagFields,
       };
 
   const { error } = await anonClient.from("support_tickets").insert({

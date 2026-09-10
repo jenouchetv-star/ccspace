@@ -944,3 +944,22 @@ alter table moderation_terms enable row level security;
 grant select, insert, update, delete on moderation_terms to authenticated;
 drop policy if exists "admin only" on moderation_terms;
 create policy "admin only" on moderation_terms for all to authenticated using (is_active_admin()) with check (is_active_admin());
+
+-- ---------------------------------------------------------------------
+-- moderation_settings - one row (id "global") holding the
+-- #/admin/moderation "Auto-block on a filter match" switch. Off never
+-- lets a banned-content message through (it's still rejected either
+-- way) - it only stops that match from also adding the sender to
+-- blocked_senders. submit-ticket reads this with the service-role key
+-- and defaults to enabled on any read failure or missing row, same
+-- fail-toward-stricter posture as everything else in this function.
+create table if not exists moderation_settings (
+  id text primary key,
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table moderation_settings enable row level security;
+grant select, insert, update, delete on moderation_settings to authenticated;
+drop policy if exists "admin only" on moderation_settings;
+create policy "admin only" on moderation_settings for all to authenticated using (is_active_admin()) with check (is_active_admin());

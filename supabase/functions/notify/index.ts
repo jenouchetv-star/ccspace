@@ -92,10 +92,21 @@ Deno.serve(async (req) => {
       const msgBody = String(record.body ?? "");
       const replyEmail = String(record.email ?? "");
       const type = String(record.type ?? "");
+      // submit-ticket sets this when its self-harm word list matches -
+      // see supabase/functions/submit-ticket/index.ts. Never blocked or
+      // rejected there, just flagged, so the alert email needs to say so
+      // plainly rather than reading like any other contact message.
+      const flagged = Boolean(record.flagged);
+      const flagReason = String(record.flagReason ?? "");
       await sendEmail(
         adminTo,
-        `New ${from === "business" ? "business inquiry" : "contact"} message: ${subject}`,
-        `<p><b>From:</b> ${escapeHtml(replyEmail)}</p>` +
+        (flagged ? "URGENT - please review: " : `New ${from === "business" ? "business inquiry" : "contact"} message: `) + subject,
+        (flagged
+          ? `<p style="background:#fdecea;color:#b00;font-weight:bold;padding:10px;border-radius:6px">` +
+            escapeHtml(flagReason || "This message was automatically flagged for possible self-harm language.") +
+            `</p>`
+          : "") +
+          `<p><b>From:</b> ${escapeHtml(replyEmail)}</p>` +
           (type ? `<p><b>Type:</b> ${escapeHtml(type)}</p>` : "") +
           `<p><b>Subject:</b> ${escapeHtml(subject)}</p>` +
           `<p>${escapeHtml(msgBody).replace(/\n/g, "<br>")}</p>` +
