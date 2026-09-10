@@ -82,6 +82,31 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Merges only RUNS of consecutive single-character tokens (e.g.
+    "f u c k" -> "fuck") so deliberately spaced-out letters are still
+    caught, without merging genuinely separate words together. Naively
+    concatenating the whole message (an earlier version of this function
+    did exactly that) turns innocent phrases into false matches - "watch
+    ink dry" collapses into "...watchinkdry..." which contains "chink",
+    and "found a hole" collapses into "...foundahole..." which contains
+    "ahole". A real word never looks like a run of 1-letter tokens, so
+    this only ever fires on actual letter-by-letter spacing. */
+function collapseSpacedLetters(normalized: string): string[] {
+  const tokens = normalized.split(" ").filter(Boolean);
+  const out: string[] = [];
+  let run = "";
+  for (const tok of tokens) {
+    if (tok.length === 1) {
+      run += tok;
+    } else {
+      if (run) { out.push(run); run = ""; }
+      out.push(tok);
+    }
+  }
+  if (run) out.push(run);
+  return out;
+}
+
 /** terms is BANNED_TERMS plus whatever admins have added via
     #/admin/moderation (moderation_terms) - admin-supplied text isn't
     guaranteed regex-safe, so every term is escaped before use here,
@@ -89,11 +114,7 @@ function escapeRegExp(s: string): string {
 function containsBannedContent(text: string, terms: string[]): boolean {
   const normalized = normalizeForFilter(text);
   if (!normalized) return false;
-  // catches letters spaced/punctuated apart to dodge a whole-word match,
-  // e.g. "f u c k" - only applied to single words of 4+ letters, since a
-  // substring check on anything shorter risks false positives (e.g. "ass"
-  // inside "class") that \b word-boundary matching below already avoids.
-  const collapsed = normalized.replace(/\s+/g, "");
+  const tokens = collapseSpacedLetters(normalized);
   for (const raw of terms) {
     const term = normalizeForFilter(raw);
     if (!term) continue;
@@ -102,7 +123,13 @@ function containsBannedContent(text: string, terms: string[]): boolean {
       if (new RegExp("\\b" + words.join("\\s+") + "\\b").test(normalized)) return true;
     } else {
       if (new RegExp("\\b" + words[0] + "\\b").test(normalized)) return true;
-      if (term.length >= 4 && collapsed.includes(term)) return true;
+      // catches letters spaced/punctuated apart within ONE original word,
+      // e.g. "f u c k" - only for terms of 4+ letters, since a substring
+      // check on anything shorter risks false positives the \b match
+      // above already avoids (e.g. "ass" inside "class" is one token,
+      // "class" itself, and never matches "ass" via \b or via .includes
+      // unless "ass" itself were the whole token).
+      if (term.length >= 4 && tokens.some((tok) => tok.includes(term))) return true;
     }
   }
   return false;
@@ -201,7 +228,7 @@ Deno.serve(async (req) => {
   const combined = [subject, message, org].join(" ");
   const customTerms = await loadCustomTerms(adminClient);
   if (containsBannedContent(combined, BANNED_TERMS.concat(customTerms))) {
-    await recordBlock(adminClient, email, ip, "disallowed language", subject, message);
+    await recordBlock(adminClient, email, ip, "Violating our terms of use.", subject, message);
     return json({
       error: "We couldn't send that message because it contains language we don't allow on our forms. This form is no longer available to you.",
     }, 403);
