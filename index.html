@@ -5738,7 +5738,7 @@ const AppState = {
       subject:"", previewText:"", heroLabel:"", headline:"", heroImage:{src:"",alt:""}, intro:"",
       details:{}, ctaLabel:"", ctaUrl:"", secondaryLabel:"", secondaryText:"", footerNote:"" },
     lastNewsletterId:null,
-    storyBuilder:{ storyId:null, pages:null, selectedPageId:"", selectedLayerId:"", dirty:false },
+    storyBuilder:{ storyId:null, pages:null, selectedPageId:"", selectedLayerId:"", dirty:false, undoStack:[], redoStack:[] },
     notifOpen:false },
   launchFilter: { q:"", status:"", gateOnly:false, flaggedOnly:false },
   launchOpenCategories: {},
@@ -5841,6 +5841,55 @@ function bgToCSS(bg){
 function currentBuilderPage(){
   const sb = AppState.admin.storyBuilder;
   return sb.pages && sb.pages.find(p => p.id === sb.selectedPageId);
+}
+
+/* Undo/redo for the story builder only - one stack of whole-pages
+   snapshots, taken right before each edit (see the "story-build-" guard
+   in the click/change listeners, and the two direct call sites in
+   mountLayerDragResize/mountStoryBuilderCanvasDrag for the two gestures
+   that bypass data-act dispatch entirely: drag/resize and the
+   double-click text prompt). Capped so a very long editing session
+   can't grow this without bound; older history just falls off. */
+const STORY_UNDO_LIMIT = 40;
+function snapshotStoryBuilder(){
+  const sb = AppState.admin.storyBuilder;
+  if (!sb.pages) return;
+  sb.undoStack.push(JSON.parse(JSON.stringify(sb.pages)));
+  if (sb.undoStack.length > STORY_UNDO_LIMIT) sb.undoStack.shift();
+  sb.redoStack = [];
+}
+function storyBuilderUndo(){
+  const sb = AppState.admin.storyBuilder;
+  if (!sb.undoStack.length) return;
+  sb.redoStack.push(JSON.parse(JSON.stringify(sb.pages)));
+  sb.pages = sb.undoStack.pop();
+  if (!sb.pages.some(p => p.id === sb.selectedPageId)) sb.selectedPageId = sb.pages[0] ? sb.pages[0].id : "";
+  sb.selectedLayerId = "";
+  sb.dirty = true;
+  rerender();
+}
+/* Everything "story-build-" prefixed EXCEPT these actually edits page/layer
+   content - the rest are navigation, selection, or (for bg-pick/add-image)
+   just open a picker whose own callback is the real edit and snapshots
+   itself right before applying it. Kept as one list so the click and
+   change listeners below can't drift apart on what counts as undoable. */
+const STORY_BUILD_NON_UNDOABLE = [
+  "story-build-pages", "story-build-select-page", "story-build-select-layer",
+  "story-build-close", "story-build-save", "story-build-bg-pick", "story-build-add-image",
+  "story-build-undo", "story-build-redo"
+];
+function isUndoableStoryAction(act){
+  return !!act && act.indexOf("story-build-") === 0 && STORY_BUILD_NON_UNDOABLE.indexOf(act) < 0;
+}
+function storyBuilderRedo(){
+  const sb = AppState.admin.storyBuilder;
+  if (!sb.redoStack.length) return;
+  sb.undoStack.push(JSON.parse(JSON.stringify(sb.pages)));
+  sb.pages = sb.redoStack.pop();
+  if (!sb.pages.some(p => p.id === sb.selectedPageId)) sb.selectedPageId = sb.pages[0] ? sb.pages[0].id : "";
+  sb.selectedLayerId = "";
+  sb.dirty = true;
+  rerender();
 }
 /* A gradient background is one "c1,c2,angle" string (see bgToCSS) so it
    round-trips through a single field with no bespoke 3-part control - the
@@ -12963,6 +13012,8 @@ function adminStoryBuilder(id){
     sb.selectedPageId = sb.pages[0].id;
     sb.selectedLayerId = "";
     sb.dirty = false;
+    sb.undoStack = [];
+    sb.redoStack = [];
   }
 
   const page = sb.pages.find(p => p.id === sb.selectedPageId) || sb.pages[0];
@@ -12973,6 +13024,8 @@ function adminStoryBuilder(id){
     + '<h1 class="admin-section-title" style="margin-top:2px">' + E(story.title || "Untitled story") + '</h1></div>'
     + '<div class="row" style="gap:10px">'
     + (sb.dirty ? '<span class="admin-status"><span class="admin-badge admin-badge--sm admin-badge--warn">' + ic("pencil") + '</span>Unsaved</span>' : "")
+    + '<button type="button" class="admin-btn admin-btn--ghost admin-btn--icon" data-act="story-build-undo" aria-label="Undo (Ctrl+Z)" title="Undo (Ctrl+Z)"' + (sb.undoStack.length ? "" : " disabled") + '>' + ic("undo-2") + '</button>'
+    + '<button type="button" class="admin-btn admin-btn--ghost admin-btn--icon" data-act="story-build-redo" aria-label="Redo (Ctrl+Shift+Z)" title="Redo (Ctrl+Shift+Z)"' + (sb.redoStack.length ? "" : " disabled") + '>' + ic("redo-2") + '</button>'
     + '<button type="button" class="admin-btn admin-btn--ghost" data-act="story-build-close" data-id="' + E(id) + '">Close</button>'
     + '<button type="button" class="admin-btn admin-btn--primary" data-act="story-build-save" data-id="' + E(id) + '">' + ic("save") + ' Save</button>'
     + '</div></div>'
@@ -13183,6 +13236,7 @@ function mountStoryBuilderDrag(){
       const from = sb.pages.findIndex(p => p.id === dragId);
       const to = sb.pages.findIndex(p => p.id === overId);
       if (from < 0 || to < 0) return;
+      snapshotStoryBuilder();
       const [moved] = sb.pages.splice(from, 1);
       sb.pages.splice(to, 0, moved);
       sb.dirty = true;
@@ -13205,6 +13259,7 @@ function mountStoryBuilderDrag(){
         const from = page.layers.findIndex(l => l.id === dragLayerId);
         const to = page.layers.findIndex(l => l.id === overId);
         if (from < 0 || to < 0) return;
+        snapshotStoryBuilder();
         const [moved] = page.layers.splice(from, 1);
         page.layers.splice(to, 0, moved);
         AppState.admin.storyBuilder.dirty = true;
@@ -13227,6 +13282,7 @@ function mountLayerDragResize(el, layer, layerId, canvas, sb, lockAspect){
     e.preventDefault();
     sb.selectedLayerId = layerId;
     el.setPointerCapture(e.pointerId);
+    snapshotStoryBuilder();
     const rect = canvas.getBoundingClientRect();
     const startX = e.clientX, startY = e.clientY;
     const startLX = layer.x, startLY = layer.y;
@@ -13244,16 +13300,22 @@ function mountLayerDragResize(el, layer, layerId, canvas, sb, lockAspect){
       document.removeEventListener("pointerup", onUp);
       document.removeEventListener("pointercancel", onCancel);
     };
+    // Every pointerdown snapshots up front (simplest way to guarantee one
+    // snapshot per gesture, taken before the first move) - a click that
+    // never actually moved anything pops that snapshot back off instead
+    // of leaving a no-op step in the undo history.
     const onUp = (up) => {
       if (up.pointerId !== e.pointerId) return;
       cleanup();
       if (layer.x !== startLX || layer.y !== startLY) sb.dirty = true;
+      else sb.undoStack.pop();
       rerender();
     };
     const onCancel = (cn) => {
       if (cn.pointerId !== e.pointerId) return;
       cleanup();
       if (layer.x !== startLX || layer.y !== startLY) sb.dirty = true;
+      else sb.undoStack.pop();
       rerender();
     };
     document.addEventListener("pointermove", onMove);
@@ -13267,6 +13329,7 @@ function mountLayerDragResize(el, layer, layerId, canvas, sb, lockAspect){
     e.preventDefault();
     e.stopPropagation();
     handle.setPointerCapture(e.pointerId);
+    snapshotStoryBuilder();
     const rect = canvas.getBoundingClientRect();
     const startX = e.clientX, startY = e.clientY;
     const startW = layer.w, startH = layer.h;
@@ -13299,12 +13362,14 @@ function mountLayerDragResize(el, layer, layerId, canvas, sb, lockAspect){
       if (up.pointerId !== e.pointerId) return;
       cleanup();
       if (layer.w !== startW || layer.h !== startH) sb.dirty = true;
+      else sb.undoStack.pop();
       rerender();
     };
     const onCancel = (cn) => {
       if (cn.pointerId !== e.pointerId) return;
       cleanup();
       if (layer.w !== startW || layer.h !== startH) sb.dirty = true;
+      else sb.undoStack.pop();
       rerender();
     };
     document.addEventListener("pointermove", onMove);
@@ -13329,6 +13394,7 @@ function mountStoryBuilderCanvasDrag(){
       e.stopPropagation();
       const next = prompt("Edit text:", richTextToText(layer.content));
       if (next === null) return;
+      snapshotStoryBuilder();
       layer.content = sanitizeHTML(next);
       sb.dirty = true;
       rerender();
@@ -16406,6 +16472,8 @@ const ACTIONS = {
       rerender();
     });
   },
+  "story-build-undo": () => { storyBuilderUndo(); },
+  "story-build-redo": () => { storyBuilderRedo(); },
   "story-build-close": (el) => {
     const id = el.getAttribute("data-id");
     if (AppState.admin.storyBuilder.dirty && !confirm("You have unsaved changes. Leave without saving?")) return;
@@ -16460,6 +16528,7 @@ const ACTIONS = {
       if (!file) return;
       try {
         const url = await uploadToStorage(file, "story-pages");
+        snapshotStoryBuilder();
         page.background = { type: file.type === "image/gif" ? "gif" : "image", value: url };
         AppState.admin.storyBuilder.dirty = true;
         rerender();
@@ -16511,6 +16580,7 @@ const ACTIONS = {
     const page = currentBuilderPage();
     if (!page) return;
     openMediaPicker((m) => {
+      snapshotStoryBuilder();
       const ly = blankImageLayer(m.path, m.alt);
       page.layers.push(ly);
       AppState.admin.storyBuilder.selectedLayerId = ly.id;
@@ -18330,6 +18400,7 @@ document.addEventListener("click", (ev) => {
   const el = closestAction(ev.target);
   if (!el) return;
   const act = el.getAttribute("data-act");
+  if (isUndoableStoryAction(act)) snapshotStoryBuilder();
   if (el.tagName === "FORM") return;
   /* A <select> only ever acts on "change" (every data-act select in this
      app already has its own change-listener branch) - a click here is
@@ -18357,6 +18428,20 @@ document.addEventListener("keydown", (ev) => {
   if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key.toLowerCase() === "l" && isActiveAdmin() && !isLocked){
     ev.preventDefault();
     ACTIONS["lock-now"]();
+    return;
+  }
+  /* Scoped to whenever the story builder canvas is actually on screen, so
+     this never steals Ctrl+Z from a native text field's own undo anywhere
+     else in the app - the canvas isn't a text field, so there's no
+     competing native undo to preserve while it's open. */
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z" && $("#story-canvas")){
+    ev.preventDefault();
+    if (ev.shiftKey) storyBuilderRedo(); else storyBuilderUndo();
+    return;
+  }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "y" && $("#story-canvas")){
+    ev.preventDefault();
+    storyBuilderRedo();
     return;
   }
   if (ev.key === "Escape" && closeMediaPicker()) return;
@@ -18461,6 +18546,7 @@ document.addEventListener("change", (ev) => {
     const label = el.closest("label");
     if (label) label.setAttribute("aria-pressed", el.checked ? "true" : "false");
   }
+  if (isUndoableStoryAction(el.getAttribute && el.getAttribute("data-act"))) snapshotStoryBuilder();
   if (el.getAttribute && el.getAttribute("data-act") === "story-build-bg-type"){
     ACTIONS["story-build-bg-type"](el);
     return;
