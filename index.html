@@ -10482,6 +10482,10 @@ function adminList(col){
     + '<span class="admin-chip">' + rows.length + ' shown</span>'
     + (problemCount ? "" : '<span class="admin-chip admin-chip--good">' + ic("check") + ' All valid</span>')
     + (st.selected.ids.length ? '<span class="admin-chip admin-chip--accent">' + plural(st.selected.ids.length, "selected") + '</span>'
+        + '<select class="admin-select" style="width:auto" data-act="admin-bulk-status" data-col="' + E(col) + '" aria-label="Set status for selected">'
+        + '<option value="" selected disabled>Set status…</option>'
+        + STATUSES.map(s => '<option value="' + s.id + '">' + E(s.label) + '</option>').join("")
+        + '</select>'
         + '<button class="admin-btn admin-btn--sm admin-btn--danger" data-act="admin-bulk-delete" data-col="' + E(col) + '">' + ic("trash-2") + ' Delete selected</button>'
         + '<button class="admin-btn admin-btn--sm admin-btn--ghost" data-act="admin-select-clear">Clear</button>'
         : "")
@@ -12482,7 +12486,7 @@ function adminMedia(){
     + '<button class="admin-filter-chip" data-act="media-tab" data-value="manage" aria-pressed="' + (tab === "manage" ? "true" : "false") + '">' + ic("list") + ' Manage media</button>'
     + '<button class="admin-filter-chip" data-act="media-tab" data-value="reference" aria-pressed="' + (tab === "reference" ? "true" : "false") + '">' + ic("image") + ' Media Reference</button>'
     + '</div>'
-    + '<button type="button" class="admin-btn admin-btn--primary" data-act="media-upload">' + ic("upload") + ' Upload image or video</button>'
+    + '<button type="button" class="admin-btn admin-btn--primary" data-act="media-upload">' + ic("upload") + ' Upload images or videos</button>'
     + '</div>';
 
   if (tab === "reference"){
@@ -17291,21 +17295,44 @@ const ACTIONS = {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*,video/*";
+    input.multiple = true;
     input.onchange = async () => {
-      const file = input.files[0];
-      if (!file) return;
-      const isVideo = file.type.indexOf("video") === 0;
-      try {
-        const url = await uploadToStorage(file, "media-library");
-        const rec = await db.add("mediaAssets", {
-          path: url, alt: "", usage: "",
-          kind: isVideo ? "video" : "illustration",
-          status: "draft", sizeBytes: file.size
-        });
+      const files = Array.from(input.files || []);
+      if (!files.length) return;
+      // Sequential, not Promise.all - each upload path is stamped with
+      // Date.now(), so racing them in parallel risks two files in the
+      // same batch landing on the exact same millisecond and colliding.
+      // One failed file (e.g. over MAX_UPLOAD_BYTES) shouldn't stop the
+      // rest from going up, same "keep going" spirit as admin-bulk-delete.
+      let uploaded = 0, lastId = null;
+      const failed = [];
+      for (const file of files){
+        const isVideo = file.type.indexOf("video") === 0;
+        try {
+          const url = await uploadToStorage(file, "media-library");
+          const rec = await db.add("mediaAssets", {
+            path: url, alt: "", usage: "",
+            kind: isVideo ? "video" : "illustration",
+            status: "draft", sizeBytes: file.size
+          });
+          lastId = rec.id;
+          uploaded++;
+        } catch(err){
+          failed.push(file.name + ": " + err.message);
+        }
+      }
+      rerender();
+      if (uploaded === 1 && !failed.length){
         toast("Uploaded. Add alt text and where it's used below.");
-        rerender();
-        openEditor("mediaAssets", rec.id);
-      } catch(err){ toast("Upload failed: " + err.message, "bad"); }
+        openEditor("mediaAssets", lastId);
+      } else if (uploaded && !failed.length){
+        toast(plural(uploaded, "file") + " uploaded as drafts. Add alt text and where each is used below.");
+      } else if (uploaded && failed.length){
+        toast(plural(uploaded, "file") + " uploaded, " + failed.length + " failed - see the console for details.", "bad");
+        console.warn("Some uploads failed:\n" + failed.join("\n"));
+      } else {
+        toast("Upload failed: " + (failed[0] || "unknown error"), "bad");
+      }
     };
     input.click();
   },
@@ -17961,18 +17988,12 @@ async function handleSubmit(form, act){
     const guard = canSetStatus(col, candidate, wanted);
     if (!guard.ok){
       candidate.status = existing && existing.status === "published" ? "revision" : "draft";
-      let box = form.querySelector("[data-valbox]");
-      if (!box){ box = document.createElement("div"); box.setAttribute("data-valbox",""); form.prepend(box); }
-      box.innerHTML = validationBox(guard.errs);
       try {
         if (id) await db.update(col, id, candidate);
-        else {
-          const created = await db.add(col, candidate);
-          form.setAttribute("data-id", created.id);   /* so the next save edits rather than duplicates */
-        }
+        else await db.add(col, candidate);
       } catch(_e){ return; }
+      closeModal();
       toast("Saved as " + statusMeta(candidate.status).label + ". Publishing is blocked until the problems are fixed.", "bad");
-      drawIcons();
       rerender();
       return;
     }
@@ -18485,6 +18506,34 @@ document.addEventListener("change", (ev) => {
     db.update("launchReadiness", id, { status: el.value }, true)
       .then(() => rerender())
       .catch(() => {});
+    return;
+  }
+  if (el.getAttribute && el.getAttribute("data-act") === "admin-bulk-status" && el.tagName === "SELECT"){
+    const col = el.getAttribute("data-col");
+    const wanted = el.value;
+    const ids = AppState.admin.selected.ids.slice();
+    if (!ids.length || !wanted) return;
+    (async () => {
+      // Same downgrade rule openEditor's own save already applies: setting
+      // "published"/"scheduled" on a record that fails validation doesn't
+      // block the whole batch, it just saves that one record as draft (or
+      // revision, if it was already live) instead - never silently skipped.
+      let applied = 0, downgraded = 0;
+      for (const id of ids){
+        const existing = db.find(col, id);
+        if (!existing) continue;
+        const guard = canSetStatus(col, existing, wanted);
+        const nextStatus = guard.ok ? wanted : (existing.status === "published" ? "revision" : "draft");
+        try { await db.update(col, id, { status: nextStatus }, true); applied++; if (!guard.ok) downgraded++; }
+        catch(_e){ /* keep going */ }
+      }
+      AppState.admin.selected = { col: null, ids: [] };
+      rerender();
+      const label = (STATUSES.find(s => s.id === wanted) || {}).label || wanted;
+      toast(downgraded
+        ? plural(applied, "record") + " updated (" + downgraded + " couldn't publish yet, so " + (downgraded === 1 ? "it was" : "they were") + " saved as draft/needs revision instead)"
+        : plural(applied, "record") + " set to " + label);
+    })();
     return;
   }
   if (el.getAttribute && el.getAttribute("data-act") === "launch-set-notes"){
