@@ -14040,10 +14040,11 @@ function openMediaPicker(onPick){
   const items = db.list("mediaAssets").filter(m => m.status !== "archived");
   $("#picker-root").innerHTML =
     '<div class="scrim" data-act="picker-scrim" role="dialog" aria-modal="true" aria-label="Choose an image">'
-    + '<div class="modal" style="max-width:900px">'
+    + '<div class="modal modal--sheet" style="max-width:900px;height:min(700px,92vh)">'
     + '<div class="modal__head"><div><span class="eyebrow">Media library</span>'
     + '<h3 style="margin:0">Choose an image</h3></div>'
     + '<button type="button" class="btn btn--ghost btn--icon" data-act="close-picker" aria-label="Close">' + ic("x", "i-lg") + '</button></div>'
+    + '<div class="modal__body">'
     + (items.length
         ? '<div class="mediagrid">' + items.map(m =>
             '<button type="button" class="mediagrid__item" data-act="media-choose" data-id="' + E(m.id) + '">'
@@ -14053,6 +14054,7 @@ function openMediaPicker(onPick){
         : '<div class="empty">No images in the library yet. Add one in Media references.</div>')
     + '<div class="callout callout--info" style="margin-top:18px">' + ic("info")
     + ' Files themselves live in the <code>assets/</code> folder next to this page. This prototype records the path and the description; uploading needs a server.</div>'
+    + '</div>'
     + '<div class="modal__foot"><button type="button" class="btn btn--ghost" data-act="close-picker">Cancel</button></div>'
     + '</div></div>';
   rootAssetPaths($("#picker-root"));
@@ -17191,7 +17193,18 @@ const ACTIONS = {
     toast("Blocked - they can no longer submit the contact forms.");
     rerender();
   },
-  "confirm-delete-yes": () => { if (PENDING_DELETE) { const f = PENDING_DELETE; PENDING_DELETE = null; f(); } },
+  "confirm-delete-yes": () => {
+    if (!PENDING_DELETE) return;
+    const f = PENDING_DELETE;
+    PENDING_DELETE = null;
+    // Close on click, not after whatever async work f() does - some
+    // confirmDelete() callers already close it themselves once their own
+    // db call resolves, but not all of them did, which is exactly the
+    // bug this fixes: closing here guarantees it every time, regardless
+    // of what a given callback does or forgets to do.
+    closeModal();
+    f();
+  },
   "confirm-send-newsletter-yes": () => { if (PENDING_SEND_NEWSLETTER){ const f = PENDING_SEND_NEWSLETTER; PENDING_SEND_NEWSLETTER = null; f(); } },
   "confirm-schedule-newsletter-yes": () => { if (PENDING_SCHEDULE_NEWSLETTER){ const f = PENDING_SCHEDULE_NEWSLETTER; PENDING_SCHEDULE_NEWSLETTER = null; f(); } },
 
