@@ -13937,7 +13937,14 @@ function cmsBody(key){
   const r = pageRec(key);
   const id = r ? r.id : null;
   const html = r ? sanitizeHTML(r.body || "") : "";
-  if (html.trim()) return quEditable("page-body", id, '<div class="prose">' + html + '</div>');
+  /* A rich-text editor left open and closed without typing anything
+     saves as "<br>" or "<p></p>", not "" - html.trim() alone treats
+     that as real content and renders an empty, pointless prose block
+     on the public page. Strip tags/&nbsp; first so only genuine text
+     (or a real embedded image) counts as content. */
+  const hasContent = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, "").trim().length > 0
+    || /<img[\s>]/i.test(html);
+  if (hasContent) return quEditable("page-body", id, '<div class="prose">' + html + '</div>');
   /* Nothing written yet - admin-only placeholder (gated the same way
      quEditable() already gates everything else) so there's still
      something to click to add the page's rich-text body, instead of
