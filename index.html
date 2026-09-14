@@ -1947,10 +1947,15 @@ h1.admin-page-title{ font-size:1.7rem; }
 .story-builder__canvas-wrap{ padding:16px; }
 .story-builder__canvas{ position:relative; width:min(420px,100%); aspect-ratio:1/1.44; margin:0 auto; border-radius:8px; overflow:hidden; border:1px solid var(--admin-border); }
 .story-builder__layer{ position:absolute; cursor:move; box-sizing:border-box; }
-.story-builder__layer.is-selected{ outline:2px solid var(--admin-accent); outline-offset:2px; }
+/* Drawn INSIDE the layer's own box (a negative offset), not straddling its
+   edge - a layer sized to fill the canvas (the common "full bg" photo case)
+   has no room outside itself before .story-builder__canvas's overflow:hidden
+   clips it away, which used to make the selection outline and resize handle
+   silently invisible on exactly the layer an admin is most likely to resize. */
+.story-builder__layer.is-selected{ outline:2px solid var(--admin-accent); outline-offset:-2px; }
 .story-builder__layer.is-locked{ cursor:not-allowed; }
 .story-builder__layer.is-locked.is-selected{ outline-color:#999; }
-.story-builder__resize-handle{ position:absolute; right:-6px; bottom:-6px; width:14px; height:14px; background:var(--admin-accent); border:2px solid #fff; border-radius:50%; cursor:nwse-resize; }
+.story-builder__resize-handle{ position:absolute; right:3px; bottom:3px; width:16px; height:16px; background:var(--admin-accent); border:2px solid #fff; border-radius:50%; cursor:nwse-resize; box-shadow:0 1px 4px rgba(0,0,0,.4); }
 .story-builder__layer:not(.is-selected) .story-builder__resize-handle{ display:none; }
 .story-builder__layerrow{ display:block; padding:6px; border:1px solid var(--admin-border); border-radius:6px; margin-bottom:6px; cursor:grab; transition:box-shadow .15s ease; }
 .story-builder__layerrow.is-selected{ border-color:var(--admin-accent); }
@@ -5979,10 +5984,19 @@ function layerToBuilderHTML(layer, selected){
       + sanitizeHTML(layer.content) + '</div>';
   }
   const rect = imageLayerRect(layer);
-  return '<img class="story-builder__layer story-builder__layer--image' + sel + lockedCls + '"'
+  /* A plain <img> can't be the layer element itself: mountLayerDragResize()
+     appends the resize-handle as a child, and a browser never renders (or
+     hit-tests) children of an <img> - it's a replaced element with no content
+     box. That silently made every image layer's resize handle exist in the
+     DOM but be unusable (zero size, unclickable). Wrap it in a plain div
+     instead, so the div carries the layer's position/selection/handle and
+     the <img> just fills it. */
+  return '<div class="story-builder__layer story-builder__layer--image' + sel + lockedCls + '"'
     + ' data-act="story-build-select-layer" data-layer-id="' + E(layer.id) + '"'
-    + ' src="' + E(layer.src) + '" alt="' + E(layer.alt) + '"'
-    + ' style="position:absolute;left:' + rect.x + '%;top:' + rect.y + '%;width:' + rect.w + '%;height:' + rect.h + '%;object-fit:' + rect.fit + '">';
+    + ' style="position:absolute;left:' + rect.x + '%;top:' + rect.y + '%;width:' + rect.w + '%;height:' + rect.h + '%">'
+    + '<img src="' + E(layer.src) + '" alt="' + E(layer.alt) + '" draggable="false"'
+    + ' style="display:block;width:100%;height:100%;object-fit:' + rect.fit + ';pointer-events:none">'
+    + '</div>';
 }
 /* A true small-scale rendering for the filmstrip thumbnails - not just a
    background swatch. Text can't reuse TEXT_STYLE_CSS here: those sizes are
