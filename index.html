@@ -14171,10 +14171,42 @@ function fileFieldControl(f, rec){
    Media picker, on its own layer so it can open over the editor
    ------------------------------------------------------------ */
 let MEDIA_PICK_TARGET = null;
+let MEDIA_PICKER_QUERY = "";
 
-function openMediaPicker(onPick){
-  MEDIA_PICK_TARGET = onPick || null;
+/** Matches against the filename and the two describable fields an admin
+    actually fills in (alt text, where it's used) - not `kind`/`status`,
+    which are pickers/labels, not something anyone would type to find a
+    photo by. */
+function mediaPickerItems(){
+  const q = MEDIA_PICKER_QUERY.trim().toLowerCase();
   const items = db.list("mediaAssets").filter(m => m.status !== "archived");
+  if (!q) return items;
+  return items.filter(m =>
+    m.path.split("/").pop().toLowerCase().indexOf(q) >= 0
+    || String(m.alt || "").toLowerCase().indexOf(q) >= 0
+    || String(m.usage || "").toLowerCase().indexOf(q) >= 0
+  );
+}
+
+function mediaPickerGridHTML(){
+  const items = mediaPickerItems();
+  if (!items.length){
+    return '<div class="empty">' + (MEDIA_PICKER_QUERY.trim()
+      ? 'No images match “' + E(MEDIA_PICKER_QUERY.trim()) + '”.'
+      : 'No images in the library yet. Add one in Media references.') + '</div>';
+  }
+  return '<div class="mediagrid">' + items.map(m =>
+      '<button type="button" class="mediagrid__item" data-act="media-choose" data-id="' + E(m.id) + '">'
+      + '<img src="' + E(m.path) + '" alt="' + E(m.alt) + '" loading="lazy">'
+      + '<span class="mediagrid__name">' + E(m.path.split("/").pop()) + '</span></button>').join("")
+    + '</div>';
+}
+
+/** Rebuilds the whole picker (used on open, and again on close-of-search
+    edge cases); the search box's own keystrokes instead patch just the
+    grid in place, via reMediaPickerGrid() below, so typing never steals
+    focus out of the search field. */
+function renderMediaPicker(){
   $("#picker-root").innerHTML =
     '<div class="scrim" data-act="picker-scrim" role="dialog" aria-modal="true" aria-label="Choose an image">'
     + '<div class="modal modal--sheet" style="max-width:900px;height:min(700px,92vh)">'
@@ -14182,13 +14214,9 @@ function openMediaPicker(onPick){
     + '<h3 style="margin:0">Choose an image</h3></div>'
     + '<button type="button" class="btn btn--ghost btn--icon" data-act="close-picker" aria-label="Close">' + ic("x", "i-lg") + '</button></div>'
     + '<div class="modal__body">'
-    + (items.length
-        ? '<div class="mediagrid">' + items.map(m =>
-            '<button type="button" class="mediagrid__item" data-act="media-choose" data-id="' + E(m.id) + '">'
-            + '<img src="' + E(m.path) + '" alt="' + E(m.alt) + '" loading="lazy">'
-            + '<span class="mediagrid__name">' + E(m.path.split("/").pop()) + '</span></button>').join("")
-          + '</div>'
-        : '<div class="empty">No images in the library yet. Add one in Media references.</div>')
+    + '<div class="field" style="max-width:340px"><label for="media-picker-search">Search images</label>'
+    + '<input class="inp" id="media-picker-search" type="search" placeholder="Search by filename, alt text, or usage" value="' + E(MEDIA_PICKER_QUERY) + '" data-act="media-picker-search" autocomplete="off"></div>'
+    + '<div id="media-picker-grid" style="margin-top:16px">' + mediaPickerGridHTML() + '</div>'
     + '<div class="callout callout--info" style="margin-top:18px">' + ic("info")
     + ' Files themselves live in the <code>assets/</code> folder next to this page. This prototype records the path and the description; uploading needs a server.</div>'
     + '</div>'
@@ -14197,6 +14225,22 @@ function openMediaPicker(onPick){
   rootAssetPaths($("#picker-root"));
   document.body.classList.add("no-scroll");
   drawIcons();
+}
+
+/** Just the grid, patched in place on every keystroke - re-running the
+    whole renderMediaPicker() would blow away the search input the user
+    is actively typing in. */
+function reMediaPickerGrid(){
+  const grid = $("#media-picker-grid");
+  if (!grid) return;
+  grid.innerHTML = mediaPickerGridHTML();
+  drawIcons();
+}
+
+function openMediaPicker(onPick){
+  MEDIA_PICK_TARGET = onPick || null;
+  MEDIA_PICKER_QUERY = "";
+  renderMediaPicker();
 }
 
 function closeMediaPicker(){
@@ -18566,6 +18610,12 @@ document.addEventListener("input", (ev) => {
   } else if (act === "launch-search"){
     AppState.launchFilter.q = el.value;
     restoreFocusAfter(() => rerender(), "#launch-q");
+  } else if (act === "media-picker-search"){
+    /* Patches just the grid in place (not a restoreFocusAfter/rerender
+       round-trip like the filters above) - the search input itself is
+       never re-rendered here, so it never loses focus to begin with. */
+    MEDIA_PICKER_QUERY = el.value;
+    reMediaPickerGrid();
   } else if (act === "story-build-bg-value"){
     ACTIONS["story-build-bg-value"](el);
   } else if (el.id === "nl-subject" && el.closest("#nl-form")){
