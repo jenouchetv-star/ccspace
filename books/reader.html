@@ -401,6 +401,52 @@
             outline-offset: 2px;
         }
 
+        /* PAGE-TURN ARROWS
+           A plain click-the-page-half gesture has no visible sign that
+           anything is interactive, so a first-time reader has no way to
+           discover it. Sit at the outer edges of .book-container (which
+           never itself gets the .opened translate - only .book-wrapper
+           does, so this position stays correct whether the book is
+           closed, mid-spread, or on its last page) at the same bottom
+           band as each page's own page-number chip, so the arrows read
+           as "turn from here" controls paired with that page count. */
+        .page-arrow {
+            position: absolute;
+            bottom: 8px;
+            width: var(--arrow-size);
+            height: var(--arrow-size);
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.94);
+            color: var(--teal-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 3px 14px rgba(0, 0, 0, 0.18);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+            z-index: 50;
+        }
+        .page-arrow svg { width: 42%; height: 42%; }
+        .page-arrow--prev { left: 4px; }
+        .page-arrow--next { right: 4px; }
+        .page-arrow:hover { transform: scale(1.08); box-shadow: 0 5px 18px rgba(0, 0, 0, 0.25); }
+        .page-arrow:active { transform: scale(0.95); }
+        .page-arrow:disabled { opacity: 0.25; cursor: default; box-shadow: none; }
+        .page-arrow:focus-visible { outline: 3px solid #BC3229; outline-offset: 3px; }
+        /* A couple of gentle nudges on the next-page arrow right after load,
+           just enough to catch the eye toward "this is clickable" without
+           nagging - it runs twice, then stops for good. */
+        .page-arrow--next.hint { animation: page-arrow-hint 1.1s ease-in-out 2; }
+        @keyframes page-arrow-hint {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(6px); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .page-arrow { transition: none; }
+            .page-arrow--next.hint { animation: none; }
+        }
+
         /* SINGLE-PAGE MOBILE READER
            Below 768px, every .front/.back across every paper occupies the
            same box (their 3D transforms are neutralised) and only the
@@ -431,9 +477,15 @@
 <body>
     <div class="app-container">
         <div class="book-container" id="book-container">
+            <button type="button" id="prev-page-btn" class="page-arrow page-arrow--prev" aria-label="Previous page" title="Previous page" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+            </button>
             <div class="book-wrapper">
                 <div class="book" id="book-pages"></div>
             </div>
+            <button type="button" id="next-page-btn" class="page-arrow page-arrow--next hint" aria-label="Next page" title="Next page" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+            </button>
         </div>
         <div class="bottom-controls">
             <button id="all-pages-btn"><p style="font-family: poppins; font-size: 12px; color: white; letter-spacing: 2px; margin:0"><b>&#9776;  ALL PAGES</b></p></button>
@@ -603,6 +655,13 @@ document.addEventListener('DOMContentLoaded', async function () {
   const closeModalBtn = document.querySelector('.close-modal-btn');
   const thumbnailGrid = document.getElementById('thumbnail-grid');
   const bookContainer = document.getElementById('book-container');
+  const prevPageBtn = document.getElementById('prev-page-btn');
+  const nextPageBtn = document.getElementById('next-page-btn');
+  /* Hidden by default (see the markup) so a story that fails to load never
+     leaves two dead-looking buttons floating over the error message -
+     only revealed once there's an actual book behind them to turn. */
+  prevPageBtn.hidden = false;
+  nextPageBtn.hidden = false;
 
   let currentLocation = 0;
   const numOfPapers = papers.length;
@@ -622,7 +681,10 @@ document.addEventListener('DOMContentLoaded', async function () {
   let mobileIndex = 0;
 
   function notifyPagePosition() {
+    const atFirstPage = isMobileBook() ? mobileIndex === 0 : currentLocation <= 0;
     const atLastPage = isMobileBook() ? mobileIndex === flatFaces.length - 1 : currentLocation >= lastFlipLocation;
+    prevPageBtn.disabled = atFirstPage;
+    nextPageBtn.disabled = atLastPage;
     try { window.parent.postMessage({ source: 'ccs-book', atLastPage: atLastPage }, '*'); }
     catch (_e) { /* no parent frame - reading the file on its own */ }
   }
@@ -632,10 +694,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     flatFaces.forEach((el, idx) => el.classList.toggle('mobile-active', idx === mobileIndex));
     notifyPagePosition();
   }
-  function mobileNext() { if (mobileIndex < flatFaces.length - 1) showMobilePage(mobileIndex + 1); }
+  function mobileNext() { if (mobileIndex < flatFaces.length - 1) { nextPageBtn.classList.remove('hint'); showMobilePage(mobileIndex + 1); } }
   function mobilePrev() { if (mobileIndex > 0) showMobilePage(mobileIndex - 1); }
 
   allPagesBtn.addEventListener('click', openThumbnailView);
+  prevPageBtn.addEventListener('click', () => { if (isMobileBook()) mobilePrev(); else goPrevPage(); });
+  nextPageBtn.addEventListener('click', () => { if (isMobileBook()) mobileNext(); else goNextPage(); });
   closeModalBtn.addEventListener('click', closeThumbnailView);
   thumbnailModal.addEventListener('click', function(e) { if (e.target === thumbnailModal) closeThumbnailView(); });
 
@@ -721,6 +785,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   function turnPage(paper, move) {
     if (turning) return false;
+    nextPageBtn.classList.remove('hint');
     turning = paper;
     paper.classList.add('turning');
     move();
