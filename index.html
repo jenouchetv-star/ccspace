@@ -10663,11 +10663,11 @@ function countAll(pred){
 
 /* Content-health sweep (LRC auto-2): the same rule-based checks
    validateRecord() already runs per-record at save time, run across the
-   whole catalog on demand and used to keep the two matching issues
-   (iss-alt-text, iss-printables-missing) reflecting current reality
-   instead of a fixed snapshot from seed time. Advisory only - fixing a
-   gap still goes through the normal editor and publish workflow; this
-   never publishes or changes a content record itself. */
+   whole catalog on demand and used to keep three matching issues
+   (iss-alt-text, iss-printables-missing, iss-video-ids) reflecting
+   current reality instead of a fixed snapshot from seed time. Advisory
+   only - fixing a gap still goes through the normal editor and publish
+   workflow; this never publishes or changes a content record itself. */
 /* Ops digest (LRC auto-5): compiles numbers the app already tracks into
    one glanceable card, operationalizing MAINTENANCE.md's monthly runbook
    instead of leaving it as a markdown file someone has to remember to
@@ -10724,6 +10724,17 @@ async function runContentHealthCheck(){
     });
   });
 
+  /* iss-video-ids claims every published episode carries a real, working
+     video id - a claim that was only ever true the day it was written and
+     had nothing re-checking it since (exactly the kind of stale, hardcoded-
+     looking issue an admin would have no way to tell apart from a real one
+     without opening the code). Verified the same way embed()/viewActivity
+     already gate on whether an episode is actually playable. */
+  const videoGaps = [];
+  db.list("videos").forEach(v => {
+    if (v.status === "published" && !isVideoId(v.youtubeId)) videoGaps.push("videos: " + (v.title || v.id));
+  });
+
   const summarize = (list, noun) => list.length
     ? plural(list.length, noun) + ", as of the last health check: " + list.slice(0,8).join("; ") + (list.length > 8 ? "; and " + (list.length - 8) + " more." : ".")
     : "None found as of the last health check (" + relTime(nowISO()) + ").";
@@ -10742,7 +10753,17 @@ async function runContentHealthCheck(){
       detail: summarize(fileGaps, "record") + " Auto-checked by the content-health sweep."
     });
   }
-  return { altGaps: altGaps.length, fileGaps: fileGaps.length };
+  const videoIssue = db.find("issues", "iss-video-ids");
+  if (videoIssue){
+    await db.update("issues", videoIssue.id, {
+      state: videoGaps.length ? "open" : "fixed",
+      detail: (videoGaps.length
+        ? summarize(videoGaps, "published episode") + " missing a real video id."
+        : "All published episodes carry a real video id, as of the last health check (" + relTime(nowISO()) + ").")
+        + " Auto-checked by the content-health sweep."
+    });
+  }
+  return { altGaps: altGaps.length, fileGaps: fileGaps.length, videoGaps: videoGaps.length };
 }
 
 /* Storage usage, for the dashboard's early-warning card. This reads real
