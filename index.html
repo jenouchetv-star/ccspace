@@ -5945,6 +5945,13 @@ const IMAGE_PLACEMENT_RECT = {
   "inset-right":  { x:52, y:30, w:44,  h:40,  fit:"contain" },
   "inset-center": { x:20, y:30, w:60,  h:40,  fit:"contain" }
 };
+/** An "image" layer whose src is actually a compressed video - a GIF-sized
+    animation re-encoded as MP4/WebM is 90%+ smaller for the same loop, at
+    the cost of needing a <video> tag instead of <img> wherever it's drawn.
+    Layer type stays "image" (position/resize/select all still apply
+    unchanged); only the tag rendered inside the layer box differs. */
+const isVideoSrc = src => /\.(mp4|webm|mov)(\?|$)/i.test(String(src || ""));
+
 /** An image layer's actual geometry - its own x/y/w/h/fit once it has
     been positioned directly, otherwise derived from its placement preset. */
 function imageLayerRect(layer){
@@ -5958,17 +5965,25 @@ function imageLayerRect(layer){
     box. Async (the image has to actually load to know its dimensions),
     so it re-renders once it resolves rather than blocking on it. */
 function fitImageLayerToNaturalSize(layer){
-  const probe = new Image();
-  probe.onload = () => {
+  const apply = (naturalW, naturalH) => {
     const canvas = $("#story-canvas");
-    if (!canvas || !probe.naturalWidth || !probe.naturalHeight) return;
+    if (!canvas || !naturalW || !naturalH) return;
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     const pixelW = rect.width * layer.w / 100;
-    const pixelH = pixelW * (probe.naturalHeight / probe.naturalWidth);
+    const pixelH = pixelW * (naturalH / naturalW);
     layer.h = Math.max(5, Math.min(100 - layer.y, pixelH / rect.height * 100));
     rerender();
   };
+  if (isVideoSrc(layer.src)){
+    const probe = document.createElement("video");
+    probe.preload = "metadata";
+    probe.onloadedmetadata = () => apply(probe.videoWidth, probe.videoHeight);
+    probe.src = layer.src;
+    return;
+  }
+  const probe = new Image();
+  probe.onload = () => apply(probe.naturalWidth, probe.naturalHeight);
   probe.src = layer.src;
 }
 
@@ -5991,11 +6006,15 @@ function layerToBuilderHTML(layer, selected){
      DOM but be unusable (zero size, unclickable). Wrap it in a plain div
      instead, so the div carries the layer's position/selection/handle and
      the <img> just fills it. */
+  const fill = isVideoSrc(layer.src)
+    ? '<video src="' + E(layer.src) + '" autoplay loop muted playsinline'
+      + ' style="display:block;width:100%;height:100%;object-fit:' + rect.fit + ';pointer-events:none"></video>'
+    : '<img src="' + E(layer.src) + '" alt="' + E(layer.alt) + '" draggable="false"'
+      + ' style="display:block;width:100%;height:100%;object-fit:' + rect.fit + ';pointer-events:none">';
   return '<div class="story-builder__layer story-builder__layer--image' + sel + lockedCls + '"'
     + ' data-act="story-build-select-layer" data-layer-id="' + E(layer.id) + '"'
     + ' style="position:absolute;left:' + rect.x + '%;top:' + rect.y + '%;width:' + rect.w + '%;height:' + rect.h + '%">'
-    + '<img src="' + E(layer.src) + '" alt="' + E(layer.alt) + '" draggable="false"'
-    + ' style="display:block;width:100%;height:100%;object-fit:' + rect.fit + ';pointer-events:none">'
+    + fill
     + '</div>';
 }
 /* A true small-scale rendering for the filmstrip thumbnails - not just a
@@ -6017,7 +6036,10 @@ function layerToThumbnailHTML(layer){
       + E(richTextToText(layer.content)) + '</div>';
   }
   const rect = imageLayerRect(layer);
-  return '<img src="' + E(layer.src) + '" alt="" style="position:absolute;left:' + rect.x + '%;top:' + rect.y + '%;width:' + rect.w + '%;height:' + rect.h + '%;object-fit:' + rect.fit + '">';
+  const posStyle = 'position:absolute;left:' + rect.x + '%;top:' + rect.y + '%;width:' + rect.w + '%;height:' + rect.h + '%;object-fit:' + rect.fit;
+  return isVideoSrc(layer.src)
+    ? '<video src="' + E(layer.src) + '" autoplay loop muted playsinline style="' + posStyle + '"></video>'
+    : '<img src="' + E(layer.src) + '" alt="" style="' + posStyle + '">';
 }
 
 const PUBLIC_NAV = [
