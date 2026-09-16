@@ -431,18 +431,19 @@ p:last-child{ margin-bottom:0; }
   position:relative; aspect-ratio:16/10; overflow:hidden;
   border-bottom:var(--line); background:var(--paper-3);
 }
-.card__media img{ width:100%; height:100%; object-fit:cover; }
+.card__media img, .card__media video{ width:100%; height:100%; object-fit:cover; }
 /* Skeleton shimmer for lazy-loaded photos, so an image-heavy row of cards
    never shows a blank gap while it loads. Swapped for the loaded photo,
-   or a flat tint under reduced motion. */
-img.skel{
+   or a flat tint under reduced motion. A story cover pulled from a video
+   layer (storyCoverFromPages()) reuses this same class on a <video>. */
+img.skel, video.skel{
   background-image:linear-gradient(100deg, rgba(30,40,46,.05) 28%, rgba(30,40,46,.12) 45%, rgba(30,40,46,.05) 62%);
   background-size:200% 100%; animation:skel-shimmer 1.3s ease-in-out infinite;
 }
-img.skel.is-loaded{ animation:none; background-image:none; }
+img.skel.is-loaded, video.skel.is-loaded{ animation:none; background-image:none; }
 @keyframes skel-shimmer{ from{ background-position:150% 0; } to{ background-position:-50% 0; } }
 @media (prefers-reduced-motion: reduce){
-  img.skel{ animation:none; background-image:none; background-color:rgba(30,40,46,.08); }
+  img.skel, video.skel{ animation:none; background-image:none; background-color:rgba(30,40,46,.08); }
 }
 .card__body{ padding:17px 19px 20px; display:flex; flex-direction:column; gap:10px; flex:1; }
 .card__title{ font-size:1.22rem; font-weight:800; line-height:1.2; letter-spacing:-.022em; margin:0; }
@@ -1175,7 +1176,7 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
   background:var(--paper-card); border:var(--line); border-radius:var(--r-lg);
   box-shadow:var(--hard); padding:clamp(18px,2.4vw,30px);
 }
-.bookcard__cover img{
+.bookcard__cover img, .bookcard__cover video{
   width:100%; display:block; border:var(--line);
   border-radius:var(--r); box-shadow:var(--hard-sm);
 }
@@ -8613,7 +8614,9 @@ function viewStories(){
 /** The book as one of the cards in the list, alongside the short stories. */
 function bookListCard(b){
   const media = (b.cover && b.cover.src)
-    ? '<img class="skel" src="' + E(b.cover.src) + '" alt="' + E(b.cover.alt) + '" loading="lazy">'
+    ? (isVideoSrc(b.cover.src)
+        ? '<video class="skel" src="' + E(b.cover.src) + '" muted loop autoplay playsinline aria-label="' + E(b.cover.alt) + '"></video>'
+        : '<img class="skel" src="' + E(b.cover.src) + '" alt="' + E(b.cover.alt) + '" loading="lazy">')
     : '<div class="plate" style="--p1:' + E(b.color || "#1273B0") + ';--p2:' + E(b.colorDeep || "#0A5280") + '" role="presentation">'
       + '<div class="plate__mark">' + ic(b.icon || "book-open") + '</div></div>';
   return '<article class="card" data-act="open-book" data-id="' + E(b.id) + '" tabindex="0" role="button" aria-label="Read ' + E(b.title) + '">'
@@ -8628,8 +8631,11 @@ function bookListCard(b){
 }
 
 function bookCard(b){
+  const media = isVideoSrc(b.cover.src)
+    ? '<video src="' + E(b.cover.src) + '" muted loop autoplay playsinline aria-label="' + E(b.cover.alt) + '"></video>'
+    : '<img src="' + E(b.cover.src) + '" alt="' + E(b.cover.alt) + '" loading="lazy">';
   return '<article class="bookcard">'
-    + '<div class="bookcard__cover"><img src="' + E(b.cover.src) + '" alt="' + E(b.cover.alt) + '" loading="lazy"></div>'
+    + '<div class="bookcard__cover">' + media + '</div>'
     + '<div class="bookcard__body">'
     + '<h3 style="margin-bottom:.3em">' + E(b.title) + '</h3>'
     + '<p class="lede" style="font-size:1.08rem">' + E(b.blurb) + '</p>'
@@ -10294,9 +10300,11 @@ function formatBytes(n){
    25. ADMIN LISTS
    ============================================================ */
 function thumbCell(src){
-  return src
-    ? '<img src="' + E(src) + '" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:8px;border:1px solid var(--admin-border);display:block" loading="lazy">'
-    : '<div style="width:40px;height:40px;border-radius:8px;background:var(--admin-surface-2);display:flex;align-items:center;justify-content:center;color:var(--admin-faint)">' + ic("image","i") + '</div>';
+  if (!src) return '<div style="width:40px;height:40px;border-radius:8px;background:var(--admin-surface-2);display:flex;align-items:center;justify-content:center;color:var(--admin-faint)">' + ic("image","i") + '</div>';
+  const style = "width:40px;height:40px;object-fit:cover;border-radius:8px;border:1px solid var(--admin-border);display:block";
+  return isVideoSrc(src)
+    ? '<video src="' + E(src) + '" muted loop autoplay playsinline style="' + style + '"></video>'
+    : '<img src="' + E(src) + '" alt="" style="' + style + '" loading="lazy">';
 }
 
 const LIST_COLS = {
@@ -13315,7 +13323,9 @@ function storyBuilderLayersPanel(page){
       + (ly.type === "text"
           ? '<span title="Text layer" style="flex-shrink:0;display:flex;color:var(--admin-faint)">' + ic("type","i") + '</span>'
           : (ly.src
-              ? '<img src="' + E(ly.src) + '" alt="" style="width:28px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0">'
+              ? (isVideoSrc(ly.src)
+                  ? '<video src="' + E(ly.src) + '" muted loop autoplay playsinline style="width:28px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0"></video>'
+                  : '<img src="' + E(ly.src) + '" alt="" style="width:28px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0">')
               : '<span title="Image layer" style="flex-shrink:0;display:flex;color:var(--admin-faint)">' + ic("image","i") + '</span>'))
       + '<span class="tiny" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ly.type === "text" ? E(richTextToText(ly.content).slice(0, 24)) : "Image") + '</span>'
       + '<button type="button" class="admin-btn admin-btn--icon admin-btn--ghost" data-act="story-build-delete-layer" data-layer-id="' + E(ly.id) + '" aria-label="Delete layer">' + ic("trash-2") + '</button>'
@@ -16541,8 +16551,11 @@ function render(){
   }
   rootAssetPaths($("#app"));
   /* A cached image can already be complete before its load event would
-     fire, which the capture-phase listener above would otherwise miss. */
+     fire, which the capture-phase listener above would otherwise miss.
+     readyState >= 2 (HAVE_CURRENT_DATA) is a video's equivalent of
+     img.complete - it already has a frame ready to paint. */
   $$("#app img.skel").forEach(img => { if (img.complete) img.classList.add("is-loaded"); });
+  $$("#app video.skel").forEach(v => { if (v.readyState >= 2) v.classList.add("is-loaded"); });
   paceMarquee();
   rotateHeroWord();
 
@@ -18908,11 +18921,13 @@ document.addEventListener("change", (ev) => {
   }
 });
 
-/* Skeleton fade-in: load/error do not bubble, so this listens in the
-   capture phase instead of delegating the usual way. */
-["load","error"].forEach(type => document.addEventListener(type, (ev) => {
-  const img = ev.target;
-  if (img && img.tagName === "IMG" && img.classList && img.classList.contains("skel")) img.classList.add("is-loaded");
+/* Skeleton fade-in: load/error (and video's equivalent, loadeddata) do not
+   bubble, so this listens in the capture phase instead of delegating the
+   usual way. Covers <video class="skel"> too - a story cover pulled from
+   a video layer (storyCoverFromPages()) reuses the same skeleton class. */
+["load","error","loadeddata"].forEach(type => document.addEventListener(type, (ev) => {
+  const el = ev.target;
+  if (el && (el.tagName === "IMG" || el.tagName === "VIDEO") && el.classList && el.classList.contains("skel")) el.classList.add("is-loaded");
 }, true));
 
 window.addEventListener("hashchange", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); render(); });
