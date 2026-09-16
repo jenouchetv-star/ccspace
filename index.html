@@ -6481,6 +6481,32 @@ function charName(id){
   return c ? c.name : titleCase(id || "");
 }
 
+/** A circular "face" portrait of a character - the "Brought to you by"
+    byline and the Spin-the-Wheel result card, not the big square card on
+    /characters (which is meant to show the whole illustrated scene).
+    Most character portraits are a full-body shot in an environment, where
+    the face only fills a small slice of the frame - object-fit:cover
+    alone can't "zoom" past whatever crop the source's own aspect ratio
+    already gives (for a near-square source into a circular avatar,
+    that's next to nothing), so a character whose portrait needs an
+    actual close-up gets an explicit avatarZoom/avatarFocusY override on
+    its record. Every other character keeps rendering exactly as before -
+    nothing changes until one is set, the same fallback pattern used
+    throughout this file. */
+function charAvatarHTML(ch, sizePx, extraStyle){
+  const style = extraStyle || "";
+  if (ch.avatarZoom && ch.avatarZoom > 1){
+    const focusY = typeof ch.avatarFocusY === "number" ? ch.avatarFocusY : 22;
+    return '<div role="img" aria-label="' + E(ch.image.alt || ch.name) + '"'
+      + ' style="width:' + sizePx + 'px;height:' + sizePx + 'px;border-radius:50%;flex:none;'
+      + "background-image:url('" + E(ch.image.src).replace(/'/g, "%27") + "');"
+      + 'background-size:' + (ch.avatarZoom * 100) + '% auto;background-position:50% ' + focusY + '%;background-repeat:no-repeat;'
+      + style + '"></div>';
+  }
+  return '<img src="' + E(ch.image.src) + '" alt="' + E(ch.image.alt || "") + '" width="' + sizePx + '" height="' + sizePx + '"'
+    + ' style="border-radius:50%;object-fit:cover;object-position:center 22%;' + style + '" loading="lazy">';
+}
+
 function activityCard(a){
   const t = typeMeta(a.type);
   return '<article class="card" data-act="go" data-hash="#/activity/' + E(a.id) + '" tabindex="0" role="link">'
@@ -7644,8 +7670,7 @@ function viewFindActivity(id){
 
     + (who
         ? '<div class="row" style="margin-top:22px">'
-          + '<img src="' + E(who.image.src) + '" alt="" width="52" height="52"'
-          + ' style="border:var(--line-thin);border-radius:50%;object-fit:cover;object-position:center 22%" loading="lazy">'
+          + charAvatarHTML(who, 52, "border:var(--line-thin)")
           + '<div><div class="tiny mute" style="line-height:1.2">Brought to you by</div>'
           + '<a href="#/characters/' + E(who.slug) + '" style="font-weight:800;text-decoration:none;border-bottom:2px solid var(--sun)">'
           + E(who.name) + '</a></div></div>'
@@ -8194,7 +8219,7 @@ function viewActivity(id){
     + E((DIFFS.find(d=>d.id===a.difficulty)||{}).label) + ' &middot; '
     + E((SETTINGS.find(x=>x.id===a.setting)||{}).label) + ' &middot; '
     + E((SUPPORT.find(x=>x.id===a.adultSupport)||{}).label) + '</p>'
-    + (ch ? '<div class="row" style="margin-top:22px"><img src="' + E(ch.image.src) + '" alt="" width="52" height="52" style="border:var(--line-thin);border-radius:50%;object-fit:cover;object-position:center 22%" loading="lazy">'
+    + (ch ? '<div class="row" style="margin-top:22px">' + charAvatarHTML(ch, 52, "border:var(--line-thin)")
         + '<div><div class="tiny mute" style="line-height:1.2">Brought to you by</div>'
         + '<a href="#/characters/' + E(ch.slug) + '" style="font-weight:800;text-decoration:none;border-bottom:2px solid var(--sun)">' + E(ch.name) + '</a></div></div>' : "")
     + '<div class="row no-print" style="margin-top:26px">'
@@ -8405,7 +8430,7 @@ function viewGame(id){
   if (g.kind === "spinner"){
     const c = SPIN_RESULT ? db.list("characters").find(x => x.slug === SPIN_RESULT) : null;
     board = '<div class="panel taped" style="margin-top:26px;text-align:center">'
-      + (c ? '<img src="' + E(c.image.src) + '" alt="' + E(c.image.alt) + '" width="140" height="140" style="border:var(--line);border-radius:50%;object-fit:cover;object-position:center 22%;margin:0 auto 16px;box-shadow:var(--hard-sm)">'
+      + (c ? charAvatarHTML(c, 140, "border:var(--line);margin:0 auto 16px;box-shadow:var(--hard-sm)")
             + '<h3 style="margin-bottom:.2em">Make it the way ' + E(c.name) + ' would</h3>'
             + '<p class="lede" style="margin-inline:auto">' + E(c.strength) + '. ' + E(c.tagline) + '</p>'
             + '<a class="btn btn--sm btn--paper" style="margin-top:14px" href="#/characters/' + E(c.slug) + '">' + ic("arrow-right") + ' See ' + E(c.name) + '&#39;s activities</a>'
