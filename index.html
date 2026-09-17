@@ -2867,9 +2867,50 @@ function resetTurnstileWidget(action){
   if (window.turnstile && id != null) window.turnstile.reset(id);
 }
 
+/** Downscales/re-compresses a still image before it ever reaches Storage,
+    so a large phone photo or an AI-generation export (routinely 2-4x
+    bigger than anything this site actually displays) doesn't sit in the
+    library at full size and get served to every visitor forever. Animated
+    GIFs and non-image files (video, PDF) pass through untouched - a
+    canvas can only ever capture one static frame. Silently keeps the
+    original if compression didn't actually help (rare, but a few formats
+    are already near-optimal). */
+async function compressImageForUpload(file){
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return file;
+  const MAX_DIM = 1600;
+  let bitmap;
+  try { bitmap = await createImageBitmap(file); } catch(_e){ return file; }
+  const scale = Math.min(1, MAX_DIM / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale), h = Math.round(bitmap.height * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  if (bitmap.close) bitmap.close();
+
+  let outType = "image/jpeg";
+  if (file.type === "image/png"){
+    /* JPEG has no alpha channel, so a genuinely transparent PNG (a logo, an
+       icon) has to stay PNG or transparency would turn solid. Sampled, not
+       exhaustive - checking every pixel of a large image here would be
+       slow for what's just a yes/no transparency question. */
+    const { data } = ctx.getImageData(0, 0, w, h);
+    let hasAlpha = false;
+    for (let i = 3; i < data.length; i += 4 * 97){ if (data[i] < 255){ hasAlpha = true; break; } }
+    if (hasAlpha) outType = "image/png";
+  }
+
+  const blob = await new Promise(res => canvas.toBlob(res, outType, 0.82));
+  if (!blob || blob.size >= file.size) return file;
+  const ext = outType === "image/png" ? "png" : "jpg";
+  const name = file.name.replace(/\.[a-z0-9]+$/i, "") + "." + ext;
+  return new File([blob], name, { type: outType });
+}
+
 /** Uploads a File to Supabase Storage under folder/, returning its public
     URL. Filenames are timestamp-prefixed so two uploads never collide. */
 async function uploadToStorage(file, folder){
+  file = await compressImageForUpload(file);
   if (file.size > MAX_UPLOAD_BYTES){
     throw new Error("That file is " + (file.size / (1024*1024)).toFixed(1) + " MB - please keep uploads "
       + "under " + (MAX_UPLOAD_BYTES / (1024*1024)) + " MB. Try a shorter clip, a smaller export, "
