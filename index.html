@@ -2909,6 +2909,55 @@ async function compressImageForUpload(file){
   return new File([blob], name, { type: outType });
 }
 
+/** A much smaller sibling of compressImageForUpload()'s output, for the
+    card/grid/list contexts (an activity card, a character tile, an
+    episode row, ...) that show an image at a fraction of its real size -
+    without this, a 283x174 grid card downloads the exact same 1600px file
+    the detail page uses. 640px covers every such slot in the app with
+    real headroom for a retina display, at 0.78 quality since a thumbnail
+    this small hides compression artifacts a full-size image wouldn't.
+    Returns null (never throws) on anything that isn't a still image, so
+    callers can treat "no thumbnail" as a normal, expected outcome. */
+async function compressThumbForUpload(file){
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return null;
+  const MAX_DIM = 640;
+  let bitmap;
+  try { bitmap = await createImageBitmap(file); } catch(_e){ return null; }
+  const scale = Math.min(1, MAX_DIM / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale), h = Math.round(bitmap.height * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  if (bitmap.close) bitmap.close();
+
+  let outType = "image/jpeg";
+  if (file.type === "image/png"){
+    const { data } = ctx.getImageData(0, 0, w, h);
+    let hasAlpha = false;
+    for (let i = 3; i < data.length; i += 4 * 97){ if (data[i] < 255){ hasAlpha = true; break; } }
+    if (hasAlpha) outType = "image/png";
+  }
+  return await new Promise(res => canvas.toBlob(res, outType, 0.78));
+}
+
+/** Card/grid/list render sites ask for "the same image, smaller" through
+    this rather than a separate stored field - a thumbnail is never
+    independently edited, so deriving its URL from whatever src is already
+    saved (same path, "-thumb" inserted before the extension) means every
+    existing {src,alt}-shaped image field gets thumbnail support for free,
+    with nothing new to migrate. Pairs with the data-full fallback below:
+    if a particular image predates this feature and has no "-thumb"
+    sibling yet, the broken request swaps back to the real image instead
+    of showing a broken-image icon. */
+function thumbSrc(src){
+  if (!src) return src;
+  const q = src.indexOf("?");
+  const base = q >= 0 ? src.slice(0, q) : src;
+  const suffix = q >= 0 ? src.slice(q) : "";
+  return base.replace(/(\.[a-z0-9]+)$/i, "-thumb$1") + suffix;
+}
+
 /** Uploads a File to Supabase Storage under folder/, returning its public
     URL. Filenames are timestamp-prefixed so two uploads never collide. */
 async function uploadToStorage(file, folder){
@@ -2924,6 +2973,18 @@ async function uploadToStorage(file, folder){
     cacheControl: "3600", upsert: false, contentType: file.type || undefined
   });
   if (error) throw error;
+  /* Best-effort: a failed thumbnail upload isn't a reason to fail an
+     upload the admin is actively waiting on - thumbSrc()'s data-full
+     fallback covers exactly this case on render. */
+  try {
+    const thumbBlob = await compressThumbForUpload(file);
+    if (thumbBlob){
+      const thumbPath = path.replace(/(\.[a-z0-9]+)$/i, "-thumb$1");
+      await sb.storage.from(UPLOAD_BUCKET).upload(thumbPath, thumbBlob, {
+        cacheControl: "3600", upsert: false, contentType: thumbBlob.type
+      });
+    }
+  } catch (_e){ /* main upload already succeeded; see thumbSrc() fallback */ }
   const { data } = sb.storage.from(UPLOAD_BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
@@ -6519,10 +6580,12 @@ function plate(typeId, label){
     + '</div>';
 }
 
-function cover(rec, typeId, label){
+function cover(rec, typeId, label, thumb){
   const img = rec && rec.image;
   if (img && img.src){
-    return '<img class="skel" src="' + E(img.src) + '" alt="' + E(img.alt) + '" loading="lazy">';
+    const src = thumb ? thumbSrc(img.src) : img.src;
+    return '<img class="skel" src="' + E(src) + '" alt="' + E(img.alt) + '"'
+      + (thumb ? ' data-full="' + E(img.src) + '"' : '') + ' loading="lazy">';
   }
   return plate(typeId, label);
 }
@@ -6569,14 +6632,14 @@ function charAvatarHTML(ch, sizePx, extraStyle){
       + 'background-size:' + (ch.avatarZoom * 100) + '% auto;background-position:50% ' + focusY + '%;background-repeat:no-repeat;'
       + style + '"></div>';
   }
-  return '<img class="skel" src="' + E(ch.image.src) + '" alt="' + E(ch.image.alt || "") + '" width="' + sizePx + '" height="' + sizePx + '"'
-    + ' style="border-radius:50%;object-fit:cover;object-position:center 22%;' + style + '" loading="lazy">';
+  return '<img class="skel" src="' + E(thumbSrc(ch.image.src)) + '" alt="' + E(ch.image.alt || "") + '" width="' + sizePx + '" height="' + sizePx + '"'
+    + ' data-full="' + E(ch.image.src) + '" style="border-radius:50%;object-fit:cover;object-position:center 22%;' + style + '" loading="lazy">';
 }
 
 function activityCard(a){
   const t = typeMeta(a.type);
   return '<article class="card" data-act="go" data-hash="#/activity/' + E(a.id) + '" tabindex="0" role="link">'
-    + '<div class="card__media">' + cover(a, a.type, t.label)
+    + '<div class="card__media">' + cover(a, a.type, t.label, true)
     + '<span class="card__badge chip chip--ink">' + E(t.label) + '</span>'
     + '</div>'
     + '<div class="card__body">'
@@ -6588,7 +6651,7 @@ function activityCard(a){
 function characterCard(c, compact){
   const t = typeMeta(c.type);
   return '<article class="char' + (compact ? ' char--sm' : '') + '" data-act="go" data-hash="#/characters/' + E(c.slug) + '" tabindex="0" role="link" style="--p1:' + t.p1 + ';--p2:' + t.p2 + '">'
-    + '<div class="char__pic"><img class="skel" src="' + E(c.image.src) + '" alt="' + E(c.image.alt) + '" loading="lazy"></div>'
+    + '<div class="char__pic"><img class="skel" src="' + E(thumbSrc(c.image.src)) + '" alt="' + E(c.image.alt) + '" data-full="' + E(c.image.src) + '" loading="lazy"></div>'
     + '<div class="char__name">' + E(c.name) + '</div>'
     + (compact ? "" : '<div class="char__strength">' + E(c.strength) + '</div>')
     + '</article>';
@@ -6667,7 +6730,7 @@ function episodeRow(v){
     + '<div class="ep__thumb">'
     + (live
         ? (v.thumb && v.thumb.src
-            ? '<img class="skel" src="' + E(v.thumb.src) + '" alt="' + E(v.thumb.alt) + '" loading="lazy">'
+            ? '<img class="skel" src="' + E(thumbSrc(v.thumb.src)) + '" alt="' + E(v.thumb.alt) + '" data-full="' + E(v.thumb.src) + '" loading="lazy">'
             : plate("story","Episode"))
           + '<span class="ep__play"><span>' + ic("play") + '</span></span>'
         : '<span class="ep__blank" role="img" aria-label="No footage yet">'
@@ -8302,7 +8365,7 @@ function viewActivity(id){
     + '</div>'
     + '<div><div class="detail__cover">' + quEditable("activity-image", a.id, cover(a, a.type, t.label)) + '</div>'
     + (a.printable && a.printable.path
-        ? '<a class="btn btn--block btn--sun no-print" style="margin-top:16px" data-act="printable" data-label="' + E(a.printable.label) + '" href="' + E(a.printable.path) + '">' + ic("file-down") + " " + E(a.printable.label) + '</a>'
+        ? '<a class="btn btn--block btn--sun no-print" style="margin-top:16px" target="_blank" rel="noopener" href="' + E(a.printable.path) + '">' + ic("file-down") + " " + E(a.printable.label) + '</a>'
         : "")
     + '<div class="grid" style="grid-template-columns:1fr;gap:16px;margin-top:16px">'
     + '<div class="panel panel--flat"><div class="row" style="justify-content:space-between;align-items:center;gap:10px">'
@@ -8382,7 +8445,7 @@ function viewPlay(sub){
 
 function gamePlate(g){
   if (g.cover && g.cover.src){
-    return '<img class="skel" src="' + E(g.cover.src) + '" alt="' + E(g.cover.alt || "") + '" loading="lazy">';
+    return '<img class="skel" src="' + E(thumbSrc(g.cover.src)) + '" alt="' + E(g.cover.alt || "") + '" data-full="' + E(g.cover.src) + '" loading="lazy">';
   }
   return '<div class="plate" style="--p1:' + E(g.p1 || "#C9E7BC") + ';--p2:' + E(g.p2 || "#4E9E4A") + '" role="presentation"></div>';
 }
@@ -8665,7 +8728,7 @@ function bookListCard(b){
   const media = (b.cover && b.cover.src)
     ? (isVideoSrc(b.cover.src)
         ? '<video class="skel" src="' + E(b.cover.src) + '" muted loop autoplay playsinline aria-label="' + E(b.cover.alt) + '"></video>'
-        : '<img class="skel" src="' + E(b.cover.src) + '" alt="' + E(b.cover.alt) + '" loading="lazy">')
+        : '<img class="skel" src="' + E(thumbSrc(b.cover.src)) + '" alt="' + E(b.cover.alt) + '" data-full="' + E(b.cover.src) + '" loading="lazy">')
     : '<div class="plate" style="--p1:' + E(b.color || "#1273B0") + ';--p2:' + E(b.colorDeep || "#0A5280") + '" role="presentation">'
       + '<div class="plate__mark">' + ic(b.icon || "book-open") + '</div></div>';
   return '<article class="card" data-act="open-book" data-id="' + E(b.id) + '" tabindex="0" role="button" aria-label="Read ' + E(b.title) + '">'
@@ -8726,7 +8789,7 @@ function storyCard(s){
 
   const ch = db.list("characters").find(c => c.slug === s.character);
   return '<article class="card" data-act="go" data-hash="#/stories/' + E(s.id) + '" tabindex="0" role="link">'
-    + '<div class="card__media">' + (s.image && s.image.src ? '<img class="skel" src="' + E(s.image.src) + '" alt="' + E(s.image.alt) + '" loading="lazy">' : plate("story","Story"))
+    + '<div class="card__media">' + (s.image && s.image.src ? '<img class="skel" src="' + E(thumbSrc(s.image.src)) + '" alt="' + E(s.image.alt) + '" data-full="' + E(s.image.src) + '" loading="lazy">' : plate("story","Story"))
     + '<span class="card__badge chip chip--ink">' + E(ch ? ch.name : "Story") + '</span></div>'
     + '<div class="card__body"><h3 class="card__title">' + E(s.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(s.blurb) + '</p>'
@@ -9401,7 +9464,7 @@ function cartSheetHTML(){
 function cartLineHTML(l){
   const p = l.product, c = l.cart;
   return '<div class="row" style="gap:12px;align-items:center">'
-    + '<div class="cart-thumb">' + cover(p, "story", p.title) + '</div>'
+    + '<div class="cart-thumb">' + cover(p, "story", p.title, true) + '</div>'
     + '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:.92rem">' + E(p.title) + '</div>'
     + '<div class="tiny mute">$' + p.priceUSD.toFixed(2) + ' each</div></div>'
     + '<div class="row" style="gap:4px;align-items:center">'
@@ -9424,7 +9487,7 @@ function refreshCartSheet(){
 
 function productCard(p){
   return '<article class="card" data-act="go" data-hash="#/shop/printables/' + E(p.id) + '" tabindex="0" role="link">'
-    + '<div class="card__media">' + cover(p, "story", p.access === "free" ? "Free" : "Printable pack")
+    + '<div class="card__media">' + cover(p, "story", p.access === "free" ? "Free" : "Printable pack", true)
     + '<span class="card__badge chip ' + (p.access === "free" ? "chip--leaf" : "chip--sun") + '">' + (p.access === "free" ? "Free" : "$" + p.priceUSD) + '</span></div>'
     + '<div class="card__body"><h3 class="card__title">' + E(p.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(p.blurb) + '</p>'
@@ -9472,7 +9535,7 @@ function recCard(r){
   const direct = r.linkType === "product";
   return '<article class="card" style="cursor:default">'
     + (r.cover
-        ? '<div class="cover"><img class="skel" src="' + E(r.cover) + '" alt="Cover of ' + E(r.title) + '" loading="lazy"></div>'
+        ? '<div class="cover"><img class="skel" src="' + E(thumbSrc(r.cover)) + '" alt="Cover of ' + E(r.title) + '" data-full="' + E(r.cover) + '" loading="lazy"></div>'
         : "")
     + '<div class="card__body" style="padding:20px">'
     + '<div class="row" style="gap:8px;margin-bottom:8px"><span class="chip chip--ghost">' + E(r.priceBand) + '</span>'
@@ -10357,7 +10420,7 @@ function thumbCell(src){
   const style = "width:40px;height:40px;object-fit:cover;border-radius:8px;border:1px solid var(--admin-border);display:block";
   return isVideoSrc(src)
     ? '<video src="' + E(src) + '" muted loop autoplay playsinline style="' + style + '"></video>'
-    : '<img src="' + E(src) + '" alt="" style="' + style + '" loading="lazy">';
+    : '<img src="' + E(thumbSrc(src)) + '" alt="" data-full="' + E(src) + '" style="' + style + '" loading="lazy">';
 }
 
 const LIST_COLS = {
@@ -12708,7 +12771,7 @@ function mediaCard(m){
   return '<div class="admin-card admin-card--flat" style="padding:0;overflow:hidden">'
     + (m.kind === "video"
         ? '<video src="' + E(m.path) + '" controls style="width:100%;aspect-ratio:16/10;object-fit:cover;border-bottom:1px solid var(--admin-border)"></video>'
-        : '<img src="' + E(m.path) + '" alt="' + E(m.alt) + '" style="width:100%;aspect-ratio:16/10;object-fit:cover;border-bottom:1px solid var(--admin-border)" loading="lazy">')
+        : '<img src="' + E(thumbSrc(m.path)) + '" alt="' + E(m.alt) + '" data-full="' + E(m.path) + '" style="width:100%;aspect-ratio:16/10;object-fit:cover;border-bottom:1px solid var(--admin-border)" loading="lazy">')
     + '<div style="padding:12px"><p style="font-size:.82rem;margin:0;word-break:break-all"><b>' + E(m.path) + '</b></p>'
     + '<p class="admin-meta" style="margin:6px 0 0">' + E(m.alt) + '</p>'
     + '<p class="admin-meta" style="margin:4px 0 0;font-family:monospace">' + E(formatBytes(m.sizeBytes)) + '</p></div></div>';
@@ -14367,7 +14430,7 @@ function mediaPickerGridHTML(){
   }
   return '<div class="mediagrid">' + items.map(m =>
       '<button type="button" class="mediagrid__item" data-act="media-choose" data-id="' + E(m.id) + '">'
-      + '<img src="' + E(m.path) + '" alt="' + E(m.alt) + '" loading="lazy">'
+      + '<img src="' + E(thumbSrc(m.path)) + '" alt="' + E(m.alt) + '" data-full="' + E(m.path) + '" loading="lazy">'
       + '<span class="mediagrid__name">' + E(m.path.split("/").pop()) + '</span></button>').join("")
     + '</div>';
 }
@@ -16988,33 +17051,6 @@ const ACTIONS = {
     } else fallbackCopy(url, done);
   },
 
-  "printable": (el, ev) => {
-    /* The click delegator above always preventDefault()s a data-act="printable"
-       link before this runs, so this has to do the opening itself. A real
-       file can now be either a Supabase upload (https://...) or one of the
-       site's own local assets/printables/... PDFs, and a not-yet-produced
-       placeholder can look exactly like the second of those - same shape,
-       no file behind it - so the only honest way to tell them apart is to
-       actually ask for it. The blank tab opens synchronously, inside the
-       click, so the browser doesn't treat the later navigation (after the
-       await) as an unrequested popup; it either fills in with the real
-       file or closes itself and the toast explains why. */
-    const href = el.getAttribute("href") || "";
-    if (!href){
-      toast("Printable files have not been produced yet in this prototype build.", "bad");
-      return;
-    }
-    const win = window.open("", "_blank", "noopener");
-    const fail = () => {
-      if (win) win.close();
-      toast("Printable files have not been produced yet in this prototype build.", "bad");
-    };
-    fetch(href, { method: "HEAD" }).then(res => {
-      if (res.ok && win) win.location.href = href;
-      else fail();
-    }).catch(fail);
-  },
-
   /* ---- finder ---- */
   "find-set": (el) => {
     const key = el.getAttribute("data-key");
@@ -18742,7 +18778,7 @@ document.addEventListener("click", (ev) => {
   if (ACTIONS[act]){
     /* Let real links behave like links when the user wants a new tab. */
     if (el.tagName === "A" && (ev.metaKey || ev.ctrlKey || el.getAttribute("target") === "_blank")) return;
-    if (el.tagName === "A" && act !== "printable" && act !== "go") return;
+    if (el.tagName === "A" && act !== "go") return;
     /* A click can land on a real <a href> that has no data-act of its
        own (e.g. a share-sheet's Facebook/X/WhatsApp links) nested inside
        something that does (e.g. the modal scrim wrapping the whole
@@ -19051,6 +19087,18 @@ document.addEventListener("change", (ev) => {
   const el = ev.target;
   if (el && (el.tagName === "IMG" || el.tagName === "VIDEO") && el.classList && el.classList.contains("skel")) el.classList.add("is-loaded");
 }, true));
+
+/* thumbSrc()'s fallback: an image whose "-thumb" sibling doesn't exist
+   yet (predates the thumbnail feature, or the upload that made it never
+   got a thumbnail written) 404s instead of leaving a broken-image icon -
+   swap back to the real image once, the same capture-phase trick as the
+   skeleton listener above since "error" doesn't bubble either. */
+document.addEventListener("error", (ev) => {
+  const el = ev.target;
+  if (el && el.tagName === "IMG" && el.dataset && el.dataset.full && el.src !== el.dataset.full){
+    el.src = el.dataset.full;
+  }
+}, true);
 
 window.addEventListener("hashchange", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); render(); });
 window.addEventListener("popstate", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); AppState.restoringScroll = true; render(); });
