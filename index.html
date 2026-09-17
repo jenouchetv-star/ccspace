@@ -9544,7 +9544,6 @@ function validateRecord(col, r){
     if (r.ageMin > r.ageMax) err("ageMin","Minimum age is above maximum age.");
     if (!(r.timeMinutes > 0)) err("timeMinutes","Time must be more than zero minutes.");
     if (r.printable && r.printable.label && isBlank(r.printable.path)) err("printable.path","A printable label needs a file path.");
-    if (r.printable && r.printable.path && !/^https?:\/\//i.test(r.printable.path)) warn("printable.path","Printable file is referenced but has not been produced yet.");
     const broken = (r.related||[]).filter(id => !db.find("activities", id));
     if (broken.length) err("related","Related activity no longer exists: " + broken.join(", "));
     if (!(r.tags||[]).length) warn("tags","No tags, so this will be harder to find in search.");
@@ -10795,7 +10794,7 @@ function opsDigestHTML(){
 
 async function runContentHealthCheck(){
   const altGaps = [];
-  const fileGaps = [];
+  const fileCandidates = [];
   CONTENT_COLS.forEach(col => {
     db.list(col).forEach(r => {
       const label = r.title || r.name || r.id;
@@ -10805,9 +10804,26 @@ async function runContentHealthCheck(){
       });
       const filePath = getPath(r, "printable.path") || getPath(r, "file.path")
         || (col === "games" && r.kind === "embed" ? r.path : null);
-      if (filePath && !/^https?:\/\//i.test(filePath)) fileGaps.push(col + ": " + label);
+      if (filePath) fileCandidates.push({ label: col + ": " + label, path: filePath });
     });
   });
+  /* A file path used to be "real" only if it was an https:// upload -
+     every local assets/printables/... path was, by definition, still a
+     placeholder, because none of those files existed yet. That stopped
+     being true the day real files were added at those exact paths, so
+     the only check that still means anything is whether the path
+     actually resolves - a real HEAD request, not a guess from the
+     shape of the string. */
+  const fileGaps = [];
+  await Promise.all(fileCandidates.map(async ({ label, path }) => {
+    const url = /^https?:\/\//i.test(path) ? path : (location.origin + "/" + path.replace(/^\/+/, ""));
+    try {
+      const res = await fetch(url, { method: "HEAD" });
+      if (!res.ok) fileGaps.push(label);
+    } catch (_e){
+      fileGaps.push(label);
+    }
+  }));
 
   /* iss-video-ids claims every published episode carries a real, working
      video id - a claim that was only ever true the day it was written and
@@ -16358,7 +16374,7 @@ const FAQS = [
   ]},
   { g:"Activities and printables", items:[
     ["The printable will not download.",
-     "In this prototype build the printable files have not been produced yet, so those buttons show a notice instead of a file. On the live site each one is a PDF sized for both A4 and Letter."],
+     "Each activity's printable is a real PDF - the button opens it in a new tab, where you can print or save it. If you see a notice instead, that specific file has not been added yet; try refreshing, or let us know which activity so we can fix it."],
     ["Can I print the activity page itself?",
      "Yes. Every activity page has a Print button that lays out the materials, safety notes, and steps without the navigation, the images, or anything else you would rather not use ink on."],
     ["Can I change an activity?",
@@ -16974,16 +16990,29 @@ const ACTIONS = {
 
   "printable": (el, ev) => {
     /* The click delegator above always preventDefault()s a data-act="printable"
-       link before this runs (so a still-unproduced placeholder path never
-       tries to navigate anywhere) - once a real file has been uploaded, its
-       href is a genuine https:// URL, so open that ourselves instead of
-       leaving the click a no-op. */
+       link before this runs, so this has to do the opening itself. A real
+       file can now be either a Supabase upload (https://...) or one of the
+       site's own local assets/printables/... PDFs, and a not-yet-produced
+       placeholder can look exactly like the second of those - same shape,
+       no file behind it - so the only honest way to tell them apart is to
+       actually ask for it. The blank tab opens synchronously, inside the
+       click, so the browser doesn't treat the later navigation (after the
+       await) as an unrequested popup; it either fills in with the real
+       file or closes itself and the toast explains why. */
     const href = el.getAttribute("href") || "";
-    if (/^https?:\/\//i.test(href)){
-      window.open(href, "_blank", "noopener");
+    if (!href){
+      toast("Printable files have not been produced yet in this prototype build.", "bad");
       return;
     }
-    toast("Printable files have not been produced yet in this prototype build.", "bad");
+    const win = window.open("", "_blank", "noopener");
+    const fail = () => {
+      if (win) win.close();
+      toast("Printable files have not been produced yet in this prototype build.", "bad");
+    };
+    fetch(href, { method: "HEAD" }).then(res => {
+      if (res.ok && win) win.location.href = href;
+      else fail();
+    }).catch(fail);
   },
 
   /* ---- finder ---- */
