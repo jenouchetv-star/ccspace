@@ -18679,6 +18679,18 @@ document.addEventListener("click", (ev) => {
     /* Let real links behave like links when the user wants a new tab. */
     if (el.tagName === "A" && (ev.metaKey || ev.ctrlKey || el.getAttribute("target") === "_blank")) return;
     if (el.tagName === "A" && act !== "printable" && act !== "go") return;
+    /* A click can land on a real <a href> that has no data-act of its
+       own (e.g. a share-sheet's Facebook/X/WhatsApp links) nested inside
+       something that does (e.g. the modal scrim wrapping the whole
+       dialog) - closestAction() walks past the anchor and matches that
+       outer ancestor instead. Without this check, preventDefault() below
+       fires unconditionally and silently swallows the click, so the link
+       never opens even though the matched action (e.g. "modal-scrim")
+       goes on to correctly decide it has nothing to do. Let the anchor
+       navigate natively whenever one sits between the click and the
+       matched element. */
+    const realLink = ev.target.closest && ev.target.closest("a[href]");
+    if (realLink && realLink !== el && el.contains(realLink)) return;
     ev.preventDefault();
     ACTIONS[act](el, ev);
   }
