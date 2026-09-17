@@ -227,6 +227,8 @@ p:last-child{ margin-bottom:0; }
   display:inline-flex; align-items:center; gap:9px; margin:0 0 14px;
 }
 .lede{ font-size:clamp(1.18rem,1.9vw,1.42rem); line-height:1.6; color:var(--ink-soft); max-width:54ch; }
+.lede p{ margin:0 0 .8em; }
+.lede p:last-child{ margin-bottom:0; }
 .tiny{ font-size:.92rem; line-height:1.6; }
 .mute{ color:var(--ink-mute); }
 /* ink-shadow display treatment */
@@ -7903,8 +7905,8 @@ function viewHome(){
       + '<div class="shell hero__in"><div class="hero__copy">'
       + '<span class="hero__kicker rise d1">' + ic("hand") + " " + E(pageVal("home", "eyebrow", "Welcome to Chike’s Creative Space")) + '</span>'
       + quEditable(heroHeadingRotates() ? "home-hero-words" : "home-hero-heading", homeId, heroHeading())
-      + '<p class="lede rise d3">' + quEditable("home-hero-intro", homeId, E(pageVal("home", "intro",
-          "This is where kids build, draw, play, read, and explore. Start with a project, story, video, or game, then use your imagination to make it your own."))) + '</p>'
+      + '<div class="lede rise d3">' + quEditable("home-hero-intro", homeId, introRichHTML(pageVal("home", "intro",
+          "This is where kids build, draw, play, read, and explore. Start with a project, story, video, or game, then use your imagination to make it your own."))) + '</div>'
       + cmsBody("home")
       + '</div>'
       + '<div class="paths paths--hero rise d4">'
@@ -8230,7 +8232,7 @@ function viewCreate(){
     + '<div class="create-layout__results">'
     + '<div style="margin-bottom:24px">'
     + '<h2 style="margin-bottom:.3em">' + quEditable("page-heading", createId, createHeading) + '</h2>'
-    + '<p class="lede">' + quEditable("page-intro", createId, E(createIntro)) + '</p>'
+    + '<div class="lede">' + quEditable("page-intro", createId, introRichHTML(createIntro)) + '</div>'
     + '</div>'
     + '<div class="row-between" style="margin-bottom:20px;gap:14px">'
     + '<p class="mute" style="margin:0">'
@@ -9682,7 +9684,7 @@ const FIELDS = {
     { key:"heading", label:"Heading", type:"textarea", wide:true, help:"Plain text. Press Enter for a line break. Blank keeps the built-in heading." },
     { key:"highlight", label:"Highlighted word", type:"text", help:"A word from the heading to mark. Leave blank for no mark." },
     { key:"tone", label:"Mark color", type:"select", options:() => [{value:"sun",label:"Yellow"},{value:"cyan",label:"Blue"}] },
-    { key:"intro", label:"Intro", type:"textarea", wide:true, help:"The sentence under the heading." },
+    { key:"intro", label:"Intro", type:"richtext", wide:true, help:"The text under the heading. Use paragraph breaks, bold, or a link if you need them." },
     { key:"image", label:"Banner picture", type:"media", wide:true, help:"Sits beside the heading at the top of the page." },
     { key:"body", label:"Page content", type:"richtext", wide:true, help:"Appears under the page's built-in sections." }
   ],
@@ -9970,6 +9972,12 @@ let EDITING = { col:"", id:"" };
 function openEditor(col, id, overlay){
   const existing = id ? db.find(col, id) : null;
   const rec = existing ? JSON.parse(JSON.stringify(existing)) : BLANKS[col]();
+  /* pages.intro switched from a plain textarea to this rich-text editor,
+     but a record saved before that switch still holds plain text (blank
+     lines between paragraphs, no markup) - show it pre-formatted as real
+     paragraphs here too, matching how it now renders on the public page,
+     instead of one run-on line with no visible breaks. */
+  if (col === "pages" && rec.intro) rec.intro = introRichHTML(rec.intro);
   if (overlay) Object.keys(overlay).forEach(k => setPath(rec, k, overlay[k]));
   EDITING = { col:col, id:id || "" };
   const label = COLLECTION_LABELS[col] || col;
@@ -10471,7 +10479,7 @@ const PREVIEW_HASH = {
    site - not a new subsystem. */
 const QU_EDITABLE_REGIONS = {
   "home-hero-heading": { label:"Hero heading",         col:"pages",      fieldKey:"heading",     contentType:"text" },
-  "home-hero-intro":   { label:"Hero intro",            col:"pages",      fieldKey:"intro",       contentType:"text" },
+  "home-hero-intro":   { label:"Hero intro",            col:"pages",      fieldKey:"intro",       contentType:"richtext" },
   "home-promises":     { label:"Scrolling taglines",     col:"pages",      fieldKey:"promises",    contentType:"list" },
   "home-hero-words":   { label:"Hero rotating word",     col:"pages",      fieldKey:"heroWords",   contentType:"list" },
   "newest-ep-title":   { label:"Newest episode title",  col:"videos",     fieldKey:"title",       contentType:"text" },
@@ -10507,7 +10515,7 @@ const QU_EDITABLE_REGIONS = {
      (see heroHeading()), so it keeps its separate "home-hero-*" pair
      above rather than colliding with these. */
   "page-heading": { label:"Page heading", col:"pages", fieldKey:"heading", contentType:"text" },
-  "page-intro":   { label:"Page intro",   col:"pages", fieldKey:"intro",   contentType:"text" },
+  "page-intro":   { label:"Page intro",   col:"pages", fieldKey:"intro",   contentType:"richtext" },
   /* One "block-item" region per PAGE_LIST_BLOCKS field that's rendered
      as individually-clickable cards - the form itself is built from
      that block's own `fields` list (see quickUpdateSelectedRegionHTML),
@@ -13778,7 +13786,7 @@ function cmsHeader(key, fbEyebrow, fbHeadingHTML, fbIntro, actions, opts){
     CMS_HEADER_FALLBACKS[id + "::heading"] = quPlainTextFromHTML(heading);
     CMS_HEADER_FALLBACKS[id + "::intro"] = introText;
   }
-  o.ledeHTML = introText ? '<p class="lede">' + quEditable("page-intro", id, E(introText)) + '</p>' : "";
+  o.ledeHTML = introText ? '<div class="lede">' + quEditable("page-intro", id, introRichHTML(introText)) + '</div>' : "";
   return pageHeader(pageVal(key, "eyebrow", fbEyebrow), quEditable("page-heading", id, heading), introText, actions, o);
 }
 
@@ -14213,6 +14221,23 @@ function richTextToText(html){
   const box = document.createElement("div");
   box.innerHTML = sanitizeHTML(html);
   return (box.textContent || "").trim();
+}
+
+/** pages.intro is edited through the rich-text editor now, but every value
+    already on a record (every seed default too) was written before that -
+    plain text, blank lines between paragraphs. A page's intro renders
+    through this instead of a bare E() so those existing paragraphs still
+    show as real paragraphs rather than collapsing into one run-on line,
+    while a value an admin has already reformatted with the rich-text
+    editor (real markup in it) passes through untouched. */
+function introRichHTML(text){
+  const raw = String(text || "");
+  if (!raw.trim()) return "";
+  const looksLikeMarkup = /<(p|br|strong|b|em|i|u|s|ul|ol|li|h[234]|a|img|blockquote)[\s/>]/i.test(raw);
+  const html = looksLikeMarkup ? raw
+    : raw.split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
+        .map(p => "<p>" + E(p).replace(/\n/g, "<br>") + "</p>").join("");
+  return sanitizeHTML(html);
 }
 
 /* ------------------------------------------------------------
@@ -16268,7 +16293,7 @@ function viewDonate(){
 
     + '<div class="finder__grid">'
     + '<div><h2 style="font-size:2rem">' + quEditable("page-heading", donateId, donateHeading) + '</h2>'
-    + '<p class="lede">' + quEditable("page-intro", donateId, E(donateIntro)) + '</p>'
+    + '<div class="lede">' + quEditable("page-intro", donateId, introRichHTML(donateIntro)) + '</div>'
 
     + '<div class="seg" role="radiogroup" aria-label="How often to support" style="margin-top:22px">'
     + '<button class="seg__opt' + (freq === "once" ? ' is-on" aria-checked="true"' : '" aria-checked="false"') + ' role="radio" data-act="donate-freq" data-freq="once">One-time</button>'
