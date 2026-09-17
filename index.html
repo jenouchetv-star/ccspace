@@ -8292,7 +8292,6 @@ function viewActivity(id){
         + '<a href="#/characters/' + E(ch.slug) + '" style="font-weight:800;text-decoration:none;border-bottom:2px solid var(--sun)">' + E(ch.name) + '</a></div></div>' : "")
     + '<div class="row no-print" style="margin-top:26px">'
     + '<button class="btn btn--paper" data-act="print">' + ic("printer") + ' Print</button>'
-    + '<button class="btn btn--paper" data-act="copy-materials" data-id="' + E(a.id) + '">' + ic("copy") + ' Copy materials list</button>'
     + '<button class="btn btn--paper" data-act="share" data-url="' + E(location.origin + "/activity/" + a.id) + '" data-title="' + E(a.title) + '">' + ic("share-2") + ' Share</button>'
     + '</div>'
 
@@ -8304,7 +8303,10 @@ function viewActivity(id){
         ? '<a class="btn btn--block btn--sun no-print" style="margin-top:16px" data-act="printable" data-label="' + E(a.printable.label) + '" href="' + E(a.printable.path) + '">' + ic("file-down") + " " + E(a.printable.label) + '</a>'
         : "")
     + '<div class="grid" style="grid-template-columns:1fr;gap:16px;margin-top:16px">'
-    + '<div class="panel panel--flat"><h3>' + ic("package","i-lg") + ' What you need</h3>'
+    + '<div class="panel panel--flat"><div class="row" style="justify-content:space-between;align-items:center;gap:10px">'
+    + '<h3 style="margin:0">' + ic("package","i-lg") + ' What you need</h3>'
+    + '<button class="btn btn--paper btn--sm no-print" data-act="copy-materials" data-id="' + E(a.id) + '">' + ic("copy") + ' Copy list</button>'
+    + '</div>'
     + quEditable("activity-materials", a.id, '<ul class="checklist">' + (a.materialsDetail||[]).map(m => '<li>' + ic("square-check") + '<span>' + E(m) + '</span></li>').join("") + '</ul>')
     + '</div>'
     + '<div class="panel panel--flat" style="border-left:8px solid var(--berry)"><h3>' + ic("shield-alert","i-lg") + ' Before you start</h3>'
@@ -16947,7 +16949,16 @@ const ACTIONS = {
   },
 
   "printable": (el, ev) => {
-    ev.preventDefault();
+    /* The click delegator above always preventDefault()s a data-act="printable"
+       link before this runs (so a still-unproduced placeholder path never
+       tries to navigate anywhere) - once a real file has been uploaded, its
+       href is a genuine https:// URL, so open that ourselves instead of
+       leaving the click a no-op. */
+    const href = el.getAttribute("href") || "";
+    if (/^https?:\/\//i.test(href)){
+      window.open(href, "_blank", "noopener");
+      return;
+    }
     toast("Printable files have not been produced yet in this prototype build.", "bad");
   },
 
