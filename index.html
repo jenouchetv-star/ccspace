@@ -14491,7 +14491,13 @@ function closeMediaPicker(){
    running the tests never changes your content.
    ============================================================ */
 
-/* Words this build must never show anywhere in the interface. */
+/* Words this build must never show anywhere in the interface - this is
+   about keeping the site's own voice warm and non-technical (never
+   describing a feature as "AI-powered" or the like), not about banning
+   the word outright. The Privacy Policy's own honest AI-content
+   disclosure is a deliberate, narrow exception - see excludeLegal on
+   renderAllPublicText() below, used only by the one test that checks
+   this list. */
 const FORBIDDEN_TECH = [
   "artificial intelligence", "machine learning", "neural network",
   "chatbot", "chat bot", "large language model", "generative model",
@@ -14510,14 +14516,23 @@ const EMOJI_RE = (function(){
   catch(_e){ return /[\uD800-\uDBFF][\uDC00-\uDFFF]|[☀-➿️←-⇿⬀-⯿]/; }
 })();
 
-function renderAllPublicText(){
+function renderAllPublicText(opts){
+  opts = opts || {};
   const box = document.createElement("div");
   const savedRoute = AppState.route;
   const chunks = [];
   try {
     chunks.push(viewHome(), viewCreate(), viewPlay(), viewWatch(), viewStories(),
                 viewCharacters(), viewShop(),
-                viewDonate(), viewPrivacy(), viewTerms());
+                viewDonate());
+    /* Privacy/Terms are legal disclosures, not marketing copy - the one
+       caller that scans for tech-assistant language (FORBIDDEN_TECH/
+       FORBIDDEN_ABBR below) excludes them on purpose, so the Privacy
+       Policy's own honest "some content was made with AI" disclosure
+       doesn't fail its own guardrail. Every other caller of this
+       function (alt-text, broken links, contrast, ...) still wants
+       these two pages included, so this only skips them when asked. */
+    if (!opts.excludeLegal) chunks.push(viewPrivacy(), viewTerms());
     ["mission", "vision", "team", "partners", "business"].forEach(sub => chunks.push(viewAbout(sub)));
     ["", "help", "articles", "contact"].forEach(sub => chunks.push(viewGrownUps(sub)));
     const art = db.list("articles")[0];
@@ -15216,11 +15231,14 @@ const TEST_SUITE = [
       : T.fail("Found: " + hits.slice(0,6).join(" "));
   }},
   { group:"Brand guardrails", name:"No technology-assistant language anywhere in the interface", blocking:true, run(){
-    const rendered = renderAllPublicText();
+    /* excludeLegal: the Privacy Policy's own AI-content disclosure is a
+       deliberate, narrow exception to this guardrail (a legal
+       disclosure, not marketing copy) - see renderAllPublicText(). */
+    const rendered = renderAllPublicText({ excludeLegal: true });
     const lower = rendered.text.toLowerCase();
     const found = FORBIDDEN_TECH.filter(p => lower.indexOf(p) >= 0);
     if (FORBIDDEN_ABBR.test(rendered.text)) found.push("standalone abbreviation");
-    return found.length === 0 ? T.pass("Nothing matched the forbidden list across every public view")
+    return found.length === 0 ? T.pass("Nothing matched the forbidden list across every public view (Privacy/Terms excluded - see their own AI-content disclosure)")
       : T.fail("Found: " + found.join(", "));
   }},
   { group:"Brand guardrails", name:"No prompt inputs or generation controls exist", blocking:true, run(){
@@ -16472,7 +16490,7 @@ const FAQS = [
 /* ============================================================
    21d. LEGAL PAGES
    ============================================================ */
-const LEGAL_UPDATED = { privacy: "30 August 2026", terms: "9 September 2026" };
+const LEGAL_UPDATED = { privacy: "18 September 2026", terms: "9 September 2026" };
 
 /** Converts a legal page's section outline (heading + paragraphs, some as
     bullet lists) into the same plain rich-text markup an admin's editor
@@ -16531,6 +16549,10 @@ const PRIVACY_SECTIONS = [
       { h:"Cookies and tracking", p:[
         "This build sets no cookies, loads no analytics, and includes no advertising or social tracking pixels.",
         "It does load type from Google Fonts, which means a font request goes to Google's servers when you visit a page that uses one. The icon library is self-hosted already, and the fonts can be too if that matters to you."
+      ]},
+      { h:"AI-generated content", p:[
+        "Some images, games, and other content on this site were generated using AI rather than photographed, filmed, or built by hand.",
+        "Some images that look like photos of people, including in some activity and team photos, are not actual people - they were generated using AI."
       ]},
       { h:"Links to other sites", p:[
         "Some pages link out to YouTube, Instagram, Facebook, and Amazon. Once you follow one of those links you are on their site and their privacy policy applies, not ours. The shop links are ordinary search links, not affiliate links, in this build."
