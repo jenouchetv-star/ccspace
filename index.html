@@ -16064,7 +16064,16 @@ const TEST_SUITE = [
                  : T.pass(CASES.length + " games all fit a " + W + " by " + H + " window, controls included"));
   }},
   { group:"Games", name:"Every game loads the shared skin", blocking:false, run(){
-    const paths = db.list("games").filter(g => g.kind === "embed").map(g => g.path);
+    /* games/spacetime-sandbox-simulator.html is a deliberate, confirmed
+       exception - a fully custom Three.js/Tailwind 3D UI whose own dark
+       theme and control styling would conflict with game-skin.css's
+       !important typeface/button rules. Also already assumed true by
+       Launch Readiness task "games-3" and the admin dashboard's own
+       "unexpected failures" filter - keep those three in sync if this
+       exception list ever changes. */
+    const ACCEPTED_EXCEPTIONS = ["games/spacetime-sandbox-simulator.html"];
+    const paths = db.list("games").filter(g => g.kind === "embed").map(g => g.path)
+      .filter(p => ACCEPTED_EXCEPTIONS.indexOf(p) < 0);
     return Promise.all(paths.map(path =>
       fetch(siteURL(path)).then(r => r.text())
         .then(t => (t.indexOf("game-skin.css") >= 0 ? null : path))
@@ -16073,7 +16082,7 @@ const TEST_SUITE = [
       if (results.some(r => r === "__blocked__")) return T.skip("Serve the site over http to check the game files");
       const bad = results.filter(Boolean);
       return bad.length ? T.fail(bad.join(", ") + " do not link games/game-skin.css")
-                        : T.pass(paths.length + " games all share the site typeface and control shapes");
+                        : T.pass(paths.length + " games all share the site typeface and control shapes (1 accepted exception)");
     });
   }},
   { group:"Games", name:"Both game tabs have games in them", blocking:true, run(){
