@@ -5966,7 +5966,7 @@ const BOOKS = [
     color:"#BC3229", colorDeep:"#7A1F19", path:"books/reader.html?story=story-fold-that-would-not" },
   { id:"story-city-that-sank", title:"Mateo's Recycled City",
     blurb:"Mateo's bridge will not hold, and he does not want to change his design. His friends have an idea, if he will let them help.",
-    pages:7, icon:"book-open", character:"Mateo",
+    pages:9, icon:"book-open", character:"Mateo",
     color:"#C4661A", colorDeep:"#8F4A12", path:"books/reader.html?story=story-city-that-sank" },
   { id:"story-drawing-nobody-understood", title:"Kiyah's Garden of Tiny Clues",
     blurb:"Kiyah's garden has too much to draw at once. Chike helps her find one small clue at a time.",
@@ -5974,7 +5974,7 @@ const BOOKS = [
     color:"#DD7A22", colorDeep:"#A55C00", path:"books/reader.html?story=story-drawing-nobody-understood" },
   { id:"story-train-with-no-signals", title:"The Train With No Signals",
     blurb:"Corey's railway runs beautifully until two trains want the same piece of track.",
-    pages:7, icon:"book-open", character:"Corey",
+    pages:9, icon:"book-open", character:"Corey",
     color:"#3A7A37", colorDeep:"#2F6B2C", path:"books/reader.html?story=story-train-with-no-signals" },
   { id:"story-song-in-the-rain", title:"Stacey and the Sound of Sunshine",
     blurb:"A tricky part of the song will not come together, until Zech notices a rhythm hiding in the sunlight on the floor.",
@@ -14674,6 +14674,49 @@ const T = {
   skip: detail => ({ result:"skip", detail: detail || "" })
 };
 
+/** Loads books/reader.html?story=<id> in a real, hidden iframe and waits
+    for it to actually finish - a plain fetch()+DOMParser can never see
+    this page's content, because reader.html builds every .paper element
+    client-side, after its own async fetch straight from the Supabase
+    REST API (see that file's DOMContentLoaded handler). Resolves with
+    the iframe's live contentDocument as soon as either a .paper exists
+    or the reader's own #reader-error box has something to say (so a
+    genuinely broken story fails in well under a second, not at the full
+    timeout), or with whatever's there once timeoutMs elapses regardless -
+    the caller reads an empty/absent result as "no pages" either way. */
+function loadBookDoc(path, timeoutMs){
+  return new Promise(resolve => {
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none";
+    iframe.setAttribute("aria-hidden", "true");
+    let settled = false;
+    let poller = null;
+    const finish = doc => {
+      if (settled) return;
+      settled = true;
+      if (poller) clearInterval(poller);
+      resolve(doc);
+      setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 0);
+    };
+    const readyDoc = () => {
+      let doc = null;
+      try { doc = iframe.contentDocument; } catch(_e){ return null; }
+      return doc;
+    };
+    const checkReady = () => {
+      const doc = readyDoc();
+      if (!doc) return;
+      const errorBox = doc.getElementById("reader-error");
+      if (doc.querySelector(".paper") || (errorBox && errorBox.textContent.trim())) finish(doc);
+    };
+    iframe.onload = () => { poller = setInterval(checkReady, 120); checkReady(); };
+    iframe.onerror = () => finish(null);
+    setTimeout(() => finish(readyDoc()), timeoutMs || 6000);
+    document.body.appendChild(iframe);
+    iframe.src = siteURL(path);
+  });
+}
+
 const TEST_SUITE = [
   /* ---------- database ---------- */
   { group:"Database", name:"Seed database initialises with every collection", blocking:true, run(){
@@ -15561,12 +15604,11 @@ const TEST_SUITE = [
     if (!opener) return T.fail("There is no way to open the book on the Read page");
     if (!box.querySelector(".bookfeature__cover[alt]")) return T.fail("The cover has no description");
 
-    return fetch(siteURL(b.path)).then(r => {
-      if (!r.ok) return T.fail("The book file did not load (" + r.status + ")");
-      return r.text();
-    }).then(text => {
-      if (typeof text !== "string") return text;      /* already a failure */
-      const doc = new DOMParser().parseFromString(text, "text/html");
+    if (location.protocol !== "http:" && location.protocol !== "https:") return T.skip("Serve the site over http to check the book file");
+    return loadBookDoc(b.path).then(doc => {
+      if (!doc) return T.fail("The book file did not load");
+      const errorBox = doc.getElementById("reader-error");
+      if (errorBox && errorBox.textContent.trim()) return T.fail("The book failed to open: " + errorBox.textContent.trim());
       const papers = doc.querySelectorAll(".paper").length;
       const faces = doc.querySelectorAll(".paper .front, .paper .back").length;
       const imgs = Array.from(doc.querySelectorAll(".book img"));
@@ -15574,12 +15616,16 @@ const TEST_SUITE = [
       const relative = imgs.map(i => i.getAttribute("src") || "")
         .filter(src => src && !/^(https?:)?\/\//.test(src) && src.charAt(0) !== "/");
       if (!papers) return T.fail("The book has no pages");
-      if (faces !== papers * 2) return T.fail("A page is missing one of its two faces");
+      /* An odd total page count leaves the last sheet with only a front -
+         there is nothing left to reveal behind it, so it never gets a
+         .back. Both shapes are structurally valid; only fewer than that
+         means a face is genuinely missing. */
+      if (faces !== papers * 2 && faces !== papers * 2 - 1) return T.fail("A page is missing one of its two faces");
       if (imgs.length < b.pages - 1) return T.fail("Only " + imgs.length + " pictures for " + b.pages + " pages");
       if (relative.length) return T.fail("These pictures would not resolve inside the stage: " + relative.join(", "));
       if (noAlt.length) return T.fail(noAlt.length + " pictures in the book have no description");
       return T.pass(b.pages + " pages across " + papers + " sheets, " + imgs.length + " pictures, all described and all addressable");
-    }).catch(() => T.skip("Serve the site over http to check the book file"));
+    });
   }},
   { group:"Games", name:"Every short-story book opens, turns the right number of pages, and links to its story", blocking:true, run(){
     const rest = BOOKS.slice(1);           /* the fully-illustrated space adventure is checked above */
@@ -15595,31 +15641,33 @@ const TEST_SUITE = [
     });
     if (bad.length) return T.fail(bad.join("; "));
 
-    return Promise.all(rest.map(b => fetch(siteURL(b.path)).then(r => {
-      if (!r.ok) return b.id + ": did not load (" + r.status + ")";
-      return r.text().then(text => {
-        const doc = new DOMParser().parseFromString(text, "text/html");
-        const papers = doc.querySelectorAll(".paper").length;
-        const faces = doc.querySelectorAll(".paper .front, .paper .back").length;
-        const imgs = Array.from(doc.querySelectorAll(".book img, .page-content img"));
-        const noAlt = imgs.filter(i => !String(i.getAttribute("alt") || "").trim());
-        const relative = imgs.map(i => i.getAttribute("src") || "")
-          .filter(src => src && !/^(https?:)?\/\//.test(src) && src.charAt(0) !== "/");
-        if (!papers) return b.id + ": has no pages";
-        if (faces !== papers * 2) return b.id + ": a page is missing one of its two faces";
-        /* the last sheet never turns - it is revealed by removing what sits
-           on top of it - so it contributes one page, not two. */
-        const filePages = (papers - 1) * 2 + 1;
-        if (filePages !== b.pages) return b.id + ": lists " + b.pages + " pages but the file has " + filePages;
-        if (relative.length) return b.id + ": pictures would not resolve inside the stage (" + relative.join(", ") + ")";
-        if (noAlt.length) return b.id + ": " + noAlt.length + " picture(s) with no description";
-        return null;
-      });
+    if (location.protocol !== "http:" && location.protocol !== "https:") return T.skip("Serve the site over http to check the book files");
+    return Promise.all(rest.map(b => loadBookDoc(b.path).then(doc => {
+      if (!doc) return b.id + ": did not load";
+      const errorBox = doc.getElementById("reader-error");
+      if (errorBox && errorBox.textContent.trim()) return b.id + ": failed to open (" + errorBox.textContent.trim() + ")";
+      const papers = doc.querySelectorAll(".paper").length;
+      const faces = doc.querySelectorAll(".paper .front, .paper .back").length;
+      const imgs = Array.from(doc.querySelectorAll(".book img, .page-content img"));
+      const noAlt = imgs.filter(i => !String(i.getAttribute("alt") || "").trim());
+      const relative = imgs.map(i => i.getAttribute("src") || "")
+        .filter(src => src && !/^(https?:)?\/\//.test(src) && src.charAt(0) !== "/");
+      if (!papers) return b.id + ": has no pages";
+      /* Same odd/even allowance as the picture-book check above - an odd
+         total page count leaves the last sheet with only a front. */
+      if (faces !== papers * 2 && faces !== papers * 2 - 1) return b.id + ": a page is missing one of its two faces";
+      /* the last sheet never turns - it is revealed by removing what sits
+         on top of it - so it contributes one page, not two. */
+      const filePages = (papers - 1) * 2 + 1;
+      if (filePages !== b.pages) return b.id + ": lists " + b.pages + " pages but the file has " + filePages;
+      if (relative.length) return b.id + ": pictures would not resolve inside the stage (" + relative.join(", ") + ")";
+      if (noAlt.length) return b.id + ": " + noAlt.length + " picture(s) with no description";
+      return null;
     }))).then(results => {
       const fails = results.filter(Boolean);
       return fails.length ? T.fail(fails.join("; "))
         : T.pass(rest.length + " short-story books all open, all match their page count, and every picture is described and addressable");
-    }).catch(() => T.skip("Serve the site over http to check the book files"));
+    });
   }},
 
   /* ---------- announcements ---------- */
