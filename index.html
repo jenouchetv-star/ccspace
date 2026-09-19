@@ -62,6 +62,12 @@
      background token, so the browser chrome never clashes with the page. -->
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#FAF4E6">
+<!-- /favicon.ico had no real file behind it - some browsers, feed
+     readers, and bots still request this exact path regardless of the
+     rel="icon" links below, and were getting the SPA's catch-all
+     _redirects fallback (a real 200, but the "Not found" screen's own
+     HTML, not an icon). A real multi-size ICO now exists at the root. -->
+<link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="/assets/icons/icon-512.png">
 <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
@@ -15395,18 +15401,23 @@ const TEST_SUITE = [
     db.list("videos").forEach(v => { if (v.thumb && v.thumb.src) paths[v.thumb.src] = 1; });
     db.list("stories").forEach(t => { if (t.image && t.image.src) paths[t.image.src] = 1; });
     const list = Object.keys(paths);
+    /* A media reference can legitimately be a video (loop backgrounds on
+       story pages, video uploads in the media library - see isVideoSrc()
+       and its many call sites) - an <img> can never fire "load" for one
+       of those regardless of whether the file is fine, so this branches
+       on the same extension check the rest of the app already uses. */
     const load = (src, attempt) => new Promise(resolve => {
-      const img = new Image();
-      img.onload  = () => resolve(null);
-      img.onerror = () => resolve(attempt < 2
-        ? load(src, attempt + 1)
-        : src);
-      img.src = siteURL(src) + (attempt > 1 ? "?retry=" + attempt : "");
+      const el = isVideoSrc(src) ? document.createElement("video") : new Image();
+      const done = () => resolve(null);
+      const fail = () => resolve(attempt < 2 ? load(src, attempt + 1) : src);
+      if (isVideoSrc(src)){ el.onloadeddata = done; el.onerror = fail; el.preload = "metadata"; }
+      else { el.onload = done; el.onerror = fail; }
+      el.src = siteURL(src) + (attempt > 1 ? "?retry=" + attempt : "");
     });
     return Promise.all(list.map(src => load(src, 1))).then(rs => Promise.all(rs)).then(results => {
       const bad = results.filter(Boolean);
       return bad.length ? T.fail(bad.length + " did not load: " + bad.join(", "))
-                        : T.pass(list.length + " image files all resolved");
+                        : T.pass(list.length + " media files all resolved");
     });
   }},
 
@@ -15491,7 +15502,7 @@ const TEST_SUITE = [
   }},
   { group:"Site map", name:"Section tabs sit under the main navigation and mark the current page", blocking:true, run(){
     const cases = [
-      ["about", "", 4], ["about", "vision", 4],
+      ["about", "", 5], ["about", "vision", 5],
       ["grown-ups", "", 4], ["grown-ups", "articles", 4],
       ["play", "online", 2], ["play", "offline", 2]
     ];
@@ -18881,7 +18892,21 @@ document.addEventListener("click", (ev) => {
   if (ACTIONS[act]){
     /* Let real links behave like links when the user wants a new tab. */
     if (el.tagName === "A" && (ev.metaKey || ev.ctrlKey || el.getAttribute("target") === "_blank")) return;
-    if (el.tagName === "A" && act !== "go") return;
+    if (el.tagName === "A" && act !== "go"){
+      /* A real link that also needs to close its own modal (e.g. an
+         announcement's "Watch the episode" CTA, built in
+         announcementModal()) has to do both - the anchor's own href
+         already navigates correctly with no help from here, so this
+         only ever runs the side effect (closing the modal) alongside
+         it, never hijacking the click the way the ACTIONS dispatch
+         below does (that path calls preventDefault(), which would
+         cancel the very navigation this link exists for). Every other
+         real-link-plus-data-act combination in this app is content to
+         just navigate, so this stays a narrow, named exception rather
+         than a blanket rule. */
+      if (act === "close-modal") closeModal();
+      return;
+    }
     /* A click can land on a real <a href> that has no data-act of its
        own (e.g. a share-sheet's Facebook/X/WhatsApp links) nested inside
        something that does (e.g. the modal scrim wrapping the whole
