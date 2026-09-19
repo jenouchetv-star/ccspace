@@ -5917,6 +5917,7 @@ const AppState = {
   admin: { q:"", status:"", invalid:false, sort:"updatedAt", dir:"desc", openGroup:null, lastSection:null, selected:{ col:null, ids:[] }, mediaTab:"manage", mediaFolder:"", mediaSortBySize:false,
     moderationTermsShown:25,
     storageUsage:{ status:"idle", totalBytes:0, fileCount:0, largest:[] }, quickUpdate:{ log:[], panelOpen:false, selectedRegion:null },
+    analytics:{ status:"idle", days:7, data:null, error:"" },
     newsletterCompose:{ editingId:null, templateId:null, mode:"now", scheduledAt:"",
       subject:"", previewText:"", heroLabel:"", headline:"", heroImage:{src:"",alt:""}, intro:"",
       details:{}, ctaLabel:"", ctaUrl:"", secondaryLabel:"", secondaryText:"", footerNote:"" },
@@ -6279,6 +6280,7 @@ const ADMIN_NAV = [
   { heading:"Site" },
   { hash:"#/admin/homepage",       label:"Homepage",        icon:"home" },
   { hash:"#/admin/media",          label:"Media references",icon:"image" },
+  { hash:"#/admin/analytics",      label:"Analytics",       icon:"bar-chart-3" },
 
   { heading:"Operations" },
   { hash:"#/admin/send-newsletter",label:"Newsletters", icon:"send" },
@@ -11058,6 +11060,126 @@ function storageUsageCardHTML(){
     + '</div>';
 }
 
+/* Real visitor traffic, proxied through the get-site-analytics Edge
+   Function so every admin can see it inside this portal - not just
+   whoever has a login to the Cloudflare account itself. Same idle ->
+   loading -> loaded/error lifecycle as loadStorageUsage() above. */
+async function loadAnalytics(days){
+  AppState.admin.analytics.status = "loading";
+  AppState.admin.analytics.days = days;
+  rerender();
+  try {
+    const res = await sb.functions.invoke("get-site-analytics", { body: { days: days } });
+    let detail = res.error ? res.error.message : (res.data && res.data.error);
+    if (res.error){
+      try {
+        if (res.error.context && typeof res.error.context.json === "function"){
+          const b = await res.error.context.json();
+          if (b && b.error) detail = b.error;
+        }
+      } catch(_e){ /* body wasn't JSON - keep the generic message */ }
+    }
+    if (detail) throw new Error(detail);
+    AppState.admin.analytics = { status:"loaded", days:days, data: res.data, error:"" };
+  } catch(err){
+    AppState.admin.analytics = { status:"error", days:days, data:null, error: err.message };
+  }
+  rerender();
+}
+/** A simple, dependency-free line+area chart - one series, thin 2px
+    line, a light fill, recessive gridlines, and a native <title> per
+    point standing in for a full hover layer (no charting library or
+    mouse-tracking infrastructure exists anywhere else in this vanilla-
+    JS codebase, so this stays proportional to that). */
+function analyticsLineChart(byDate){
+  if (!byDate.length) return '<p class="admin-meta">No data for this range yet.</p>';
+  const W = 600, H = 160, padL = 6, padR = 6, padT = 10, padB = 10;
+  const maxV = Math.max(1, ...byDate.map(d => d.views));
+  const stepX = byDate.length > 1 ? (W - padL - padR) / (byDate.length - 1) : 0;
+  const points = byDate.map((d,i) => ({
+    x: padL + i * stepX,
+    y: padT + (1 - d.views / maxV) * (H - padT - padB),
+    d: d
+  }));
+  const line = points.map((p,i) => (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ");
+  const area = line + " L" + points[points.length-1].x.toFixed(1) + "," + (H-padB)
+    + " L" + points[0].x.toFixed(1) + "," + (H-padB) + " Z";
+  const grid = [0.25, 0.5, 0.75].map(f => {
+    const y = (padT + f * (H - padT - padB)).toFixed(1);
+    return '<line x1="' + padL + '" x2="' + (W-padR) + '" y1="' + y + '" y2="' + y + '" stroke="var(--admin-border)" stroke-width="1"/>';
+  }).join("");
+  const dots = points.map(p => '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3" fill="var(--admin-info)">'
+    + '<title>' + E(fmtDate(p.d.date, false)) + ': ' + plural(p.d.views, "view") + '</title></circle>').join("");
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:160px;display:block" role="img" aria-label="Page views by day">'
+    + grid
+    + '<path d="' + area + '" fill="var(--admin-info-soft)" stroke="none"/>'
+    + '<path d="' + line + '" fill="none" stroke="var(--admin-info)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+    + dots
+    + '</svg>';
+}
+/** The same ranked-bar component as the dashboard's Workflow pipeline,
+    generalized for any "label + count" rows - one hue, since every row
+    here is the same metric (views), not a set of identities needing to
+    stay visually distinct from each other. */
+function analyticsBarList(rows, labelKey, formatLabel){
+  if (!rows.length) return '<p class="admin-meta">No data for this range yet.</p>';
+  const max = Math.max(1, ...rows.map(r => r.views));
+  return '<div class="stack" style="gap:10px">' + rows.map(r => {
+    const label = formatLabel ? formatLabel(r[labelKey]) : r[labelKey];
+    return '<div><div class="row-between" style="margin-bottom:4px;gap:10px">'
+      + '<span style="font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(label) + '</span>'
+      + '<span class="t-mono" style="color:var(--admin-mute);flex-shrink:0">' + r.views + '</span></div>'
+      + '<div class="admin-progress-track"><div class="admin-progress-fill" style="width:' + ((r.views/max)*100).toFixed(1) + '%;background:var(--admin-info)"></div></div></div>';
+  }).join("") + '</div>';
+}
+function renderAnalyticsLoaded(data){
+  if (!data.totalViews){
+    return '<div class="admin-card"><p class="admin-meta">No traffic recorded yet for this range. Web Analytics was only just switched on - check back once the site has had some real visits.</p></div>';
+  }
+  return '<div class="admin-card" style="margin-bottom:20px">'
+    + '<h3 class="admin-section-title" style="font-size:1rem">Page views</h3>'
+    + '<p style="margin:6px 0 14px"><b style="font-size:2rem;font-family:var(--admin-font-mono)">' + data.totalViews.toLocaleString() + '</b> '
+      + '<span class="admin-meta">page views from ' + data.totalVisits.toLocaleString() + ' visits, ' + E(fmtDate(data.since,false)) + ' to ' + E(fmtDate(data.until,false)) + '.</span></p>'
+    + analyticsLineChart(data.byDate)
+    + '</div>'
+    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">'
+    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">Top pages</h3>'
+      + '<p class="admin-meta" style="margin:2px 0 14px">Where visitors actually land and stay.</p>'
+      + analyticsBarList(data.byPath, "path")
+      + '</div>'
+    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">Where visitors come from</h3>'
+      + '<p class="admin-meta" style="margin:2px 0 14px">The site that sent them here, when known.</p>'
+      + (data.byReferer.length ? analyticsBarList(data.byReferer, "host")
+          : '<p class="admin-meta">No referrers recorded - most visits arrived directly (a bookmark, a typed address, or a link that does not send one).</p>')
+      + '</div>'
+    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">Visitor countries</h3>'
+      + '<p class="admin-meta" style="margin:2px 0 14px">Country-level only - Web Analytics never identifies an individual visitor.</p>'
+      + analyticsBarList(data.byCountry, "country")
+      + '</div>'
+    + '</div>';
+}
+function adminAnalytics(){
+  const a = AppState.admin.analytics;
+  if (a.status === "idle") loadAnalytics(a.days);
+  const ranges = [[7,"7 days"],[30,"30 days"],[90,"90 days"]];
+  return '<div class="row-between" style="margin-bottom:20px;flex-wrap:wrap;gap:12px"><div>'
+    + '<span class="admin-eyebrow">Site traffic</span><h1 class="admin-page-title" style="text-transform:none;font-size:1.5rem">Analytics</h1>'
+    + '<p class="admin-meta">Real visitor traffic on ' + E(BRAND.site) + ', from Cloudflare Web Analytics - cookieless, and it never tracks who a visitor is.</p></div>'
+    + '<div class="row" style="gap:8px;flex-wrap:wrap">'
+    + ranges.map(r => '<button class="admin-btn admin-btn--sm' + (a.days === r[0] ? " admin-btn--primary" : " admin-btn--ghost") + '" data-act="set-analytics-range" data-days="' + r[0] + '">' + E(r[1]) + '</button>').join("")
+    + '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--icon" data-act="refresh-analytics" aria-label="Refresh" title="Refresh">' + ic("refresh-cw") + '</button>'
+    + '</div></div>'
+    + (a.status === "loading" || a.status === "idle"
+        ? '<div class="admin-card"><p class="admin-meta">Loading traffic data...</p></div>'
+      : a.status === "error"
+        ? '<div class="admin-card"><div class="row" style="gap:10px;align-items:center">'
+          + '<span class="admin-badge admin-badge--bad">' + ic("triangle-alert") + '</span>'
+          + '<h3 class="admin-section-title" style="font-size:1rem">Could not load analytics</h3></div>'
+          + '<p class="admin-meta" style="margin-top:10px">' + E(a.error) + '</p>'
+          + '<p class="admin-meta" style="margin-top:6px">If this is the first time this page has loaded, get-site-analytics may not be deployed yet, or its three Cloudflare secrets may not be set - see supabase/deploy-get-site-analytics.ps1.</p></div>'
+        : renderAnalyticsLoaded(a.data));
+}
+
 /* Same status->color mapping statusPill()/STATUS_BADGE already use
    everywhere else in this portal, reused here so the dashboard's own
    charts read as the same system rather than a second, disconnected
@@ -13335,6 +13457,7 @@ function viewAdmin(section, id, sub){
   else if (section === "brand")    body = adminBrand();
   else if (section === "style-guide") body = adminStyleGuide();
   else if (section === "media")    body = adminMedia();
+  else if (section === "analytics") body = adminAnalytics();
   else if (section === "launch-readiness") body = adminLaunchReadiness();
   else if (section === "admins") body = adminAdmins();
   else if (section === "send-newsletter") body = id ? adminNewsletterCompose(id) : adminNewsletterList();
@@ -17945,6 +18068,8 @@ const ACTIONS = {
     rerender();
   },
   "refresh-storage-usage": () => { loadStorageUsage(); },
+  "set-analytics-range": (el) => { loadAnalytics(Number(el.getAttribute("data-days")) || 7); },
+  "refresh-analytics": () => { loadAnalytics(AppState.admin.analytics.days); },
   "media-upload": () => {
     const input = document.createElement("input");
     input.type = "file";
