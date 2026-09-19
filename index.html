@@ -10887,38 +10887,51 @@ function countAll(pred){
    instead of leaving it as a markdown file someone has to remember to
    open. Every number here is a plain read/count - nothing generated,
    nothing sent anywhere. */
-function opsDigestHTML(){
+function opsVitalsHTML(){
   const meta = db.get().meta || {};
   const run = AppState.lastTestRun;
+  const passCount = run ? run.results.filter(r => r.result === "pass").length : 0;
+  const testPct = run ? Math.round((passCount / run.results.length) * 100) : null;
   const realFailures = run ? run.results.filter(r => r.result !== "pass" && r.name !== "Every game loads the shared skin") : [];
-  const testLine = !run ? "Not run this session"
-    : run.results.filter(r => r.result === "pass").length + "/" + run.results.length + " passed"
-      + (realFailures.length ? " (" + plural(realFailures.length, "unexpected failure") + ")" : "");
 
   const daysSince = iso => iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null;
   const ageLabel = days => days === null ? "Never recorded" : days === 0 ? "Today" : plural(days, "day") + " ago";
   const backupDays = daysSince(meta.lastBackupAt);
   const sitemapDays = daysSince(meta.lastSitemapAt);
-
-  const openTickets = db.list("supportTickets").filter(t => t.state === "open");
-  const oldest = openTickets.slice().sort((a,b) => new Date(a.at) - new Date(b.at))[0];
+  const stale = days => days === null || days > 30;
 
   const lrc = db.list("launchReadiness");
   const lrcDone = lrc.filter(t => t.status === "complete").length;
   const lrcPct = lrc.length ? Math.round((lrcDone / lrc.length) * 100) : 0;
 
-  const row = (label, value, warn) => '<div class="row-between" style="padding:7px 0;border-bottom:1px dashed var(--admin-border)">'
-    + '<span class="admin-meta" style="margin:0">' + E(label) + '</span>'
-    + '<b style="font-size:.85rem' + (warn ? ";color:var(--admin-bad)" : "") + '">' + value + '</b></div>';
+  const vitalRow = (icon, cls, title, desc, chip) => '<div class="row" style="gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid var(--admin-border)">'
+    + '<span class="admin-badge' + (cls ? " admin-badge--" + cls : "") + '">' + ic(icon) + '</span>'
+    + '<div style="flex:1;min-width:0"><div style="font-size:.88rem;font-weight:600">' + E(title) + '</div>'
+    + '<p class="admin-meta" style="margin:3px 0 0">' + desc + '</p></div>'
+    + chip + '</div>';
 
-  return '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">This week</h3>'
-    + '<p class="admin-meta" style="margin:2px 0 4px">Operationalizes the MAINTENANCE.md monthly runbook.</p>'
-    + '<div style="margin-top:8px">'
-    + row("Test baseline", E(testLine), !!realFailures.length)
-    + row("Last backup", ageLabel(backupDays), backupDays === null || backupDays > 30)
-    + row("Last sitemap regen", ageLabel(sitemapDays), sitemapDays === null || sitemapDays > 30)
-    + row("Open tickets", openTickets.length + (oldest ? " (oldest " + relTime(oldest.at) + ")" : ""), openTickets.length > 0)
-    + row("Launch Readiness", lrcPct + "% complete (" + lrcDone + "/" + lrc.length + ")", false)
+  return '<div class="admin-card">'
+    + '<div class="row-between" style="align-items:flex-start"><div>'
+    + '<h3 class="admin-section-title" style="font-size:1rem">Operational vitals</h3>'
+    + '<p class="admin-meta" style="margin:2px 0 0">Routine checks and release readiness</p></div>'
+    + '<span class="admin-chip">4 checks</span></div>'
+    + '<div style="margin-top:6px">'
+    + vitalRow("clipboard-check", !run ? "" : realFailures.length ? "warn" : "good", "Test baseline",
+        E(!run ? "Not run this session yet - open Run tests above." : passCount + " of " + run.results.length + " checks passed in the last recorded run."),
+        '<span class="admin-chip' + (!run ? "" : realFailures.length ? " admin-chip--warn" : " admin-chip--good") + '" style="flex:none">' + (testPct === null ? "Not run" : testPct + "% pass") + '</span>')
+    + vitalRow("database", stale(backupDays) ? "warn" : "good", "Database backup",
+        E(backupDays === null ? "No backup recorded - use Export backup above." : "Last exported " + ageLabel(backupDays).toLowerCase() + "."),
+        '<span class="admin-chip' + (stale(backupDays) ? " admin-chip--warn" : " admin-chip--good") + '" style="flex:none">' + E(backupDays === null ? "Unverified" : ageLabel(backupDays)) + '</span>')
+    + vitalRow("layers", stale(sitemapDays) ? "warn" : "good", "Sitemap regeneration",
+        E(sitemapDays === null ? "No recent regeneration event recorded." : "Last regenerated " + ageLabel(sitemapDays).toLowerCase() + "."),
+        '<span class="admin-chip' + (stale(sitemapDays) ? " admin-chip--warn" : " admin-chip--good") + '" style="flex:none">' + E(sitemapDays === null ? "Unverified" : ageLabel(sitemapDays)) + '</span>')
+    + '<div class="row" style="gap:12px;align-items:center;padding:11px 0 2px">'
+    + '<span class="admin-badge' + (lrcPct >= 100 ? " admin-badge--good" : "") + '">' + ic("list-checks") + '</span>'
+    + '<div style="flex:1;min-width:0"><div style="font-size:.88rem;font-weight:600">Launch checklist</div>'
+    + '<p class="admin-meta" style="margin:3px 0 6px">' + lrcDone + ' of ' + lrc.length + ' tasks marked complete</p>'
+    + '<div class="admin-progress-track"><div class="admin-progress-fill' + (lrcPct >= 100 ? " is-complete" : "") + '" style="width:' + lrcPct + '%"></div></div></div>'
+    + '<b class="t-mono" style="flex:none;color:var(--admin-ink)">' + lrcPct + '%</b>'
+    + '</div>'
     + '</div></div>';
 }
 
@@ -11025,38 +11038,51 @@ async function loadStorageUsage(){
   }
   rerender();
 }
-function storageUsageCardHTML(){
+function storageOverviewCardHTML(){
   const su = AppState.admin.storageUsage;
   if (su.status === "idle") loadStorageUsage();
   const ratio = su.totalBytes / STORAGE_QUOTA_BYTES;
   const level = ratio >= 0.9 ? "bad" : ratio >= 0.7 ? "warn" : "good";
   const pct = Math.min(100, ratio * 100);
   return '<div class="admin-card" id="storage-usage">'
-    + '<div class="row-between" style="flex-wrap:wrap;gap:10px">'
-    + '<div class="row" style="gap:10px;align-items:center">'
-    + '<span class="admin-badge' + (su.status === "loaded" ? " admin-badge--" + level : "") + '">' + ic(su.status === "loaded" && level !== "good" ? "triangle-alert" : "database") + '</span>'
-    + '<h3 class="admin-section-title" style="font-size:1rem">Storage usage</h3></div>'
-    + '<button class="admin-btn admin-btn--sm admin-btn--ghost" data-act="refresh-storage-usage">' + ic("refresh-cw") + ' Refresh</button>'
+    + '<div class="row-between" style="flex-wrap:wrap;gap:10px;align-items:flex-start">'
+    + '<div><h3 class="admin-section-title" style="font-size:1rem">Media storage</h3>'
+    + '<p class="admin-meta" style="margin:2px 0 0">Storage quota utilization</p></div>'
+    + (su.status === "loaded"
+        ? '<span class="admin-chip' + (level === "good" ? " admin-chip--good" : level === "warn" ? " admin-chip--warn" : " admin-chip--bad") + '">' + E(level === "good" ? "Within quota" : level === "warn" ? "Approaching quota" : "Over quota") + '</span>'
+        : '<button class="admin-btn admin-btn--sm admin-btn--ghost" data-act="refresh-storage-usage">' + ic("refresh-cw") + ' Refresh</button>')
     + '</div>'
     + (su.status === "loading" || su.status === "idle" ? '<p class="admin-meta" style="margin-top:12px">Checking Supabase Storage...</p>'
       : su.status === "error" ? '<p class="admin-meta" style="margin-top:12px">Could not check storage usage: ' + E(su.error || "unknown error") + '</p>'
-      : '<div style="margin-top:12px">'
-        + '<div class="row-between" style="margin-bottom:5px">'
-        + '<span style="font-size:.82rem;font-weight:600">' + E(formatBytes(su.totalBytes)) + ' of 1 GB</span>'
-        + '<span class="t-mono" style="color:var(--admin-mute)">' + pct.toFixed(1) + '%</span></div>'
-        + '<div class="admin-progress-track"><div class="admin-progress-fill" style="width:' + pct.toFixed(1) + '%;background:' + (level === "good" ? "var(--admin-good)" : level === "warn" ? "var(--admin-warn)" : "var(--admin-bad)") + '"></div></div>'
-        + '<p class="admin-meta" style="margin-top:10px">' + E(plural(su.fileCount, "file")) + ' in your media library. '
-        + 'Supabase doesn’t expose exact monthly egress through any API - check the real number on your '
+      : '<div style="margin-top:16px">'
+        + '<div class="row-between" style="align-items:flex-end">'
+        + '<div><div style="font-size:1.7rem;font-weight:800;font-family:var(--admin-font-mono);color:var(--admin-ink);line-height:1">' + E(formatBytes(su.totalBytes)) + '</div>'
+        + '<p class="admin-meta" style="margin:5px 0 0">of 1 GB allocated</p></div>'
+        + '<div style="font-size:1.4rem;font-weight:800;font-family:var(--admin-font-mono);color:' + (level === "good" ? "var(--admin-good)" : level === "warn" ? "var(--admin-warn)" : "var(--admin-bad)") + '">' + pct.toFixed(1) + '<span style="font-size:.85rem">%</span></div>'
+        + '</div>'
+        + '<div class="admin-progress-track" style="height:10px;margin-top:12px"><div class="admin-progress-fill" style="width:' + Math.max(pct, 1.2).toFixed(1) + '%;background:' + (level === "good" ? "var(--admin-good)" : level === "warn" ? "var(--admin-warn)" : "var(--admin-bad)") + '"></div></div>'
+        + '<p class="admin-meta" style="margin-top:14px;line-height:1.5">Storage use is tracked against the free-tier quota. Supabase doesn’t expose exact monthly egress through any API - check the real number on your '
         + '<a href="https://supabase.com/dashboard/org/' + SUPABASE_ORG_SLUG + '/usage" target="_blank" rel="noopener">Supabase usage page</a>.</p>'
-        + (su.largest.length
-            ? '<div class="stack" style="gap:8px;margin-top:12px">'
-              + '<p class="admin-meta" style="margin:0;font-weight:600">Largest files</p>'
-              + su.largest.map(f => '<div class="row" style="font-size:.82rem;gap:10px;align-items:center">'
-                  + '<span class="admin-badge admin-badge--sm">' + ic(isVideoSrc(f.name) ? "file-video" : "file-image") + '</span>'
-                  + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(f.name) + '</span>'
-                  + '<span class="t-mono" style="flex-shrink:0;color:var(--admin-mute)">' + E(formatBytes(f.size)) + '</span></div>').join("")
-              + '</div>'
-            : "")
+        + '<p class="admin-meta" style="margin-top:10px">Media library &middot; ' + E(plural(su.fileCount, "file")) + '</p>'
+        + '</div>')
+    + '</div>';
+}
+function storageLargestFilesCardHTML(){
+  const su = AppState.admin.storageUsage;
+  return '<div class="admin-card">'
+    + '<div class="row-between" style="flex-wrap:wrap;gap:10px">'
+    + '<div><h3 class="admin-section-title" style="font-size:1rem">Largest media assets</h3>'
+    + '<p class="admin-meta" style="margin:2px 0 0">Largest files in the current media inventory</p></div>'
+    + '<a class="admin-btn admin-btn--sm admin-btn--ghost" href="#/admin/media">' + ic("arrow-right") + ' Open library</a>'
+    + '</div>'
+    + (su.status !== "loaded" ? '<p class="admin-meta" style="margin-top:12px">' + (su.status === "error" ? "Could not load the media library." : "Checking Supabase Storage...") + '</p>'
+      : !su.largest.length ? '<p class="admin-meta" style="margin-top:12px">No files uploaded yet.</p>'
+      : '<div class="admin-rows" style="margin-top:10px">' + su.largest.map(f =>
+          '<a class="admin-row" style="text-decoration:none" href="#/admin/media">'
+          + ic(isVideoSrc(f.name) ? "file-video" : "file-image")
+          + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b style="font-weight:600">' + E(f.name) + '</b> '
+          + '<span class="admin-meta">' + E(isVideoSrc(f.name) ? "video file" : "image file") + '</span></span>'
+          + '<span class="t-mono" style="flex-shrink:0;color:var(--admin-mute)">' + E(formatBytes(f.size)) + '</span></a>').join("")
         + '</div>')
     + '</div>';
 }
@@ -11204,11 +11230,8 @@ function adminDashboard(){
   const drafts    = countAll(r => r.status === "draft");
   const inFlight  = countAll(r => ["review","revision","approved","scheduled"].indexOf(r.status) >= 0);
   const archived  = countAll(r => r.status === "archived");
-  const openIssues = db.list("issues").filter(i => i.state !== "fixed").length;
-  const openTickets = db.list("supportTickets").filter(t => t.state === "open").length;
 
   const pipeline = STATUSES.map(s => ({ s:s, n: countAll(r => r.status === s.id) }));
-  const maxN = Math.max(1, ...pipeline.map(p => p.n));
   const activeTotal = total - archived;
   const liveRate = activeTotal ? Math.round((published / activeTotal) * 100) : 0;
 
@@ -11219,57 +11242,52 @@ function adminDashboard(){
       if (errs.length) problems.push({ col:c, rec:r, errs:errs });
     });
   });
+  const openIssues = db.list("issues").filter(i => i.state !== "fixed");
+  const openTickets = db.list("supportTickets").filter(t => t.state === "open");
+
+  /* One flat list of everything that could delay publishing or needs an
+     operational follow-up - content validation problems, open issues, and
+     open tickets alike - so "Needs attention" reads as one worklist of
+     concrete next actions instead of three separate counters. */
+  const attentionItems = []
+    .concat(problems.map(p => ({
+      icon:"pencil", pill: COLLECTION_LABELS[p.col] || p.col,
+      title: p.rec.title || p.rec.name || p.rec.path || p.rec.id,
+      desc: p.errs[0].message, actLabel:"Fix record", act:"edit-record", col:p.col, id:p.rec.id
+    })))
+    .concat(openIssues.map(i => ({
+      icon: i.severity === "high" ? "triangle-alert" : "flag", pill:"Operations",
+      title: i.title, desc: i.detail ? (i.detail.length > 130 ? i.detail.slice(0,130) + "…" : i.detail) : titleCase(i.state) + " issue",
+      actLabel:"Review", href:"#/admin/issues"
+    })))
+    .concat(openTickets.map(t => {
+      const days = Math.max(0, Math.floor((Date.now() - new Date(t.at).getTime()) / 86400000));
+      return { icon:"life-buoy", pill:"Operations",
+        title:"Support ticket: " + (t.subject || t.id),
+        desc:"Open for " + plural(days, "day") + ". Confirm an owner and a next response.",
+        actLabel:"Review", href:"#/admin/support" };
+    }));
+  const needsAttention = attentionItems.length;
 
   const lrc = db.list("launchReadiness");
   const lrcDone = lrc.filter(t => t.status === "complete").length;
   const lrcPct = lrc.length ? Math.round((lrcDone / lrc.length) * 100) : 0;
 
-  /* Trigger both lazy loads once, up front, so the KPI row below and the
-     detail cards further down always agree on the same in-flight state
-     instead of each independently deciding whether to kick one off. */
+  /* Trigger the storage lazy-load once, up front, so the storage card
+     further down doesn't independently decide whether to kick one off. */
   if (AppState.admin.storageUsage.status === "idle") loadStorageUsage();
-  if (AppState.admin.analytics.status === "idle") loadAnalytics(AppState.admin.analytics.days);
-  const su = AppState.admin.storageUsage;
-  const an = AppState.admin.analytics;
-  const storageRatio = su.totalBytes / STORAGE_QUOTA_BYTES;
-  const storageLevel = su.status !== "loaded" ? "" : storageRatio >= 0.9 ? "bad" : storageRatio >= 0.7 ? "warn" : "good";
-
-  /* What an editor reaches for most: the content types that change week to
-     week, not the whole 15-collection catalog. */
-  const quickAdd = [
-    ["activities", "hammer"], ["videos", "clapperboard"],
-    ["pages", "file-pen"], ["announcements", "megaphone"]
-  ];
-  const needsAttention = problems.length + openIssues + openTickets;
 
   /* One honest sentence, never a fabricated "all green" tone when it
      isn't - the same real numbers as the rest of the page, just read
      aloud before the detail underneath backs it up. */
-  const heroHeadline = needsAttention === 0 && lrcPct >= 90 ? "Everything is steady right now."
+  const heroHeadline = needsAttention === 0 && lrcPct >= 90 ? "Your site is operating steadily."
     : needsAttention === 0 ? "Nothing needs a decision right now."
     : plural(needsAttention, "item") + " " + (needsAttention === 1 ? "needs" : "need") + " a decision before anything new goes out.";
-  const heroDetail = "Launch readiness is " + lrcPct + "% (" + lrcDone + " of " + lrc.length + " checklist items). "
+  const heroDetail = "Launch readiness is " + lrcPct + "%. "
     + (published === activeTotal
-        ? "Every active piece of content is already published."
-        : liveRate + "% of your " + activeTotal + " active pieces of content are published and live.");
-
-  /* One small tile factory, shared by all four KPIs below - a link when
-     there's somewhere useful to send the click, a plain card otherwise. */
-  const kpi = (icon, color, label, value, note, href) => (href ? '<a href="' + href + '"' : '<div')
-    + ' class="admin-card" style="text-decoration:none;color:inherit;display:block">'
-    + '<div class="row-between" style="align-items:flex-start;gap:8px">'
-    + '<span class="admin-meta" style="text-transform:uppercase;letter-spacing:.07em;font-size:.66rem;font-weight:800;margin:0">' + E(label) + '</span>'
-    + '<span class="admin-badge admin-badge--sm' + (color ? " admin-badge--" + color : "") + '">' + ic(icon) + '</span>'
-    + '</div>'
-    + '<div style="font-size:1.7rem;font-weight:800;font-family:var(--admin-font-mono);margin-top:10px;color:var(--admin-ink);line-height:1">' + value + '</div>'
-    + '<p class="admin-meta" style="margin:5px 0 0">' + note + '</p>'
-    + (href ? '</a>' : '</div>');
-
-  const visitorsValue = an.status === "loaded" ? an.data.totalVisits.toLocaleString()
-    : an.status === "error" ? "-" : "...";
-  const visitorsNote = an.status === "loaded" ? "last " + an.days + " days &middot; " + an.data.totalViews.toLocaleString() + " views"
-    : an.status === "error" ? "Could not load - view Analytics"
-    : "Loading...";
+        ? "Published content is healthy - every active piece is already live."
+        : "Published content is healthy overall (" + liveRate + "% of " + activeTotal + " active pieces), while "
+          + (needsAttention ? plural(needsAttention, "item") + " above still " + (needsAttention === 1 ? "needs" : "need") + " a decision." : "nothing else is currently blocked."));
 
   return '<div class="row-between" style="margin-bottom:20px;flex-wrap:wrap;gap:12px"><div>'
     + '<span class="admin-eyebrow">Prototype admin</span><h1 class="admin-page-title" style="text-transform:none;font-size:1.5rem">Dashboard</h1>'
@@ -11278,109 +11296,119 @@ function adminDashboard(){
     + '<button class="admin-btn admin-btn--sm" data-act="run-health-check">' + ic("stethoscope") + ' Run health check</button>'
     + '<a class="admin-btn admin-btn--sm admin-btn--primary" href="#/test">' + ic("clipboard-check") + ' Run tests</a></div></div>'
 
-    /* Executive snapshot: a plain-English read of the two things that
-       actually gate a launch (open decisions, the launch checklist),
-       always in the same real numbers the rest of the page shows -
-       never a separate, rosier-sounding narrative. */
+    /* Executive snapshot: a two-column hero, headline/detail/CTAs on the
+       left and two at-a-glance stat boxes on the right - always the same
+       real numbers the rest of the page shows, never a rosier separate
+       narrative. */
     + '<div class="admin-card" style="margin-bottom:20px;border:none;color:#fff;overflow:hidden;position:relative;padding:26px 28px;'
-      + 'background:linear-gradient(120deg, var(--admin-accent-hover) 0%, var(--admin-accent) 55%, #4B74C9 130%)">'
+      + 'background:linear-gradient(115deg,#142B66 0%,#1E40AF 58%,#4B74C9 100%)">'
+    + '<div class="grid" style="grid-template-columns:1.5fr 1fr;gap:24px;align-items:center">'
+    + '<div style="min-width:0">'
     + '<span style="display:inline-flex;align-items:center;gap:7px;font-size:.68rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:#BFD4EE">'
       + '<span style="width:7px;height:7px;border-radius:50%;background:#8FC1FF"></span> Executive snapshot</span>'
     + '<h2 style="margin:10px 0 6px;font-size:1.35rem;font-weight:800;color:#fff;max-width:640px">' + E(heroHeadline) + '</h2>'
     + '<p style="margin:0 0 18px;font-size:.88rem;color:#D3E2F5;max-width:620px;line-height:1.5">' + E(heroDetail) + '</p>'
     + '<div class="row" style="gap:10px;flex-wrap:wrap">'
-    + (needsAttention ? '<a class="admin-btn admin-btn--sm" style="background:#fff;color:var(--admin-accent-ink);border-color:#fff" href="#needs-attention">' + ic("triangle-alert") + ' Review ' + plural(needsAttention, "item") + '</a>' : "")
-    + '<a class="admin-btn admin-btn--sm" style="background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.35)" href="#/admin/launch-readiness">' + ic("rocket") + ' Launch Readiness</a>'
-    + '<a class="admin-btn admin-btn--sm" style="background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.35)" href="#/admin/analytics">' + ic("bar-chart-3") + ' Full analytics</a>'
+    + (needsAttention ? '<a class="admin-btn admin-btn--sm" style="text-decoration:none;background:#fff;color:var(--admin-accent-ink);border-color:#fff" href="#needs-attention">' + ic("triangle-alert") + ' Review ' + plural(needsAttention, "item") + '</a>' : "")
+    + '<a class="admin-btn admin-btn--sm" style="text-decoration:none;background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.35)" href="#/admin/launch-readiness">' + ic("rocket") + ' Launch Readiness</a>'
+    + '</div></div>'
+    + '<div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div style="border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);border-radius:12px;padding:14px">'
+    + '<div style="font-size:.7rem;color:#BFD4EE">Launch readiness</div>'
+    + '<div style="font-size:1.7rem;font-weight:800;margin-top:4px">' + lrcPct + '<span style="font-size:1rem">%</span></div>'
+    + '<div class="admin-progress-track" style="background:rgba(255,255,255,.2);margin-top:8px"><div class="admin-progress-fill" style="width:' + Math.max(lrcPct,2) + '%;background:#BFDBFE"></div></div>'
+    + '<div style="font-size:.68rem;color:#BFD4EE;margin-top:8px">' + lrcDone + ' of ' + lrc.length + ' checklist items</div>'
+    + '</div>'
+    + '<div style="border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);border-radius:12px;padding:14px">'
+    + '<div style="font-size:.7rem;color:#BFD4EE">Needs attention</div>'
+    + '<div style="font-size:1.7rem;font-weight:800;margin-top:4px;font-family:var(--admin-font-mono)">' + String(needsAttention).padStart(2,"0") + '</div>'
+    + '<div style="font-size:.68rem;color:#BFD4EE;margin-top:8px">' + (needsAttention ? plural(problems.length,"content problem") + ' &middot; ' + plural(openIssues.length + openTickets.length, "operational item") : "Nothing open right now") + '</div>'
+    + (needsAttention ? '<a href="#needs-attention" style="text-decoration:none;display:inline-block;margin-top:8px;font-size:.72rem;font-weight:700;color:#fff">Needs review &rarr;</a>' : "")
+    + '</div>'
+    + '</div>'
     + '</div></div>'
 
-    /* Four honest numbers, each answering one specific question at a
-       glance and each a front door into the card that explains it - a
-       faster, shallower read than "Content health" below, not a
-       duplicate of it. */
-    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:20px">'
-    + kpi("file-check-2", liveRate >= 70 ? "good" : "warn", "Content live", liveRate + "%", published + " of " + activeTotal + " active pieces", "#content-health")
-    + kpi("rocket", lrcPct >= 90 ? "good" : "warn", "Launch readiness", lrcPct + "%", lrcDone + " of " + lrc.length + " checklist items", "#/admin/launch-readiness")
-    + kpi("hard-drive", storageLevel, "Storage used", su.status === "loaded" ? formatBytes(su.totalBytes) : "...", su.status === "loaded" ? sharePct(su.totalBytes, STORAGE_QUOTA_BYTES) + " of 1 GB" : "Checking...", "#storage-usage")
-    + kpi("users", "info", "Visitors", visitorsValue, visitorsNote, "#/admin/analytics")
-    + '</div>'
-
-    /* 1. What today's job actually is: add something. Front and center,
-       because "update the content" is the reason this page exists. */
-    + '<div class="admin-card" style="margin-bottom:20px">'
-    + '<h3 class="admin-section-title" style="margin-bottom:2px;font-size:1rem">Add content</h3>'
-    + '<p class="admin-meta" style="margin:0 0 14px">The four kinds that change most often. Everything else lives in Content on the left.</p>'
-    + '<div class="row" style="gap:8px;flex-wrap:wrap">' + quickAdd.map(q => '<button class="admin-btn admin-btn--sm" data-act="new-record" data-col="' + q[0] + '">'
-        + ic(q[1]) + ' New ' + E((COLLECTION_LABELS[q[0]] || q[0]).toLowerCase()) + '</button>').join("") + '</div>'
-    + '</div>'
-
-    /* 2. What needs a decision before it can go out (broken records, open
-       tickets/issues) beside storage health - two independent status
-       readouts, side by side rather than each claiming a full-width row
-       the way a single "needs a decision" card would. */
-    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;margin-bottom:20px">'
-
-    + '<div class="admin-card" id="needs-attention">'
-    + '<div class="row-between" style="flex-wrap:wrap;gap:10px">'
-    + '<div class="row" style="gap:10px;align-items:center">'
-    + '<span class="admin-badge' + (needsAttention ? " admin-badge--bad" : " admin-badge--good") + '">' + ic(needsAttention ? "triangle-alert" : "check") + '</span>'
-    + '<h3 class="admin-section-title" style="font-size:1rem">Needs your attention</h3></div>'
-    + '<div class="row" style="gap:8px">'
-    + '<a class="admin-btn admin-btn--sm' + (openIssues ? "" : " admin-btn--ghost") + '" href="#/admin/issues">' + ic("triangle-alert") + ' ' + E(plural(openIssues,"issue")) + '</a>'
-    + '<a class="admin-btn admin-btn--sm' + (openTickets ? "" : " admin-btn--ghost") + '" href="#/admin/support">' + ic("life-buoy") + ' ' + E(plural(openTickets,"ticket")) + '</a>'
-    + '</div></div>'
-    + (problems.length
-        ? '<div class="admin-rows" style="margin-top:10px">' + problems.slice(0,6).map(p =>
-            '<button class="admin-row" data-act="edit-record" data-col="' + E(p.col) + '" data-id="' + E(p.rec.id) + '">'
-            + ic("pencil") + '<span style="flex:1">' + E(p.rec.title || p.rec.name || p.rec.path) + ' <span style="color:var(--admin-mute)">- ' + E(p.errs[0].message) + '</span></span>'
-            + '<span class="admin-chip admin-chip--warn" style="flex:none;border-radius:4px">' + E(COLLECTION_LABELS[p.col] || p.col) + '</span></button>').join("")
-          + (problems.length > 6 ? '<p class="admin-meta" style="margin-top:8px">and ' + (problems.length - 6) + ' more incomplete record' + (problems.length - 6 === 1 ? "" : "s") + '.</p>' : "")
-          + '</div>'
-        : '<p class="admin-meta" style="margin-top:12px">Every record passes publication validation.</p>')
-    + '</div>'
-
-    + storageUsageCardHTML()
-
-    + '</div>'
-
-    /* 3. The state of the library, in full - one number in context (how
-       much is actually live) plus one proportional bar beats four
-       disconnected tiles - archived is left out of the denominator
-       since it was deliberately retired, not something the count of
-       "how much is live" should be judged against. Every segment also
-       carries its own status icon+label, so the story never depends on
-       color alone. */
+    /* Content workflow: composition bar + legend, then a stage card per
+       status, then one honest interpretation - replaces the separate KPI
+       tile row, since those four numbers were already redundant with the
+       detail this section shows. */
     + (() => {
         const compose = ["draft","review","revision","approved","scheduled","published"]
           .map(id => ({ s: statusMeta(id), n: pipeline.find(p => p.s.id === id).n }))
           .filter(p => p.n > 0);
-        return '<div class="admin-card" style="margin-bottom:20px" id="content-health">'
-          + '<h3 class="admin-section-title" style="font-size:1rem">Content health</h3>'
-          + '<p style="margin:6px 0 16px;font-size:.95rem">'
-            + '<b style="font-size:2.1rem;color:var(--admin-good);font-family:var(--admin-font-mono)">' + liveRate + '%</b> '
-            + '<span class="admin-meta">of your ' + plural(activeTotal, "active piece", "active pieces") + ' of content'
-            + ' (' + published + ' of ' + activeTotal + ') ' + (published === 1 ? "is" : "are") + ' published and live for visitors right now.</span></p>'
-          + '<div style="display:flex;gap:2px;height:14px;border-radius:7px;overflow:hidden;background:var(--admin-surface-2)">'
+        const stages = STATUSES.map(s => ({ s:s, n: pipeline.find(p => p.s.id === s.id).n, denom: s.id === "archived" ? total : activeTotal }));
+        const interpretation = needsAttention === 0
+          ? "All active content is already published, with nothing currently blocking a new release."
+          : "Most content is already published. The near-term workflow focus is clearing the " + plural(needsAttention, "item") + " above, then moving any in-review work through approval. Draft volume alone does not indicate a problem - age and publishing intent should guide prioritization.";
+        return '<div class="admin-card" style="margin-bottom:20px" id="content-workflow">'
+          + '<div class="row-between" style="flex-wrap:wrap;gap:10px"><div>'
+          + '<h3 class="admin-section-title" style="font-size:1rem">Content workflow</h3>'
+          + '<p class="admin-meta" style="margin:2px 0 0">' + plural(total, "total record") + (archived ? " &middot; " + plural(archived, "archived record") + " excluded from active content health" : "") + '.</p></div>'
+          + '<span class="admin-chip">CMS overview</span></div>'
+          + '<div style="margin-top:16px">'
+          + '<div style="display:flex;gap:2px;height:14px;border-radius:7px;overflow:hidden;background:var(--admin-surface-2)" title="Workflow distribution">'
           + compose.map(p => '<div style="width:' + ((p.n / activeTotal) * 100).toFixed(1) + '%;background:' + pipelineSegColor(p.s.id) + '" title="' + E(p.s.label) + ': ' + plural(p.n, "record") + '"></div>').join("")
           + '</div>'
-          + '<div class="row" style="gap:16px;flex-wrap:wrap;margin-top:14px">'
-          + compose.map(p => { const b = STATUS_BADGE[p.s.id] || STATUS_BADGE.draft;
-              return '<span style="display:inline-flex;align-items:center;gap:6px;font-size:.82rem">'
-                + '<span class="admin-badge admin-badge--sm ' + b.cls + '">' + ic(b.icon) + '</span>'
-                + E(p.s.label) + ' <b class="t-mono">' + p.n + '</b>'
-                + ' <span class="admin-meta">(' + sharePct(p.n, activeTotal) + ')</span></span>'; }).join("")
+          + '<div class="row" style="gap:16px;flex-wrap:wrap;margin-top:12px">'
+          + compose.map(p => '<span style="font-size:.78rem;color:var(--admin-mute)">' + E(p.s.label) + ' <b class="t-mono" style="color:var(--admin-ink)">' + p.n + ' &middot; ' + sharePct(p.n, activeTotal) + '</b></span>').join("")
+          + '</div></div>'
+          + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:18px">'
+          + stages.map(p => { const b = STATUS_BADGE[p.s.id] || STATUS_BADGE.draft; const pct = p.denom ? (p.n / p.denom) * 100 : 0;
+              return '<div class="admin-card admin-card--flat" style="padding:13px' + (p.s.id === "published" ? ";background:var(--admin-good-soft)" : "") + '">'
+                + '<div class="row-between" style="align-items:center">'
+                + '<span style="font-size:.72rem;font-weight:700">' + E(p.s.label) + '</span>'
+                + '<span class="admin-badge admin-badge--sm ' + b.cls + '">' + ic(b.icon) + '</span></div>'
+                + '<div style="font-size:1.4rem;font-weight:800;font-family:var(--admin-font-mono);margin-top:8px">' + p.n + '</div>'
+                + '<div class="admin-meta" style="margin-top:2px">' + sharePct(p.n, p.denom) + ' of records</div>'
+                + '<div class="admin-progress-track" style="margin-top:8px"><div class="admin-progress-fill" style="width:' + Math.max(pct,1).toFixed(1) + '%;background:' + pipelineSegColor(p.s.id) + '"></div></div>'
+                + '</div>'; }).join("")
           + '</div>'
-          + (inFlight ? '<p class="admin-meta" style="margin-top:12px">' + plural(inFlight, "piece") + ' of content ' + (inFlight === 1 ? "is" : "are") + ' somewhere between draft and published - see the workflow pipeline below for exactly where.</p>' : "")
-          + (archived ? '<p class="admin-meta" style="margin-top:6px">' + plural(archived, "archived record") + ' kept out of the total above.</p>' : "")
+          + '<div class="admin-callout admin-callout--info" style="margin-top:16px"><p style="margin:0;font-size:.82rem;line-height:1.6"><b>Interpretation:</b> ' + E(interpretation) + '</p></div>'
           + '</div>';
       })()
 
-    /* 4. Supporting detail: what changed, and the shape of the pipeline. */
-    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px">'
+    /* Storage: overview and largest files as two side-by-side cards. */
+    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;margin-bottom:20px">'
+    + storageOverviewCardHTML()
+    + storageLargestFilesCardHTML()
+    + '</div>'
 
-    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">Recent activity</h3>'
+    /* Needs attention: one full-width worklist, every row a concrete next
+       action (fix a record, review an issue, respond to a ticket) rather
+       than three disconnected counters. */
+    + '<div class="admin-card" style="margin-bottom:20px" id="needs-attention">'
+    + '<div class="row" style="gap:10px;align-items:center">'
+    + '<span class="admin-badge' + (needsAttention ? " admin-badge--bad" : " admin-badge--good") + '">' + ic(needsAttention ? "triangle-alert" : "check") + '</span>'
+    + '<h3 class="admin-section-title" style="font-size:1rem">Needs attention</h3>'
+    + '<span class="admin-chip' + (needsAttention ? "" : " admin-chip--good") + '">' + plural(needsAttention, "open item") + '</span>'
+    + '</div>'
+    + '<p class="admin-meta" style="margin:8px 0 0">Items that may delay publishing or require an operational follow-up.</p>'
+    + (attentionItems.length
+        ? '<div class="admin-rows" style="margin-top:10px">' + attentionItems.slice(0,8).map(it => {
+            const inner = ic(it.icon) + '<span style="flex:1;min-width:0"><b style="font-weight:600">' + E(it.title) + '</b>'
+              + '<span class="admin-meta" style="display:block;margin-top:2px">' + E(it.desc) + '</span></span>'
+              + '<span class="admin-chip" style="flex:none">' + E(it.pill) + '</span>';
+            return it.href
+              ? '<a class="admin-row" style="text-decoration:none" href="' + E(it.href) + '">' + inner + '</a>'
+              : '<button class="admin-row" data-act="' + E(it.act) + '" data-col="' + E(it.col) + '" data-id="' + E(it.id) + '">' + inner + '</button>';
+          }).join("")
+          + (attentionItems.length > 8 ? '<p class="admin-meta" style="margin-top:8px">and ' + (attentionItems.length - 8) + ' more.</p>' : "")
+          + '</div>'
+        : '<p class="admin-meta" style="margin-top:12px">Every record passes publication validation, and there are no open issues or tickets.</p>')
+    + '</div>'
+
+    /* Operations: routine checks + release readiness beside the audit
+       trail - two independent readouts, side by side. */
+    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;margin-bottom:20px">'
+
+    + opsVitalsHTML()
+
+    + '<div class="admin-card"><div class="row-between" style="align-items:flex-start"><div>'
+    + '<h3 class="admin-section-title" style="font-size:1rem">Recent system activity</h3>'
+    + '<p class="admin-meta" style="margin:2px 0 0">Latest recorded CMS and admin events</p></div>'
+    + '<a class="admin-btn admin-btn--sm admin-btn--ghost" href="#/admin/audit">' + ic("arrow-right") + ' Full log</a></div>'
     + (d.auditLog.length
-        ? '<div style="margin-top:14px;position:relative;padding-left:4px">'
+        ? '<div style="margin-top:16px;position:relative;padding-left:4px">'
           + '<div style="position:absolute;left:8px;top:6px;bottom:6px;width:1px;background:var(--admin-border)"></div>'
           + d.auditLog.slice(0,6).map(l => '<div style="position:relative;padding-left:20px;margin-bottom:14px">'
               + '<span style="position:absolute;left:2px;top:4px;width:9px;height:9px;border-radius:50%;background:var(--admin-info);box-shadow:0 0 0 3px var(--admin-info-soft)"></span>'
@@ -11389,20 +11417,7 @@ function adminDashboard(){
               + '<span class="admin-meta">' + E(relTime(l.at)) + '</span></div>').join("")
           + '</div>'
         : '<p class="admin-meta" style="margin-top:12px">Nothing logged yet.</p>')
-    + '<a class="admin-btn admin-btn--sm admin-btn--ghost" style="margin-top:4px" href="#/admin/audit">' + ic("arrow-right") + ' Full log</a></div>'
-
-    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">Workflow pipeline</h3>'
-    + '<p class="admin-meta" style="margin:2px 0 14px">Where every piece of content sits right now, from first draft to published - same colors as the badges throughout this portal.</p>'
-    + '<div class="stack" style="gap:12px">'
-    + pipeline.map(p => { const b = STATUS_BADGE[p.s.id] || STATUS_BADGE.draft;
-        return '<div><div class="row-between" style="margin-bottom:5px">'
-        + '<span style="display:inline-flex;align-items:center;gap:6px;font-size:.82rem;font-weight:600">'
-          + '<span class="admin-badge admin-badge--sm ' + b.cls + '">' + ic(b.icon) + '</span>' + E(p.s.label) + '</span>'
-        + '<span class="t-mono" style="color:var(--admin-mute)">' + p.n + ' &middot; ' + sharePct(p.n, total) + '</span></div>'
-        + '<div class="admin-progress-track"><div class="admin-progress-fill" style="width:' + ((p.n / maxN) * 100).toFixed(1) + '%;background:' + pipelineSegColor(p.s.id) + '"></div></div></div>'; }).join("")
-    + '</div></div>'
-
-    + opsDigestHTML()
+    + '</div>'
 
     + '</div>';
 }
