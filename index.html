@@ -6259,6 +6259,7 @@ const SHOP_NAV = [
 
 const ADMIN_NAV = [
   { hash:"#/admin",                label:"Dashboard",       icon:"layout-dashboard" },
+  { hash:"#/admin/analytics",      label:"Analytics",       icon:"bar-chart-3" },
 
   { heading:"Content" },
   { hash:"#/admin/announcements",  label:"Announcements",   icon:"megaphone",    col:"announcements" },
@@ -6280,7 +6281,6 @@ const ADMIN_NAV = [
   { heading:"Site" },
   { hash:"#/admin/homepage",       label:"Homepage",        icon:"home" },
   { hash:"#/admin/media",          label:"Media references",icon:"image" },
-  { hash:"#/admin/analytics",      label:"Analytics",       icon:"bar-chart-3" },
 
   { heading:"Operations" },
   { hash:"#/admin/send-newsletter",label:"Newsletters", icon:"send" },
@@ -11031,7 +11031,7 @@ function storageUsageCardHTML(){
   const ratio = su.totalBytes / STORAGE_QUOTA_BYTES;
   const level = ratio >= 0.9 ? "bad" : ratio >= 0.7 ? "warn" : "good";
   const pct = Math.min(100, ratio * 100);
-  return '<div class="admin-card">'
+  return '<div class="admin-card" id="storage-usage">'
     + '<div class="row-between" style="flex-wrap:wrap;gap:10px">'
     + '<div class="row" style="gap:10px;align-items:center">'
     + '<span class="admin-badge' + (su.status === "loaded" ? " admin-badge--" + level : "") + '">' + ic(su.status === "loaded" && level !== "good" ? "triangle-alert" : "database") + '</span>'
@@ -11049,10 +11049,11 @@ function storageUsageCardHTML(){
         + 'Supabase doesn’t expose exact monthly egress through any API - check the real number on your '
         + '<a href="https://supabase.com/dashboard/org/' + SUPABASE_ORG_SLUG + '/usage" target="_blank" rel="noopener">Supabase usage page</a>.</p>'
         + (su.largest.length
-            ? '<div class="stack" style="gap:6px;margin-top:12px">'
+            ? '<div class="stack" style="gap:8px;margin-top:12px">'
               + '<p class="admin-meta" style="margin:0;font-weight:600">Largest files</p>'
-              + su.largest.map(f => '<div class="row-between" style="font-size:.82rem;gap:10px">'
-                  + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(f.name) + '</span>'
+              + su.largest.map(f => '<div class="row" style="font-size:.82rem;gap:10px;align-items:center">'
+                  + '<span class="admin-badge admin-badge--sm">' + ic(isVideoSrc(f.name) ? "file-video" : "file-image") + '</span>'
+                  + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(f.name) + '</span>'
                   + '<span class="t-mono" style="flex-shrink:0;color:var(--admin-mute)">' + E(formatBytes(f.size)) + '</span></div>').join("")
               + '</div>'
             : "")
@@ -11208,6 +11209,8 @@ function adminDashboard(){
 
   const pipeline = STATUSES.map(s => ({ s:s, n: countAll(r => r.status === s.id) }));
   const maxN = Math.max(1, ...pipeline.map(p => p.n));
+  const activeTotal = total - archived;
+  const liveRate = activeTotal ? Math.round((published / activeTotal) * 100) : 0;
 
   const problems = [];
   CONTENT_COLS.forEach(c => {
@@ -11217,6 +11220,20 @@ function adminDashboard(){
     });
   });
 
+  const lrc = db.list("launchReadiness");
+  const lrcDone = lrc.filter(t => t.status === "complete").length;
+  const lrcPct = lrc.length ? Math.round((lrcDone / lrc.length) * 100) : 0;
+
+  /* Trigger both lazy loads once, up front, so the KPI row below and the
+     detail cards further down always agree on the same in-flight state
+     instead of each independently deciding whether to kick one off. */
+  if (AppState.admin.storageUsage.status === "idle") loadStorageUsage();
+  if (AppState.admin.analytics.status === "idle") loadAnalytics(AppState.admin.analytics.days);
+  const su = AppState.admin.storageUsage;
+  const an = AppState.admin.analytics;
+  const storageRatio = su.totalBytes / STORAGE_QUOTA_BYTES;
+  const storageLevel = su.status !== "loaded" ? "" : storageRatio >= 0.9 ? "bad" : storageRatio >= 0.7 ? "warn" : "good";
+
   /* What an editor reaches for most: the content types that change week to
      week, not the whole 15-collection catalog. */
   const quickAdd = [
@@ -11225,12 +11242,68 @@ function adminDashboard(){
   ];
   const needsAttention = problems.length + openIssues + openTickets;
 
-  return '<div class="row-between" style="margin-bottom:20px"><div>'
+  /* One honest sentence, never a fabricated "all green" tone when it
+     isn't - the same real numbers as the rest of the page, just read
+     aloud before the detail underneath backs it up. */
+  const heroHeadline = needsAttention === 0 && lrcPct >= 90 ? "Everything is steady right now."
+    : needsAttention === 0 ? "Nothing needs a decision right now."
+    : plural(needsAttention, "item") + " " + (needsAttention === 1 ? "needs" : "need") + " a decision before anything new goes out.";
+  const heroDetail = "Launch readiness is " + lrcPct + "% (" + lrcDone + " of " + lrc.length + " checklist items). "
+    + (published === activeTotal
+        ? "Every active piece of content is already published."
+        : liveRate + "% of your " + activeTotal + " active pieces of content are published and live.");
+
+  /* One small tile factory, shared by all four KPIs below - a link when
+     there's somewhere useful to send the click, a plain card otherwise. */
+  const kpi = (icon, color, label, value, note, href) => (href ? '<a href="' + href + '"' : '<div')
+    + ' class="admin-card" style="text-decoration:none;color:inherit;display:block">'
+    + '<div class="row-between" style="align-items:flex-start;gap:8px">'
+    + '<span class="admin-meta" style="text-transform:uppercase;letter-spacing:.07em;font-size:.66rem;font-weight:800;margin:0">' + E(label) + '</span>'
+    + '<span class="admin-badge admin-badge--sm' + (color ? " admin-badge--" + color : "") + '">' + ic(icon) + '</span>'
+    + '</div>'
+    + '<div style="font-size:1.7rem;font-weight:800;font-family:var(--admin-font-mono);margin-top:10px;color:var(--admin-ink);line-height:1">' + value + '</div>'
+    + '<p class="admin-meta" style="margin:5px 0 0">' + note + '</p>'
+    + (href ? '</a>' : '</div>');
+
+  const visitorsValue = an.status === "loaded" ? an.data.totalVisits.toLocaleString()
+    : an.status === "error" ? "-" : "...";
+  const visitorsNote = an.status === "loaded" ? "last " + an.days + " days &middot; " + an.data.totalViews.toLocaleString() + " views"
+    : an.status === "error" ? "Could not load - view Analytics"
+    : "Loading...";
+
+  return '<div class="row-between" style="margin-bottom:20px;flex-wrap:wrap;gap:12px"><div>'
     + '<span class="admin-eyebrow">Prototype admin</span><h1 class="admin-page-title" style="text-transform:none;font-size:1.5rem">Dashboard</h1>'
     + '<p class="admin-meta">Last saved ' + E(relTime(d.meta.updatedAt)) + ' &middot; ' + E(fmtDate(d.meta.updatedAt, true)) + '</p></div>'
     + '<div class="row" style="gap:8px"><button class="admin-btn admin-btn--sm" data-act="export">' + ic("download") + ' Export backup</button>'
     + '<button class="admin-btn admin-btn--sm" data-act="run-health-check">' + ic("stethoscope") + ' Run health check</button>'
     + '<a class="admin-btn admin-btn--sm admin-btn--primary" href="#/test">' + ic("clipboard-check") + ' Run tests</a></div></div>'
+
+    /* Executive snapshot: a plain-English read of the two things that
+       actually gate a launch (open decisions, the launch checklist),
+       always in the same real numbers the rest of the page shows -
+       never a separate, rosier-sounding narrative. */
+    + '<div class="admin-card" style="margin-bottom:20px;border:none;color:#fff;overflow:hidden;position:relative;padding:26px 28px;'
+      + 'background:linear-gradient(120deg, var(--admin-accent-hover) 0%, var(--admin-accent) 55%, #4B74C9 130%)">'
+    + '<span style="display:inline-flex;align-items:center;gap:7px;font-size:.68rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:#BFD4EE">'
+      + '<span style="width:7px;height:7px;border-radius:50%;background:#8FC1FF"></span> Executive snapshot</span>'
+    + '<h2 style="margin:10px 0 6px;font-size:1.35rem;font-weight:800;color:#fff;max-width:640px">' + E(heroHeadline) + '</h2>'
+    + '<p style="margin:0 0 18px;font-size:.88rem;color:#D3E2F5;max-width:620px;line-height:1.5">' + E(heroDetail) + '</p>'
+    + '<div class="row" style="gap:10px;flex-wrap:wrap">'
+    + (needsAttention ? '<a class="admin-btn admin-btn--sm" style="background:#fff;color:var(--admin-accent-ink);border-color:#fff" href="#needs-attention">' + ic("triangle-alert") + ' Review ' + plural(needsAttention, "item") + '</a>' : "")
+    + '<a class="admin-btn admin-btn--sm" style="background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.35)" href="#/admin/launch-readiness">' + ic("rocket") + ' Launch Readiness</a>'
+    + '<a class="admin-btn admin-btn--sm" style="background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.35)" href="#/admin/analytics">' + ic("bar-chart-3") + ' Full analytics</a>'
+    + '</div></div>'
+
+    /* Four honest numbers, each answering one specific question at a
+       glance and each a front door into the card that explains it - a
+       faster, shallower read than "Content health" below, not a
+       duplicate of it. */
+    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:20px">'
+    + kpi("file-check-2", liveRate >= 70 ? "good" : "warn", "Content live", liveRate + "%", published + " of " + activeTotal + " active pieces", "#content-health")
+    + kpi("rocket", lrcPct >= 90 ? "good" : "warn", "Launch readiness", lrcPct + "%", lrcDone + " of " + lrc.length + " checklist items", "#/admin/launch-readiness")
+    + kpi("hard-drive", storageLevel, "Storage used", su.status === "loaded" ? formatBytes(su.totalBytes) : "...", su.status === "loaded" ? sharePct(su.totalBytes, STORAGE_QUOTA_BYTES) + " of 1 GB" : "Checking...", "#storage-usage")
+    + kpi("users", "info", "Visitors", visitorsValue, visitorsNote, "#/admin/analytics")
+    + '</div>'
 
     /* 1. What today's job actually is: add something. Front and center,
        because "update the content" is the reason this page exists. */
@@ -11247,7 +11320,7 @@ function adminDashboard(){
        the way a single "needs a decision" card would. */
     + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;margin-bottom:20px">'
 
-    + '<div class="admin-card">'
+    + '<div class="admin-card" id="needs-attention">'
     + '<div class="row-between" style="flex-wrap:wrap;gap:10px">'
     + '<div class="row" style="gap:10px;align-items:center">'
     + '<span class="admin-badge' + (needsAttention ? " admin-badge--bad" : " admin-badge--good") + '">' + ic(needsAttention ? "triangle-alert" : "check") + '</span>'
@@ -11259,7 +11332,8 @@ function adminDashboard(){
     + (problems.length
         ? '<div class="admin-rows" style="margin-top:10px">' + problems.slice(0,6).map(p =>
             '<button class="admin-row" data-act="edit-record" data-col="' + E(p.col) + '" data-id="' + E(p.rec.id) + '">'
-            + ic("pencil") + '<span>' + E(p.rec.title || p.rec.name || p.rec.path) + ' <span style="color:var(--admin-mute)">- ' + E(p.errs[0].message) + '</span></span></button>').join("")
+            + ic("pencil") + '<span style="flex:1">' + E(p.rec.title || p.rec.name || p.rec.path) + ' <span style="color:var(--admin-mute)">- ' + E(p.errs[0].message) + '</span></span>'
+            + '<span class="admin-chip admin-chip--warn" style="flex:none;border-radius:4px">' + E(COLLECTION_LABELS[p.col] || p.col) + '</span></button>').join("")
           + (problems.length > 6 ? '<p class="admin-meta" style="margin-top:8px">and ' + (problems.length - 6) + ' more incomplete record' + (problems.length - 6 === 1 ? "" : "s") + '.</p>' : "")
           + '</div>'
         : '<p class="admin-meta" style="margin-top:12px">Every record passes publication validation.</p>')
@@ -11269,20 +11343,18 @@ function adminDashboard(){
 
     + '</div>'
 
-    /* 3. The state of the library, for orientation rather than action.
-       One number in context (how much is actually live) plus one
-       proportional bar beats four disconnected tiles - archived is left
-       out of the denominator since it was deliberately retired, not
-       something the count of "how much is live" should be judged
-       against. Every segment also carries its own status icon+label, so
-       the story never depends on color alone. */
+    /* 3. The state of the library, in full - one number in context (how
+       much is actually live) plus one proportional bar beats four
+       disconnected tiles - archived is left out of the denominator
+       since it was deliberately retired, not something the count of
+       "how much is live" should be judged against. Every segment also
+       carries its own status icon+label, so the story never depends on
+       color alone. */
     + (() => {
-        const activeTotal = total - archived;
-        const liveRate = activeTotal ? Math.round((published / activeTotal) * 100) : 0;
         const compose = ["draft","review","revision","approved","scheduled","published"]
           .map(id => ({ s: statusMeta(id), n: pipeline.find(p => p.s.id === id).n }))
           .filter(p => p.n > 0);
-        return '<div class="admin-card" style="margin-bottom:20px">'
+        return '<div class="admin-card" style="margin-bottom:20px" id="content-health">'
           + '<h3 class="admin-section-title" style="font-size:1rem">Content health</h3>'
           + '<p style="margin:6px 0 16px;font-size:.95rem">'
             + '<b style="font-size:2.1rem;color:var(--admin-good);font-family:var(--admin-font-mono)">' + liveRate + '%</b> '
@@ -11298,7 +11370,8 @@ function adminDashboard(){
                 + E(p.s.label) + ' <b class="t-mono">' + p.n + '</b>'
                 + ' <span class="admin-meta">(' + sharePct(p.n, activeTotal) + ')</span></span>'; }).join("")
           + '</div>'
-          + (archived ? '<p class="admin-meta" style="margin-top:12px">' + plural(archived, "archived record") + ' kept out of the total above.</p>' : "")
+          + (inFlight ? '<p class="admin-meta" style="margin-top:12px">' + plural(inFlight, "piece") + ' of content ' + (inFlight === 1 ? "is" : "are") + ' somewhere between draft and published - see the workflow pipeline below for exactly where.</p>' : "")
+          + (archived ? '<p class="admin-meta" style="margin-top:6px">' + plural(archived, "archived record") + ' kept out of the total above.</p>' : "")
           + '</div>';
       })()
 
@@ -11306,14 +11379,17 @@ function adminDashboard(){
     + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px">'
 
     + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">Recent activity</h3>'
-    + '<div class="stack" style="gap:8px;margin-top:12px">'
     + (d.auditLog.length
-        ? d.auditLog.slice(0,6).map(l => '<div style="font-size:.82rem"><b>' + E(titleCase(l.action)) + '</b> '
-            + E(COLLECTION_LABELS[l.collection] || l.collection).toLowerCase() + ' &middot; ' + E(l.label)
-            + ' <span style="color:var(--admin-mute)">' + E(relTime(l.at)) + '</span></div>').join("")
-        : '<p class="admin-meta">Nothing logged yet.</p>')
-    + '</div>'
-    + '<a class="admin-btn admin-btn--sm admin-btn--ghost" style="margin-top:12px" href="#/admin/audit">' + ic("arrow-right") + ' Full log</a></div>'
+        ? '<div style="margin-top:14px;position:relative;padding-left:4px">'
+          + '<div style="position:absolute;left:8px;top:6px;bottom:6px;width:1px;background:var(--admin-border)"></div>'
+          + d.auditLog.slice(0,6).map(l => '<div style="position:relative;padding-left:20px;margin-bottom:14px">'
+              + '<span style="position:absolute;left:2px;top:4px;width:9px;height:9px;border-radius:50%;background:var(--admin-info);box-shadow:0 0 0 3px var(--admin-info-soft)"></span>'
+              + '<div style="font-size:.82rem"><b>' + E(titleCase(l.action)) + '</b> '
+              + E(COLLECTION_LABELS[l.collection] || l.collection).toLowerCase() + ' &middot; ' + E(l.label) + '</div>'
+              + '<span class="admin-meta">' + E(relTime(l.at)) + '</span></div>').join("")
+          + '</div>'
+        : '<p class="admin-meta" style="margin-top:12px">Nothing logged yet.</p>')
+    + '<a class="admin-btn admin-btn--sm admin-btn--ghost" style="margin-top:4px" href="#/admin/audit">' + ic("arrow-right") + ' Full log</a></div>'
 
     + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">Workflow pipeline</h3>'
     + '<p class="admin-meta" style="margin:2px 0 14px">Where every piece of content sits right now, from first draft to published - same colors as the badges throughout this portal.</p>'
@@ -13409,8 +13485,8 @@ function viewAdmin(section, id, sub){
     : (ADMIN_NAV.find(n => n.hash === routeHash) || ADMIN_NAV[0]);
 
   /* Grouped rather than one long list: a heading starts a new, collapsible
-     group, and anything before the first heading (just Dashboard) sits on
-     its own above them. */
+     group, and anything before the first heading (Dashboard, Analytics)
+     sits on its own above them. */
   const top = [];
   const groups = [];
   ADMIN_NAV.forEach(n => {
