@@ -11058,12 +11058,29 @@ function storageUsageCardHTML(){
     + '</div>';
 }
 
+/* Same status->color mapping statusPill()/STATUS_BADGE already use
+   everywhere else in this portal, reused here so the dashboard's own
+   charts read as the same system rather than a second, disconnected
+   color language. */
+function pipelineSegColor(id){
+  return { review:"var(--admin-info)", revision:"var(--admin-warn)", approved:"var(--admin-info)",
+    scheduled:"var(--admin-info)", published:"var(--admin-good)" }[id] || "var(--admin-neutral)";
+}
+/** "1 (0%)" reads as a contradiction - round(1/221) genuinely is 0, but
+    showing "0%" next to a nonzero count looks like a bug rather than a
+    rounding artifact. */
+function sharePct(n, total){
+  if (!n) return "0%";
+  const pct = Math.round((n / total) * 100);
+  return pct === 0 ? "<1%" : pct + "%";
+}
 function adminDashboard(){
   const d = db.get();
   const total     = countAll(() => true);
   const published = countAll(r => r.status === "published");
   const drafts    = countAll(r => r.status === "draft");
   const inFlight  = countAll(r => ["review","revision","approved","scheduled"].indexOf(r.status) >= 0);
+  const archived  = countAll(r => r.status === "archived");
   const openIssues = db.list("issues").filter(i => i.state !== "fixed").length;
   const openTickets = db.list("supportTickets").filter(t => t.state === "open").length;
 
@@ -11130,13 +11147,38 @@ function adminDashboard(){
 
     + '</div>'
 
-    /* 3. The state of the library, for orientation rather than action. */
-    + '<div class="kpi-grid" style="margin-bottom:20px">'
-    + '<div class="kpi"><b>' + total + '</b><span>Total records</span></div>'
-    + '<div class="kpi kpi--good"><b>' + published + '</b><span>Published</span></div>'
-    + '<div class="kpi"><b>' + drafts + '</b><span>Drafts</span></div>'
-    + '<div class="kpi kpi--warn"><b>' + inFlight + '</b><span>In review</span></div>'
-    + '</div>'
+    /* 3. The state of the library, for orientation rather than action.
+       One number in context (how much is actually live) plus one
+       proportional bar beats four disconnected tiles - archived is left
+       out of the denominator since it was deliberately retired, not
+       something the count of "how much is live" should be judged
+       against. Every segment also carries its own status icon+label, so
+       the story never depends on color alone. */
+    + (() => {
+        const activeTotal = total - archived;
+        const liveRate = activeTotal ? Math.round((published / activeTotal) * 100) : 0;
+        const compose = ["draft","review","revision","approved","scheduled","published"]
+          .map(id => ({ s: statusMeta(id), n: pipeline.find(p => p.s.id === id).n }))
+          .filter(p => p.n > 0);
+        return '<div class="admin-card" style="margin-bottom:20px">'
+          + '<h3 class="admin-section-title" style="font-size:1rem">Content health</h3>'
+          + '<p style="margin:6px 0 16px;font-size:.95rem">'
+            + '<b style="font-size:2.1rem;color:var(--admin-good);font-family:var(--admin-font-mono)">' + liveRate + '%</b> '
+            + '<span class="admin-meta">of your ' + plural(activeTotal, "active piece", "active pieces") + ' of content'
+            + ' (' + published + ' of ' + activeTotal + ') ' + (published === 1 ? "is" : "are") + ' published and live for visitors right now.</span></p>'
+          + '<div style="display:flex;gap:2px;height:14px;border-radius:7px;overflow:hidden;background:var(--admin-surface-2)">'
+          + compose.map(p => '<div style="width:' + ((p.n / activeTotal) * 100).toFixed(1) + '%;background:' + pipelineSegColor(p.s.id) + '" title="' + E(p.s.label) + ': ' + plural(p.n, "record") + '"></div>').join("")
+          + '</div>'
+          + '<div class="row" style="gap:16px;flex-wrap:wrap;margin-top:14px">'
+          + compose.map(p => { const b = STATUS_BADGE[p.s.id] || STATUS_BADGE.draft;
+              return '<span style="display:inline-flex;align-items:center;gap:6px;font-size:.82rem">'
+                + '<span class="admin-badge admin-badge--sm ' + b.cls + '">' + ic(b.icon) + '</span>'
+                + E(p.s.label) + ' <b class="t-mono">' + p.n + '</b>'
+                + ' <span class="admin-meta">(' + sharePct(p.n, activeTotal) + ')</span></span>'; }).join("")
+          + '</div>'
+          + (archived ? '<p class="admin-meta" style="margin-top:12px">' + plural(archived, "archived record") + ' kept out of the total above.</p>' : "")
+          + '</div>';
+      })()
 
     /* 4. Supporting detail: what changed, and the shape of the pipeline. */
     + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px">'
@@ -11152,11 +11194,14 @@ function adminDashboard(){
     + '<a class="admin-btn admin-btn--sm admin-btn--ghost" style="margin-top:12px" href="#/admin/audit">' + ic("arrow-right") + ' Full log</a></div>'
 
     + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">Workflow pipeline</h3>'
-    + '<div class="stack" style="gap:12px;margin-top:14px">'
-    + pipeline.map(p => '<div><div class="row-between" style="margin-bottom:5px">'
-        + '<span style="font-size:.82rem;font-weight:600">' + E(p.s.label) + '</span>'
-        + '<span class="t-mono" style="color:var(--admin-mute)">' + p.n + '</span></div>'
-        + '<div class="admin-progress-track"><div class="admin-progress-fill' + (p.n === maxN && p.n > 0 ? " is-complete" : "") + '" style="width:' + ((p.n / maxN) * 100).toFixed(1) + '%"></div></div></div>').join("")
+    + '<p class="admin-meta" style="margin:2px 0 14px">Where every piece of content sits right now, from first draft to published - same colors as the badges throughout this portal.</p>'
+    + '<div class="stack" style="gap:12px">'
+    + pipeline.map(p => { const b = STATUS_BADGE[p.s.id] || STATUS_BADGE.draft;
+        return '<div><div class="row-between" style="margin-bottom:5px">'
+        + '<span style="display:inline-flex;align-items:center;gap:6px;font-size:.82rem;font-weight:600">'
+          + '<span class="admin-badge admin-badge--sm ' + b.cls + '">' + ic(b.icon) + '</span>' + E(p.s.label) + '</span>'
+        + '<span class="t-mono" style="color:var(--admin-mute)">' + p.n + ' &middot; ' + sharePct(p.n, total) + '</span></div>'
+        + '<div class="admin-progress-track"><div class="admin-progress-fill" style="width:' + ((p.n / maxN) * 100).toFixed(1) + '%;background:' + pipelineSegColor(p.s.id) + '"></div></div></div>'; }).join("")
     + '</div></div>'
 
     + opsDigestHTML()
