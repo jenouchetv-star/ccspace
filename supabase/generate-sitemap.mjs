@@ -15,7 +15,11 @@ import path from "node:path";
 
 const SUPABASE_URL = "https://wdctkfhwygwwulipwnys.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
-const BASE = "https://chikescreativespace.com";
+// www.chikescreativespace.com is where this build actually lives - the
+// bare apex domain (chikescreativespace.com, no www) serves a completely
+// different, unrelated GoDaddy Website Builder site. Confirmed live,
+// 2026-09-19, by checking response headers/markup at both hosts.
+const BASE = "https://www.chikescreativespace.com";
 
 const STATIC = [
   ["/", "1.0", "weekly"],
