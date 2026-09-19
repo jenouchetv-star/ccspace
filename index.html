@@ -11942,12 +11942,18 @@ function adminNewsletterCompose(id){
     + '<div class="admin-field" style="margin-top:14px"><label for="nl-footer-note">Footer note (optional - e.g. a support disclaimer)</label>'
     + '<input class="admin-input" id="nl-footer-note" name="footerNote" value="' + E(nc.footerNote) + '"></div>'
 
-    + '<div class="row" style="margin-top:20px">'
+    + '<div class="row-between" style="margin-top:20px;flex-wrap:wrap;gap:12px;align-items:center">'
+    + '<div class="admin-card admin-card--flat" style="padding:8px 10px;display:flex;gap:8px;align-items:center;margin:0">'
+    + '<input class="admin-input" type="email" id="nl-test-email" name="testEmail" placeholder="Test email address" style="width:190px" title="Sends this exact email to one address only, marked [TEST] - never counts as a real send to subscribers.">'
+    + '<button type="button" class="admin-btn admin-btn--ghost" data-act="nl-send-test">' + ic("send") + ' Send test</button>'
+    + '</div>'
+    + '<div class="row" style="gap:10px;flex-wrap:wrap">'
     + '<button type="button" class="admin-btn admin-btn--ghost" data-act="nl-preview">' + ic("eye") + ' Preview</button>'
     + '<button type="button" class="admin-btn admin-btn--ghost" data-act="nl-save-draft">' + ic("save") + ' Save as draft</button>'
     + (scheduling
         ? '<button type="button" class="admin-btn admin-btn--primary" data-act="nl-schedule">' + ic("clock") + ' Schedule</button>'
         : '<button type="button" class="admin-btn admin-btn--primary"' + (count ? '' : ' disabled') + ' data-act="nl-send-now">' + ic("send") + ' Send to ' + count + ' subscriber' + (count === 1 ? '' : 's') + '</button>')
+    + '</div>'
     + '</div>'
     + '</form>';
 }
@@ -12082,6 +12088,58 @@ async function nlSendNow(form){
        rather than staying on a compose page with nothing left to do. */
     Router.go("#/admin/send-newsletter");
   });
+}
+
+/** A one-off, one-recipient send of the exact draft on screen - for
+    checking how it actually renders in a real inbox before committing to
+    the real subscriber list. Never touches the newsletters record (no
+    status change, no sentCount) and never opens the "no undo" confirm
+    modal nlSendNow() does, since sending yourself a copy is fully
+    reversible and low-stakes by construction. */
+async function nlSendTest(form){
+  const f = nlReadForm(form);
+  if (!f.subject){ toast("Add a subject line first.", "bad"); return; }
+  if (!f.intro || f.intro === "<p></p>"){ toast("Write a message first.", "bad"); return; }
+  const emailEl = form.elements["testEmail"];
+  const testEmail = emailEl ? emailEl.value.trim() : "";
+  if (!testEmail){ toast("Enter an email address to send the test to.", "bad"); return; }
+  const nc = AppState.admin.newsletterCompose;
+  const html = renderNewsletterHTML(Object.assign({}, nc, f));
+  if (html.includes(NO_POSTAL_ADDRESS_MARKER)){
+    toast("Add a postal mailing address in Settings before sending a newsletter - required by law.", "bad");
+    return;
+  }
+  const btn = form.querySelector('[data-act="nl-send-test"]');
+  const restoreBtn = btn ? btn.innerHTML : "";
+  if (btn){ btn.disabled = true; btn.innerHTML = ic("refresh-cw") + " Sending..."; }
+  try {
+    const res = await sb.functions.invoke("send-newsletter", { body: { subject: f.subject, html: html, testEmail: testEmail } });
+    let detail = res.error ? res.error.message : (res.data && res.data.error);
+    if (res.error){
+      try {
+        if (res.error.context && typeof res.error.context.json === "function"){
+          const body = await res.error.context.json();
+          if (body && body.error) detail = body.error;
+        }
+      } catch(_e){ /* body wasn't JSON - keep the generic message */ }
+    }
+    if (detail){ toast("Could not send test: " + detail, "bad"); return; }
+    /* The deployed Edge Function only started recognizing testEmail once
+       this feature shipped - a stale, not-yet-redeployed copy silently
+       falls through to its old behavior and broadcasts to the real
+       subscriber list instead, with no error to catch. res.data.test is
+       a marker only the new code ever sets, so this is the one reliable
+       way to tell "actually sent to just this address" apart from "the
+       function is out of date and just emailed everyone" - never assume
+       success just because the request didn't error. */
+    if (!(res.data && res.data.test === true)){
+      toast("The server didn't confirm this as an isolated test send - it may have just gone to your real subscriber list instead. Redeploy send-newsletter (supabase/deploy-send-newsletter.ps1) before using Send test again.", "bad");
+      return;
+    }
+    toast("Test email sent to " + testEmail + ".");
+  } finally {
+    if (btn){ btn.disabled = false; btn.innerHTML = restoreBtn; }
+  }
 }
 
 function adminSupport(){
@@ -18176,6 +18234,7 @@ const ACTIONS = {
   "nl-save-draft": (el) => nlSaveDraft(el.closest("form")),
   "nl-schedule": (el) => nlSchedule(el.closest("form")),
   "nl-send-now": (el) => nlSendNow(el.closest("form")),
+  "nl-send-test": (el) => nlSendTest(el.closest("form")),
   /* Invoked only from the list page (newsletterRow()) - if this record
      happens to be cached from an earlier visit to its own compose page,
      drop that cache so reopening it re-reads the now-draft record from

@@ -35,6 +35,11 @@
 //   sb.functions.invoke("send-newsletter", { body: { subject, html } })
 // which automatically attaches the caller's own access token - that
 // token is what step 1 below verifies before anything gets sent.
+//
+// An optional testEmail field sends this exact html to just that one
+// address (subject prefixed "[TEST]") instead of the subscriber list -
+// see Step 2.5 - so an admin can check a draft's real rendering before
+// committing to a real send. Never touches the subscribers table.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -95,7 +100,7 @@ Deno.serve(async (req) => {
   }
 
   // Step 2: validate the request body.
-  let body: { subject?: string; html?: string };
+  let body: { subject?: string; html?: string; testEmail?: string };
   try {
     body = await req.json();
   } catch {
@@ -103,6 +108,7 @@ Deno.serve(async (req) => {
   }
   const subject = String(body.subject ?? "").trim();
   const html = String(body.html ?? "").trim();
+  const testEmail = String(body.testEmail ?? "").trim();
   if (!subject || !html) {
     return json({ error: "A subject and a message are both required" }, 400);
   }
@@ -115,6 +121,32 @@ Deno.serve(async (req) => {
   // (see NO_POSTAL_ADDRESS_MARKER there); keep both in sync.
   if (html.includes("[[NO POSTAL ADDRESS ON FILE")) {
     return json({ error: "This newsletter has no postal mailing address - required by law for commercial email. Set one in Admin -> Settings -> Brand settings, then re-open this newsletter so it re-renders with the address, before sending." }, 422);
+  }
+
+  // Step 2.5: a test send - one specific address the admin typed in,
+  // never the subscriber list. Subject gets a "[TEST]" prefix and the
+  // unsubscribe token points at the plain site origin (there is no real
+  // subscriber id to build a working unsubscribe link from) so this can
+  // never be mistaken for - or accidentally logged as - a real send.
+  if (testEmail) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testEmail)) {
+      return json({ error: "That doesn't look like a valid email address" }, 400);
+    }
+    const siteOrigin = Deno.env.get("SITE_URL") || req.headers.get("origin") || "https://www.chikescreativespace.com";
+    const testHtml = html.split("__UNSUB_URL__").join(siteOrigin);
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ from: RESEND_FROM, to: testEmail, subject: "[TEST] " + subject, html: testHtml }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      return json({ error: "Resend " + res.status + ": " + detail }, 502);
+    }
+    return json({ ok: true, test: true, sentTo: testEmail });
   }
 
   // Step 3: the actual subscriber list. subscribers is admin-only under
