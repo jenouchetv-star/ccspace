@@ -3025,6 +3025,16 @@ const ADMIN_ONLY_COLLECTIONS = ["subscribers","supportTickets",
   "blockedSenders","moderationTerms","moderationSettings"];
 const BACKED_COLLECTIONS = PUBLIC_COLLECTIONS.concat(ADMIN_ONLY_COLLECTIONS);
 
+/** A literal, greppable marker rendered in place of a missing postal
+    address (see BRAND.postalAddress below) - CAN-SPAM requires every
+    commercial email to carry one, so this string exists to make its
+    absence loud rather than silently omitting the line. The exact same
+    string is checked for, verbatim, in nlSchedule()/nlSendNow() below and
+    in both supabase/functions/send-newsletter and
+    send-scheduled-newsletters - all four places refuse to send while it's
+    still present. Keep them in sync if this ever changes. */
+const NO_POSTAL_ADDRESS_MARKER = "[[NO POSTAL ADDRESS ON FILE - set one in Admin -> Settings -> Brand settings before sending]]";
+
 const BRAND = {
   name: "Chike's Creative Space",
   line: "Make it real.",
@@ -3032,6 +3042,15 @@ const BRAND = {
   site: "chikescreativespace.com",
   email: "info@chikescreativespace.com",
   place: "Atlanta, Georgia",
+  /** CAN-SPAM requires every commercial email (the newsletter) to carry a
+      real, registered postal address - a street address, a USPS-registered
+      PO box, or a private mailbox registered with a commercial mail
+      receiving agency (CMRA). Left blank until a real one is registered;
+      emailShell() renders an impossible-to-miss placeholder instead of
+      silently omitting the line, and the send-time guards below (see
+      nlSchedule/nlSendNow and both send-newsletter Edge Functions) refuse
+      to send while it's still blank. */
+  postalAddress: "",
   youtube: "https://www.youtube.com/@ChikesCreativeSpace",
   instagram: "https://www.instagram.com/chikescreativespace/",
   facebook: "https://www.facebook.com/chikescreativespace",
@@ -3054,6 +3073,7 @@ const BRAND_FIELDS = [
   { key:"email", label:"Contact email", type:"email" },
   { key:"place", label:"Location" },
   { key:"site", label:"Site domain" },
+  { key:"postalAddress", label:"Postal mailing address (required by law on newsletter emails)" },
   { key:"youtube", label:"YouTube URL" },
   { key:"instagram", label:"Instagram URL" },
   { key:"facebook", label:"Facebook URL" },
@@ -11339,6 +11359,7 @@ function emailShell(o){
     + (o.footerNote ? '<p style="margin:0 0 10px;font-style:italic;">' + E(o.footerNote) + '</p>' : "")
     + '<p style="margin:0 0 6px;"><a href="' + E(SITE_ORIGIN) + '" style="color:#1E2226;font-weight:700;text-decoration:none;">' + E(BRAND.site) + '</a></p>'
     + '<p style="margin:0 0 6px;">Questions? <a href="mailto:' + E(BRAND.email) + '" style="color:#1E2226;">' + E(BRAND.email) + '</a></p>'
+    + '<p style="margin:0 0 6px;font-weight:700;">' + (BRAND.postalAddress ? E(BRAND.postalAddress) : NO_POSTAL_ADDRESS_MARKER) + '</p>'
     + '<p style="margin:0 0 6px;">You’re receiving this because you signed up for Chike’s Creative Space updates.</p>'
     + '<p style="margin:0;"><a href="__UNSUB_URL__" style="color:#5B6673;text-decoration:underline;">Unsubscribe</a> &middot; <a href="' + E(absUrl("/#/grown-ups")) + '" style="color:#5B6673;text-decoration:underline;">Email preferences</a></p>'
     + '</td></tr>'
@@ -11631,6 +11652,10 @@ async function nlSchedule(form){
   const whenLabel = fmtDate(iso, true);
   const nc = AppState.admin.newsletterCompose;
   const html = renderNewsletterHTML(Object.assign({}, nc, f));
+  if (html.includes(NO_POSTAL_ADDRESS_MARKER)){
+    toast("Add a postal mailing address in Settings before sending a newsletter - required by law.", "bad");
+    return;
+  }
   confirmScheduleNewsletter(f.subject, whenLabel, async () => {
     const patch = Object.assign({ templateId: nc.templateId, body: html, status:"scheduled", scheduledAt: iso }, f);
     try {
@@ -11658,6 +11683,10 @@ async function nlSendNow(form){
   if (!count){ toast("No active subscribers to send to.", "bad"); return; }
   const nc = AppState.admin.newsletterCompose;
   const html = renderNewsletterHTML(Object.assign({}, nc, f));
+  if (html.includes(NO_POSTAL_ADDRESS_MARKER)){
+    toast("Add a postal mailing address in Settings before sending a newsletter - required by law.", "bad");
+    return;
+  }
   confirmSendNewsletter(f.subject, count, async () => {
     const res = await sb.functions.invoke("send-newsletter", { body: { subject: f.subject, html: html } });
     /* Same unwrap as "send-invite" elsewhere: a non-2xx response's
@@ -15256,6 +15285,18 @@ const TEST_SUITE = [
     const rendered = renderAllPublicText();
     const suspicious = /prompt me|generate for me|ask the assistant|type a prompt/i.test(rendered.text);
     return suspicious ? T.fail("Found generation-style interface copy") : T.pass("No generation controls in the public interface");
+  }},
+  { group:"Brand guardrails", name:"The newsletter carries a real postal mailing address", blocking:true, run(){
+    /* CAN-SPAM requires a real, registered postal address (street address,
+       USPS PO box, or a CMRA-registered private mailbox) on every
+       commercial email. This stays a blocking failure - not just a
+       warning - until BRAND.postalAddress is actually set, matching
+       nlSchedule()/nlSendNow()'s own send-time refusal (see
+       NO_POSTAL_ADDRESS_MARKER). */
+    const html = emailShell({ subject:"Test", introHtml:"<p></p>" });
+    return html.includes(NO_POSTAL_ADDRESS_MARKER)
+      ? T.fail("No postal address on file - set one in Admin -> Settings -> Brand settings before any newsletter can legally be sent")
+      : T.pass("A postal address is set and appears in the newsletter footer");
   }},
   { group:"Brand guardrails", name:"Every activity pairs a discovery with a discussion prompt", blocking:true, run(){
     const bad = publishedActivities().filter(a => isBlank(a.learning.title) || isBlank(a.learning.text) || isBlank(a.discussionPrompt));

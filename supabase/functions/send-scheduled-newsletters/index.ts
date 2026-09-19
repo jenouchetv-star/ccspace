@@ -106,6 +106,18 @@ Deno.serve(async (req) => {
         // its own public address.
         const siteOrigin = Deno.env.get("SITE_URL") || "https://www.chikescreativespace.com";
         const emailHtml = String(n.body ?? "");
+
+        // Defense in depth: same check as send-newsletter's immediate path.
+        // A newsletter can sit scheduled for a while - if it was composed
+        // before a postal address was ever set (or the address gets
+        // cleared later), this stops the cron from mailing out a
+        // legally-incomplete commercial email while nobody is watching.
+        // This literal string is NO_POSTAL_ADDRESS_MARKER in index.html;
+        // keep both in sync.
+        if (emailHtml.includes("[[NO POSTAL ADDRESS ON FILE")) {
+          throw new Error("No postal mailing address on file - required by law for commercial email. Set one in Admin -> Settings -> Brand settings, then re-save this newsletter so it re-renders with the address.");
+        }
+
         const emails = recipients.map((r) => ({
           from: RESEND_FROM,
           to: r.email,

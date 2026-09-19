@@ -1,11 +1,30 @@
 // Chike's Creative Space - notify Edge Function
 //
-// Sends two kinds of transactional email via Resend:
+// TRANSACTIONAL mail only - never commercial/marketing mail. Under
+// CAN-SPAM, a message's primary purpose decides which rules apply, and
+// mixing the two categories in one code path is exactly how a
+// transactional message accidentally ends up needing (and missing) an
+// unsubscribe link and a postal address, or how a promotional one
+// accidentally skips them. Keep it that way: sends two kinds of email via
+// Resend, both automatic responses to an action the recipient just took,
+// neither one advertising anything -
 //   - a new-ticket alert to the site's own inbox, whenever a row lands in
 //     support_tickets (the Grown-Ups contact form and the business inquiry
-//     form both write there)
+//     form both write there) - an internal notification, not sent to a
+//     member of the public at all
 //   - a welcome email to a new subscriber, whenever a row lands in
-//     subscribers (the newsletter form)
+//     subscribers (the newsletter form) - confirms the subscription
+//     action itself, nothing more; the moment a "welcome" email starts
+//     advertising specific content or products, it stops being
+//     transactional and belongs in send-newsletter/emailShell() instead,
+//     with the same unsubscribe link and postal address every other
+//     commercial send carries
+//
+// The actual marketing/commercial path lives entirely elsewhere - see
+// send-newsletter and send-scheduled-newsletters (Resend batch sends
+// through index.html's emailShell() template, which is the one place a
+// postal address and an unsubscribe link get built in) - this function
+// must never gain either of those.
 //
 // This function is never called from index.html. It is called from inside
 // Postgres itself, by the two AFTER INSERT triggers appended to

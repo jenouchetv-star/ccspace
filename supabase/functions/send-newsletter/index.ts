@@ -1,16 +1,23 @@
 // Chike's Creative Space - send-newsletter Edge Function
 //
-// Sends one admin-written update to every active subscriber via Resend's
-// batch send endpoint (up to 100 recipients per call - this function
-// chunks the list itself, so it works the same whether there are 3
-// subscribers or 3,000).
+// COMMERCIAL mail - see notify/index.ts for why that distinction matters
+// and stays separate in code. Sends one admin-written update to every
+// active subscriber via Resend's batch send endpoint (up to 100
+// recipients per call - this function chunks the list itself, so it
+// works the same whether there are 3 subscribers or 3,000).
 //
-// Every recipient gets a real, working unsubscribe link
-// (/#/unsubscribe/<id>) baked into the email - not a courtesy, a
-// requirement for any bulk mail like this. It hits the
-// unsubscribe_newsletter() Postgres function (see migration.sql), the one
-// narrow exception carved into the otherwise admin-only subscribers table
-// so a visitor who never had an account can still remove themselves.
+// Three things every commercial send needs, all enforced here rather than
+// left to whoever composes the next newsletter:
+//   - a real, working unsubscribe link (/#/unsubscribe/<id>) baked into
+//     the email, hitting the unsubscribe_newsletter() Postgres function
+//     (see migration.sql) - the one narrow exception carved into the
+//     otherwise admin-only subscribers table so a visitor who never had
+//     an account can still remove themselves, no login required
+//   - a real postal mailing address (see the check below, and
+//     NO_POSTAL_ADDRESS_MARKER/emailShell() in index.html)
+//   - the recipient list read fresh from subscribers right here, at send
+//     time (see Step 3 below) - not a list built earlier and reused,
+//     which would go stale against anyone who unsubscribed in between
 //
 // Deploy: npx supabase functions deploy send-newsletter
 // Secrets this needs (same names as the notify function - Studio ->
@@ -98,6 +105,16 @@ Deno.serve(async (req) => {
   const html = String(body.html ?? "").trim();
   if (!subject || !html) {
     return json({ error: "A subject and a message are both required" }, 400);
+  }
+
+  // Defense in depth: nlSendNow() in index.html already refuses to reach
+  // this function while BRAND.postalAddress is unset, but a stale saved
+  // draft composed before that check existed - or before an address was
+  // ever set - could still carry the placeholder into a later send. This
+  // is the exact literal string emailShell() substitutes in index.html
+  // (see NO_POSTAL_ADDRESS_MARKER there); keep both in sync.
+  if (html.includes("[[NO POSTAL ADDRESS ON FILE")) {
+    return json({ error: "This newsletter has no postal mailing address - required by law for commercial email. Set one in Admin -> Settings -> Brand settings, then re-open this newsletter so it re-renders with the address, before sending." }, 422);
   }
 
   // Step 3: the actual subscriber list. subscribers is admin-only under
