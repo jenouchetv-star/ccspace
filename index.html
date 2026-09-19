@@ -2028,10 +2028,17 @@ h1.admin-page-title{ font-size:1.7rem; }
 .admin-badge svg{ width:14px; height:14px; }
 .admin-badge--sm{ width:20px; height:20px; }
 .admin-badge--sm svg{ width:11px; height:11px; }
+.admin-badge--lg{ width:36px; height:36px; }
+.admin-badge--lg svg{ width:24px; height:24px; }
 .admin-badge--good{ background:var(--admin-good-soft); color:var(--admin-good); }
 .admin-badge--bad{ background:var(--admin-bad-soft); color:var(--admin-bad); }
 .admin-badge--info{ background:var(--admin-info-soft); color:var(--admin-info); }
 .admin-badge--warn{ background:var(--admin-warn-soft); color:var(--admin-warn); }
+/* The Analytics page's own icon badges use this instead of --info - a
+   real brand color (Chike's own blue) rather than the generic admin
+   accent, scoped here rather than changed on the shared --info variant
+   every other admin screen still uses. */
+.admin-badge--brand{ background:rgba(18,115,176,.12); color:var(--cyan); }
 
 /* Status pill with a leading badge - the workflow-status component
    used throughout admin list tables. */
@@ -2133,7 +2140,7 @@ h1.admin-page-title{ font-size:1.7rem; }
 .admin-callout svg{ flex:none; margin-top:1px; }
 .admin-callout--ok{ background:var(--admin-good-soft); color:var(--admin-good); }
 .admin-callout--bad{ background:var(--admin-bad-soft); color:var(--admin-bad); }
-.admin-callout--info{ background:var(--admin-info-soft); color:var(--admin-info); }
+.admin-callout--info{ background:var(--admin-info-soft); color:var(--admin-accent-ink); }
 .admin-callout ul{ margin:6px 0 0; padding-left:18px; }
 
 /* -- Tables -- */
@@ -2161,6 +2168,38 @@ h1.admin-page-title{ font-size:1.7rem; }
 .admin-empty{
   text-align:center; padding:32px 20px; color:var(--admin-mute); font-size:.9rem;
   border:1px dashed var(--admin-border-strong); border-radius:10px; background:var(--admin-surface-2);
+}
+
+.wmap-wrap svg{ width:100%; height:auto; display:block; }
+.wmap-wrap svg path{ fill:var(--admin-neutral-soft); stroke:var(--admin-surface); stroke-width:.6; }
+
+/* A single shared hover tooltip for every SVG chart on this page (bar
+   charts, the line chart, the world map) - lighter than a full charting
+   library, but a real positioned, styled tooltip rather than the
+   browser's native <title> box. Content and position are set by one
+   delegated listener (see chartTooltipInit()), never per-chart JS. */
+.chart-tooltip{
+  position:fixed; z-index:1100; pointer-events:none; opacity:0;
+  background:var(--admin-ink); color:#fff; font-size:.76rem; font-weight:600;
+  padding:6px 10px; border-radius:6px; max-width:240px; line-height:1.4;
+  transform:translate(-50%,-100%); transition:opacity .12s ease;
+  box-shadow:var(--admin-shadow);
+}
+.chart-tooltip.is-visible{ opacity:1; }
+
+/* Load-in motion for this page's charts - bars grow up from the
+   baseline, lines draw themselves in, everything else fades - so the
+   dashboard reads as alive rather than a static screenshot. The dashed-
+   line "draw" trick needs an offset that's just guaranteed to exceed the
+   real path length, not an exact match, so no per-path JS is needed. */
+@keyframes admin-bar-grow{ from{ transform:scaleY(0); } to{ transform:scaleY(1); } }
+.admin-chart-bar{ transform-box:fill-box; transform-origin:bottom; animation:admin-bar-grow .5s cubic-bezier(.22,.8,.24,1) both; }
+@keyframes admin-fade-in{ from{ opacity:0; } to{ opacity:1; } }
+.admin-chart-fade{ animation:admin-fade-in .7s ease both; }
+@keyframes admin-draw-line{ from{ stroke-dashoffset:2000; } to{ stroke-dashoffset:0; } }
+.admin-chart-line{ stroke-dasharray:2000; animation:admin-draw-line 1.1s ease-out both; }
+@media (prefers-reduced-motion: reduce){
+  .admin-chart-bar,.admin-chart-fade,.admin-chart-line{ animation:none !important; }
 }
 
 /* Retargets the shared .modal chrome (built for the public site's comic-
@@ -2665,6 +2704,7 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 <div id="picker-root"></div>
 <div id="lock-root"></div>
 <div id="quick-update-panel-root"></div>
+<div id="chart-tooltip" class="chart-tooltip" role="tooltip"></div>
 <button type="button" class="back-to-top" id="back-to-top" data-act="scroll-top" aria-label="Back to top" aria-hidden="true" tabindex="-1"><i data-lucide="arrow-up" class="i"></i></button>
 <!-- Lucide icons: self-hosted first (works fully offline), CDN with Subresource Integrity as fallback. -->
 <script src="assets/vendor/lucide.js"></script>
@@ -5918,6 +5958,7 @@ const AppState = {
     moderationTermsShown:25,
     storageUsage:{ status:"idle", totalBytes:0, fileCount:0, largest:[] }, quickUpdate:{ log:[], panelOpen:false, selectedRegion:null },
     analytics:{ status:"idle", days:7, data:null, error:"" },
+    worldMap:{ status:"idle", svg:"" },
     newsletterCompose:{ editingId:null, templateId:null, mode:"now", scheduledAt:"",
       subject:"", previewText:"", heroLabel:"", headline:"", heroImage:{src:"",alt:""}, intro:"",
       details:{}, ctaLabel:"", ctaUrl:"", secondaryLabel:"", secondaryText:"", footerNote:"" },
@@ -10912,7 +10953,7 @@ function opsVitalsHTML(){
 
   return '<div class="admin-card">'
     + '<div class="row-between" style="align-items:flex-start"><div>'
-    + '<h3 class="admin-section-title" style="font-size:1rem">Operational vitals</h3>'
+    + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("activity") + 'Operational vitals</h3>'
     + '<p class="admin-meta" style="margin:2px 0 0">Routine checks and release readiness</p></div>'
     + '<span class="admin-chip">4 checks</span></div>'
     + '<div style="margin-top:6px">'
@@ -11046,7 +11087,7 @@ function storageOverviewCardHTML(){
   const pct = Math.min(100, ratio * 100);
   return '<div class="admin-card" id="storage-usage">'
     + '<div class="row-between" style="flex-wrap:wrap;gap:10px;align-items:flex-start">'
-    + '<div><h3 class="admin-section-title" style="font-size:1rem">Media storage</h3>'
+    + '<div><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("hard-drive") + 'Media storage</h3>'
     + '<p class="admin-meta" style="margin:2px 0 0">Storage quota utilization</p></div>'
     + (su.status === "loaded"
         ? '<span class="admin-chip' + (level === "good" ? " admin-chip--good" : level === "warn" ? " admin-chip--warn" : " admin-chip--bad") + '">' + E(level === "good" ? "Within quota" : level === "warn" ? "Approaching quota" : "Over quota") + '</span>'
@@ -11071,7 +11112,7 @@ function storageLargestFilesCardHTML(){
   const su = AppState.admin.storageUsage;
   return '<div class="admin-card">'
     + '<div class="row-between" style="flex-wrap:wrap;gap:10px">'
-    + '<div><h3 class="admin-section-title" style="font-size:1rem">Largest media assets</h3>'
+    + '<div><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("image") + 'Largest media assets</h3>'
     + '<p class="admin-meta" style="margin:2px 0 0">Largest files in the current media inventory</p></div>'
     + '<a class="admin-btn admin-btn--sm admin-btn--ghost" href="#/admin/media">' + ic("arrow-right") + ' Open library</a>'
     + '</div>'
@@ -11164,50 +11205,227 @@ function analyticsLineChart(byDate){
   const last = points[points.length-1];
   const dots = points.map((p,i) => {
     const isLast = i === points.length - 1;
-    return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + (isLast ? 5 : 3) + '" fill="' + (isLast ? "#fff" : "var(--admin-info)") + '" stroke="var(--admin-info)" stroke-width="' + (isLast ? 2.5 : 0) + '">'
-      + '<title>' + E(fmtDate(p.d.date, false)) + ': ' + plural(p.d.views, "view") + '</title></circle>';
+    return '<circle class="admin-chart-fade" style="animation-delay:' + (900 + i * 30) + 'ms" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + (isLast ? 5 : 3) + '" fill="' + (isLast ? "#fff" : "var(--admin-info)") + '" stroke="var(--admin-info)" stroke-width="' + (isLast ? 2.5 : 0) + '" data-tip="' + E(fmtDate(p.d.date, false)) + ': ' + plural(p.d.views, "view") + '"></circle>';
   }).join("");
   const lastLabel = '<text x="' + Math.min(last.x, W - padR - 4).toFixed(1) + '" y="' + Math.max(last.y - 12, padT + 10).toFixed(1) + '" text-anchor="end" font-size="11" font-weight="700" fill="var(--admin-ink)" font-family="var(--admin-font-mono)">' + last.d.views.toLocaleString() + '</text>';
   return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:220px;display:block" role="img" aria-label="Page views by day, ' + E(fmtDate(byDate[0].date,false)) + ' to ' + E(fmtDate(byDate[byDate.length-1].date,false)) + '">'
     + grid + xLabels
-    + '<path d="' + area + '" fill="var(--admin-info-soft)" stroke="none"/>'
-    + '<path d="' + line + '" fill="none" stroke="var(--admin-info)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+    + '<path class="admin-chart-fade" style="animation-delay:.6s" d="' + area + '" fill="var(--admin-info-soft)" stroke="none"/>'
+    + '<path class="admin-chart-line" d="' + line + '" fill="none" stroke="var(--admin-info)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
     + dots + lastLabel
     + '</svg>';
 }
-/** The same ranked-bar component as the dashboard's Workflow pipeline,
-    generalized for any "label + count" rows - one hue, since every row
-    here is the same metric (views), not a set of identities needing to
-    stay visually distinct from each other. A rank badge and a share of
-    the range's total both ride along, so a raw count reads in context
-    instead of floating alone next to a bar. */
-function analyticsBarList(rows, labelKey, formatLabel){
+/** A leading icon badge for a card's own <h3> title - shared by the
+    Dashboard and Analytics pages so both read as the same design system
+    rather than Analytics getting a treatment Dashboard never did. Brand
+    blue, 24px (admin-badge--lg), never the generic admin-info variant. */
+function sectionIcon(icon){
+  return '<span class="admin-badge admin-badge--lg admin-badge--brand" style="margin-right:10px;vertical-align:-11px">' + ic(icon) + '</span>';
+}
+/** A donut chart for a set of named, colored segments that make up one
+    whole (a status breakdown, a composition) - drawn as stacked arcs of
+    one wide circular stroke, each with its own status color (never a
+    new hue) and a hover tooltip. Each arc fades in with a small stagger
+    on load. Legend stays a separate, plain-text list beside it (per the
+    accessibility rule that identity is never color-alone). */
+function donutChart(segments, size){
+  const total = segments.reduce((s,seg) => s + seg.value, 0);
+  const S = size || 150, thickness = Math.round(S * 0.16);
+  const r = (S - thickness) / 2, cx = S / 2, cy = S / 2;
+  const circumference = 2 * Math.PI * r;
+  if (!total) return '<svg viewBox="0 0 ' + S + ' ' + S + '" style="width:' + S + 'px;height:' + S + 'px;display:block"><circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--admin-surface-2)" stroke-width="' + thickness + '"/></svg>';
+  let offset = 0;
+  const arcs = segments.filter(seg => seg.value > 0).map((seg,i) => {
+    const len = (seg.value / total) * circumference;
+    const dashoffset = -offset;
+    offset += len;
+    return '<circle class="admin-chart-fade" style="animation-delay:' + (i * 90) + 'ms" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + seg.color + '" stroke-width="' + thickness + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (circumference - len).toFixed(2) + '" stroke-dashoffset="' + dashoffset.toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')" data-tip="' + E(seg.label) + ': ' + plural(seg.value, "record") + ' (' + sharePct(seg.value, total) + ')"></circle>';
+  }).join("");
+  return '<svg viewBox="0 0 ' + S + ' ' + S + '" style="width:' + S + 'px;height:' + S + 'px;display:block" role="img" aria-label="Composition donut chart">'
+    + '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--admin-surface-2)" stroke-width="' + thickness + '"/>'
+    + arcs
+    + '</svg>';
+}
+/** A tiny inline trend line for a stat tile - the same at-a-glance
+    treatment Cloudflare's own dashboard puts on every KPI card. No axes,
+    no labels, no hover - it's a texture that says "this is trending"
+    at a glance; the real numbers are already in the tile above it. */
+function sparkline(values, color){
+  if (values.length < 2) return "";
+  const W = 100, H = 28;
+  const max = Math.max(...values), min = Math.min(...values);
+  const range = Math.max(1, max - min);
+  const stepX = W / (values.length - 1);
+  const points = values.map((v,i) => ({ x: i * stepX, y: H - ((v - min) / range) * (H - 4) - 2 }));
+  const path = points.map((p,i) => (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ");
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:28px;display:block;margin-top:10px" aria-hidden="true">'
+    + '<path class="admin-chart-line" d="' + path + '" fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+}
+/** One Good/Needs improvement/Poor proportion bar - the same three-way
+    split Cloudflare's Core Web Vitals report uses, drawn with this
+    site's own brand cast (--leaf/--sun/--berry) instead of the generic
+    admin status colors - chosen specifically because they land on the
+    same green/amber/red family, so the good/warn/bad meaning established
+    everywhere else in this portal still reads correctly at a glance. */
+function vitalBar(label, v){
+  if (!v.total) return '<div style="margin-bottom:14px"><p class="admin-meta" style="margin:0;font-weight:600">' + E(label) + '</p><p class="admin-meta">No data for this range yet.</p></div>';
+  const goodPct = (v.good / v.total) * 100, niPct = (v.needsImprovement / v.total) * 100, poorPct = (v.poor / v.total) * 100;
+  return '<div style="margin-bottom:14px">'
+    + '<div class="row-between" style="margin-bottom:5px"><span style="font-size:.82rem;font-weight:700">' + E(label) + '</span>'
+    + '<span class="t-mono" style="font-size:.78rem;color:var(--leaf)">' + goodPct.toFixed(0) + '% good</span></div>'
+    + '<div style="display:flex;gap:2px;height:10px;overflow:hidden;background:var(--admin-surface-2)">'
+    + (goodPct > 0 ? '<div style="width:' + goodPct.toFixed(1) + '%;background:var(--leaf)" title="Good: ' + goodPct.toFixed(1) + '%"></div>' : "")
+    + (niPct > 0 ? '<div style="width:' + niPct.toFixed(1) + '%;background:var(--sun)" title="Needs improvement: ' + niPct.toFixed(1) + '%"></div>' : "")
+    + (poorPct > 0 ? '<div style="width:' + poorPct.toFixed(1) + '%;background:var(--berry)" title="Poor: ' + poorPct.toFixed(1) + '%"></div>' : "")
+    + '</div></div>';
+}
+/* A static SVG asset (assets/vendor/world-map.svg - "Simple World Map" by
+   Al MacDonald / Fritz Lekschas, CC BY-SA 3.0, paths keyed by lowercase
+   ISO 3166-1 alpha-2 code), fetched once and cached at module scope since
+   it's a fixed asset shared by every admin, not per-request data - the
+   same reasoning that keeps lucide.js/supabase.js out of AppState. */
+let worldMapSvgCache = null;
+async function loadWorldMapSvg(){
+  if (worldMapSvgCache === null){
+    try {
+      const res = await fetch("assets/vendor/world-map.svg");
+      worldMapSvgCache = res.ok ? await res.text() : "";
+    } catch(_e){ worldMapSvgCache = ""; }
+  }
+  return worldMapSvgCache;
+}
+/** Linear RGB interpolation between two same-hue endpoints - a sequential
+    ramp needs exactly one hue light->dark (never a second color), and a
+    plain lerp between two already-chosen admin tokens is precise enough
+    for a two-stop ramp like this one. */
+function mixColor(hexA, hexB, t){
+  const a = hexA.replace("#","").match(/.{2}/g).map(h => parseInt(h,16));
+  const b = hexB.replace("#","").match(/.{2}/g).map(h => parseInt(h,16));
+  const c = a.map((v,i) => Math.round(v + (b[i] - v) * Math.max(0, Math.min(1, t))));
+  return "rgb(" + c.join(",") + ")";
+}
+/** Cloudflare's own "Requests by country" choropleth, drawn with this
+    portal's sequential info-blue ramp instead of a second, unrelated
+    palette - magnitude by country is exactly the sequential job the
+    dataviz system reserves one hue for. Countries with no traffic in
+    this range stay the map's own neutral gray; a sqrt scale keeps one
+    very large country from washing out everything else on the map. */
+function countryMapHTML(byCountry){
+  const wm = AppState.admin.worldMap;
+  if (wm.status === "idle"){
+    wm.status = "loading";
+    loadWorldMapSvg().then(svg => { AppState.admin.worldMap = { status:"loaded", svg:svg }; rerender(); });
+  }
+  if (wm.status !== "loaded") return '<div style="min-height:220px;display:flex;align-items:center;justify-content:center"><p class="admin-meta">Loading map...</p></div>';
+  if (!wm.svg) return '<p class="admin-meta">Map unavailable.</p>';
+  const max = Math.max(1, ...byCountry.map(c => c.views));
+  const sum = byCountry.reduce((s,c) => s + c.views, 0);
+  let svgHtml = wm.svg;
+  const styles = byCountry.map(c => {
+    const code = /^[A-Za-z]{2}$/.test(c.country) ? c.country.toLowerCase() : null;
+    if (!code) return "";
+    const t = Math.sqrt(c.views / max);
+    const fill = mixColor("#E4E8FB", "#3B5BDB", Math.max(t, 0.22));
+    /* The map asset's own markup has no hover layer - inject one data-tip
+       attribute per matched country (ids are unique in the source file,
+       so one targeted replace per code is safe) rather than forking the
+       asset just to add attributes it doesn't otherwise need. */
+    const tip = E(c.country) + ": " + plural(c.views, "view") + " (" + sharePct(c.views, sum) + ")";
+    svgHtml = svgHtml.replace(new RegExp('(<(?:path|g) id="' + code + '")'), '$1 data-tip="' + tip + '"');
+    return '[id="' + code + '"], [id="' + code + '"] path { fill:' + fill + ' !important; }';
+  }).join("\n");
+  return '<div class="wmap-wrap admin-chart-fade">' + '<style>' + styles + '</style>' + svgHtml + '</div>';
+}
+/* One brand hue per chart, not per bar - a small, fixed mapping so
+   different ranked charts on the same page are distinguishable from
+   each other at a glance, while every bar within one chart stays a
+   single color family (the correct sequential treatment for "several
+   instances of the same metric"). Ten unrelated hues in one chart reads
+   as a "rainbow dashboard"; one hue per chart, varied across charts,
+   reads as designed. Falls back to the accent blue for anything not
+   listed here. */
+const CHART_HUES = { path: "#1273B0", host: "#F2C230", country: "#3A7A37" };
+/** A ranked vertical column chart, generalized for any "label + count"
+    rows. Every bar in one chart instance shares CHART_HUES[keyPrefix] -
+    magnitude is what varies (via each bar's own height and a lighter
+    top-stop the taller a bar is), not hue. Each bar gets a subtle
+    top-to-bottom gradient (a lighter tint of the chart's hue into the
+    true hue) via a per-chart-instance <linearGradient>; keyPrefix keeps
+    gradient ids from colliding when more than one of these charts is on
+    the page at once. Square corners throughout - no rx. A direct value
+    label over each column, and a custom hover tooltip (chartTooltip(),
+    wired up globally) stand in for a full hover layer. */
+function verticalBarChart(rows, labelKey, formatLabel, keyPrefix){
   if (!rows.length) return '<p class="admin-meta">No data for this range yet.</p>';
+  const n = rows.length;
+  const W = Math.max(320, n * 64), H = 230, padT = 26, padB = 58, padX = 16;
   const max = Math.max(1, ...rows.map(r => r.views));
   const sum = rows.reduce((s,r) => s + r.views, 0);
-  return '<div class="stack" style="gap:12px">' + rows.map((r,i) => {
+  const bandW = (W - padX * 2) / n;
+  const barW = Math.min(40, bandW * 0.5);
+  const baseY = H - padB;
+  const hue = CHART_HUES[keyPrefix] || "var(--admin-accent)".replace("var(--admin-accent)", "#2A5C99");
+  const truncate = (s, n) => s.length > n ? s.slice(0, n - 1) + "…" : s;
+  const bars = rows.map((r,i) => {
     const label = formatLabel ? formatLabel(r[labelKey]) : r[labelKey];
-    return '<div><div class="row" style="align-items:center;gap:8px;margin-bottom:5px">'
-      + '<span class="t-mono" style="flex:none;width:16px;font-size:.7rem;color:var(--admin-mute)">' + (i+1) + '</span>'
-      + '<span style="flex:1;min-width:0;font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(label) + '</span>'
-      + '<span class="t-mono" style="color:var(--admin-ink);font-weight:700;flex-shrink:0">' + r.views.toLocaleString() + '</span>'
-      + '<span class="admin-meta" style="flex-shrink:0;width:34px;text-align:right">' + sharePct(r.views, sum) + '</span></div>'
-      + '<div class="admin-progress-track" style="margin-left:24px"><div class="admin-progress-fill" style="width:' + Math.max((r.views/max)*100,1.5).toFixed(1) + '%;background:var(--admin-info)"></div></div></div>';
-  }).join("") + '</div>';
+    const t = r.views / max;
+    const h = Math.max(3, t * (H - padT - padB));
+    const cx = padX + i * bandW + bandW / 2;
+    return { r: r, label: label, h: h, x: cx - barW / 2, y: baseY - h, cx: cx, t: t, gradId: "vb-grad-" + keyPrefix + "-" + i };
+  });
+  const defs_svg = bars.map(b => '<linearGradient id="' + b.gradId + '" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0%" stop-color="' + mixColor("#FFFFFF", hue, 0.35 + b.t * 0.25) + '"/>'
+    + '<stop offset="100%" stop-color="' + hue + '"/></linearGradient>').join("");
+  const bars_svg = bars.map((b,i) =>
+    '<rect class="admin-chart-bar" style="animation-delay:' + (i * 45) + 'ms" x="' + b.x.toFixed(1) + '" y="' + b.y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + b.h.toFixed(1) + '" rx="0" fill="url(#' + b.gradId + ')" data-tip="' + E(b.label) + ': ' + plural(b.r.views, "view") + ' (' + sharePct(b.r.views, sum) + ')"></rect>'
+    + '<text x="' + b.cx.toFixed(1) + '" y="' + (b.y - 6).toFixed(1) + '" text-anchor="middle" font-size="11" font-weight="700" fill="var(--admin-ink)" font-family="var(--admin-font-mono)">' + b.r.views.toLocaleString() + '</text>'
+  ).join("");
+  const labels_svg = bars.map(b =>
+    '<text x="' + b.cx.toFixed(1) + '" y="' + (baseY + 14).toFixed(1) + '" text-anchor="end" font-size="10" fill="var(--admin-mute)" transform="rotate(-40 ' + b.cx.toFixed(1) + ' ' + (baseY + 14).toFixed(1) + ')">'
+      + '<title>' + E(b.label) + '</title>' + E(truncate(String(b.label), 16)) + '</text>'
+  ).join("");
+  return '<div style="overflow-x:auto"><svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;min-width:' + W + 'px;height:230px;display:block" role="img" aria-label="Ranked column chart">'
+    + '<defs>' + defs_svg + '</defs>'
+    + '<line x1="' + padX + '" x2="' + (W - padX) + '" y1="' + baseY + '" y2="' + baseY + '" stroke="var(--admin-border)" stroke-width="1"/>'
+    + bars_svg + labels_svg
+    + '</svg></div>';
 }
 function renderAnalyticsLoaded(data){
   if (!data.totalViews){
     return '<div class="admin-card"><p class="admin-meta">No traffic recorded yet for this range. Web Analytics was only just switched on - check back once the site has had some real visits.</p></div>';
   }
+  /* Web Vitals and the prior-period comparison only exist once
+     get-site-analytics has actually been redeployed with them - default
+     them here so an older, still-live copy of that function degrades
+     gracefully (no Core Web Vitals card, no % deltas) instead of
+     throwing on a field that response simply doesn't have yet. */
+  const emptyVital = { good:0, needsImprovement:0, poor:0, total:0 };
+  data = Object.assign({
+    prevTotalViews: 0, prevTotalVisits: 0,
+    webVitals: { lcp: emptyVital, inp: emptyVital, cls: emptyVital },
+    pageLoadTimeMs: { p50:0, p75:0, p90:0, p99:0 }, pageLoadTimeByDate: [],
+  }, data);
   const days = Math.max(1, Math.round((new Date(data.until) - new Date(data.since)) / 86400000) + 1);
   const avgPerDay = Math.round(data.totalViews / days);
-  const statTile = (icon, label, value, note) => '<div class="admin-card">'
+  /* deltaPct compares this range to the immediately preceding one of
+     equal length - the same "vs last period" Cloudflare shows on every
+     stat card - but only when there is a real previous number to compare
+     against; a jump from zero reads as a fabricated "+100%", not a
+     meaningful trend, so that case is left blank instead. sparkValues
+     draws the tiny trend line under the number, same as Cloudflare's own
+     cards, straight from the real daily series already fetched above. */
+  const statTile = (icon, label, value, note, deltaPct, sparkValues) => '<div class="admin-card">'
     + '<div class="row-between" style="align-items:flex-start;gap:8px">'
     + '<span class="admin-meta" style="text-transform:uppercase;letter-spacing:.07em;font-size:.66rem;font-weight:800;margin:0">' + E(label) + '</span>'
-    + '<span class="admin-badge admin-badge--sm admin-badge--info">' + ic(icon) + '</span></div>'
-    + '<div style="font-size:1.7rem;font-weight:800;font-family:var(--admin-font-mono);margin-top:10px;color:var(--admin-ink);line-height:1">' + value + '</div>'
-    + '<p class="admin-meta" style="margin:5px 0 0">' + E(note) + '</p></div>';
-  const sectionIcon = icon => '<span class="admin-badge admin-badge--sm admin-badge--info" style="margin-right:8px;vertical-align:-6px">' + ic(icon) + '</span>';
+    + '<span class="admin-badge admin-badge--lg admin-badge--brand">' + ic(icon) + '</span></div>'
+    + '<div class="row" style="gap:8px;align-items:baseline;margin-top:10px">'
+    + '<div style="font-size:1.7rem;font-weight:800;font-family:var(--admin-font-mono);color:var(--admin-ink);line-height:1">' + value + '</div>'
+    + (typeof deltaPct === "number" ? '<span style="display:inline-flex;align-items:center;gap:2px;font-size:.72rem;font-weight:700;color:' + (deltaPct >= 0 ? "var(--admin-good)" : "var(--admin-bad)") + '">' + ic(deltaPct >= 0 ? "trending-up" : "trending-down") + " " + Math.abs(deltaPct).toFixed(1) + '%</span>' : "")
+    + '</div>'
+    + '<p class="admin-meta" style="margin:5px 0 0">' + E(note) + '</p>'
+    + (sparkValues ? sparkline(sparkValues, "var(--admin-info)") : "")
+    + '</div>';
+  const pctChange = (curr, prev) => prev > 0 ? ((curr - prev) / prev) * 100 : null;
 
   /* One real sentence built from this exact range's numbers - never a
      canned "insights" blurb, since there is no analysis behind it beyond
@@ -11219,39 +11437,69 @@ function renderAnalyticsLoaded(data){
     + (topPage ? " " + E(topPage.path) + " is the most-viewed page (" + sharePct(topPage.views, data.totalViews) + " of views in this range)." : "")
     + " " + (topRef ? E(topRef.host) + " is the top referring site." : "Most visits arrive directly, with no referrer recorded.");
 
-  return '<div class="admin-card" style="margin-bottom:20px;background:linear-gradient(120deg, var(--admin-accent-soft) 0%, var(--admin-teal-soft) 100%);border-color:var(--admin-accent-soft)">'
+  return '<div class="grid" style="grid-template-columns:1.6fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;align-items:stretch">'
+    + '<div class="admin-card" style="background:linear-gradient(120deg, var(--admin-accent-soft) 0%, var(--admin-teal-soft) 100%);border-color:var(--admin-accent-soft)">'
     + '<div class="row" style="gap:14px;align-items:flex-start">'
-    + '<span class="admin-badge" style="background:var(--admin-accent);color:#fff;flex:none">' + ic("sparkles") + '</span>'
+    + '<span class="admin-badge admin-badge--lg" style="background:var(--admin-accent);color:#fff;flex:none">' + ic("sparkles") + '</span>'
     + '<div><h3 class="admin-section-title" style="font-size:1rem">Range summary</h3>'
     + '<p style="margin:6px 0 0;font-size:.86rem;line-height:1.6;color:var(--admin-accent-ink)">' + insight + '</p></div>'
     + '</div></div>'
-
-    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:20px">'
-    + statTile("eye", "Page views", data.totalViews.toLocaleString(), fmtDate(data.since,false) + " to " + fmtDate(data.until,false))
-    + statTile("users", "Visits", data.totalVisits.toLocaleString(), data.totalVisits ? (data.totalViews / data.totalVisits).toFixed(1) + " views per visit" : "No visits recorded")
+    + statTile("eye", "Page views", data.totalViews.toLocaleString(), fmtDate(data.since,false) + " to " + fmtDate(data.until,false), pctChange(data.totalViews, data.prevTotalViews), data.byDate.map(d => d.views))
+    + statTile("users", "Visits", data.totalVisits.toLocaleString(), data.totalVisits ? (data.totalViews / data.totalVisits).toFixed(1) + " views per visit" : "No visits recorded", pctChange(data.totalVisits, data.prevTotalVisits), data.byDate.map(d => d.visits))
     + statTile("activity", "Daily average", avgPerDay.toLocaleString(), "views per day over " + plural(days, "day"))
     + '</div>'
-    + '<div class="admin-card" style="margin-bottom:20px">'
+
+    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:20px;margin-bottom:20px;align-items:stretch">'
+
+    + (data.webVitals.lcp.total ? '<div class="admin-card">'
+      + '<div class="row-between" style="flex-wrap:wrap;gap:10px"><div>'
+      + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("gauge") + 'Core Web Vitals</h3>'
+      + '<p class="admin-meta" style="margin:2px 0 0">Real-user performance from the same beacon that powers the traffic above.</p></div>'
+      + '<div class="row" style="gap:14px;flex-wrap:wrap">'
+      + '<span style="display:inline-flex;align-items:center;gap:5px;font-size:.72rem;color:var(--admin-mute)"><span style="width:8px;height:8px;border-radius:50%;background:var(--leaf)"></span>Good</span>'
+      + '<span style="display:inline-flex;align-items:center;gap:5px;font-size:.72rem;color:var(--admin-mute)"><span style="width:8px;height:8px;border-radius:50%;background:var(--sun)"></span>Needs improvement</span>'
+      + '<span style="display:inline-flex;align-items:center;gap:5px;font-size:.72rem;color:var(--admin-mute)"><span style="width:8px;height:8px;border-radius:50%;background:var(--berry)"></span>Poor</span>'
+      + '</div></div>'
+      + '<div style="margin-top:16px">'
+      + vitalBar("Largest Contentful Paint (LCP)", data.webVitals.lcp)
+      + vitalBar("Interaction to Next Paint (INP)", data.webVitals.inp)
+      + vitalBar("Cumulative Layout Shift (CLS)", data.webVitals.cls)
+      + '</div>'
+      + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:16px;margin-top:6px;padding-top:14px;border-top:1px solid var(--admin-border)">'
+      + ["p50","p75","p90","p99"].map(p => '<div><div class="admin-meta" style="text-transform:uppercase;font-size:.62rem;font-weight:800;margin:0">Page load ' + p.toUpperCase() + '</div>'
+          + '<div class="t-mono" style="font-weight:700;font-size:.95rem;margin-top:2px">' + data.pageLoadTimeMs[p].toLocaleString() + 'ms</div>'
+          + sparkline(data.pageLoadTimeByDate.map(d => d[p]), "var(--admin-info)")
+          + '</div>').join("")
+      + '</div>'
+      + '</div>' : "")
+
+    + '<div class="admin-card">'
     + '<div class="row-between" style="flex-wrap:wrap;gap:10px"><div>'
     + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("trending-up") + 'Page views over time</h3>'
     + '<p class="admin-meta" style="margin:2px 0 0">Daily totals, ' + E(fmtDate(data.since,false)) + ' to ' + E(fmtDate(data.until,false)) + '.</p></div>'
     + '<span class="admin-chip admin-chip--info">' + ic("trending-up") + ' ' + plural(data.totalViews, "view") + '</span></div>'
     + '<div style="margin-top:12px">' + analyticsLineChart(data.byDate) + '</div>'
     + '</div>'
-    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">'
+
+    + '</div>'
+    + '<div class="grid" style="grid-template-columns:1fr 1fr;gap:20px;align-items:start">'
+    + '<div class="admin-card">'
+    + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("globe") + 'Visitor countries</h3>'
+    + '<p class="admin-meta" style="margin:2px 0 14px">Country-level only - Web Analytics never identifies an individual visitor.</p>'
+    + '<div style="max-width:480px;margin:0 auto">' + countryMapHTML(data.byCountry) + '</div>'
+    + '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--admin-border)">' + verticalBarChart(data.byCountry, "country", null, "country") + '</div>'
+    + '</div>'
+    + '<div class="stack" style="gap:20px">'
     + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("file-text") + 'Top pages</h3>'
       + '<p class="admin-meta" style="margin:2px 0 14px">Where visitors actually land and stay.</p>'
-      + analyticsBarList(data.byPath, "path")
+      + verticalBarChart(data.byPath, "path", null, "path")
       + '</div>'
     + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("link") + 'Where visitors come from</h3>'
       + '<p class="admin-meta" style="margin:2px 0 14px">The site that sent them here, when known.</p>'
-      + (data.byReferer.length ? analyticsBarList(data.byReferer, "host")
+      + (data.byReferer.length ? verticalBarChart(data.byReferer, "host", null, "host")
           : '<p class="admin-meta">No referrers recorded - most visits arrived directly (a bookmark, a typed address, or a link that does not send one).</p>')
       + '</div>'
-    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("globe") + 'Visitor countries</h3>'
-      + '<p class="admin-meta" style="margin:2px 0 14px">Country-level only - Web Analytics never identifies an individual visitor.</p>'
-      + analyticsBarList(data.byCountry, "country")
-      + '</div>'
+    + '</div>'
     + '</div>';
 }
 function adminAnalytics(){
@@ -11269,7 +11517,7 @@ function adminAnalytics(){
         ? '<div class="admin-card"><p class="admin-meta">Loading traffic data...</p></div>'
       : a.status === "error"
         ? '<div class="admin-card"><div class="row" style="gap:10px;align-items:center">'
-          + '<span class="admin-badge admin-badge--bad">' + ic("triangle-alert") + '</span>'
+          + '<span class="admin-badge admin-badge--lg admin-badge--bad">' + ic("triangle-alert") + '</span>'
           + '<h3 class="admin-section-title" style="font-size:1rem">Could not load analytics</h3></div>'
           + '<p class="admin-meta" style="margin-top:10px">' + E(a.error) + '</p>'
           + '<p class="admin-meta" style="margin-top:6px">If this is the first time this page has loaded, get-site-analytics may not be deployed yet, or its three Cloudflare secrets may not be set - see supabase/deploy-get-site-analytics.ps1.</p></div>'
@@ -11411,15 +11659,16 @@ function adminDashboard(){
           : "Most content is already published. The near-term workflow focus is clearing the " + plural(needsAttention, "item") + " above, then moving any in-review work through approval. Draft volume alone does not indicate a problem - age and publishing intent should guide prioritization.";
         return '<div class="admin-card" style="margin-bottom:20px" id="content-workflow">'
           + '<div class="row-between" style="flex-wrap:wrap;gap:10px"><div>'
-          + '<h3 class="admin-section-title" style="font-size:1rem">Content workflow</h3>'
+          + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("layers") + 'Content workflow</h3>'
           + '<p class="admin-meta" style="margin:2px 0 0">' + plural(total, "total record") + (archived ? " &middot; " + plural(archived, "archived record") + " excluded from active content health" : "") + '.</p></div>'
           + '<span class="admin-chip">CMS overview</span></div>'
-          + '<div style="margin-top:16px">'
-          + '<div style="display:flex;gap:2px;height:14px;border-radius:7px;overflow:hidden;background:var(--admin-surface-2)" title="Workflow distribution">'
-          + compose.map(p => '<div style="width:' + ((p.n / activeTotal) * 100).toFixed(1) + '%;background:' + pipelineSegColor(p.s.id) + '" title="' + E(p.s.label) + ': ' + plural(p.n, "record") + '"></div>').join("")
-          + '</div>'
-          + '<div class="row" style="gap:16px;flex-wrap:wrap;margin-top:12px">'
-          + compose.map(p => '<span style="font-size:.78rem;color:var(--admin-mute)">' + E(p.s.label) + ' <b class="t-mono" style="color:var(--admin-ink)">' + p.n + ' &middot; ' + sharePct(p.n, activeTotal) + '</b></span>').join("")
+          + '<div class="row" style="gap:24px;flex-wrap:wrap;align-items:center;margin-top:16px">'
+          + donutChart(compose.map(p => ({ label: p.s.label, value: p.n, color: pipelineSegColor(p.s.id) })), 150)
+          + '<div class="stack" style="gap:8px;flex:1;min-width:180px">'
+          + compose.map(p => '<span style="display:flex;align-items:center;gap:8px;font-size:.82rem">'
+              + '<span style="width:10px;height:10px;border-radius:2px;background:' + pipelineSegColor(p.s.id) + ';flex:none"></span>'
+              + '<span style="color:var(--admin-mute);flex:1">' + E(p.s.label) + '</span>'
+              + '<b class="t-mono" style="color:var(--admin-ink)">' + p.n + ' &middot; ' + sharePct(p.n, activeTotal) + '</b></span>').join("")
           + '</div></div>'
           + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:18px">'
           + stages.map(p => { const b = STATUS_BADGE[p.s.id] || STATUS_BADGE.draft; const pct = p.denom ? (p.n / p.denom) * 100 : 0;
@@ -11447,7 +11696,7 @@ function adminDashboard(){
        than three disconnected counters. */
     + '<div class="admin-card" style="margin-bottom:20px" id="needs-attention">'
     + '<div class="row" style="gap:10px;align-items:center">'
-    + '<span class="admin-badge' + (needsAttention ? " admin-badge--bad" : " admin-badge--good") + '">' + ic(needsAttention ? "triangle-alert" : "check") + '</span>'
+    + '<span class="admin-badge admin-badge--lg' + (needsAttention ? " admin-badge--bad" : " admin-badge--good") + '">' + ic(needsAttention ? "triangle-alert" : "check") + '</span>'
     + '<h3 class="admin-section-title" style="font-size:1rem">Needs attention</h3>'
     + '<span class="admin-chip' + (needsAttention ? "" : " admin-chip--good") + '">' + plural(needsAttention, "open item") + '</span>'
     + '</div>'
@@ -11473,7 +11722,7 @@ function adminDashboard(){
     + opsVitalsHTML()
 
     + '<div class="admin-card"><div class="row-between" style="align-items:flex-start"><div>'
-    + '<h3 class="admin-section-title" style="font-size:1rem">Recent system activity</h3>'
+    + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("clock") + 'Recent system activity</h3>'
     + '<p class="admin-meta" style="margin:2px 0 0">Latest recorded CMS and admin events</p></div>'
     + '<a class="admin-btn admin-btn--sm admin-btn--ghost" href="#/admin/audit">' + ic("arrow-right") + ' Full log</a></div>'
     + (d.auditLog.length
@@ -19288,6 +19537,43 @@ document.addEventListener("mousedown", (ev) => {
   const btn = ev.target.closest && ev.target.closest('[data-act="rt-cmd"]');
   if (btn) ev.preventDefault();
 });
+
+/* One shared hover tooltip for every SVG chart in the admin portal
+   (verticalBarChart, analyticsLineChart, the world map) - delegated, so
+   new chart markup never needs its own JS, just a data-tip attribute.
+   Positioned above the pointer and clamped to the viewport so it never
+   runs off-screen near an edge. */
+(function chartTooltipInit(){
+  let tipEl = null, current = null;
+  function show(target, x, y){
+    if (!tipEl) tipEl = document.getElementById("chart-tooltip");
+    if (!tipEl) return;
+    const text = target.getAttribute("data-tip");
+    if (current !== target){ tipEl.textContent = text; current = target; }
+    const pad = 10;
+    const left = Math.min(Math.max(x, 60), window.innerWidth - 60);
+    const top = Math.max(y - pad, 30);
+    tipEl.style.left = left + "px";
+    tipEl.style.top = top + "px";
+    tipEl.classList.add("is-visible");
+  }
+  function hide(){
+    if (tipEl) tipEl.classList.remove("is-visible");
+    current = null;
+  }
+  document.addEventListener("pointerover", (ev) => {
+    const el = ev.target.closest && ev.target.closest("[data-tip]");
+    if (el) show(el, ev.clientX, ev.clientY);
+  });
+  document.addEventListener("pointermove", (ev) => {
+    if (current && ev.target.closest && ev.target.closest("[data-tip]") === current) show(current, ev.clientX, ev.clientY);
+  });
+  document.addEventListener("pointerout", (ev) => {
+    const el = ev.target.closest && ev.target.closest("[data-tip]");
+    if (el && (!ev.relatedTarget || !ev.relatedTarget.closest || ev.relatedTarget.closest("[data-tip]") !== el)) hide();
+  });
+  document.addEventListener("scroll", hide, true);
+})();
 
 document.addEventListener("click", (ev) => {
   /* A drawer link closes the drawer first, then lands on the page it

@@ -1,10 +1,11 @@
 // Chike's Creative Space - get-site-analytics Edge Function
 //
 // Proxies Cloudflare's GraphQL Analytics API so real visitor traffic
-// (page views, top pages, referrers, country) can render inside this
-// app's own admin portal instead of requiring a separate login to the
-// Cloudflare dashboard - every admin already signs into this portal,
-// not all of them have (or should have) Cloudflare account access.
+// (page views, top pages, referrers, country, Core Web Vitals, and a
+// vs-last-period delta on each stat) can render inside this app's own
+// admin portal instead of requiring a separate login to the Cloudflare
+// dashboard - every admin already signs into this portal, not all of
+// them have (or should have) Cloudflare account access.
 //
 // The Cloudflare API token this needs is read-only (Account
 // Analytics:Read, scoped to this one account) and lives only as a
@@ -43,16 +44,28 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// One GraphQL request, four aliased groupings of the same dataset -
-// cheaper than four round trips, and Cloudflare's adaptive-groups
-// pattern group by whatever `dimensions` fields each alias asks for
+// One GraphQL request, several aliased groupings across three datasets -
+// cheaper than one round trip per alias, and Cloudflare's adaptive-groups
+// pattern groups by whatever `dimensions` fields each alias asks for
 // independently, so aliasing is safe here.
+//
+// rumWebVitalsEventsAdaptiveGroups and rumPerformanceEventsAdaptiveGroups
+// are the same Web Vitals data Cloudflare's own dashboard renders under
+// Analytics -> Web analytics -> Core Web Vitals for this exact site - real
+// numbers, not a stand-in for the zone-level traffic/security/cache stats
+// on Cloudflare's separate "Account analytics" page, which this project
+// has no access to (this domain has no Cloudflare zone - DNS isn't
+// proxied through Cloudflare, only the Web Analytics beacon is installed).
 const QUERY = `
-  query($accountTag: String!, $siteTag: String!, $since: Date!, $until: Date!) {
+  query($accountTag: String!, $siteTag: String!, $since: Date!, $until: Date!, $prevSince: Date!, $prevUntil: Date!) {
     viewer {
       accounts(filter: { accountTag: $accountTag }) {
         totals: rumPageloadEventsAdaptiveGroups(
           filter: { siteTag: $siteTag, date_geq: $since, date_leq: $until, bot: 0 }
+          limit: 1
+        ) { count sum { visits } }
+        prevTotals: rumPageloadEventsAdaptiveGroups(
+          filter: { siteTag: $siteTag, date_geq: $prevSince, date_leq: $prevUntil, bot: 0 }
           limit: 1
         ) { count sum { visits } }
         byDate: rumPageloadEventsAdaptiveGroups(
@@ -75,6 +88,23 @@ const QUERY = `
           limit: 10
           orderBy: [count_DESC]
         ) { count dimensions { countryName } }
+        webVitals: rumWebVitalsEventsAdaptiveGroups(
+          filter: { siteTag: $siteTag, date_geq: $since, date_leq: $until, bot: 0 }
+          limit: 1
+        ) { sum {
+            lcpGood lcpNeedsImprovement lcpPoor lcpTotal
+            inpGood inpNeedsImprovement inpPoor inpTotal
+            clsGood clsNeedsImprovement clsPoor clsTotal
+        } }
+        performance: rumPerformanceEventsAdaptiveGroups(
+          filter: { siteTag: $siteTag, date_geq: $since, date_leq: $until, bot: 0 }
+          limit: 1
+        ) { quantiles { pageLoadTimeP50 pageLoadTimeP75 pageLoadTimeP90 pageLoadTimeP99 } }
+        performanceByDate: rumPerformanceEventsAdaptiveGroups(
+          filter: { siteTag: $siteTag, date_geq: $since, date_leq: $until, bot: 0 }
+          limit: 100
+          orderBy: [date_ASC]
+        ) { quantiles { pageLoadTimeP50 pageLoadTimeP75 pageLoadTimeP90 pageLoadTimeP99 } dimensions { date } }
       }
     }
   }
@@ -125,6 +155,11 @@ Deno.serve(async (req) => {
   const days = Math.max(1, Math.min(90, Number(body.days) || 7));
   const until = new Date();
   const since = new Date(until.getTime() - days * 86400000);
+  // The immediately preceding period of equal length, for the "vs last
+  // period" deltas on each stat tile - the same comparison Cloudflare's
+  // own dashboards show next to every number.
+  const prevUntil = new Date(since.getTime() - 86400000);
+  const prevSince = new Date(prevUntil.getTime() - (days - 1) * 86400000);
 
   // Step 3: one call to Cloudflare's GraphQL Analytics API.
   let cfJson: any;
@@ -142,6 +177,8 @@ Deno.serve(async (req) => {
           siteTag: CF_SITE_TAG,
           since: isoDate(since),
           until: isoDate(until),
+          prevSince: isoDate(prevSince),
+          prevUntil: isoDate(prevUntil),
         },
       }),
     });
@@ -162,6 +199,7 @@ Deno.serve(async (req) => {
   // Step 4: reshape into exactly what the dashboard chart needs - no
   // GraphQL-shaped nesting leaking into the client.
   const totals = account.totals?.[0] || { count: 0, sum: { visits: 0 } };
+  const prevTotals = account.prevTotals?.[0] || { count: 0, sum: { visits: 0 } };
   const byDate = (account.byDate || []).map((r: any) => ({
     date: r.dimensions.date, views: r.count, visits: r.sum.visits,
   }));
@@ -175,12 +213,45 @@ Deno.serve(async (req) => {
     country: r.dimensions.countryName || "Unknown", views: r.count,
   }));
 
+  // Cloudflare reports RUM durations in microseconds; every UI (its own
+  // dashboard included) shows milliseconds.
+  const msFromMicros = (v: number | undefined) => Math.round((v || 0) / 1000);
+  const perfQuantiles = account.performance?.[0]?.quantiles || {};
+  const pageLoadTimeMs = {
+    p50: msFromMicros(perfQuantiles.pageLoadTimeP50),
+    p75: msFromMicros(perfQuantiles.pageLoadTimeP75),
+    p90: msFromMicros(perfQuantiles.pageLoadTimeP90),
+    p99: msFromMicros(perfQuantiles.pageLoadTimeP99),
+  };
+  // A per-day trend for each percentile - the same sparkline treatment
+  // the page-views/visits stat tiles already get, applied to page load
+  // time instead of guessing at a shape for data that isn't fetched.
+  const pageLoadTimeByDate = (account.performanceByDate || []).map((r: any) => ({
+    date: r.dimensions.date,
+    p50: msFromMicros(r.quantiles?.pageLoadTimeP50),
+    p75: msFromMicros(r.quantiles?.pageLoadTimeP75),
+    p90: msFromMicros(r.quantiles?.pageLoadTimeP90),
+    p99: msFromMicros(r.quantiles?.pageLoadTimeP99),
+  }));
+
+  const wvSum = account.webVitals?.[0]?.sum || {};
+  const vitalBreakdown = (prefix: string) => ({
+    good: wvSum[prefix + "Good"] || 0,
+    needsImprovement: wvSum[prefix + "NeedsImprovement"] || 0,
+    poor: wvSum[prefix + "Poor"] || 0,
+    total: wvSum[prefix + "Total"] || 0,
+  });
+
   return json({
     ok: true,
     since: isoDate(since),
     until: isoDate(until),
     totalViews: totals.count,
     totalVisits: totals.sum?.visits || 0,
+    prevTotalViews: prevTotals.count,
+    prevTotalVisits: prevTotals.sum?.visits || 0,
     byDate, byPath, byReferer, byCountry,
+    pageLoadTimeMs, pageLoadTimeByDate,
+    webVitals: { lcp: vitalBreakdown("lcp"), inp: vitalBreakdown("inp"), cls: vitalBreakdown("cls") },
   });
 });
