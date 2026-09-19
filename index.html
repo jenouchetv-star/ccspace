@@ -11113,14 +11113,35 @@ async function loadAnalytics(days){
   }
   rerender();
 }
-/** A simple, dependency-free line+area chart - one series, thin 2px
-    line, a light fill, recessive gridlines, and a native <title> per
-    point standing in for a full hover layer (no charting library or
-    mouse-tracking infrastructure exists anywhere else in this vanilla-
-    JS codebase, so this stays proportional to that). */
+/** A dependency-free line+area chart - one series (page views/day), so one
+    hue throughout (var(--admin-info), the same sequential hue every ranked
+    bar list on this page already uses - never cycled per-point). Numeric
+    y-axis labels and first/mid/last x-axis dates replace the old bare
+    gridlines; the final point is emphasized (larger marker + a direct
+    label) since "where are we now" is the question this page answers
+    first. A native <title> per point is the hover layer - no charting
+    library or mouse-tracking infrastructure exists anywhere else in this
+    vanilla-JS codebase, so this stays proportional to that. */
+/* A light Catmull-Rom-style smoothing (quadratic curves through each
+   segment's midpoint) - enough to read as a "real chart" curve rather
+   than a jagged connect-the-dots line, without pulling in a charting
+   library this codebase deliberately has none of. Falls back to a
+   straight line for 1-2 points, where there's nothing to smooth. */
+function smoothPath(points){
+  if (points.length < 3) return points.map((p,i) => (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ");
+  let d = "M " + points[0].x.toFixed(1) + "," + points[0].y.toFixed(1);
+  for (let i = 0; i < points.length - 1; i++){
+    const p0 = points[i], p1 = points[i+1];
+    const midX = (p0.x + p1.x) / 2, midY = (p0.y + p1.y) / 2;
+    if (i === 0) d += " L " + midX.toFixed(1) + "," + midY.toFixed(1);
+    else d += " Q " + p0.x.toFixed(1) + "," + p0.y.toFixed(1) + " " + midX.toFixed(1) + "," + midY.toFixed(1);
+  }
+  const last = points[points.length-1];
+  return d + " L " + last.x.toFixed(1) + "," + last.y.toFixed(1);
+}
 function analyticsLineChart(byDate){
   if (!byDate.length) return '<p class="admin-meta">No data for this range yet.</p>';
-  const W = 600, H = 160, padL = 6, padR = 6, padT = 10, padB = 10;
+  const W = 680, H = 220, padL = 40, padR = 14, padT = 20, padB = 26;
   const maxV = Math.max(1, ...byDate.map(d => d.views));
   const stepX = byDate.length > 1 ? (W - padL - padR) / (byDate.length - 1) : 0;
   const points = byDate.map((d,i) => ({
@@ -11128,58 +11149,106 @@ function analyticsLineChart(byDate){
     y: padT + (1 - d.views / maxV) * (H - padT - padB),
     d: d
   }));
-  const line = points.map((p,i) => (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ");
+  const line = smoothPath(points);
   const area = line + " L" + points[points.length-1].x.toFixed(1) + "," + (H-padB)
     + " L" + points[0].x.toFixed(1) + "," + (H-padB) + " Z";
-  const grid = [0.25, 0.5, 0.75].map(f => {
-    const y = (padT + f * (H - padT - padB)).toFixed(1);
-    return '<line x1="' + padL + '" x2="' + (W-padR) + '" y1="' + y + '" y2="' + y + '" stroke="var(--admin-border)" stroke-width="1"/>';
+  const yTicks = [0, 0.5, 1].map(f => {
+    const y = padT + (1 - f) * (H - padT - padB);
+    return { y: y, label: Math.round(f * maxV).toLocaleString() };
+  });
+  const grid = yTicks.map(t => '<line x1="' + padL + '" x2="' + (W-padR) + '" y1="' + t.y.toFixed(1) + '" y2="' + t.y.toFixed(1) + '" stroke="var(--admin-border)" stroke-width="1"/>'
+    + '<text x="' + (padL - 8) + '" y="' + (t.y + 3).toFixed(1) + '" text-anchor="end" font-size="10" fill="var(--admin-mute)" font-family="var(--admin-font-mono)">' + t.label + '</text>').join("");
+  const xLabelIdx = byDate.length > 1 ? [0, Math.floor((byDate.length-1)/2), byDate.length-1] : [0];
+  const xLabels = [...new Set(xLabelIdx)].map(i => '<text x="' + points[i].x.toFixed(1) + '" y="' + (H - padB + 16) + '" text-anchor="middle" font-size="10" fill="var(--admin-mute)">'
+    + E(fmtDate(byDate[i].date, false)) + '</text>').join("");
+  const last = points[points.length-1];
+  const dots = points.map((p,i) => {
+    const isLast = i === points.length - 1;
+    return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + (isLast ? 5 : 3) + '" fill="' + (isLast ? "#fff" : "var(--admin-info)") + '" stroke="var(--admin-info)" stroke-width="' + (isLast ? 2.5 : 0) + '">'
+      + '<title>' + E(fmtDate(p.d.date, false)) + ': ' + plural(p.d.views, "view") + '</title></circle>';
   }).join("");
-  const dots = points.map(p => '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3" fill="var(--admin-info)">'
-    + '<title>' + E(fmtDate(p.d.date, false)) + ': ' + plural(p.d.views, "view") + '</title></circle>').join("");
-  return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:160px;display:block" role="img" aria-label="Page views by day">'
-    + grid
+  const lastLabel = '<text x="' + Math.min(last.x, W - padR - 4).toFixed(1) + '" y="' + Math.max(last.y - 12, padT + 10).toFixed(1) + '" text-anchor="end" font-size="11" font-weight="700" fill="var(--admin-ink)" font-family="var(--admin-font-mono)">' + last.d.views.toLocaleString() + '</text>';
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:220px;display:block" role="img" aria-label="Page views by day, ' + E(fmtDate(byDate[0].date,false)) + ' to ' + E(fmtDate(byDate[byDate.length-1].date,false)) + '">'
+    + grid + xLabels
     + '<path d="' + area + '" fill="var(--admin-info-soft)" stroke="none"/>'
     + '<path d="' + line + '" fill="none" stroke="var(--admin-info)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
-    + dots
+    + dots + lastLabel
     + '</svg>';
 }
 /** The same ranked-bar component as the dashboard's Workflow pipeline,
     generalized for any "label + count" rows - one hue, since every row
     here is the same metric (views), not a set of identities needing to
-    stay visually distinct from each other. */
+    stay visually distinct from each other. A rank badge and a share of
+    the range's total both ride along, so a raw count reads in context
+    instead of floating alone next to a bar. */
 function analyticsBarList(rows, labelKey, formatLabel){
   if (!rows.length) return '<p class="admin-meta">No data for this range yet.</p>';
   const max = Math.max(1, ...rows.map(r => r.views));
-  return '<div class="stack" style="gap:10px">' + rows.map(r => {
+  const sum = rows.reduce((s,r) => s + r.views, 0);
+  return '<div class="stack" style="gap:12px">' + rows.map((r,i) => {
     const label = formatLabel ? formatLabel(r[labelKey]) : r[labelKey];
-    return '<div><div class="row-between" style="margin-bottom:4px;gap:10px">'
-      + '<span style="font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(label) + '</span>'
-      + '<span class="t-mono" style="color:var(--admin-mute);flex-shrink:0">' + r.views + '</span></div>'
-      + '<div class="admin-progress-track"><div class="admin-progress-fill" style="width:' + ((r.views/max)*100).toFixed(1) + '%;background:var(--admin-info)"></div></div></div>';
+    return '<div><div class="row" style="align-items:center;gap:8px;margin-bottom:5px">'
+      + '<span class="t-mono" style="flex:none;width:16px;font-size:.7rem;color:var(--admin-mute)">' + (i+1) + '</span>'
+      + '<span style="flex:1;min-width:0;font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(label) + '</span>'
+      + '<span class="t-mono" style="color:var(--admin-ink);font-weight:700;flex-shrink:0">' + r.views.toLocaleString() + '</span>'
+      + '<span class="admin-meta" style="flex-shrink:0;width:34px;text-align:right">' + sharePct(r.views, sum) + '</span></div>'
+      + '<div class="admin-progress-track" style="margin-left:24px"><div class="admin-progress-fill" style="width:' + Math.max((r.views/max)*100,1.5).toFixed(1) + '%;background:var(--admin-info)"></div></div></div>';
   }).join("") + '</div>';
 }
 function renderAnalyticsLoaded(data){
   if (!data.totalViews){
     return '<div class="admin-card"><p class="admin-meta">No traffic recorded yet for this range. Web Analytics was only just switched on - check back once the site has had some real visits.</p></div>';
   }
-  return '<div class="admin-card" style="margin-bottom:20px">'
-    + '<h3 class="admin-section-title" style="font-size:1rem">Page views</h3>'
-    + '<p style="margin:6px 0 14px"><b style="font-size:2rem;font-family:var(--admin-font-mono)">' + data.totalViews.toLocaleString() + '</b> '
-      + '<span class="admin-meta">page views from ' + data.totalVisits.toLocaleString() + ' visits, ' + E(fmtDate(data.since,false)) + ' to ' + E(fmtDate(data.until,false)) + '.</span></p>'
-    + analyticsLineChart(data.byDate)
+  const days = Math.max(1, Math.round((new Date(data.until) - new Date(data.since)) / 86400000) + 1);
+  const avgPerDay = Math.round(data.totalViews / days);
+  const statTile = (icon, label, value, note) => '<div class="admin-card">'
+    + '<div class="row-between" style="align-items:flex-start;gap:8px">'
+    + '<span class="admin-meta" style="text-transform:uppercase;letter-spacing:.07em;font-size:.66rem;font-weight:800;margin:0">' + E(label) + '</span>'
+    + '<span class="admin-badge admin-badge--sm admin-badge--info">' + ic(icon) + '</span></div>'
+    + '<div style="font-size:1.7rem;font-weight:800;font-family:var(--admin-font-mono);margin-top:10px;color:var(--admin-ink);line-height:1">' + value + '</div>'
+    + '<p class="admin-meta" style="margin:5px 0 0">' + E(note) + '</p></div>';
+  const sectionIcon = icon => '<span class="admin-badge admin-badge--sm admin-badge--info" style="margin-right:8px;vertical-align:-6px">' + ic(icon) + '</span>';
+
+  /* One real sentence built from this exact range's numbers - never a
+     canned "insights" blurb, since there is no analysis behind it beyond
+     what these three lookups actually found. */
+  const peakDay = data.byDate.reduce((best,d) => (!best || d.views > best.views) ? d : best, data.byDate[0]);
+  const topPage = data.byPath[0];
+  const topRef = data.byReferer[0];
+  const insight = "Traffic peaked on " + fmtDate(peakDay.date, false) + " with " + plural(peakDay.views, "view") + "."
+    + (topPage ? " " + E(topPage.path) + " is the most-viewed page (" + sharePct(topPage.views, data.totalViews) + " of views in this range)." : "")
+    + " " + (topRef ? E(topRef.host) + " is the top referring site." : "Most visits arrive directly, with no referrer recorded.");
+
+  return '<div class="admin-card" style="margin-bottom:20px;background:linear-gradient(120deg, var(--admin-accent-soft) 0%, var(--admin-teal-soft) 100%);border-color:var(--admin-accent-soft)">'
+    + '<div class="row" style="gap:14px;align-items:flex-start">'
+    + '<span class="admin-badge" style="background:var(--admin-accent);color:#fff;flex:none">' + ic("sparkles") + '</span>'
+    + '<div><h3 class="admin-section-title" style="font-size:1rem">Range summary</h3>'
+    + '<p style="margin:6px 0 0;font-size:.86rem;line-height:1.6;color:var(--admin-accent-ink)">' + insight + '</p></div>'
+    + '</div></div>'
+
+    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:20px">'
+    + statTile("eye", "Page views", data.totalViews.toLocaleString(), fmtDate(data.since,false) + " to " + fmtDate(data.until,false))
+    + statTile("users", "Visits", data.totalVisits.toLocaleString(), data.totalVisits ? (data.totalViews / data.totalVisits).toFixed(1) + " views per visit" : "No visits recorded")
+    + statTile("activity", "Daily average", avgPerDay.toLocaleString(), "views per day over " + plural(days, "day"))
+    + '</div>'
+    + '<div class="admin-card" style="margin-bottom:20px">'
+    + '<div class="row-between" style="flex-wrap:wrap;gap:10px"><div>'
+    + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("trending-up") + 'Page views over time</h3>'
+    + '<p class="admin-meta" style="margin:2px 0 0">Daily totals, ' + E(fmtDate(data.since,false)) + ' to ' + E(fmtDate(data.until,false)) + '.</p></div>'
+    + '<span class="admin-chip admin-chip--info">' + ic("trending-up") + ' ' + plural(data.totalViews, "view") + '</span></div>'
+    + '<div style="margin-top:12px">' + analyticsLineChart(data.byDate) + '</div>'
     + '</div>'
     + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">'
-    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">Top pages</h3>'
+    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("file-text") + 'Top pages</h3>'
       + '<p class="admin-meta" style="margin:2px 0 14px">Where visitors actually land and stay.</p>'
       + analyticsBarList(data.byPath, "path")
       + '</div>'
-    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">Where visitors come from</h3>'
+    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("link") + 'Where visitors come from</h3>'
       + '<p class="admin-meta" style="margin:2px 0 14px">The site that sent them here, when known.</p>'
       + (data.byReferer.length ? analyticsBarList(data.byReferer, "host")
           : '<p class="admin-meta">No referrers recorded - most visits arrived directly (a bookmark, a typed address, or a link that does not send one).</p>')
       + '</div>'
-    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">Visitor countries</h3>'
+    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("globe") + 'Visitor countries</h3>'
       + '<p class="admin-meta" style="margin:2px 0 14px">Country-level only - Web Analytics never identifies an individual visitor.</p>'
       + analyticsBarList(data.byCountry, "country")
       + '</div>'
