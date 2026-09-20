@@ -57,6 +57,7 @@
 <meta name="twitter:title" content="Chike's Creative Space">
 <meta name="twitter:description" content="Chike's Creative Space turns imagination into action. Hands-on activities, games, stories, and short animated adventures where every creation leads to a discovery.">
 <meta name="twitter:image" content="https://www.chikescreativespace.com/assets/hero/og-share.jpg">
+<link id="canonical-link" rel="canonical" href="https://www.chikescreativespace.com/">
 
 <!-- PWA: installable app metadata. Colors match --paper, the site's own
      background token, so the browser chrome never clashes with the page. -->
@@ -2030,6 +2031,8 @@ h1.admin-page-title{ font-size:1.7rem; }
 .admin-badge--sm svg{ width:11px; height:11px; }
 .admin-badge--lg{ width:36px; height:36px; }
 .admin-badge--lg svg{ width:24px; height:24px; }
+.admin-badge--md{ width:30px; height:30px; }
+.admin-badge--md svg{ width:20px; height:20px; }
 .admin-badge--good{ background:var(--admin-good-soft); color:var(--admin-good); }
 .admin-badge--bad{ background:var(--admin-bad-soft); color:var(--admin-bad); }
 .admin-badge--info{ background:var(--admin-info-soft); color:var(--admin-info); }
@@ -11228,23 +11231,59 @@ function sectionIcon(icon){
     new hue) and a hover tooltip. Each arc fades in with a small stagger
     on load. Legend stays a separate, plain-text list beside it (per the
     accessibility rule that identity is never color-alone). */
+/** An isometric-style donut: the ring is drawn as an ellipse (a flat
+    tilt, not a true 3D transform) with a short front-facing "wall"
+    extruded below the rim wherever a segment crosses the bottom half,
+    giving the puck-like depth an isometric dashboard donut is known
+    for. Wedges and walls are plain elliptical-arc paths - no charting
+    library, matching every other chart in this file. */
 function donutChart(segments, size){
   const total = segments.reduce((s,seg) => s + seg.value, 0);
   const S = size || 150, thickness = Math.round(S * 0.16);
-  const r = (S - thickness) / 2, cx = S / 2, cy = S / 2;
-  const circumference = 2 * Math.PI * r;
-  if (!total) return '<svg viewBox="0 0 ' + S + ' ' + S + '" style="width:' + S + 'px;height:' + S + 'px;display:block"><circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--admin-surface-2)" stroke-width="' + thickness + '"/></svg>';
-  let offset = 0;
-  const arcs = segments.filter(seg => seg.value > 0).map((seg,i) => {
-    const len = (seg.value / total) * circumference;
-    const dashoffset = -offset;
-    offset += len;
-    return '<circle class="admin-chart-fade" style="animation-delay:' + (i * 90) + 'ms" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + seg.color + '" stroke-width="' + thickness + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (circumference - len).toFixed(2) + '" stroke-dashoffset="' + dashoffset.toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')" data-tip="' + E(seg.label) + ': ' + plural(seg.value, "record") + ' (' + sharePct(seg.value, total) + ')"></circle>';
-  }).join("");
-  return '<svg viewBox="0 0 ' + S + ' ' + S + '" style="width:' + S + 'px;height:' + S + 'px;display:block" role="img" aria-label="Composition donut chart">'
-    + '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--admin-surface-2)" stroke-width="' + thickness + '"/>'
-    + arcs
-    + '</svg>';
+  const outerR = (S - thickness) / 2, innerR = outerR - thickness;
+  const squash = 0.52, depth = Math.round(thickness * 0.9);
+  const outerRy = outerR * squash, innerRy = innerR * squash;
+  const cx = S / 2, cy = Math.round(outerRy) + 3;
+  const viewH = Math.round(outerRy * 2 + depth + 6);
+  const pt = (rx, ry, deg) => { const t = deg * Math.PI / 180; return [cx + rx * Math.cos(t), cy + ry * Math.sin(t)]; };
+  const fmt = p => p[0].toFixed(2) + "," + p[1].toFixed(2);
+  const wedgeD = (f0, f1, rx1, ry1, rx2, ry2) => {
+    const spans = f1 - f0 >= 0.999999 ? [[f0, f0 + 0.5], [f0 + 0.5, f1]] : [[f0, f1]];
+    return spans.map(([a,b]) => {
+      const th0 = -90 + a * 360, th1 = -90 + b * 360, big = (b - a) > 0.5 ? 1 : 0;
+      return "M " + fmt(pt(rx1,ry1,th0)) + " A " + rx1.toFixed(2) + " " + ry1.toFixed(2) + " 0 " + big + " 1 " + fmt(pt(rx1,ry1,th1))
+        + " L " + fmt(pt(rx2,ry2,th1)) + " A " + rx2.toFixed(2) + " " + ry2.toFixed(2) + " 0 " + big + " 0 " + fmt(pt(rx2,ry2,th0)) + " Z";
+    });
+  };
+  const wallD = (f0, f1) => {
+    const ov0 = Math.max(f0, 0.25), ov1 = Math.min(f1, 0.75);
+    if (ov1 <= ov0) return null;
+    const th0 = -90 + ov0 * 360, th1 = -90 + ov1 * 360;
+    const top0 = pt(outerR,outerRy,th0), top1 = pt(outerR,outerRy,th1);
+    const bot0 = [top0[0], top0[1] + depth], bot1 = [top1[0], top1[1] + depth];
+    return "M " + fmt(top0) + " A " + outerR.toFixed(2) + " " + outerRy.toFixed(2) + " 0 0 1 " + fmt(top1)
+      + " L " + fmt(bot1) + " A " + outerR.toFixed(2) + " " + outerRy.toFixed(2) + " 0 0 0 " + fmt(bot0) + " Z";
+  };
+  const build = (segs, colorOf, tipOf) => {
+    let offset = 0, walls = "", faces = "";
+    segs.forEach((seg,i) => {
+      const f0 = offset / total, f1 = (offset + seg.value) / total;
+      offset += seg.value;
+      const color = colorOf(seg), delay = (i * 90) + "ms";
+      const wall = wallD(f0, f1);
+      if (wall) walls += '<path d="' + wall + '" fill="' + color + '" style="filter:brightness(.72)"></path>';
+      faces += wedgeD(f0, f1, outerR, outerRy, innerR, innerRy).map(d =>
+        '<path class="admin-chart-fade" style="animation-delay:' + delay + '" d="' + d + '" fill="' + color + '"' + (tipOf ? ' data-tip="' + tipOf(seg) + '"' : '') + '></path>').join("");
+    });
+    return walls + faces;
+  };
+  if (!total){
+    const body = build([{ value:1 }], () => "var(--admin-surface-2)", null);
+    return '<svg viewBox="0 0 ' + S + ' ' + viewH + '" style="width:' + S + 'px;height:' + viewH + 'px;display:block">' + body + '</svg>';
+  }
+  const body = build(segments.filter(seg => seg.value > 0), seg => seg.color,
+    seg => E(seg.label) + ': ' + plural(seg.value, "record") + ' (' + sharePct(seg.value, total) + ')');
+  return '<svg viewBox="0 0 ' + S + ' ' + viewH + '" style="width:' + S + 'px;height:' + viewH + 'px;display:block" role="img" aria-label="Composition donut chart">' + body + '</svg>';
 }
 /** A tiny inline trend line for a stat tile - the same at-a-glance
     treatment Cloudflare's own dashboard puts on every KPI card. No axes,
@@ -11263,18 +11302,18 @@ function sparkline(values, color){
 }
 /** One Good/Needs improvement/Poor proportion bar - the same three-way
     split Cloudflare's Core Web Vitals report uses, drawn with this
-    site's own brand cast (--leaf/--sun/--berry) instead of the generic
+    site's own brand cast (--teal/--sun/--berry) instead of the generic
     admin status colors - chosen specifically because they land on the
-    same green/amber/red family, so the good/warn/bad meaning established
-    everywhere else in this portal still reads correctly at a glance. */
+    same good/warn/bad family, so that meaning established elsewhere in
+    this portal still reads correctly at a glance. */
 function vitalBar(label, v){
   if (!v.total) return '<div style="margin-bottom:14px"><p class="admin-meta" style="margin:0;font-weight:600">' + E(label) + '</p><p class="admin-meta">No data for this range yet.</p></div>';
   const goodPct = (v.good / v.total) * 100, niPct = (v.needsImprovement / v.total) * 100, poorPct = (v.poor / v.total) * 100;
   return '<div style="margin-bottom:14px">'
     + '<div class="row-between" style="margin-bottom:5px"><span style="font-size:.82rem;font-weight:700">' + E(label) + '</span>'
-    + '<span class="t-mono" style="font-size:.78rem;color:var(--leaf)">' + goodPct.toFixed(0) + '% good</span></div>'
+    + '<span class="t-mono" style="font-size:.78rem;color:var(--teal)">' + goodPct.toFixed(0) + '% good</span></div>'
     + '<div style="display:flex;gap:2px;height:10px;overflow:hidden;background:var(--admin-surface-2)">'
-    + (goodPct > 0 ? '<div style="width:' + goodPct.toFixed(1) + '%;background:var(--leaf)" title="Good: ' + goodPct.toFixed(1) + '%"></div>' : "")
+    + (goodPct > 0 ? '<div style="width:' + goodPct.toFixed(1) + '%;background:var(--teal)" title="Good: ' + goodPct.toFixed(1) + '%"></div>' : "")
     + (niPct > 0 ? '<div style="width:' + niPct.toFixed(1) + '%;background:var(--sun)" title="Needs improvement: ' + niPct.toFixed(1) + '%"></div>' : "")
     + (poorPct > 0 ? '<div style="width:' + poorPct.toFixed(1) + '%;background:var(--berry)" title="Poor: ' + poorPct.toFixed(1) + '%"></div>' : "")
     + '</div></div>';
@@ -11417,7 +11456,7 @@ function renderAnalyticsLoaded(data){
   const statTile = (icon, label, value, note, deltaPct, sparkValues) => '<div class="admin-card">'
     + '<div class="row-between" style="align-items:flex-start;gap:8px">'
     + '<span class="admin-meta" style="text-transform:uppercase;letter-spacing:.07em;font-size:.66rem;font-weight:800;margin:0">' + E(label) + '</span>'
-    + '<span class="admin-badge admin-badge--lg admin-badge--brand">' + ic(icon) + '</span></div>'
+    + '<span class="admin-badge admin-badge--md admin-badge--brand">' + ic(icon) + '</span></div>'
     + '<div class="row" style="gap:8px;align-items:baseline;margin-top:10px">'
     + '<div style="font-size:1.7rem;font-weight:800;font-family:var(--admin-font-mono);color:var(--admin-ink);line-height:1">' + value + '</div>'
     + (typeof deltaPct === "number" ? '<span style="display:inline-flex;align-items:center;gap:2px;font-size:.72rem;font-weight:700;color:' + (deltaPct >= 0 ? "var(--admin-good)" : "var(--admin-bad)") + '">' + ic(deltaPct >= 0 ? "trending-up" : "trending-down") + " " + Math.abs(deltaPct).toFixed(1) + '%</span>' : "")
@@ -11449,14 +11488,33 @@ function renderAnalyticsLoaded(data){
     + statTile("activity", "Daily average", avgPerDay.toLocaleString(), "views per day over " + plural(days, "day"))
     + '</div>'
 
-    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:20px;margin-bottom:20px;align-items:stretch">'
+    + '<div class="grid" style="grid-template-columns:1fr 1.4fr;gap:20px;align-items:start">'
+
+    + '<div class="stack" style="gap:20px">'
+
+    + '<div class="admin-card">'
+    + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("globe") + 'Visitor countries</h3>'
+    + '<p class="admin-meta" style="margin:2px 0 14px">Country-level only - Web Analytics never identifies an individual visitor.</p>'
+    + '<div style="max-width:480px;margin:0 auto">' + countryMapHTML(data.byCountry) + '</div>'
+    + '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--admin-border)">' + verticalBarChart(data.byCountry, "country", null, "country") + '</div>'
+    + '</div>'
+
+    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("link") + 'Where visitors come from</h3>'
+      + '<p class="admin-meta" style="margin:2px 0 14px">The site that sent them here, when known.</p>'
+      + (data.byReferer.length ? verticalBarChart(data.byReferer, "host", null, "host")
+          : '<p class="admin-meta">No referrers recorded - most visits arrived directly (a bookmark, a typed address, or a link that does not send one).</p>')
+      + '</div>'
+
+    + '</div>'
+
+    + '<div class="stack" style="gap:20px">'
 
     + (data.webVitals.lcp.total ? '<div class="admin-card">'
       + '<div class="row-between" style="flex-wrap:wrap;gap:10px"><div>'
       + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("gauge") + 'Core Web Vitals</h3>'
       + '<p class="admin-meta" style="margin:2px 0 0">Real-user performance from the same beacon that powers the traffic above.</p></div>'
       + '<div class="row" style="gap:14px;flex-wrap:wrap">'
-      + '<span style="display:inline-flex;align-items:center;gap:5px;font-size:.72rem;color:var(--admin-mute)"><span style="width:8px;height:8px;border-radius:50%;background:var(--leaf)"></span>Good</span>'
+      + '<span style="display:inline-flex;align-items:center;gap:5px;font-size:.72rem;color:var(--admin-mute)"><span style="width:8px;height:8px;border-radius:50%;background:var(--teal)"></span>Good</span>'
       + '<span style="display:inline-flex;align-items:center;gap:5px;font-size:.72rem;color:var(--admin-mute)"><span style="width:8px;height:8px;border-radius:50%;background:var(--sun)"></span>Needs improvement</span>'
       + '<span style="display:inline-flex;align-items:center;gap:5px;font-size:.72rem;color:var(--admin-mute)"><span style="width:8px;height:8px;border-radius:50%;background:var(--berry)"></span>Poor</span>'
       + '</div></div>'
@@ -11473,6 +11531,11 @@ function renderAnalyticsLoaded(data){
       + '</div>'
       + '</div>' : "")
 
+    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("file-text") + 'Top pages</h3>'
+      + '<p class="admin-meta" style="margin:2px 0 14px">Where visitors actually land and stay.</p>'
+      + verticalBarChart(data.byPath, "path", null, "path")
+      + '</div>'
+
     + '<div class="admin-card">'
     + '<div class="row-between" style="flex-wrap:wrap;gap:10px"><div>'
     + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("trending-up") + 'Page views over time</h3>'
@@ -11481,24 +11544,6 @@ function renderAnalyticsLoaded(data){
     + '<div style="margin-top:12px">' + analyticsLineChart(data.byDate) + '</div>'
     + '</div>'
 
-    + '</div>'
-    + '<div class="grid" style="grid-template-columns:1fr 1fr;gap:20px;align-items:start">'
-    + '<div class="admin-card">'
-    + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("globe") + 'Visitor countries</h3>'
-    + '<p class="admin-meta" style="margin:2px 0 14px">Country-level only - Web Analytics never identifies an individual visitor.</p>'
-    + '<div style="max-width:480px;margin:0 auto">' + countryMapHTML(data.byCountry) + '</div>'
-    + '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--admin-border)">' + verticalBarChart(data.byCountry, "country", null, "country") + '</div>'
-    + '</div>'
-    + '<div class="stack" style="gap:20px">'
-    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("file-text") + 'Top pages</h3>'
-      + '<p class="admin-meta" style="margin:2px 0 14px">Where visitors actually land and stay.</p>'
-      + verticalBarChart(data.byPath, "path", null, "path")
-      + '</div>'
-    + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("link") + 'Where visitors come from</h3>'
-      + '<p class="admin-meta" style="margin:2px 0 14px">The site that sent them here, when known.</p>'
-      + (data.byReferer.length ? verticalBarChart(data.byReferer, "host", null, "host")
-          : '<p class="admin-meta">No referrers recorded - most visits arrived directly (a bookmark, a typed address, or a link that does not send one).</p>')
-      + '</div>'
     + '</div>'
     + '</div>';
 }
@@ -11524,13 +11569,13 @@ function adminAnalytics(){
         : renderAnalyticsLoaded(a.data));
 }
 
-/* Same status->color mapping statusPill()/STATUS_BADGE already use
-   everywhere else in this portal, reused here so the dashboard's own
-   charts read as the same system rather than a second, disconnected
-   color language. */
+/* The dashboard's own workflow-stage colors - the site's brand cast
+   (one character color per stage) rather than the generic admin status
+   tokens statusPill()/STATUS_BADGE use elsewhere, per stage-by-stage
+   direction given while reviewing this exact chart. */
 function pipelineSegColor(id){
-  return { review:"var(--admin-info)", revision:"var(--admin-warn)", approved:"var(--admin-info)",
-    scheduled:"var(--admin-info)", published:"var(--admin-good)" }[id] || "var(--admin-neutral)";
+  return { draft:"var(--plum)", review:"var(--mint)", revision:"var(--admin-warn)", approved:"var(--admin-info)",
+    scheduled:"var(--admin-info)", published:"var(--teal)" }[id] || "var(--admin-neutral)";
 }
 /** "1 (0%)" reads as a contradiction - round(1/221) genuinely is 0, but
     showing "0%" next to a nonzero count looks like a bug rather than a
@@ -11618,7 +11663,7 @@ function adminDashboard(){
        real numbers the rest of the page shows, never a rosier separate
        narrative. */
     + '<div class="admin-card" style="margin-bottom:20px;border:none;color:#fff;overflow:hidden;position:relative;padding:26px 28px;'
-      + 'background:linear-gradient(115deg,#142B66 0%,#1E40AF 58%,#4B74C9 100%)">'
+      + 'background:linear-gradient(115deg,var(--admin-accent-ink) 0%,var(--admin-accent) 55%,#7595BD 100%)">'
     + '<div class="grid" style="grid-template-columns:1.5fr 1fr;gap:24px;align-items:center">'
     + '<div style="min-width:0">'
     + '<span style="display:inline-flex;align-items:center;gap:7px;font-size:.68rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:#BFD4EE">'
@@ -11653,7 +11698,8 @@ function adminDashboard(){
         const compose = ["draft","review","revision","approved","scheduled","published"]
           .map(id => ({ s: statusMeta(id), n: pipeline.find(p => p.s.id === id).n }))
           .filter(p => p.n > 0);
-        const stages = STATUSES.map(s => ({ s:s, n: pipeline.find(p => p.s.id === s.id).n, denom: s.id === "archived" ? total : activeTotal }));
+        const stageOrder = ["draft","review","published","approved","scheduled","revision","archived"];
+        const stages = stageOrder.map(id => { const s = statusMeta(id); return { s:s, n: pipeline.find(p => p.s.id === id).n, denom: id === "archived" ? total : activeTotal }; });
         const interpretation = needsAttention === 0
           ? "All active content is already published, with nothing currently blocking a new release."
           : "Most content is already published. The near-term workflow focus is clearing the " + plural(needsAttention, "item") + " above, then moving any in-review work through approval. Draft volume alone does not indicate a problem - age and publishing intent should guide prioritization.";
@@ -11662,20 +11708,16 @@ function adminDashboard(){
           + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("layers") + 'Content workflow</h3>'
           + '<p class="admin-meta" style="margin:2px 0 0">' + plural(total, "total record") + (archived ? " &middot; " + plural(archived, "archived record") + " excluded from active content health" : "") + '.</p></div>'
           + '<span class="admin-chip">CMS overview</span></div>'
-          + '<div class="row" style="gap:24px;flex-wrap:wrap;align-items:center;margin-top:16px">'
+          + '<div class="row" style="gap:20px;flex-wrap:wrap;align-items:center;margin-top:16px">'
           + donutChart(compose.map(p => ({ label: p.s.label, value: p.n, color: pipelineSegColor(p.s.id) })), 150)
-          + '<div class="stack" style="gap:8px;flex:1;min-width:180px">'
+          + '<div class="stack" style="gap:8px;flex:1 1 200px;min-width:200px">'
           + compose.map(p => '<span style="display:flex;align-items:center;gap:8px;font-size:.82rem">'
               + '<span style="width:10px;height:10px;border-radius:2px;background:' + pipelineSegColor(p.s.id) + ';flex:none"></span>'
-              + '<span style="color:var(--admin-mute);flex:1">' + E(p.s.label) + '</span>'
-              + '<b class="t-mono" style="color:var(--admin-ink)">' + p.n + ' &middot; ' + sharePct(p.n, activeTotal) + '</b></span>').join("")
-          + '</div></div>'
-          + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:18px">'
-          + stages.map(p => { const b = STATUS_BADGE[p.s.id] || STATUS_BADGE.draft; const pct = p.denom ? (p.n / p.denom) * 100 : 0;
-              return '<div class="admin-card admin-card--flat" style="padding:13px' + (p.s.id === "published" ? ";background:var(--admin-good-soft)" : "") + '">'
-                + '<div class="row-between" style="align-items:center">'
+              + '<span style="color:var(--admin-mute)">' + E(p.s.label) + '</span></span>').join("")
+          + '</div>'
+          + stages.map(p => { const pct = p.denom ? (p.n / p.denom) * 100 : 0;
+              return '<div class="admin-card admin-card--flat" style="flex:1 1 110px;min-width:110px;padding:13px;background:' + (p.s.id === "published" ? "var(--admin-good-soft)" : "var(--admin-surface)") + '">'
                 + '<span style="font-size:.72rem;font-weight:700">' + E(p.s.label) + '</span>'
-                + '<span class="admin-badge admin-badge--sm ' + b.cls + '">' + ic(b.icon) + '</span></div>'
                 + '<div style="font-size:1.4rem;font-weight:800;font-family:var(--admin-font-mono);margin-top:8px">' + p.n + '</div>'
                 + '<div class="admin-meta" style="margin-top:2px">' + sharePct(p.n, p.denom) + ' of records</div>'
                 + '<div class="admin-progress-track" style="margin-top:8px"><div class="admin-progress-fill" style="width:' + Math.max(pct,1).toFixed(1) + '%;background:' + pipelineSegColor(p.s.id) + '"></div></div>'
@@ -17541,6 +17583,17 @@ function render(){
   renderQuickUpdatePanel();
 
   document.title = routeTitle() + " | " + BRAND.name;
+  updateCanonicalLink();
+}
+
+/** Collapses whatever address got somebody here - a query string, an old
+    hash link, a trailing slash - to one canonical URL per route, so
+    search engines don't index multiple addresses for the same content. */
+function updateCanonicalLink(){
+  const link = document.getElementById("canonical-link");
+  if (!link) return;
+  const route = Router.current().split("?")[0].replace(/^\/+/, "");
+  link.href = SITE_ORIGIN + "/" + route;
 }
 
 function routeTitle(){
