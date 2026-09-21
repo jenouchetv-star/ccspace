@@ -3227,9 +3227,22 @@ async function compressThumbForUpload(file){
     with nothing new to migrate. Pairs with the data-full fallback below:
     if a particular image predates this feature and has no "-thumb"
     sibling yet, the broken request swaps back to the real image instead
-    of showing a broken-image icon. */
+    of showing a broken-image icon.
+
+    Only a local asset or something this app's own upload pipeline wrote
+    to Supabase Storage ever actually has a "-thumb" sibling file - an
+    external URL (a YouTube thumbnail, a partner's own image host) never
+    does, and guessing one for it doesn't just 404 the way a stale local
+    upload would: YouTube's CDN, for one, answers an unrecognized
+    /vi/<id>/... path with a 404 status but a real, decodable tiny grey
+    placeholder image in the body, which browsers treat as a *successful*
+    <img> load (no "error" event fires, since decoding succeeded) - so the
+    data-full fallback below never gets a chance to run and the wrong tiny
+    image sticks around permanently instead of swapping back. Passing
+    external URLs through unchanged avoids the whole failure mode. */
 function thumbSrc(src){
   if (!src) return src;
+  if (/^https?:\/\//i.test(src) && src.indexOf(SUPABASE_URL) !== 0) return src;
   const q = src.indexOf("?");
   const base = q >= 0 ? src.slice(0, q) : src;
   const suffix = q >= 0 ? src.slice(q) : "";
@@ -3662,6 +3675,29 @@ function saveLocalUI(data){
   try { localStorage.setItem(LOCAL_UI_KEY, JSON.stringify(data)); } catch(_e){}
 }
 
+/** Privacy/Terms are the one place on this site where "what did it say on
+    a given date" is a real compliance question, not just curiosity - so
+    unlike every other pages record, an edit here also keeps the text it's
+    replacing. Checked inside db.update() itself, the one write path both
+    the full admin editor ("save-record") and Quick Update's inline edits
+    already go through, so neither one can accidentally skip it. Capped at
+    50 entries - generous for a legal page that changes rarely, without
+    growing the record unboundedly. */
+const LEGAL_HISTORY_KEYS = ["privacy", "terms"];
+const LEGAL_HISTORY_FIELDS = ["eyebrow", "heading", "highlight", "tone", "intro", "body"];
+function withLegalHistory(col, rec, patch){
+  if (col !== "pages" || LEGAL_HISTORY_KEYS.indexOf(rec.key) < 0) return patch;
+  const changed = LEGAL_HISTORY_FIELDS.some(f => f in patch && patch[f] !== rec[f]);
+  if (!changed) return patch;
+  const snapshot = {
+    at: rec.updatedAt || rec.createdAt || nowISO(),
+    actor: (AuthState.profile && (AuthState.profile.name || AuthState.profile.email)) || "system"
+  };
+  LEGAL_HISTORY_FIELDS.forEach(f => { snapshot[f] = rec[f] || ""; });
+  const history = [snapshot].concat(rec.history || []).slice(0, 50);
+  return Object.assign({}, patch, { history: history });
+}
+
 let realDb = {
   _cache: null,
 
@@ -3703,6 +3739,14 @@ let realDb = {
     if (isActiveAdmin()){
       const adminReads = await Promise.all(ADMIN_ONLY_COLLECTIONS.map(fetchCol));
       ADMIN_ONLY_COLLECTIONS.forEach((col, i) => { d[col] = adminReads[i]; });
+      /* db.log() documents auditLog as "newest first" (every in-session
+         write goes in via unshift()), but a plain select() here has no
+         guaranteed order - re-sort once, right after the fetch, so every
+         reader (the audit log table, the dashboard's recent-activity
+         widget) can keep trusting that contract instead of each needing
+         its own sort. */
+      const auditIdx = ADMIN_ONLY_COLLECTIONS.indexOf("auditLog");
+      if (auditIdx >= 0) d.auditLog.sort((a, b) => new Date(b.at) - new Date(a.at));
     } else {
       ADMIN_ONLY_COLLECTIONS.forEach(col => { d[col] = []; });
     }
@@ -3758,6 +3802,7 @@ let realDb = {
     const d = this.get();
     const rec = (d[col] || []).find(r => r.id === id);
     if (!rec) return null;
+    patch = withLegalHistory(col, rec, patch);
     if (LOCAL_ONLY_COLLECTIONS.indexOf(col) >= 0){
       Object.assign(rec, patch, { updatedAt: nowISO() });
       this.saveLocal();
@@ -10362,6 +10407,7 @@ function openEditor(col, id, overlay){
     + '<h3 class="admin-section-title" style="margin-top:4px;text-transform:none">' + E(rec.title || rec.name || rec.path || ("New " + label)) + '</h3>'
     + '</div><button type="button" class="admin-btn admin-btn--ghost admin-btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
     + (col === "pages" && rec.key ? pageListBlocksPanel(rec.key) : "")
+    + (col === "pages" && LEGAL_HISTORY_KEYS.indexOf(rec.key) >= 0 ? legalHistoryPanelHTML(rec) : "")
     + '<form data-act="save-record" data-col="' + E(col) + '" data-id="' + E(id || "") + '">'
     + '<div class="modal__body">'
     + '<div data-valbox>' + (problems.length ? validationBox(problems) : "") + '</div>'
@@ -15239,6 +15285,81 @@ function faqsToGroups(items){
   return order.map(g => ({ g:g, items:byGroup[g] }));
 }
 
+/** Version history panel shown inside the pages editor for Privacy/Terms
+    only (see LEGAL_HISTORY_KEYS/withLegalHistory() near db.update()).
+    Sits outside the <form>, like pageListBlocksPanel() below, since its
+    own View/Restore buttons must never submit the surrounding
+    save-record form. */
+function legalHistoryPanelHTML(rec){
+  const history = rec.history || [];
+  return '<div class="admin-card admin-card--flat" style="margin-bottom:16px">'
+    + '<p class="admin-eyebrow" style="margin:0 0 10px">Version history</p>'
+    + (history.length === 0
+        ? '<p class="admin-meta" style="margin:0">No earlier versions yet - saving a change to this page will start one.</p>'
+        : '<div class="stack" style="gap:0">' + history.map((h, i) =>
+            '<div class="row-between" style="gap:10px;padding:8px 0;border-bottom:1px solid var(--admin-border)">'
+            + '<div><b style="font-size:.85rem">' + E(fmtDate(h.at, true)) + '</b>'
+            + '<p class="admin-meta" style="margin:2px 0 0">Edited by ' + E(h.actor) + '</p></div>'
+            + '<div class="row" style="gap:6px;flex:none">'
+            + '<button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" data-act="legal-history-view" data-id="' + E(rec.id) + '" data-idx="' + i + '">' + ic("eye") + ' View</button>'
+            + '<button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" data-act="legal-history-restore" data-id="' + E(rec.id) + '" data-idx="' + i + '">' + ic("rotate-ccw") + ' Restore</button>'
+            + '</div></div>').join("") + '</div>')
+    + '</div>';
+}
+
+/** Read-only view of one saved version - reached from "View" above, and
+    also from the same version's own "Restore" button, so an admin doesn't
+    have to restore blind. */
+function legalHistoryViewHTML(pageId, idx){
+  const rec = db.find("pages", pageId);
+  const h = rec && rec.history && rec.history[idx];
+  if (!h) return '<div class="admin-scope"><div class="modal__body"><p>That version is no longer available.</p></div></div>';
+  return '<div class="admin-scope" style="font-family:var(--admin-font-body);color:var(--admin-ink)">'
+    + '<div class="modal__head"><div><span class="admin-eyebrow">Version from ' + E(fmtDate(h.at, true)) + '</span>'
+    + '<h3 class="admin-section-title" style="margin-top:4px;text-transform:none">Edited by ' + E(h.actor) + '</h3></div>'
+    + '<button type="button" class="admin-btn admin-btn--ghost admin-btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
+    + '<div class="modal__body">'
+    + '<div class="admin-card admin-card--flat"><p class="admin-eyebrow">Heading</p><p style="margin:6px 0 0">' + E(h.heading || "(built-in wording)") + '</p></div>'
+    + '<div class="admin-card admin-card--flat" style="margin-top:12px"><p class="admin-eyebrow">Intro</p><div class="prose" style="margin-top:6px">' + sanitizeHTML(h.intro || "") + '</div></div>'
+    + '<div class="admin-card admin-card--flat" style="margin-top:12px"><p class="admin-eyebrow">Body</p><div class="prose" style="margin-top:6px">' + sanitizeHTML(h.body || "") + '</div></div>'
+    + '</div>'
+    + '<div class="modal__foot">'
+    + '<button type="button" class="admin-btn admin-btn--ghost" data-act="close-modal">Close</button>'
+    + '<button type="button" class="admin-btn admin-btn--primary" data-act="legal-history-restore" data-id="' + E(pageId) + '" data-idx="' + idx + '">' + ic("rotate-ccw") + ' Restore this version</button>'
+    + '</div></div>';
+}
+
+/** Restoring overwrites the live page right now, same "explicit typed-
+    intent confirm" rule as confirmDelete() - the difference is this one
+    isn't actually destructive: the text being replaced becomes a new
+    history entry of its own (withLegalHistory() runs on every db.update(),
+    restores included), so restoring is itself always undoable too. */
+let PENDING_RESTORE_LEGAL_VERSION = null;
+function confirmRestoreLegalVersion(rec, h){
+  openModal(
+    '<div class="admin-scope" style="font-family:var(--admin-font-body);color:var(--admin-ink)">'
+    + '<div class="modal__head"><div>'
+    + '<span class="admin-eyebrow">Restore version</span>'
+    + '<h3 class="admin-section-title" style="margin-top:4px;text-transform:none">Restore the version from ' + E(fmtDate(h.at, true)) + '?</h3>'
+    + '</div><button type="button" class="admin-btn admin-btn--ghost admin-btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
+    + '<div class="admin-callout admin-callout--warn">' + ic("triangle-alert")
+    + '<span>This replaces the live heading, intro, and body with this older version right now. The current text is not lost - it becomes a new entry in this same history.</span></div>'
+    + '<div class="modal__foot">'
+    + '<button type="button" class="admin-btn admin-btn--ghost" data-act="close-modal">Cancel</button>'
+    + '<button type="button" class="admin-btn admin-btn--primary" data-act="confirm-restore-legal-version-yes">' + ic("rotate-ccw") + ' Yes, restore it</button>'
+    + '</div></div>',
+    null, "admin-modal"
+  );
+  PENDING_RESTORE_LEGAL_VERSION = async () => {
+    const patch = {};
+    LEGAL_HISTORY_FIELDS.forEach(f => { patch[f] = h[f] || ""; });
+    try { await db.update("pages", rec.id, patch); }
+    catch(_e){ return; }
+    toast("Restored the version from " + fmtDate(h.at, true) + ".");
+    rerender();
+  };
+}
+
 /** The "Page content blocks" panel shown inside the pages editor for a
     page that has any - one button per block, opening its list editor. */
 function pageListBlocksPanel(pageKey){
@@ -17699,6 +17820,12 @@ const FAQS = [
 /* ============================================================
    21d. LEGAL PAGES
    ============================================================ */
+/** Fallback wording only, for the moment before either page has ever been
+    saved through the admin editor (a fresh, unseeded pages table). Once a
+    real "privacy"/"terms" pages record exists, legalPage() below reads its
+    actual updatedAt instead - editing either page through the portal keeps
+    this date honest automatically, rather than needing a developer to
+    hand-edit this constant and redeploy every time the text changes. */
 const LEGAL_UPDATED = { privacy: "19 September 2026", terms: "18 September 2026" };
 
 /** Converts a legal page's section outline (heading + paragraphs, some as
@@ -17714,10 +17841,12 @@ function sectionsToHTML(sections){
 }
 
 function legalPage(key, eyebrow, title, intro){
+  const r = pageRec(key);
+  const lastUpdated = r && r.updatedAt ? fmtDate(r.updatedAt) : LEGAL_UPDATED[key];
   return cmsHeader(key, eyebrow, title, intro)
     + '<section class="section"><div class="shell" style="max-width:820px">'
     + '<div class="panel">'
-    + '<p class="tiny mute" style="margin-top:0">Last updated ' + E(LEGAL_UPDATED[key]) + '</p>'
+    + '<p class="tiny mute" style="margin-top:0">Last updated ' + E(lastUpdated) + '</p>'
     + cmsBody(key)
     + '</div>'
     + '<div class="panel" style="margin-top:40px"><h3>Questions about this page</h3>'
@@ -18933,6 +19062,15 @@ const ACTIONS = {
     f();
   },
   "confirm-send-newsletter-yes": () => { if (PENDING_SEND_NEWSLETTER){ const f = PENDING_SEND_NEWSLETTER; PENDING_SEND_NEWSLETTER = null; f(); } },
+  "legal-history-view": (el) => {
+    openModal(legalHistoryViewHTML(el.getAttribute("data-id"), Number(el.getAttribute("data-idx"))), null, "admin-modal");
+  },
+  "legal-history-restore": (el) => {
+    const rec = db.find("pages", el.getAttribute("data-id"));
+    const h = rec && rec.history && rec.history[Number(el.getAttribute("data-idx"))];
+    if (rec && h) confirmRestoreLegalVersion(rec, h);
+  },
+  "confirm-restore-legal-version-yes": () => { if (PENDING_RESTORE_LEGAL_VERSION){ const f = PENDING_RESTORE_LEGAL_VERSION; PENDING_RESTORE_LEGAL_VERSION = null; closeModal(); f(); } },
   "confirm-schedule-newsletter-yes": () => { if (PENDING_SCHEDULE_NEWSLETTER){ const f = PENDING_SCHEDULE_NEWSLETTER; PENDING_SCHEDULE_NEWSLETTER = null; f(); } },
 
   /* ---- admin: send-newsletter compose ---- */
