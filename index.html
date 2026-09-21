@@ -325,6 +325,17 @@ p:last-child{ margin-bottom:0; }
 .pagehead__aside .eyebrow{ margin-bottom:6px; }
 .pagehead__aside h2{ font-size:clamp(1.1rem,1.7vw,1.35rem); margin:0 0 12px; line-height:1.2; }
 @media (max-width:900px){ .pagehead__grid{ grid-template-columns:1fr; } }
+/* One page's banner photo (Grown-Ups) reading as too large at the default
+   near-even split - narrower than pagehead--split's usual 1:1.08, not a
+   change to that shared ratio itself. */
+.pagehead--narrow-aside .pagehead__grid{ grid-template-columns:minmax(0,1.5fr) minmax(0,.8fr); }
+@media (max-width:900px){
+  .pagehead--narrow-aside .pagehead__grid{ grid-template-columns:1fr; }
+  /* Photo first, then the read - on a stacked single column, source order
+     (copy, then aside) put the photo last, well below the fold. */
+  .pagehead--narrow-aside .pagehead__grid > :first-child{ order:2; }
+  .pagehead--narrow-aside .pagehead__aside{ order:1; }
+}
 
 /* A banner carrying a proper column of copy rather than one sentence. */
 .pagehead--deep{ padding:clamp(22px,2.6vw,38px) 0; }
@@ -822,7 +833,7 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
   }
   .paths.paths--hero{
     grid-area:stage; position:relative; z-index:2;
-    align-self:end; margin:0 0 118px;
+    align-self:end; margin:0 0 134px;
     gap:10px;
   }
   .paths--hero .path{
@@ -1133,6 +1144,16 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
   gap:clamp(22px,3vw,40px); align-items:start;
 }
 @media (max-width:900px){ .detail__hero{ grid-template-columns:1fr; } }
+/* Character pages only - a portrait (4:5) photo reads as too large taking
+   the same ~45% share of the row a 16:11 activity/game cover does. */
+.detail__hero--narrow-cover{ grid-template-columns:minmax(0,1.6fr) minmax(0,.7fr); }
+@media (max-width:900px){
+  .detail__hero--narrow-cover{ grid-template-columns:1fr; }
+  /* Photo first, then the read - on a stacked single column, source order
+     (panel, then cover) put the portrait last, well below the fold. */
+  .detail__hero--narrow-cover > div:first-child{ order:2; }
+  .detail__hero--narrow-cover > .detail__cover{ order:1; }
+}
 .detail__cover{ position:relative; aspect-ratio:16/11; border:var(--line); border-radius:var(--r-lg); overflow:hidden; box-shadow:var(--hard); }
 .detail__cover img{ width:100%; height:100%; object-fit:cover; }
 
@@ -1793,27 +1814,126 @@ body.is-admin .rt{ background:#FFFFFF; }
 /* ============================================================ BACK TO TOP
    One button, rendered once in the app shell (not per-route, so it survives
    every render() rebuild of #app), shown once the page has scrolled a
-   little. Left side so it never sits under the toast stack, and lifted
-   clear of the phone-only bottom tab bar (body.has-bottom-nav) rather than
-   overlapping it. */
+   little. Bottom-center, clear of the tour avatar/toast stack (both
+   bottom-right) and lifted clear of the phone-only bottom tab bar
+   (body.has-bottom-nav) rather than overlapping it. */
 .back-to-top{
-  position:fixed; right:18px; bottom:18px; z-index:950;
+  position:fixed; left:50%; bottom:18px; z-index:950;
   width:46px; height:46px; border-radius:50%;
   display:flex; align-items:center; justify-content:center;
   background:var(--paper-card); color:var(--ink); border:var(--line);
   box-shadow:var(--hard-sm); cursor:pointer; padding:0;
-  opacity:0; transform:translateY(10px); pointer-events:none;
+  opacity:0; transform:translateX(-50%) translateY(10px); pointer-events:none;
   transition:opacity .18s ease, transform .18s ease;
 }
 .back-to-top svg{ width:20px; height:20px; }
-.back-to-top.is-visible{ opacity:1; transform:translateY(0); pointer-events:auto; }
-.back-to-top:hover{ background:#FFFFFF; transform:translateY(-2px); }
-.back-to-top.is-visible:hover{ transform:translateY(-2px); }
+.back-to-top.is-visible{ opacity:1; transform:translateX(-50%) translateY(0); pointer-events:auto; }
+.back-to-top:hover{ background:#FFFFFF; transform:translateX(-50%) translateY(-2px); }
+.back-to-top.is-visible:hover{ transform:translateX(-50%) translateY(-2px); }
 body.has-bottom-nav .back-to-top{ bottom:calc(18px + var(--bottom-nav-h, 0px)); }
 @media (max-width:767px){
   body.has-bottom-nav{ --bottom-nav-h:64px; }
 }
 @media (prefers-reduced-motion: reduce){ .back-to-top{ transition:none; } }
+
+/* ============================================================ SITE TOUR
+   Same "one root, rendered once in the app shell, refreshed at the tail
+   of every render()" pattern as the quick-update panel - see
+   renderTourRoot(). Bottom-right, the same corner the toast stack already
+   uses (toasts are transient and rare, same tradeoff back-to-top used to
+   accept there). Never shown on /admin - see body.is-admin below and
+   renderTourRoot()'s own route check. */
+.tour-avatar{
+  position:fixed; right:18px; bottom:8px; z-index:960;
+  width:72px; height:72px; border-radius:50%; padding:0; cursor:pointer;
+  border:var(--line); background:var(--paper-card); box-shadow:var(--hard-sm);
+  overflow:hidden;
+}
+.tour-avatar img{ width:100%; height:100%; object-fit:cover; display:block; filter:brightness(1.22); }
+.tour-avatar:hover{ transform:translateY(-2px); }
+body.has-bottom-nav .tour-avatar{ bottom:calc(8px + var(--bottom-nav-h, 0px)); }
+.tour-bubble{
+  position:fixed; right:18px; z-index:960;
+  bottom:calc(8px + 72px + 10px);
+  max-width:min(240px, calc(100vw - 36px));
+  background:var(--paper-card); border:var(--line); border-radius:14px 14px 4px 14px;
+  box-shadow:var(--hard-sm); padding:10px 14px; font-size:.85rem; font-weight:700;
+}
+body.has-bottom-nav .tour-bubble{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 72px + 10px); }
+/* Desktop-only invitation - on a phone the avatar alone (already visible,
+   already tappable) is enough; the bubble competing with a narrow
+   viewport's own content is the tradeoff this skips. */
+@media (max-width:767px){ .tour-bubble{ display:none; } }
+
+/* The dim + outline are one element (a giant box-shadow spread doubles as
+   the dim layer), positioned over the live target's own rect in JS - see
+   mountTourStep(). A box-shadow only paints OUTSIDE its own box, never
+   inside it, so the target underneath needs no z-index boost to stay
+   visible through it - .tour-target-lift (below) is purely a marker
+   class mountTourStep()/teardownTourStep() use to find and clean up
+   "whichever element is currently the target", not a stacking mechanism.
+   That matters here specifically: an earlier version DID lift the
+   target's z-index, which broke every sticky sub-nav bar the target
+   happened to scroll underneath (the target would then render above the
+   sticky bar instead of correctly ducking under it). pointer-events:none
+   on the spotlight itself is what actually keeps the spec's "never
+   blocks ordinary browsing" requirement true by construction. z-index
+   sits above ordinary chrome (.qu-panel/.back-to-top, 900-960) but below
+   the modal/toast/sheet/lock layers (1000+), so any of those still
+   correctly win if shown at once. */
+.tour-spotlight{
+  position:fixed; border-radius:8px; outline:3px solid var(--cyan);
+  box-shadow:0 0 0 9999px rgba(10,14,20,.55), 0 0 24px 4px rgba(18,115,176,.35);
+  pointer-events:none; z-index:980;
+  transition:top .2s ease, left .2s ease, width .2s ease, height .2s ease;
+}
+@media (prefers-reduced-motion: reduce){ .tour-spotlight{ transition:none; } }
+
+.tour-card{
+  position:fixed; z-index:982; width:min(300px, calc(100vw - 36px));
+  background:var(--paper-card); border:var(--line); border-radius:14px;
+  box-shadow:var(--hard-sm); padding:16px;
+  transition:top .2s ease, left .2s ease;
+}
+@media (prefers-reduced-motion: reduce){ .tour-card{ transition:none; } }
+.tour-card h3{ margin:0 0 6px; font-size:1rem; }
+.tour-card p{ margin:0 0 12px; font-size:.88rem; color:var(--ink-mute); }
+.tour-card__foot{ display:flex; flex-direction:column; align-items:center; gap:8px; }
+.tour-card__step{ font-size:.75rem; font-weight:800; color:var(--ink-mute); }
+/* Small screens: a fixed bottom bar instead of edge-relative placement -
+   next to a highlighted element on a phone-width viewport, an edge-
+   anchored card would as often as not overlap the very thing it is
+   explaining. */
+@media (max-width:767px){
+  .tour-card{
+    left:0; right:0; bottom:0; top:auto; width:100%;
+    border-radius:16px 16px 0 0; padding-bottom:calc(16px + env(safe-area-inset-bottom));
+  }
+}
+body.is-admin .tour-avatar, body.is-admin .tour-bubble,
+body.is-admin .tour-spotlight, body.is-admin .tour-card{ display:none; }
+/* The welcome/completion dialog is a short, friendly popup, not a form -
+   the shared .modal's 880px default (sized for the admin content editor)
+   reads as oversized for it, and the shared .scrim's dark backdrop (built
+   for a "you must resolve this" dialog like confirm-delete) reads as too
+   heavy for a friendly, skippable invitation - lightened here only, via
+   :has(), rather than for every other modal in the app. */
+.tour-modal{ width:min(480px,100%); }
+.scrim:has(.tour-modal){ background:rgba(20,12,4,.25); backdrop-filter:blur(1px); -webkit-backdrop-filter:blur(1px); }
+@media (max-width:767px){
+  .tour-modal__intro{ font-size:.92rem; }
+  .tour-modal__cta{ padding:11px 27px; min-height:46px; }
+}
+/* "Not now"/"Skip tour" are the one-click-away-from-nothing exits, not
+   real actions - a plain tertiary link reads as lower-commitment than a
+   bordered pill button, matching that. Underlined, not color-alone, so
+   it still reads as clickable without relying on color. */
+.tour-link-btn{
+  background:none; border:0; padding:4px 2px; cursor:pointer;
+  color:var(--cyan); font-weight:800; font-size:.85rem;
+  text-decoration:underline; text-underline-offset:3px;
+}
+.tour-link-btn:hover{ color:var(--cyan-deep); }
 
 /* ============================================================ QUICK UPDATE PANEL
    Rendered once in the app shell (#quick-update-panel-root, a sibling of
@@ -1907,12 +2027,11 @@ body.has-bottom-nav .back-to-top{ bottom:calc(18px + var(--bottom-nav-h, 0px)); 
    of protection for the one component actually measured to need it. */
 .qu-panel{ width:400px; }
 body.qu-panel-open #app{ margin-right:400px; transition:margin-right .2s ease; }
-body.qu-panel-open .toast-wrap{ right:calc(18px + 400px); }
-body.qu-panel-open .back-to-top{ right:calc(18px + 400px); }
+body.qu-panel-open .toast-wrap, body.qu-panel-open .tour-avatar, body.qu-panel-open .tour-bubble{ right:calc(18px + 400px); }
 @media (max-width:1599px){
   /* Desktop-but-not-huge, and tablet: overlay, not dock. */
   body.qu-panel-open #app{ margin-right:0; transition:none; }
-  body.qu-panel-open .toast-wrap, body.qu-panel-open .back-to-top{ right:18px; }
+  body.qu-panel-open .toast-wrap, body.qu-panel-open .tour-avatar, body.qu-panel-open .tour-bubble{ right:18px; }
 }
 @media (max-width:1279px){
   /* Tablet: a panel sized for a tablet, not a full desktop sidebar -
@@ -2864,6 +2983,7 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 <div id="picker-root"></div>
 <div id="lock-root"></div>
 <div id="quick-update-panel-root"></div>
+<div id="tour-root"></div>
 <div id="chart-tooltip" class="chart-tooltip" role="tooltip"></div>
 <button type="button" class="back-to-top" id="back-to-top" data-act="scroll-top" aria-label="Back to top" aria-hidden="true" tabindex="-1"><i data-lucide="arrow-up" class="i"></i></button>
 <!-- Lucide icons: self-hosted first (works fully offline), CDN with Subresource Integrity as fallback. -->
@@ -3675,6 +3795,22 @@ function saveLocalUI(data){
   try { localStorage.setItem(LOCAL_UI_KEY, JSON.stringify(data)); } catch(_e){}
 }
 
+/** Guided-tour progress: a single per-visitor state blob, not a list of
+    records, so it rides along in the same local-only JSON blob as
+    dismissedAnnouncements/recentlyViewed/cart above rather than forcing
+    it into that array-of-records shape. A saved blob from before this
+    field existed won't have "tour" at all - both accessors guard that. */
+function tourState(){
+  const d = loadLocalUI();
+  return d.tour || { status:"not_started", stepIndex:0 };
+}
+function saveTourState(patch){
+  const d = loadLocalUI();
+  d.tour = Object.assign({ status:"not_started", stepIndex:0 }, d.tour, patch);
+  saveLocalUI(d);
+  return d.tour;
+}
+
 /** Privacy/Terms are the one place on this site where "what did it say on
     a given date" is a real compliance question, not just curiosity - so
     unlike every other pages record, an edit here also keeps the text it's
@@ -3767,14 +3903,20 @@ let realDb = {
       before the first render) - this never touches the network. */
   get(){ return this._cache; },
 
-  /** Persists only the two local-only collections; everything else is
-      written straight to Supabase by add/update/remove/duplicate below. */
+  /** Persists the local-only collections; everything else is written
+      straight to Supabase by add/update/remove/duplicate below. Merges
+      onto whatever's already saved (tourState()'s own "tour" key, most
+      notably) rather than replacing the whole blob - this used to write
+      a fresh object built from only these three fields, which silently
+      dropped anything else living in the same localStorage key every
+      time any page called this (e.g. noteView() on every detail-page
+      visit, including mid-tour). */
   saveLocal(){
-    saveLocalUI({
+    saveLocalUI(Object.assign({}, loadLocalUI(), {
       dismissedAnnouncements: this._cache.dismissedAnnouncements || [],
       recentlyViewed: this._cache.recentlyViewed || [],
       cart: this._cache.cart || []
-    });
+    }));
   },
 
   list(col){ return (this.get() || {})[col] || []; },
@@ -6516,6 +6658,80 @@ const PUBLIC_NAV = [
   { hash:"#/shop",       label:"Shop",       icon:"shopping-bag" }
 ];
 
+/** The guided tour's stops, one per PUBLIC_NAV entry above, in nav order -
+    see the tour engine near renderTourRoot(). "target" is the on-page
+    element to spotlight; when it isn't found (e.g. an admin has disabled
+    that homepage module) "fallbackTarget" is tried next, and if neither
+    exists the step still shows its guide text, unanchored - the tour
+    never aborts over a missing element. Copy is voiced as Chike himself
+    walking a visitor around, matching the avatar. */
+/* Targets point at the bounded-width .shell content box inside each
+   section, not the full-bleed <section> itself - a section spans the
+   whole page width, which highlighted as a "full-width strip" rather
+   than a box around the actual content. */
+const TOUR_STOPS = [
+  { key:"home", hash:"#/", navLabel:"Home", title:"Welcome to the studio", icon:"house",
+    target:".hero .hero__in", fallbackTarget:"#main",
+    body:"Hi, I'm Chike! This is home base - from here you can jump into Create, Play, Watch, or Read whenever you're ready.",
+    next:"Let's see where the making happens." },
+  { key:"create", hash:"#/create", navLabel:"Create", title:"Create", icon:"wand-sparkles",
+    target:"#finder .shell", fallbackTarget:".pagehead .shell, #main",
+    body:"Create is my favorite spot - hands-on activities and projects. Use these filters to find something by age, type, or material.",
+    next:"Next, a whole shelf of stories." },
+  { key:"stories", hash:"#/stories", navLabel:"Read", title:"Read", icon:"book-open",
+    target:".pagehead .shell", fallbackTarget:"#main",
+    body:"Read is our library of picture books. Pick a character or search to find a story to enjoy together.",
+    next:"Now let's watch something." },
+  { key:"watch", hash:"#/watch", navLabel:"Watch", title:"Watch", icon:"clapperboard",
+    target:".pagehead .shell", fallbackTarget:"#main",
+    body:"Watch has our animated episodes. Each one links back to an activity, so watching turns into doing.",
+    next:"Time for a quick game." },
+  { key:"play", hash:"#/play", navLabel:"Play", title:"Play", icon:"gamepad-2",
+    target:".pagehead .shell", fallbackTarget:"#main",
+    body:"Play has online games and offline, unplug-and-play games - switch between them with the tabs up top.",
+    next:"Come meet my friends." },
+  { key:"characters", hash:"#/characters", navLabel:"Meet Chike", title:"Meet Chike", icon:"users",
+    target:".pagehead .shell", fallbackTarget:"#main",
+    body:"This is where you meet Zech and the rest of our friends - each one has their own creative outlet. Tap a friend to see their activities, episodes, and story.",
+    next:"And here's a closer look at me." },
+  { key:"chike", hash:"#/characters/chike", navLabel:"Chike", title:"This is me!", icon:"user",
+    /* Just the photo, not the whole hero (photo + full bio text together) -
+       "This is me!" already points at the picture, and on mobile the
+       combined block runs much taller than the viewport once the two
+       columns stack, which pushed the photo out of view on scroll. */
+    target:".detail__cover", fallbackTarget:".shell, #main",
+    body:"This is me, Chike! I love dreaming up new ideas and building things out of whatever I can find. This page has my story, plus every activity and episode I'm in.",
+    next:"This next stop is for grown-ups." },
+  { key:"grown-ups", hash:"#/grown-ups", navLabel:"Grown-Ups", title:"Grown-Ups", icon:"shield-check",
+    target:".pagehead .shell", fallbackTarget:"#main",
+    body:"Grown-Ups is where parents and teachers find answers on ages, materials, safety, and classroom use.",
+    next:"Here's how to reach us." },
+  { key:"contact", hash:"#/grown-ups/contact", navLabel:"Contact us", title:"Contact us", icon:"send",
+    target:".pagehead .shell", fallbackTarget:"#main",
+    body:"Tell us what you need and we'll write back - a real person reads every message. If a step in an activity was confusing, that's exactly the kind of thing to tell us.",
+    next:"One more way to stay in touch." },
+  { key:"mailing-list", hash:"#/grown-ups/contact", navLabel:"Mailing list", title:"Stay in the loop", icon:"mail",
+    /* Visible everywhere in the nav, not just here - see mountTourStep()'s
+       "pick the first VISIBLE match" resolution, since this button has
+       three differently-sized renderings (drawer/icon-only/labeled) in
+       the DOM at once, swapped by CSS breakpoint, not by which exists. */
+    target:'[data-act="open-mailing-list"]', fallbackTarget:"#main",
+    body:"Join our mailing list to hear about new episodes, activities, and updates - no spam, unsubscribe any time.",
+    next:"A little bit about us next." },
+  { key:"about", hash:"#/about/team", navLabel:"About us", title:"About us", icon:"info",
+    target:".pagehead .shell", fallbackTarget:"#main",
+    /* The team roster under the intro can run long - cap the box at
+       Zech's card (the 2nd bio) rather than the whole list, so this
+       stays a quick "here's who we are" glance, not the full roster. */
+    targetEnd:".about-team .stack .bio:nth-child(2)",
+    body:"About us tells you who we are, our mission, and how to reach our team.",
+    next:"Last stop - the shop." },
+  { key:"shop", hash:"#/shop", navLabel:"Shop", title:"Shop", icon:"shopping-bag",
+    target:".pagehead .shell", fallbackTarget:"#main",
+    body:"Shop has the books we've made, plus supplies our activities use.",
+    next:"" }
+];
+
 const ABOUT_NAV = [
   { hash:"#/about/team",     sub:"team",     label:"About us" },
   { hash:"#/about/mission",  sub:"mission",  label:"Our mission" },
@@ -6772,9 +6988,24 @@ function maybeShowAnnouncement(){
 }
 
 let MODAL_ON_SUBMIT = null;
-function openModal(html, onSubmit, extraClass){
+/** Shared by the sheet's own trap (below) and the modal's - Tab must cycle
+    inside whichever one is open rather than escaping to the (invisible,
+    scroll-locked) page behind it. */
+function trapFocusWithin(containerSelector, ev){
+  const container = $(containerSelector);
+  if (!container) return;
+  const focusables = Array.from(container.querySelectorAll('a[href],button:not([disabled])'));
+  if (!focusables.length) return;
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  if (ev.shiftKey && document.activeElement === first){ ev.preventDefault(); last.focus(); }
+  else if (!ev.shiftKey && document.activeElement === last){ ev.preventDefault(); first.focus(); }
+}
+
+let MODAL_TRIGGER = null;
+function openModal(html, onSubmit, extraClass, triggerEl){
   const root = $("#modal-root");
   MODAL_ON_SUBMIT = onSubmit || null;
+  MODAL_TRIGGER = triggerEl || document.activeElement;
   root.innerHTML = '<div class="scrim" data-act="modal-scrim" role="dialog" aria-modal="true">'
     + '<div class="modal' + (extraClass ? " " + extraClass : "") + '" data-modal-body>' + html + '</div></div>';
   document.body.classList.add("no-scroll");
@@ -6792,12 +7023,14 @@ function closeModal(){
   AppState.createFilterDraft = null;
   AppState.storyFilterDraft = null;
   document.body.classList.remove("no-scroll");
+  if (MODAL_TRIGGER && document.contains(MODAL_TRIGGER)) MODAL_TRIGGER.focus();
+  MODAL_TRIGGER = null;
 }
+/** Tab must cycle inside the modal while it is open - see trapFocusWithin
+    above. */
+function trapModalTab(ev){ trapFocusWithin("#modal-root .modal", ev); }
 
-/* ---- bottom sheet (mobile section switcher) ----
-   A dedicated open/close pair rather than reusing openModal/closeModal:
-   this one slides up from the bottom, and needs its own focus trap and
-   focus-restoration, which the plain modal does not do. */
+/* ---- bottom sheet (mobile section switcher) ---- */
 let SHEET_TRIGGER = null;
 function openSheet(html, ariaLabel, triggerEl){
   const root = $("#sheet-root");
@@ -6820,17 +7053,9 @@ function closeSheet(){
   }
   SHEET_TRIGGER = null;
 }
-/** Tab must cycle inside the sheet while it is open, rather than escaping
-    to the (invisible, scroll-locked) page behind it. */
-function trapSheetTab(ev){
-  const sheet = $("#sheet-root .sheet");
-  if (!sheet) return;
-  const focusables = Array.from(sheet.querySelectorAll('a[href],button:not([disabled])'));
-  if (!focusables.length) return;
-  const first = focusables[0], last = focusables[focusables.length - 1];
-  if (ev.shiftKey && document.activeElement === first){ ev.preventDefault(); last.focus(); }
-  else if (!ev.shiftKey && document.activeElement === last){ ev.preventDefault(); first.focus(); }
-}
+/** Tab must cycle inside the sheet while it is open - see trapFocusWithin
+    above. */
+function trapSheetTab(ev){ trapFocusWithin("#sheet-root .sheet", ev); }
 
 /** Close the mobile nav drawer, playing its slide/fade-out first.
     render() replaces #app wholesale, so a plain state flip would swap in
@@ -7307,6 +7532,7 @@ function footer(){
     + '</div></div></div>'
     + '<div class="foot__bar">'
     + '<span>&copy; ' + new Date().getFullYear() + ' ' + E(BRAND.name) + '</span>'
+    + '<button type="button" class="tour-link-btn" data-act="tour-open">' + ic("map") + ' Site Tour</button>'
     + '</div></div></footer>';
 }
 
@@ -7384,6 +7610,296 @@ const BackToTop = {
     });
   }
 };
+
+/* ============================================================
+   SITE TOUR
+   A friendly, optional guided tour for first-time public visitors,
+   voiced as Chike. TOUR_STOPS (near PUBLIC_NAV) is the stop list;
+   tourState()/saveTourState() (near loadLocalUI) is the per-visitor
+   persistence. #tour-root is rendered once at boot and refreshed at
+   the tail of every render() (renderTourRoot(), same pattern as
+   renderQuickUpdatePanel()) so a highlighted step re-mounts correctly
+   after every navigation - see Navigation Behavior in the spec.
+
+   The welcome dialog and the completion card are real openModal()
+   dialogs (they aren't tied to any one page). The in-progress "Stop N
+   of M" UI is NOT a dialog - it is the small explanation card mounted
+   beside the highlighted section, per the spec's own "close or
+   minimize the modal, then show a card" sequence; reopening a modal at
+   every stop would fight that. */
+
+let TOUR_SCROLL_HANDLER = null;
+let TOUR_RESIZE_OBSERVER = null;
+
+function tourStopMatchesRoute(stop){
+  const route = AppState.route;
+  const r = parseRoute(stop.hash);
+  if (r.name !== route.name) return false;
+  /* About and Grown-Ups each have several real sub-pages under the same
+     route name, with more than one of them a real tour stop (About us vs.
+     Our mission/etc; Grown-Ups' own landing vs. Contact us) - an exact sub
+     match is what tells those apart. Play/Shop's sub is just a display-
+     mode tab on the same page (their target selector, .pagehead, is
+     present either way), so no sub check is needed there. */
+  if (r.name === "about" || r.name === "grown-ups"){
+    return ((route.params && route.params.sub) || "") === ((r.params && r.params.sub) || "");
+  }
+  return true;
+}
+
+/** Stops tracking the current target (scroll/resize listeners) without
+    removing the spotlight/card elements themselves - see mountTourStep()'s
+    own comment on why those persist across a step change. */
+function detachTourListeners(){
+  if (TOUR_SCROLL_HANDLER){
+    window.removeEventListener("scroll", TOUR_SCROLL_HANDLER, true);
+    window.removeEventListener("resize", TOUR_SCROLL_HANDLER);
+    TOUR_SCROLL_HANDLER = null;
+  }
+  if (TOUR_RESIZE_OBSERVER){
+    TOUR_RESIZE_OBSERVER.disconnect();
+    TOUR_RESIZE_OBSERVER = null;
+  }
+}
+
+function teardownTourStep(){
+  $$(".tour-spotlight, .tour-card").forEach(el => el.remove());
+  $$(".tour-target-lift").forEach(el => el.classList.remove("tour-target-lift"));
+  detachTourListeners();
+}
+
+function tourCardHTML(stop, index){
+  const stepLabel = "Stop " + (index + 1) + " of " + TOUR_STOPS.length;
+  const nextBtn = index < TOUR_STOPS.length - 1
+    ? '<button type="button" class="btn btn--cyan btn--sm" data-act="tour-next" style="flex:1">Next ' + ic("arrow-right") + '</button>'
+    : '<button type="button" class="btn btn--cyan btn--sm" data-act="tour-finish" style="flex:1">Finish</button>';
+  return '<p class="tour-card__step">' + E(stepLabel) + '</p>'
+    + '<h3 tabindex="-1">' + E(stop.title) + '</h3>'
+    + '<p>' + E(stop.body) + '</p>'
+    + '<div class="tour-card__foot">'
+    + '<div class="row" style="gap:8px">'
+    + (index > 0 ? '<button type="button" class="btn btn--paper btn--sm" data-act="tour-back" style="flex:1">' + ic("arrow-left") + ' Back</button>' : "")
+    + nextBtn
+    + '</div>'
+    + '<button type="button" class="tour-link-btn" data-act="tour-skip">Skip tour</button>'
+    + '</div>';
+}
+
+/** Positions the spotlight (and, on desktop, the card) against the live
+    target's current rect - called once on mount and again on every
+    scroll/resize while the step stays up, so both track a target that
+    moves during a smooth scrollIntoView or a window resize. */
+/** How far the spotlight box sits outside the target's own edges - reads
+    as a box drawn around the content, with room to breathe, rather than
+    an outline flush against it. */
+const TOUR_SPOTLIGHT_PAD = 14;
+
+/** Most stops box the target's whole rect. A stop whose target's natural
+    content can run long (the About team roster) instead sets targetEnd -
+    a second element whose bottom edge caps the box, so the highlight
+    reads as "a quick look," not the entire list. */
+function computeTourBoxRect(targetEl, targetEndEl){
+  const r = targetEl.getBoundingClientRect();
+  if (!targetEndEl) return r;
+  /* targetEnd's own bottom edge IS the box's bottom edge - not whichever
+     of the two happens to be taller. The target's natural full height
+     (e.g. the whole About page's roster+photo) is exactly what this is
+     meant to crop away, not defer to. */
+  const bottom = targetEndEl.getBoundingClientRect().bottom;
+  return { top:r.top, left:r.left, width:r.width, bottom:bottom, height:bottom - r.top };
+}
+
+function positionTourOverlay(targetEl, card, targetEndEl){
+  const spot = $(".tour-spotlight");
+  const r = computeTourBoxRect(targetEl, targetEndEl);
+  if (spot){
+    spot.style.top = (r.top - TOUR_SPOTLIGHT_PAD) + "px";
+    spot.style.left = (r.left - TOUR_SPOTLIGHT_PAD) + "px";
+    spot.style.width = (r.width + TOUR_SPOTLIGHT_PAD * 2) + "px";
+    spot.style.height = (r.height + TOUR_SPOTLIGHT_PAD * 2) + "px";
+  }
+  if (card && !window.matchMedia("(max-width:767px)").matches){
+    const margin = 14, cardWidth = 300, minTop = margin;
+    const bottom = r.bottom + TOUR_SPOTLIGHT_PAD, top0 = r.top - TOUR_SPOTLIGHT_PAD;
+    let top = bottom + margin;
+    if (top + 180 > window.innerHeight) top = Math.max(top0 - 180 - margin, minTop);
+    let left = Math.min(Math.max(r.left, margin), window.innerWidth - cardWidth - margin);
+    card.style.top = top + "px";
+    card.style.left = left + "px";
+  }
+}
+
+/** Some selectors (the mailing-list button) match several elements at
+    once - a drawer copy, a phone icon-only copy, a tablet+ labeled copy -
+    swapped by CSS breakpoint, all still in the DOM. A plain querySelector
+    would grab whichever comes first regardless of whether it's actually
+    the one rendered right now; this picks the first with real size. */
+function queryVisibleTourTarget(selector){
+  if (!selector) return null;
+  const candidates = document.querySelectorAll(selector);
+  for (let i = 0; i < candidates.length; i++){
+    const el = candidates[i];
+    /* A nonzero rect alone isn't enough - the closed mobile nav drawer
+       (.nav__links, holding one copy of the mailing-list button) is kept
+       in the layout and just faded out (opacity:0, pointer-events:none),
+       not display:none, so it still reports real width/height while
+       genuinely invisible. checkVisibility() catches that; the rect check
+       stays as a fallback for browsers old enough not to have it. */
+    if (typeof el.checkVisibility === "function" && !el.checkVisibility({ checkOpacity:true, checkVisibilityCSS:true })) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) return el;
+  }
+  return null;
+}
+
+function mountTourStep(stop, index){
+  detachTourListeners();
+  $$(".tour-target-lift").forEach(el => el.classList.remove("tour-target-lift"));
+  requestAnimationFrame(() => {
+    const el = queryVisibleTourTarget(stop.target) || queryVisibleTourTarget(stop.fallbackTarget);
+    const endEl = queryVisibleTourTarget(stop.targetEnd);
+
+    /* Reusing the existing spotlight/card elements (rather than removing
+       and recreating them, as an earlier version did) is what makes the
+       highlight glide smoothly from the old stop to the new one instead
+       of popping: #tour-root's siblings (.tour-spotlight/.tour-card) live
+       outside #app, so a page navigation's #app.innerHTML swap never
+       touches them - only their position changes, which .tour-spotlight's
+       own CSS transition (see its rule) then animates. A brand-new
+       element would have no "before" position to animate from. */
+    let spot = $(".tour-spotlight");
+    if (el && !spot){
+      spot = document.createElement("div");
+      spot.className = "tour-spotlight";
+      document.body.appendChild(spot);
+    } else if (!el && spot){
+      spot.remove();
+      spot = null;
+    }
+
+    let card = $(".tour-card");
+    if (!card){
+      card = document.createElement("div");
+      card.className = "tour-card";
+      card.setAttribute("role", "status");
+      card.setAttribute("aria-live", "polite");
+      document.body.appendChild(card);
+    }
+    card.innerHTML = tourCardHTML(stop, index);
+    drawIcons();
+
+    if (el){
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      /* Only scroll if the target genuinely isn't visible yet - render()
+         already resets scroll to the top on every navigation, so most
+         stops' targets (right near the top of the page) are already in
+         view by the time this runs, and re-centering them anyway just
+         reads as an unwanted extra scroll. Checked against the box that
+         will actually be drawn (targetEnd-capped, when set), not el's own
+         full natural rect - el alone can run much taller than what's
+         actually shown (About's whole roster vs. just its capped box).
+
+         On mobile, also shrink the effective viewport height by the
+         card's own rendered height first - it's a fixed bar pinned to the
+         bottom (see .tour-card's own max-width:767px rule), not reserved
+         layout space, so content scrolled to sit right behind it (About's
+         family photo, here) renders normally underneath and reads as
+         "covered" once the card appears on top of it. */
+      const isMobile = window.matchMedia("(max-width:767px)").matches;
+      const obstruction = isMobile ? card.getBoundingClientRect().height : 0;
+      const preRect = computeTourBoxRect(el, endEl);
+      const alreadyVisible = preRect.top >= 0 && preRect.bottom <= (window.innerHeight - obstruction);
+      if (!alreadyVisible){
+        el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block:"center" });
+      }
+      el.classList.add("tour-target-lift");
+      positionTourOverlay(el, card, endEl);
+      TOUR_SCROLL_HANDLER = () => positionTourOverlay(el, card, endEl);
+      window.addEventListener("scroll", TOUR_SCROLL_HANDLER, true);
+      window.addEventListener("resize", TOUR_SCROLL_HANDLER);
+      /* Scroll/resize alone miss a target that changes size for its own
+         reasons after mount - most commonly an image inside it (like a
+         pagehead's photo) finishing loading a moment later and pushing
+         the section taller, which otherwise leaves the box sized for the
+         pre-image layout. ResizeObserver catches that directly. */
+      if (window.ResizeObserver){
+        TOUR_RESIZE_OBSERVER = new ResizeObserver(() => positionTourOverlay(el, card, endEl));
+        TOUR_RESIZE_OBSERVER.observe(el);
+        if (endEl) TOUR_RESIZE_OBSERVER.observe(endEl);
+      }
+    } else if (!window.matchMedia("(max-width:767px)").matches){
+      /* No target anywhere on this page (e.g. Home's hero module is
+         admin-disabled) - still show the step's own explanation, just
+         unanchored, near the avatar rather than aborting the tour. */
+      card.style.top = ""; card.style.left = "";
+      card.style.right = "18px";
+      card.style.bottom = "18px";
+    }
+    const h3 = card.querySelector("h3");
+    if (h3) h3.focus();
+  });
+}
+
+function tourWelcomeDialogHTML(){
+  const resuming = tourState().status === "in_progress";
+  return '<div class="modal__head"><div>'
+    + '<span class="eyebrow">Site tour</span>'
+    + '<h3 style="margin:0;font-size:1.5rem">Welcome to Chike’s Creative Space!</h3></div>'
+    + '<button class="btn btn--ghost btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
+    + '<div class="row" style="gap:14px;align-items:flex-start;flex-wrap:nowrap;margin-bottom:18px">'
+    + '<img src="assets/characters/chike-avatar.png" alt="" style="width:80px;height:80px;border-radius:50%;object-fit:cover;flex:none;filter:brightness(1.22)">'
+    + '<p class="tour-modal__intro" style="margin:0">Explore games, stories, creative activities, and resources made to help young minds learn and have fun. Choose a stop below, or begin the full tour.</p>'
+    + '</div>'
+    + '<button type="button" class="btn btn--cyan btn--block tour-modal__cta" data-act="tour-start" style="margin-bottom:14px">' + (resuming ? "Continue the tour" : "Start the tour") + '</button>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px">'
+    + TOUR_STOPS.map(s => '<button type="button" class="btn btn--paper btn--xs" data-act="tour-goto-stop" data-stop="' + E(s.key) + '">' + ic(s.icon) + " " + E(s.navLabel) + '</button>').join("")
+    + '</div>'
+    + '<div class="modal__foot" style="justify-content:space-between;align-items:center">'
+    + '<button class="tour-link-btn" data-act="tour-hide">Don’t show this again</button>'
+    + '<button class="tour-link-btn" data-act="tour-dismiss">Not now</button>'
+    + '</div>';
+}
+
+function tourCompleteDialogHTML(){
+  return '<div class="modal__head"><div>'
+    + '<span class="eyebrow">Site tour</span>'
+    + '<h3 style="margin:0;font-size:1.5rem">You’re all set!</h3></div>'
+    + '<button class="btn btn--ghost btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
+    + '<p>You now know where to play, read, create, and explore. The tour is always available from the avatar in the corner.</p>'
+    + '<div class="modal__foot">'
+    + '<button class="btn btn--paper btn--sm" data-act="tour-restart">Restart tour</button>'
+    + '<button class="btn btn--cyan btn--sm" data-act="tour-explore">Explore on my own</button>'
+    + '</div>';
+}
+
+/** Called once at boot (render()'s own first call covers that) and again
+    at the tail of every render() - see the call next to
+    renderQuickUpdatePanel(). Never shown on /admin: a route check, not
+    an auth check, matching renderQuickUpdatePanel()'s own guard. */
+function renderTourRoot(){
+  const root = $("#tour-root");
+  if (!root) return;
+  const state = tourState();
+  if (AppState.route.name === "admin" || state.hidden){
+    root.innerHTML = "";
+    teardownTourStep();
+    return;
+  }
+
+  root.innerHTML = '<button type="button" class="tour-avatar" data-act="tour-open" aria-label="Open website tour">'
+    + '<img src="assets/characters/chike-avatar.png" alt="" role="presentation"></button>'
+    + (state.status === "not_started"
+        ? '<div class="tour-bubble" role="status">Welcome! I would love to give you a tour of our new site.</div>'
+        : "");
+
+  if (state.status === "in_progress"){
+    const stop = TOUR_STOPS[state.stepIndex];
+    if (stop && tourStopMatchesRoute(stop)) mountTourStep(stop, state.stepIndex);
+    else teardownTourStep();
+  } else {
+    teardownTourStep();
+  }
+}
 
 /* ============================================================
    9. THE ACTIVITY FINDER
@@ -8463,7 +8979,8 @@ function pageHeader(eyebrow, title, lede, actions, opts){
   const cls = "section pagehead"
     + (o.aside ? " pagehead--split" : "")
     + (o.extra ? " pagehead--deep" : "")
-    + (o.fill ? " pagehead--fill" : "");
+    + (o.fill ? " pagehead--fill" : "")
+    + (o.asideNarrow ? " pagehead--narrow-aside" : "");
   const open = '<section class="' + cls + '" style="border-bottom:var(--line);background:var(--paper-2)">'
     + '<div class="shell">';
   if (o.aside){
@@ -9203,17 +9720,14 @@ function viewCharacter(slug){
 
   return '<section class="section"><div class="shell">'
     + '<div class="crumb"><a href="#/characters">Characters</a>' + ic("chevron-right") + '<span>' + E(c.name) + '</span></div>'
-    + '<div class="detail__hero">'
+    + '<div class="detail__hero detail__hero--narrow-cover">'
     + '<div><div class="panel">'
     + '<span class="eyebrow">' + quEditable("character-relationship", c.id, E(c.relationship)) + '</span>'
     + '<h1 style="font-size:clamp(2.3rem,5vw,3.6rem);margin-bottom:.2em">' + quEditable("character-name", c.id, E(c.name)) + '</h1>'
-    + '<p class="lede" style="font-size:1.3rem;font-weight:700">' + quEditable("character-tagline", c.id, E(c.tagline)) + '</p>'
     + '<span class="eyebrow" style="margin-top:20px">Creative outlet</span>'
     + '<p style="margin:0 0 22px;font-weight:700">' + quEditable("character-outlet", c.id, E(c.outlet || c.strength)) + '</p>'
     + '<span class="eyebrow">About ' + E(c.name) + '</span>'
     + '<p style="margin:0 0 22px">' + quEditable("character-story-value", c.id, E(c.storyValue)) + '</p>'
-    + '<span class="eyebrow">Never far from</span>'
-    + quEditable("character-loves", c.id, '<ul class="checklist" style="margin-top:8px">' + c.loves.map(l => '<li>' + ic("dot") + '<span>' + E(l) + '</span></li>').join("") + '</ul>')
     + '</div></div>'
     + '<div class="detail__cover" style="aspect-ratio:4/5;--p1:' + t.p1 + ';--p2:' + t.p2 + '">'
     + quEditable("character-image", c.id, '<img src="' + E(c.image.src) + '" alt="' + E(c.image.alt) + '" style="object-position:center 20%">')
@@ -9592,7 +10106,8 @@ function viewGrownUps(sub){
     head = cmsHeader("grown-ups", "Grown-Ups", 'A guide for parents<br>and <span class="hl">teachers</span>.',
       "How to set up an activity, what to say when it does not go as planned, and how to keep your child with it until it is finished.",
       "", {
-        aside: bannerAside("grown-ups", '<div class="taped"><img src="assets/activities/grownup-blocks.jpg" alt="An adult and a child building together with colored wooden blocks at a table" loading="lazy"></div>')
+        aside: bannerAside("grown-ups", '<div class="taped"><img src="assets/activities/grownup-blocks.jpg" alt="An adult and a child building together with colored wooden blocks at a table" loading="lazy"></div>'),
+        asideNarrow: true
       });
     const tipsHeading = pageVal("grown-ups", "tipsHeading", "What to do while they make");
     if (grownupsId0) CMS_HEADER_FALLBACKS[grownupsId0 + "::tipsHeading"] = tipsHeading;
@@ -18105,6 +18620,7 @@ function render(){
 
   maybeShowAnnouncement();
   renderQuickUpdatePanel();
+  renderTourRoot();
 
   document.title = routeTitle() + " | " + BRAND.name;
   updateCanonicalLink();
@@ -18159,6 +18675,53 @@ const ACTIONS = {
     const hash = el.getAttribute("data-hash");
     if (hash) navigate(hash);
   },
+
+  /* ---- site tour ---- */
+  "tour-open": (el) => { teardownTourStep(); openModal(tourWelcomeDialogHTML(), null, "tour-modal", el); },
+  "tour-start": () => {
+    closeModal();
+    saveTourState({ status:"in_progress", stepIndex:0 });
+    navigate(TOUR_STOPS[0].hash);
+  },
+  "tour-goto-stop": (el) => {
+    const i = TOUR_STOPS.findIndex(s => s.key === el.getAttribute("data-stop"));
+    if (i < 0) return;
+    closeModal();
+    saveTourState({ status:"in_progress", stepIndex:i });
+    navigate(TOUR_STOPS[i].hash);
+  },
+  "tour-dismiss": () => { closeModal(); saveTourState({ status:"dismissed" }); renderTourRoot(); },
+  /* Not the same as "Not now" - this also hides the floating avatar
+     itself, not just today's invitation. footer()'s "Site Tour" link
+     (data-act="tour-open", same as the avatar) is what's left to reopen
+     it once hidden. */
+  "tour-hide": () => { closeModal(); saveTourState({ status:"dismissed", hidden:true }); renderTourRoot(); },
+  "tour-back": () => {
+    const i = Math.max(0, tourState().stepIndex - 1);
+    saveTourState({ stepIndex:i });
+    navigate(TOUR_STOPS[i].hash);
+  },
+  "tour-next": () => {
+    const i = tourState().stepIndex + 1;
+    saveTourState({ stepIndex:i });
+    navigate(TOUR_STOPS[i].hash);
+  },
+  "tour-skip": () => {
+    saveTourState({ status:"dismissed" });
+    teardownTourStep();
+    renderTourRoot();
+  },
+  "tour-finish": () => {
+    saveTourState({ status:"completed" });
+    teardownTourStep();
+    openModal(tourCompleteDialogHTML(), null, "tour-modal");
+  },
+  "tour-restart": () => {
+    closeModal();
+    saveTourState({ status:"in_progress", stepIndex:0 });
+    navigate(TOUR_STOPS[0].hash);
+  },
+  "tour-explore": () => { closeModal(); navigate("#/"); },
 
   "contact-form-reset": () => { AppState.contactFormSent.ticket = false; rerender(); },
   "business-form-reset": () => { AppState.contactFormSent.business = false; rerender(); },
@@ -20337,6 +20900,7 @@ document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && $("#sheet-root .sheet")){ closeSheet(); return; }
   if (ev.key === "Escape" && AppState.admin.quickUpdate.panelOpen){ AppState.admin.quickUpdate.panelOpen = false; renderQuickUpdatePanel(); return; }
   if (ev.key === "Tab" && $("#sheet-root .sheet")){ trapSheetTab(ev); return; }
+  if (ev.key === "Tab" && $("#modal-root .modal")){ trapModalTab(ev); return; }
   if (ev.key !== "Enter" && ev.key !== " ") return;
   const el = closestAction(ev.target);
   if (!el) return;
