@@ -1611,6 +1611,10 @@ body.is-admin .btn--lg:hover{ box-shadow:0 4px 14px rgba(20,34,44,.16); }
   border:2px solid var(--admin-surface); cursor:default;
 }
 .admin-presence-cluster .admin-presence-avatar:first-child{ margin-left:0; }
+/* You, signed in from a second browser/tab - same account, a genuinely
+   separate connection - gets a dashed ring instead of a solid one so it
+   reads as "also you" at a glance, not a second admin. */
+.admin-presence-avatar--you{ border-style:dashed; border-color:var(--admin-accent); }
 .admin-topbar__proto .admin-presence-avatar--self{
   width:20px; height:20px; margin-left:0; background:rgba(122,80,21,.16); color:inherit; border-color:transparent;
 }
@@ -2337,6 +2341,11 @@ h1.admin-page-title{ font-size:1.7rem; }
   box-shadow:var(--admin-shadow);
 }
 .chart-tooltip.is-visible{ opacity:1; }
+/* Flipped by chartTooltipInit() when there's no room above the anchor
+   point (e.g. the topbar's presence avatars, hard against the top of the
+   viewport) - pins the tooltip's top-center to the point instead of its
+   bottom-center, so it opens downward instead of being clipped upward. */
+.chart-tooltip.chart-tooltip--below{ transform:translate(-50%,0); }
 
 /* Load-in motion for this page's charts - bars grow up from the
    baseline, lines draw themselves in, everything else fades - so the
@@ -20027,23 +20036,30 @@ document.addEventListener("mousedown", (ev) => {
     const text = target.getAttribute("data-tip");
     if (current !== target){ tipEl.textContent = text; current = target; }
     const pad = 10;
+    tipEl.classList.remove("chart-tooltip--below");
     tipEl.style.left = x + "px";
     tipEl.style.top = Math.max(y - pad, 0) + "px";
     tipEl.classList.add("is-visible");
-    /* The clamp above only keeps the anchor point on-screen - the tooltip
-       itself sits centered above it (transform:translate(-50%,-100%)), so
-       a target near an edge (the topbar's own presence avatars, hard
-       against the top-right corner) could still render partially or
-       fully outside the viewport. Re-measure the actual rendered box and
-       nudge it back in by exactly however far it overflows. */
-    const rect = tipEl.getBoundingClientRect();
+    /* The tooltip normally sits centered above the anchor point
+       (transform:translate(-50%,-100%)) - fine for a chart bar or map
+       country, but a target hard against the top of the viewport (the
+       topbar's own presence avatars) leaves no room above it at all.
+       Measure the actual rendered box and flip to below instead of just
+       clamping upward into overlap with whatever's being hovered. */
+    let rect = tipEl.getBoundingClientRect();
+    if (rect.top < pad){
+      tipEl.classList.add("chart-tooltip--below");
+      tipEl.style.top = (y + pad) + "px";
+      rect = tipEl.getBoundingClientRect();
+    }
     let dx = 0, dy = 0;
     if (rect.left < pad) dx = pad - rect.left;
     else if (rect.right > window.innerWidth - pad) dx = (window.innerWidth - pad) - rect.right;
     if (rect.top < pad) dy = pad - rect.top;
+    else if (rect.bottom > window.innerHeight - pad) dy = (window.innerHeight - pad) - rect.bottom;
     if (dx || dy){
       tipEl.style.left = (x + dx) + "px";
-      tipEl.style.top = (Math.max(y - pad, 0) + dy) + "px";
+      tipEl.style.top = (parseFloat(tipEl.style.top) + dy) + "px";
     }
   }
   function hide(){
@@ -20558,8 +20574,18 @@ function stopAdminRealtimeSync(){
     tracks who is subscribed and drops them the instant their websocket
     disconnects, no manual heartbeat/timeout logic needed), not a new
     Postgres table. AdminPresence mirrors the channel's own presenceState()
-    after every join/leave/sync event; nothing here is persisted. */
+    after every join/leave/sync event; nothing here is persisted.
+
+    Keyed per browser TAB (a random id generated once at connect time),
+    not per admin account - the same admin signed in on a second browser
+    is a second live connection and should show its own avatar, visible
+    the instant it connects and gone the instant that browser closes
+    (Presence's own disconnect detection, no polling). Keying by account
+    id instead would have merged every one of that admin's own sessions
+    into a single presence entry, hiding exactly the "am I also signed in
+    somewhere else" case this exists to answer. */
 let presenceChannel = null;
+let presenceKey = null;
 let presenceSince = null;
 let presenceTrackedLabel = null;
 let AdminPresence = {};
@@ -20575,7 +20601,8 @@ function startAdminPresence(){
   if (presenceChannel || !AuthState.profile) return;
   presenceSince = nowISO();
   presenceTrackedLabel = null;
-  presenceChannel = sb.channel("admin-presence", { config: { presence: { key: AuthState.profile.id } } });
+  presenceKey = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ("tab-" + Date.now() + "-" + Math.random().toString(36).slice(2));
+  presenceChannel = sb.channel("admin-presence", { config: { presence: { key: presenceKey } } });
   presenceChannel.on("presence", { event:"sync" }, () => {
     if (!presenceChannel) return;
     const state = presenceChannel.presenceState();
@@ -20592,6 +20619,7 @@ function stopAdminPresence(){
   AdminPresence = {};
   presenceSince = null;
   presenceTrackedLabel = null;
+  presenceKey = null;
 }
 
 /** Re-announces this admin's own presence payload - called once on
@@ -20602,6 +20630,7 @@ function trackAdminPresence(label){
   if (!presenceChannel || !AuthState.profile) return;
   const name = AuthState.profile.name || AuthState.profile.email || "Admin";
   presenceChannel.track({
+    profileId: AuthState.profile.id,
     name: name,
     initials: initialsOf(name),
     route: label || presenceTrackedLabel || "Admin",
@@ -20623,12 +20652,16 @@ function presenceDurationLabel(sinceISO){
     chart-tooltip [data-tip] mechanism) names their current page and how
     long they've been signed in. */
 function presenceOthersHTML(){
-  const myId = AuthState.profile && AuthState.profile.id;
-  const others = Object.keys(AdminPresence).filter(k => k !== myId).map(k => AdminPresence[k]);
+  const myProfileId = AuthState.profile && AuthState.profile.id;
+  const others = Object.keys(AdminPresence).filter(k => k !== presenceKey).map(k => AdminPresence[k]);
   if (!others.length) return "";
   return '<div class="admin-presence-cluster">' + others.map(p => {
-    const tip = E((p.name || "Admin") + " — " + (p.route || "Admin") + " — online " + presenceDurationLabel(p.since));
-    return '<span class="admin-presence-avatar" data-tip="' + tip + '">' + E(p.initials || "?") + '<span class="admin-presence-dot"></span></span>';
+    // Same account, a different open browser/tab - the exact "am I also
+    // signed in somewhere else" case this cluster exists to surface.
+    const isYou = p.profileId && p.profileId === myProfileId;
+    const label = isYou ? ((p.name || "You") + " (another browser)") : (p.name || "Admin");
+    const tip = E(label + " — " + (p.route || "Admin") + " — online " + presenceDurationLabel(p.since));
+    return '<span class="admin-presence-avatar' + (isYou ? " admin-presence-avatar--you" : "") + '" data-tip="' + tip + '">' + E(p.initials || "?") + '<span class="admin-presence-dot"></span></span>';
   }).join("") + '</div>';
 }
 
