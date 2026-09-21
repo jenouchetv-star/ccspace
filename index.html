@@ -2032,6 +2032,75 @@ h1.admin-page-title{ font-size:1.7rem; }
 .admin-badge--lg{ width:36px; height:36px; }
 .admin-badge--lg svg{ width:24px; height:24px; }
 .admin-badge--md{ width:30px; height:30px; }
+/* Site map: root pages run in one horizontal row (matching this site's
+   own top nav), each section's pages stack vertically underneath it - a
+   plain flex row of flex columns, no charting library and no per-node
+   connector-line math, so it comfortably reflows to the screen width
+   regardless of how many pages any one section has (Create alone has
+   22 - the old box-and-line tree spread those out sideways, spanning
+   several thousand px; stacking them vertically instead keeps the whole
+   diagram about as wide as the number of sections, not the number of
+   pages). */
+.sitemap-home-row{ display:flex; justify-content:center; padding-top:6px; }
+.sitemap-trunk{ width:2px; height:20px; background:var(--admin-border); margin:0 auto; }
+.sitemap-columns-wrap{ overflow-x:auto; padding-bottom:10px; }
+.sitemap-columns{ display:flex; gap:14px; align-items:flex-start; justify-content:center; min-width:max-content; margin:0 auto; padding:0 6px; }
+.sitemap-col{ display:flex; flex-direction:column; align-items:center; gap:8px; width:150px; flex:none; }
+.sitemap-col__children{
+  display:flex; flex-direction:column; gap:6px; width:100%;
+  padding-top:10px; border-top:2px solid var(--admin-border);
+}
+
+/* Each column carries its own section color as a custom property (set
+   inline per column, see sitemapColumn()) - every node inside it, and
+   the divider between its header and its pages, reads that one variable,
+   so a whole section's connection is visible at a glance without
+   tracing lines. color-mix() tints it for the leaf fill/border instead
+   of a second hand-picked color per section. */
+.sitemap-col{ --sc: var(--admin-mute); }
+.sitemap-col__children{ border-top-color:var(--sc); }
+
+.sitemap-node{
+  position:relative; display:inline-block; min-width:92px; max-width:150px;
+  padding:16px 10px 9px; border-radius:8px; border:1.5px solid var(--admin-border);
+  background:var(--admin-surface); font-family:inherit; font-size:.72rem; font-weight:700;
+  color:var(--admin-ink); line-height:1.3; cursor:pointer;
+  box-shadow:0 1px 2px rgba(22,27,34,.06);
+  transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.sitemap-node::before{
+  content:""; position:absolute; top:6px; left:9px; width:5px; height:5px; border-radius:50%;
+  background:var(--sc); opacity:.55;
+  box-shadow:9px 0 0 var(--sc), 18px 0 0 var(--sc);
+}
+.sitemap-node:hover{ transform:translateY(-2px); border-color:var(--sc); box-shadow:0 4px 10px rgba(22,27,34,.1); }
+.sitemap-node:focus-visible{ outline:2px solid var(--sc); outline-offset:2px; }
+.sitemap-col > .sitemap-node{ border-color:var(--sc); color:var(--sc); }
+.sitemap-node--root{ background:var(--admin-accent); color:#fff; border-color:var(--admin-accent); min-width:110px; }
+.sitemap-node--root::before{ background:rgba(255,255,255,.65); box-shadow:9px 0 0 rgba(255,255,255,.65), 18px 0 0 rgba(255,255,255,.65); }
+.sitemap-node--leaf{
+  display:block; width:100%; max-width:none; font-weight:600; font-size:.7rem; color:var(--admin-ink);
+  background:color-mix(in srgb, var(--sc) 14%, var(--admin-surface));
+  border-color:color-mix(in srgb, var(--sc) 55%, var(--admin-border));
+}
+@media (prefers-reduced-motion: reduce){ .sitemap-node{ transition:none; } }
+
+.sitemap-preview-frame{ position:relative; width:100%; height:60vh; border:1px solid var(--admin-border); border-radius:10px; overflow:hidden; background:var(--admin-surface-2); }
+.sitemap-preview-frame iframe{ position:relative; z-index:1; width:100%; height:100%; border:0; display:block; opacity:0; transition:opacity .25s ease; background:var(--admin-surface-2); }
+.sitemap-preview-loading{
+  position:absolute; inset:0; z-index:0; display:flex; align-items:center; justify-content:center; gap:9px;
+  font-size:.82rem; color:var(--admin-mute);
+}
+.sitemap-preview-spinner{
+  width:16px; height:16px; border-radius:50%; flex:none;
+  border:2px solid var(--admin-border); border-top-color:var(--admin-accent);
+  animation:sitemap-spin .8s linear infinite;
+}
+@keyframes sitemap-spin{ to{ transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce){
+  .sitemap-preview-frame iframe{ transition:none; }
+  .sitemap-preview-spinner{ animation:none; }
+}
 .admin-badge--md svg{ width:20px; height:20px; }
 .admin-badge--good{ background:var(--admin-good-soft); color:var(--admin-good); }
 .admin-badge--bad{ background:var(--admin-bad-soft); color:var(--admin-bad); }
@@ -6314,8 +6383,7 @@ const ADMIN_NAV = [
   { hash:"#/admin/stories",        label:"Stories",         icon:"book-open",    col:"stories" },
   { hash:"#/admin/articles",       label:"Articles",        icon:"newspaper",    col:"articles" },
   { hash:"#/admin/characters",     label:"Characters",      icon:"users",        col:"characters" },
-  { hash:"#/admin/brand",          label:"Brand settings",  icon:"settings" },
-  { hash:"#/admin/style-guide",    label:"Style guide",     icon:"palette" },
+  { hash:"#/admin/homepage",       label:"Homepage",        icon:"home" },
 
   { heading:"Shop" },
   { hash:"#/admin/products",       label:"Digital products",icon:"file-down",    col:"products" },
@@ -6323,8 +6391,10 @@ const ADMIN_NAV = [
   { hash:"#/admin/collections",    label:"Collections",     icon:"layers",       col:"collections" },
 
   { heading:"Site" },
-  { hash:"#/admin/homepage",       label:"Homepage",        icon:"home" },
+  { hash:"#/admin/sitemap",        label:"Site Map",        icon:"map" },
   { hash:"#/admin/media",          label:"Media references",icon:"image" },
+  { hash:"#/admin/brand",          label:"Brand settings",  icon:"settings" },
+  { hash:"#/admin/style-guide",    label:"Style guide",     icon:"palette" },
 
   { heading:"Operations" },
   { hash:"#/admin/send-newsletter",label:"Newsletters", icon:"send" },
@@ -13486,7 +13556,169 @@ function adminSettings(){
     + '<p class="admin-meta">Manage who else has admin access from the Admins screen.</p>'
     + '<a class="admin-btn admin-btn--sm admin-btn--ghost" style="margin-top:12px" href="#/admin/admins">' + ic("shield-check") + ' Go to Admins</a></div>'
 
+    + regenerateSitemapCardHTML(d.meta)
+
     + '</div>';
+}
+
+/** Its own nav tab (Site -> Site Map) rather than buried in Settings &
+    data - the visual explorer is something an admin browses on its own,
+    not a setting to configure. regenerateSitemapCardHTML() (the technical
+    "rebuild the XML" action) stays in Settings & data, since that's a
+    data operation, not a map to browse. */
+function adminSitemapPage(){
+  return '<div style="margin-bottom:22px">'
+    + '<span class="admin-eyebrow">Site</span><h1 class="admin-page-title" style="text-transform:none;font-size:1.5rem">Site map</h1></div>'
+    + sitemapExplorerHTML();
+}
+
+/** The technical half of sitemap tooling: a button that calls the
+    generate-sitemap Edge Function on demand, plus the last-run status
+    generate-sitemap.mjs already stamps onto meta (see opsVitalsHTML's
+    "Sitemap regeneration" row - this is the same data, with a real action
+    attached instead of just a passive staleness readout). This publishes
+    a preview copy to Supabase Storage; the file search engines actually
+    read at chikescreativespace.com/sitemap.xml only changes on the next
+    deploy of generate-sitemap.mjs's own output - see the note below. */
+function regenerateSitemapCardHTML(meta){
+  const count = meta.lastSitemapCount;
+  const url = meta.lastSitemapUrl;
+  return '<div class="admin-card"><h3 class="admin-section-title" style="font-size:.98rem">' + ic("refresh-cw") + ' Regenerate sitemap</h3>'
+    + '<p class="admin-meta">Rebuilds sitemap.xml from every currently published page and publishes a preview copy to Storage.</p>'
+    + '<p style="font-size:.85rem;margin:10px 0 0">Last generated: <b>' + E(meta.lastSitemapAt ? fmtDate(meta.lastSitemapAt, true) : "Never") + '</b></p>'
+    + '<p style="font-size:.85rem;margin:4px 0 0">URLs included: <b>' + E(count === undefined ? "-" : count) + '</b></p>'
+    + (url ? '<a href="' + E(url) + '" target="_blank" rel="noopener" class="admin-btn admin-btn--sm admin-btn--ghost" style="margin-top:10px">' + ic("eye") + ' Preview sitemap.xml</a>' : '')
+    + '<button class="admin-btn admin-btn--primary admin-btn--block" style="margin-top:12px" data-act="regenerate-sitemap">' + ic("refresh-cw") + ' Regenerate sitemap now</button>'
+    + '<p class="admin-meta" style="margin-top:10px">Search engines still read the file deployed at chikescreativespace.com/sitemap.xml, which updates on the next git push of <code>supabase/generate-sitemap.mjs</code>’s output - this preview copy is for checking what that next deploy will contain right now.</p>'
+    + '</div>';
+}
+
+/** A human-facing, clickable map of every public page currently live -
+    grouped by section with the same icons ADMIN_NAV already uses for each
+    collection - instead of a wall of raw <loc> tags. Every entry opens the
+    real page. Uses the exact same published-only rule generate-sitemap.mjs
+    and the Edge Function both use, computed straight from the live data
+    already in memory (no round trip needed just to browse it). */
+/** One clickable "page" node - a little browser-window shape (drawn in
+    CSS, see .sitemap-node) rather than a plain text link, so the diagram
+    reads as pages at a glance. Clicking opens a same-origin iframe
+    preview (see sitemapPreviewModalHTML) instead of navigating away from
+    the admin portal. */
+function sitemapNode(path, title, extraClass){
+  return '<button type="button" class="sitemap-node' + (extraClass ? " " + extraClass : "") + '" data-act="sitemap-preview" data-path="' + E(path) + '" data-title="' + E(title) + '">' + E(title) + '</button>';
+}
+/** One section column: its own page as the header node, then every page
+    under it stacked vertically below - so a section with 22 pages (e.g.
+    Create) grows downward, not sideways, keeping the row of sections
+    itself narrow enough to fit the screen regardless of how much content
+    any one section has. Each column carries its own color (one of this
+    site's own character/brand colors, not a generic chart palette) as a
+    CSS custom property, so a section's own pages are visibly the same
+    color as their header without having to trace a connector line. */
+function sitemapColumn(path, title, children, color){
+  return '<div class="sitemap-col" style="--sc:' + E(color) + '">' + sitemapNode(path, title)
+    + (children.length
+        ? '<div class="sitemap-col__children">' + children.map(c => sitemapNode(c.path, c.title, "sitemap-node--leaf")).join("") + '</div>'
+        : '')
+    + '</div>';
+}
+/* This site's own character/brand colors (from BRAND_COLORS in the
+   public stylesheet), one per section - not a generic chart palette, so
+   the site map's color coding matches the same hues used everywhere else
+   on the site. Legal/utility pages get a plain neutral instead of a
+   character color, since they aren't tied to any one character. */
+const SITEMAP_SECTION_COLOR = {
+  create: "#1273B0", read: "#F2C230", watch: "#BC3229", play: "#3A7A37",
+  characters: "#BFA5E0", grownups: "#7FD1C1", about: "#C4661A", shop: "#9C2287",
+  collections: "#0C6B64", support: "#6C3E8C", legal: "#6B7785"
+};
+
+/** A real visual site map - section pages laid out in a horizontal row
+    (matching this site's own top nav order: PUBLIC_NAV/ABOUT_NAV/
+    GROWNUP_NAV/SHOP_NAV), each section's own pages stacked vertically
+    underneath it - built straight from the live, published content
+    already in memory, following the same published-only rule
+    generate-sitemap.mjs and the Edge Function both use. */
+function sitemapExplorerHTML(){
+  const published = col => db.list(col).filter(r => r.status === "published");
+  const leaf = (path, title) => ({ path:path, title:title });
+
+  const columns = [
+    sitemapColumn("/create", "Create", published("activities").map(r => leaf("/activity/"+r.id, r.title)), SITEMAP_SECTION_COLOR.create),
+    sitemapColumn("/stories", "Read", published("stories").map(r => leaf("/stories/"+r.id, r.title)), SITEMAP_SECTION_COLOR.read),
+    sitemapColumn("/watch", "Watch", published("videos").map(r => leaf("/watch/"+r.id, r.title)), SITEMAP_SECTION_COLOR.watch),
+    sitemapColumn("/play", "Play", published("games").map(r => leaf("/play/"+r.id, r.title)), SITEMAP_SECTION_COLOR.play),
+    sitemapColumn("/characters", "Meet Chike", published("characters").map(r => leaf("/characters/"+r.slug, r.name)), SITEMAP_SECTION_COLOR.characters),
+    sitemapColumn("/grown-ups", "Grown-Ups", [
+      leaf("/grown-ups/help", "Help and support"),
+      leaf("/grown-ups/articles", "News & Articles"),
+      ...published("articles").map(r => leaf("/article/"+r.id, r.title)),
+      leaf("/grown-ups/contact", "Contact us")
+    ], SITEMAP_SECTION_COLOR.grownups),
+    sitemapColumn("/about/team", "About us", [
+      leaf("/about/mission", "Our mission"),
+      leaf("/about/vision", "Our vision"),
+      leaf("/about/partners", "Our partners"),
+      leaf("/about/business", "Business inquiries")
+    ], SITEMAP_SECTION_COLOR.about),
+    sitemapColumn("/shop", "Shop", [
+      ...(SHOP_PRINTABLES_ENABLED ? [leaf("/shop/printables", "Printable packs")] : []),
+      leaf("/shop/amazon", "Amazon picks")
+    ], SITEMAP_SECTION_COLOR.shop),
+    sitemapColumn("/", "Collections", published("collections").map(r => leaf("/collection/"+r.id, r.title)), SITEMAP_SECTION_COLOR.collections),
+    sitemapColumn("/donate", "Support", [], SITEMAP_SECTION_COLOR.support),
+    sitemapColumn("/privacy", "Legal", [
+      leaf("/privacy", "Privacy policy"),
+      leaf("/terms", "Terms and conditions")
+    ], SITEMAP_SECTION_COLOR.legal)
+  ];
+
+  const diagramHTML = '<div class="sitemap-diagram">'
+    + '<div class="sitemap-home-row">' + sitemapNode("/", "Home", "sitemap-node--root") + '</div>'
+    + '<div class="sitemap-trunk"></div>'
+    + '<div class="sitemap-columns-wrap"><div class="sitemap-columns">' + columns.join("") + '</div></div>'
+    + '</div>';
+  const totalUrls = (diagramHTML.match(/data-act="sitemap-preview"/g) || []).length;
+
+  return '<div class="admin-card">'
+    + '<div class="row-between" style="flex-wrap:wrap;gap:10px"><div>'
+    + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("map") + 'Site map</h3>'
+    + '<p class="admin-meta" style="margin:2px 0 0">Every public page currently live. Tap any page for a quick preview.</p></div>'
+    + '<span class="admin-chip admin-chip--info">' + plural(totalUrls, "page") + '</span></div>'
+    + diagramHTML
+    + '</div>';
+}
+
+/** A small preview window for one page - a same-origin iframe (this
+    session's own running app, so it's guaranteed embeddable and reflects
+    the exact data an admin is currently working with) rather than the
+    external production domain, which may not permit framing and may be
+    out of sync with what's being previewed. "Open live page" still links
+    to the real public URL for the one time a full tab is actually wanted.
+    The iframe is a fresh full page load - it re-fetches and re-hydrates
+    from Supabase from scratch, same as opening the URL in a new tab -
+    so there's a real, sometimes-not-instant gap before anything paints.
+    A "Loading preview..." placeholder sits behind the iframe the whole
+    time and only disappears once the iframe's own load event fires
+    (in practice, once its <body> has real content), so a quick glance
+    right after opening never lands on what looks like a blank/broken
+    window - see the "sitemap-preview-loading" class below. */
+function sitemapPreviewModalHTML(path, title){
+  return '<div class="admin-scope" style="font-family:var(--admin-font-body);color:var(--admin-ink)">'
+    + '<div class="modal__head"><div>'
+    + '<span class="admin-eyebrow">Site map preview</span>'
+    + '<h3 class="admin-section-title" style="margin-top:4px;text-transform:none">' + E(title) + '</h3>'
+    + '</div><button type="button" class="admin-btn admin-btn--ghost admin-btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
+    + '<div class="modal__body">'
+    + '<div class="sitemap-preview-frame">'
+    + '<div class="sitemap-preview-loading"><span class="sitemap-preview-spinner" aria-hidden="true"></span>Loading preview&hellip;</div>'
+    + '<iframe src="' + E(location.origin + path) + '" title="Preview of ' + E(title) + '" loading="eager" onload="this.style.opacity=1"></iframe>'
+    + '</div>'
+    + '</div>'
+    + '<div class="modal__foot">'
+    + '<a class="admin-btn admin-btn--ghost" href="' + E(SITE_ORIGIN + path) + '" target="_blank" rel="noopener">' + ic("external-link") + ' Open live page</a>'
+    + '<button type="button" class="admin-btn admin-btn--primary" data-act="close-modal">Close</button>'
+    + '</div></div>';
 }
 
 function adminBrand(){
@@ -13963,6 +14195,7 @@ function viewAdmin(section, id, sub){
   else if (section === "moderation") body = adminModeration();
   else if (section === "audit")    body = adminAudit();
   else if (section === "settings") body = adminSettings();
+  else if (section === "sitemap") body = adminSitemapPage();
   else if (section === "brand")    body = adminBrand();
   else if (section === "style-guide") body = adminStyleGuide();
   else if (section === "media")    body = adminMedia();
@@ -18202,6 +18435,49 @@ const ACTIONS = {
       el.disabled = false;
       el.innerHTML = label;
     }
+  },
+
+  "regenerate-sitemap": async (el) => {
+    el.disabled = true;
+    const label = el.innerHTML;
+    el.innerHTML = "Regenerating...";
+    try {
+      const res = await sb.functions.invoke("generate-sitemap");
+      if (res.error){
+        /* Same generic-wrapper caveat as "send-invite" above - the
+           function's own {error:"..."} body is on error.context. */
+        let detail = res.error.message;
+        try {
+          if (res.error.context && typeof res.error.context.json === "function"){
+            const body = await res.error.context.json();
+            if (body && body.error) detail = body.error;
+          }
+        } catch(_e){ /* body wasn't JSON (or already read) - keep the generic message */ }
+        toast("Could not regenerate sitemap: " + detail, "bad");
+        return;
+      }
+      if (res.data && res.data.error){
+        toast("Could not regenerate sitemap: " + res.data.error, "bad");
+        return;
+      }
+      /* The Edge Function already wrote meta server-side with the
+         service-role key; patch the local cache so the admin sees it
+         instantly instead of waiting on realtime/the 30s poll fallback. */
+      Object.assign(db._cache.meta, {
+        lastSitemapAt: res.data.generatedAt, lastSitemapCount: res.data.count, lastSitemapUrl: res.data.url
+      });
+      toast("Sitemap regenerated - " + plural(res.data.count, "URL") + ".");
+      rerender();
+    } catch(e){
+      toast("Could not regenerate sitemap: " + e.message, "bad");
+    } finally {
+      el.disabled = false;
+      el.innerHTML = label;
+    }
+  },
+
+  "sitemap-preview": (el) => {
+    openModal(sitemapPreviewModalHTML(el.getAttribute("data-path"), el.getAttribute("data-title")));
   },
 
   "admin-group-toggle": (el) => {

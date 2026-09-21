@@ -1,0 +1,69 @@
+name: Update sitemap
+
+# Keeps the deployed sitemap.xml (the file search engines actually read at
+# chikescreativespace.com/sitemap.xml) in sync with live, published
+# Supabase content - automatically, with no one having to remember to run
+# supabase/generate-sitemap.mjs by hand.
+#
+# Why "on a schedule" and not just "on push": content in this project is
+# published through the admin portal directly against Supabase, not
+# through a git commit. Most of the time nothing is pushed to this repo
+# when a new activity or story goes live, so a push-only trigger would
+# almost never actually fire. The schedule is what makes this real
+# automation instead of automation that only helps on the rare day
+# someone also happens to touch the code.
+#
+# The push trigger is a bonus for the case where the code itself changes
+# the sitemap's shape (a new static page, a new collection/path mapping
+# in generate-sitemap.mjs) - no need to wait up to an hour for that.
+# workflow_dispatch lets anyone re-run it on demand from the Actions tab.
+#
+# No secrets to configure: generate-sitemap.mjs already embeds the
+# Supabase anon/public key (safe by design - see pf-4 in the Launch
+# Readiness checklist), and pushing the regenerated file back uses the
+# repo's own automatic GITHUB_TOKEN. A push made with GITHUB_TOKEN does
+# not re-trigger this same "on: push" workflow, so this can't loop.
+
+on:
+  schedule:
+    - cron: "0 * * * *" # every hour, on the hour
+  push:
+    branches: [main]
+    paths:
+      - "supabase/generate-sitemap.mjs"
+      - "index.html"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-sitemap
+  cancel-in-progress: false
+
+jobs:
+  update-sitemap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Regenerate sitemap.xml from live Supabase content
+        run: node supabase/generate-sitemap.mjs
+
+      - name: Commit and push sitemap.xml if it changed
+        run: |
+          if git diff --quiet -- sitemap.xml; then
+            echo "sitemap.xml is already up to date - nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sitemap.xml
+          git commit -m "Auto-update sitemap.xml [skip ci]"
+          git push
