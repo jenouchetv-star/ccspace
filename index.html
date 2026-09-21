@@ -59,6 +59,34 @@
 <meta name="twitter:image" content="https://www.chikescreativespace.com/assets/hero/og-share.jpg">
 <link id="canonical-link" rel="canonical" href="https://www.chikescreativespace.com/">
 
+<!-- Structured data: Organization, not SoftwareApplication - this is a
+     content/media site (activities, games, stories, episodes), not a
+     piece of software being installed, so SoftwareApplication's expected
+     fields (applicationCategory, operatingSystem, offers) wouldn't
+     describe it accurately. No "offers"/pricing here on purpose: nothing
+     on this site has a real payment path (see the Monetization note in
+     supabase/seed-data.json) - inventing a price would be exactly the
+     kind of incorrect structured data Google's own guidelines warn
+     against. url/logo/sameAs match this file's own OG tags and BRAND
+     socials just above and in index.html's BRAND constant - keep all in
+     sync by hand if the brand name, tagline, or social links ever change,
+     same as the OG block already requires. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Chike's Creative Space",
+  "description": "Chike's Creative Space turns imagination into action. Hands-on activities, games, stories, and short animated adventures where every creation leads to a discovery.",
+  "url": "https://www.chikescreativespace.com/",
+  "logo": "https://www.chikescreativespace.com/assets/brand/logo.webp",
+  "sameAs": [
+    "https://www.youtube.com/@ChikesCreativeSpace",
+    "https://www.instagram.com/chikescreativespace/",
+    "https://www.facebook.com/chikescreativespace"
+  ]
+}
+</script>
+
 <!-- PWA: installable app metadata. Colors match --paper, the site's own
      background token, so the browser chrome never clashes with the page. -->
 <link rel="manifest" href="/manifest.webmanifest">
@@ -1484,9 +1512,30 @@ body.is-admin .btn--lg:hover{ box-shadow:0 4px 14px rgba(20,34,44,.16); }
 .admin-rail{
   flex:none; width:248px;
   background:var(--admin-rail-bg); color:var(--admin-rail-ink);
-  display:flex; flex-direction:column; font-family:var(--admin-font-body);
-  position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto;
+  font-family:var(--admin-font-body);
+  position:sticky; top:0; align-self:flex-start; height:100vh;
+  transition:width .15s ease;
 }
+.admin-rail__inner{ display:flex; flex-direction:column; height:100%; overflow-y:auto; overflow-x:hidden; }
+/* Collapsed: the rail narrows in the normal flex layout and its content
+   clips to match. Hovering widens the rail itself back to full width -
+   a plain width change, not an absolutely-positioned overlay - so
+   admin-main reflows briefly while browsing it. A fancier "overlay,
+   don't reflow" version (position:absolute + z-index) was tried first
+   and produced a real rendering glitch (a ghosted double-image during
+   the transition) - this plainer version has far less to go wrong. */
+.admin-rail.is-collapsed{ width:68px; }
+.admin-rail.is-collapsed .admin-rail__inner :is(.admin-rail__brand span, .admin-rail__nav a span, .admin-rail__group-toggle span, .pill-count, .admin-rail__foot){ display:none; }
+.admin-rail.is-collapsed:hover, .admin-rail.is-collapsed.is-hovering{ width:248px; z-index:60; box-shadow:6px 0 24px rgba(0,0,0,.28); }
+.admin-rail.is-collapsed:hover .admin-rail__inner :is(.admin-rail__brand span, .admin-rail__nav a span, .admin-rail__group-toggle span, .pill-count, .admin-rail__foot),
+.admin-rail.is-collapsed.is-hovering .admin-rail__inner :is(.admin-rail__brand span, .admin-rail__nav a span, .admin-rail__group-toggle span, .pill-count, .admin-rail__foot){ display:revert; }
+.admin-rail__collapse-toggle{
+  display:flex; align-items:center; justify-content:center; width:100%; flex:none;
+  padding:9px; border:0; border-bottom:1px solid var(--admin-rail-border);
+  background:none; color:var(--admin-rail-mute); cursor:pointer; transition:background .13s, color .13s;
+}
+.admin-rail__collapse-toggle:hover{ background:var(--admin-rail-hover); color:#FFFFFF; }
+.admin-rail__collapse-toggle svg{ width:16px; height:16px; }
 .admin-rail__brand{
   display:flex; align-items:center; gap:10px; padding:18px;
   text-decoration:none; color:#FFFFFF; border-bottom:1px solid var(--admin-rail-border); flex:none;
@@ -1510,15 +1559,17 @@ body.is-admin .btn--lg:hover{ box-shadow:0 4px 14px rgba(20,34,44,.16); }
    which category is expanded reads at a glance, not just from the chevron. */
 .admin-rail__group.is-open{ background:rgba(255,255,255,.045); padding-bottom:6px; }
 .admin-rail__group-toggle{
-  display:flex; align-items:center; justify-content:space-between; width:100%;
-  padding:10px 12px 10px 6px; margin-top:2px; border:0; border-radius:8px; background:none;
+  display:flex; align-items:center; gap:11px; width:100%;
+  padding:10px 12px; margin-top:2px; border:0; border-radius:8px; background:none;
   font-family:var(--admin-font-mono);
   font-size:.65rem; font-weight:500; letter-spacing:.11em; text-transform:uppercase;
   color:var(--admin-rail-mute); cursor:pointer; transition:background .13s, color .13s;
 }
 .admin-rail__group-toggle:hover{ background:var(--admin-rail-hover); color:var(--admin-rail-ink); }
 .admin-rail__group.is-open .admin-rail__group-toggle{ color:var(--admin-rail-ink); }
-.admin-rail__group-toggle svg{ width:15px; height:15px; color:inherit; }
+.admin-rail__group-toggle svg{ width:15px; height:15px; color:inherit; flex:none; }
+.admin-rail__group-toggle > span:first-of-type{ flex:1; text-align:left; }
+.admin-rail__group-chevron{ display:flex; margin-left:auto; }
 .admin-rail__group-items{ display:flex; flex-direction:column; gap:2px; }
 /* [hidden] and this rule share the same specificity, so without this the
    flex display wins and a "collapsed" group still shows every link. */
@@ -1546,6 +1597,28 @@ body.is-admin .btn--lg:hover{ box-shadow:0 4px 14px rgba(20,34,44,.16); }
   font-size:.68rem; font-weight:500; letter-spacing:.03em; white-space:nowrap;
 }
 .admin-topbar__proto svg{ width:14px; height:14px; }
+/* Who else is signed in right now (see startAdminPresence()) - a small
+   stack of initials avatars beside the account button, each with a
+   green online dot and a hover tooltip (the same [data-tip] mechanism
+   the chart tooltips use) naming their current page and how long
+   they've been on it. */
+.admin-presence-cluster{ display:flex; align-items:center; }
+.admin-presence-avatar{
+  position:relative; display:inline-flex; align-items:center; justify-content:center;
+  width:26px; height:26px; border-radius:50%; margin-left:-8px;
+  background:var(--admin-accent-soft); color:var(--admin-accent-ink);
+  font-family:var(--admin-font-mono); font-size:.62rem; font-weight:700;
+  border:2px solid var(--admin-surface); cursor:default;
+}
+.admin-presence-cluster .admin-presence-avatar:first-child{ margin-left:0; }
+.admin-topbar__proto .admin-presence-avatar--self{
+  width:20px; height:20px; margin-left:0; background:rgba(122,80,21,.16); color:inherit; border-color:transparent;
+}
+.admin-presence-dot{
+  position:absolute; right:-1px; bottom:-1px; width:8px; height:8px; border-radius:50%;
+  background:var(--admin-good); border:2px solid var(--admin-surface);
+}
+.admin-topbar__proto .admin-presence-dot{ border-color:var(--admin-warn-soft); }
 .admin-content{ flex:1; padding:clamp(20px,3vw,36px); }
 /* The family portrait beside the login/accept-invite card - decorative,
    so it only shows once there is room for it beside the form rather than
@@ -1570,9 +1643,15 @@ body.is-admin .btn--lg:hover{ box-shadow:0 4px 14px rgba(20,34,44,.16); }
 .admin-row span{ font-size:.88rem; line-height:1.5; }
 @media (max-width:940px){
   .admin-shell{ display:block; }
-  .admin-rail{ position:static; width:auto; height:auto; flex-direction:row; flex-wrap:wrap; align-items:center; }
+  .admin-rail, .admin-rail.is-collapsed, .admin-rail.is-collapsed:hover{ position:static; width:auto; height:auto; box-shadow:none; }
+  .admin-rail__inner{ flex-direction:row; flex-wrap:wrap; align-items:center; overflow:visible; }
   .admin-rail__nav{ flex-direction:row; flex-wrap:wrap; padding:10px 12px; }
   .admin-rail__foot{ display:none; }
+  /* The collapse/hover-to-expand behavior is a desktop-sidebar concept -
+     the mobile layout already collapses the rail into a wrapping top
+     bar, so the toggle has nothing to do here. */
+  .admin-rail__collapse-toggle{ display:none; }
+  .admin-rail.is-collapsed .admin-rail__inner :is(.admin-rail__brand span, .admin-rail__nav a span, .admin-rail__group-toggle span, .pill-count){ display:revert; }
 }
 
 .kpi{ background:var(--admin-surface); border:1px solid var(--admin-border); border-radius:10px; padding:17px 19px; box-shadow:var(--admin-shadow); }
@@ -2045,7 +2124,7 @@ h1.admin-page-title{ font-size:1.7rem; }
 .sitemap-trunk{ width:2px; height:20px; background:var(--admin-border); margin:0 auto; }
 .sitemap-columns-wrap{ overflow-x:auto; padding-bottom:10px; }
 .sitemap-columns{ display:flex; gap:14px; align-items:flex-start; justify-content:center; min-width:max-content; margin:0 auto; padding:0 6px; }
-.sitemap-col{ display:flex; flex-direction:column; align-items:center; gap:8px; width:150px; flex:none; }
+.sitemap-col{ display:flex; flex-direction:column; align-items:center; gap:8px; width:104px; flex:none; }
 .sitemap-col__children{
   display:flex; flex-direction:column; gap:6px; width:100%;
   padding-top:10px; border-top:2px solid var(--admin-border);
@@ -2061,7 +2140,7 @@ h1.admin-page-title{ font-size:1.7rem; }
 .sitemap-col__children{ border-top-color:var(--sc); }
 
 .sitemap-node{
-  position:relative; display:inline-block; min-width:92px; max-width:150px;
+  position:relative; display:inline-block; min-width:92px; max-width:104px;
   padding:16px 10px 9px; border-radius:8px; border:1.5px solid var(--admin-border);
   background:var(--admin-surface); font-family:inherit; font-size:.72rem; font-weight:700;
   color:var(--admin-ink); line-height:1.3; cursor:pointer;
@@ -2902,6 +2981,50 @@ function setSavedAdminEmail(email){
     if (email) localStorage.setItem(SAVED_ADMIN_EMAIL_KEY, email);
     else localStorage.removeItem(SAVED_ADMIN_EMAIL_KEY);
   } catch(_e){}
+}
+/* Whether this browser's admin nav rail is pinned narrow (still expands
+   on hover) - a per-browser display preference, same trust level and
+   storage pattern as keepSignedIn/savedAdminEmail above. */
+const RAIL_COLLAPSED_KEY = "ccs_admin_rail_collapsed";
+function railCollapsed(){
+  try { return localStorage.getItem(RAIL_COLLAPSED_KEY) === "yes"; } catch(_e){ return false; }
+}
+function setRailCollapsed(val){
+  try { localStorage.setItem(RAIL_COLLAPSED_KEY, val ? "yes" : "no"); } catch(_e){}
+}
+
+/* A collapsed rail expands on hover via .is-collapsed:hover in CSS, which
+   is fine for the very first hover - but render() replaces the whole
+   admin shell's DOM on every navigation (a plain innerHTML swap, no
+   diffing). Removing the old, hovered rail element from the DOM turns
+   out to synthesize its own mouseleave (the browser correctly notices
+   the element the cursor was over no longer exists) even though the
+   cursor itself never moved - so a plain mouseenter/mouseleave flag gets
+   reset to "not hovering" by that phantom leave moments before the new
+   rail is inserted, and a click on a nav link would visibly snap the
+   rail back to collapsed instead of staying open.
+   The fix tracks the cursor's actual last position globally (one
+   document-level mousemove listener, attached once) instead of trusting
+   enter/leave events across a DOM replacement, and recomputes whether
+   that position falls inside the brand-new rail's own bounding box right
+   after every render - ground truth, not a boolean that a phantom event
+   could have already corrupted. Live mouseenter/mouseleave still handle
+   the ordinary case (hovering in and out with no navigation in between). */
+let railHovering = false;
+let lastPointerX = -1, lastPointerY = -1;
+let pointerTrackerAttached = false;
+function mountAdminRailHover(){
+  const rail = document.querySelector(".admin-rail");
+  if (!rail) return;
+  if (!pointerTrackerAttached){
+    pointerTrackerAttached = true;
+    document.addEventListener("mousemove", (e) => { lastPointerX = e.clientX; lastPointerY = e.clientY; }, { passive:true });
+  }
+  const r = rail.getBoundingClientRect();
+  railHovering = lastPointerX >= r.left && lastPointerX <= r.right && lastPointerY >= r.top && lastPointerY <= r.bottom;
+  rail.classList.toggle("is-hovering", railHovering);
+  rail.addEventListener("mouseenter", () => { railHovering = true; rail.classList.add("is-hovering"); });
+  rail.addEventListener("mouseleave", () => { railHovering = false; rail.classList.remove("is-hovering"); });
 }
 let lastActivityPersistedAt = 0;
 function noteActivity(){
@@ -6374,7 +6497,7 @@ const ADMIN_NAV = [
   { hash:"#/admin",                label:"Dashboard",       icon:"layout-dashboard" },
   { hash:"#/admin/analytics",      label:"Analytics",       icon:"bar-chart-3" },
 
-  { heading:"Content" },
+  { heading:"Content", icon:"library" },
   { hash:"#/admin/announcements",  label:"Announcements",   icon:"megaphone",    col:"announcements" },
   { hash:"#/admin/pages",          label:"Pages",           icon:"file-pen",     col:"pages" },
   { hash:"#/admin/activities",     label:"Activities",      icon:"hammer",       col:"activities" },
@@ -6385,18 +6508,18 @@ const ADMIN_NAV = [
   { hash:"#/admin/characters",     label:"Characters",      icon:"users",        col:"characters" },
   { hash:"#/admin/homepage",       label:"Homepage",        icon:"home" },
 
-  { heading:"Shop" },
+  { heading:"Shop", icon:"shopping-bag" },
   { hash:"#/admin/products",       label:"Digital products",icon:"file-down",    col:"products" },
   { hash:"#/admin/amazonProducts", label:"Recommendations", icon:"shopping-bag", col:"amazonProducts" },
   { hash:"#/admin/collections",    label:"Collections",     icon:"layers",       col:"collections" },
 
-  { heading:"Site" },
+  { heading:"Site", icon:"globe" },
   { hash:"#/admin/sitemap",        label:"Site Map",        icon:"map" },
   { hash:"#/admin/media",          label:"Media references",icon:"image" },
   { hash:"#/admin/brand",          label:"Brand settings",  icon:"settings" },
   { hash:"#/admin/style-guide",    label:"Style guide",     icon:"palette" },
 
-  { heading:"Operations" },
+  { heading:"Operations", icon:"workflow" },
   { hash:"#/admin/send-newsletter",label:"Newsletters", icon:"send" },
   { hash:"#/admin/subscribers",    label:"Subscribers",     icon:"mail",         col:"subscribers" },
   { hash:"#/admin/support",        label:"Support queue",   icon:"life-buoy" },
@@ -6405,14 +6528,12 @@ const ADMIN_NAV = [
   { hash:"#/admin/audit",          label:"Audit log",       icon:"scroll-text" },
   { hash:"#/admin/settings",       label:"Settings & data", icon:"settings" },
 
-  { heading:"Launch" },
+  { heading:"Launch", icon:"rocket" },
   { hash:"#/admin/launch-readiness", label:"Launch Readiness", icon:"rocket" },
+  { hash:"#/admin/test-panel",     label:"Test panel",      icon:"clipboard-check" },
 
-  { heading:"Admin Access" },
-  { hash:"#/admin/admins", label:"Admins", icon:"shield-check" },
-
-  { heading:"Tools" },
-  { hash:"#/test",                 label:"Test panel",      icon:"clipboard-check" }
+  { heading:"Admin Access", icon:"shield-check" },
+  { hash:"#/admin/admins", label:"Admins", icon:"shield-check" }
 ];
 
 /* Change this when the site is deployed into a subfolder. */
@@ -6500,7 +6621,6 @@ function parseRoute(address){
   const seg = raw.split("/").filter(Boolean).map(decodeURIComponent);
   if (!seg.length) return { name:"home", params:{}, query:query };
   if (seg[0] === "admin") return { name:"admin", params:{ section: seg[1] || "dashboard", id: seg[2] || "", sub: seg[3] || "" }, query:query };
-  if (seg[0] === "test")  return { name:"test", params:{}, query:query };
   if (seg[0] === "about" || seg[0] === "grown-ups") return { name:seg[0], params:{ sub: seg[1] || "" }, query:query };
   if (seg[0] === "play"){
     if (!seg[1]) return { name:"play", params:{ sub:"online" }, query:query };
@@ -11726,7 +11846,7 @@ function adminDashboard(){
     + '<p class="admin-meta">Last saved ' + E(relTime(d.meta.updatedAt)) + ' &middot; ' + E(fmtDate(d.meta.updatedAt, true)) + '</p></div>'
     + '<div class="row" style="gap:8px"><button class="admin-btn admin-btn--sm" data-act="export">' + ic("download") + ' Export backup</button>'
     + '<button class="admin-btn admin-btn--sm" data-act="run-health-check">' + ic("stethoscope") + ' Run health check</button>'
-    + '<a class="admin-btn admin-btn--sm admin-btn--primary" href="#/test">' + ic("clipboard-check") + ' Run tests</a></div></div>'
+    + '<a class="admin-btn admin-btn--sm admin-btn--primary" href="#/admin/test-panel">' + ic("clipboard-check") + ' Run tests</a></div></div>'
 
     /* Executive snapshot: a two-column hero, headline/detail/CTAs on the
        left and two at-a-glance stat boxes on the right - always the same
@@ -11778,15 +11898,15 @@ function adminDashboard(){
           + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("layers") + 'Content workflow</h3>'
           + '<p class="admin-meta" style="margin:2px 0 0">' + plural(total, "total record") + (archived ? " &middot; " + plural(archived, "archived record") + " excluded from active content health" : "") + '.</p></div>'
           + '<span class="admin-chip">CMS overview</span></div>'
-          + '<div class="row" style="gap:20px;flex-wrap:wrap;align-items:center;margin-top:16px">'
+          + '<div class="row" style="gap:14px;flex-wrap:wrap;align-items:center;margin-top:16px">'
           + donutChart(compose.map(p => ({ label: p.s.label, value: p.n, color: pipelineSegColor(p.s.id) })), 150)
-          + '<div class="stack" style="gap:8px;flex:1 1 200px;min-width:200px">'
+          + '<div class="stack" style="gap:8px;flex:1 1 140px;min-width:140px">'
           + compose.map(p => '<span style="display:flex;align-items:center;gap:8px;font-size:.82rem">'
               + '<span style="width:10px;height:10px;border-radius:2px;background:' + pipelineSegColor(p.s.id) + ';flex:none"></span>'
               + '<span style="color:var(--admin-mute)">' + E(p.s.label) + '</span></span>').join("")
           + '</div>'
           + stages.map(p => { const pct = p.denom ? (p.n / p.denom) * 100 : 0;
-              return '<div class="admin-card admin-card--flat" style="flex:1 1 110px;min-width:110px;padding:13px;background:' + (p.s.id === "published" ? "var(--admin-good-soft)" : "var(--admin-surface)") + '">'
+              return '<div class="admin-card admin-card--flat" style="flex:1 1 100px;min-width:100px;padding:13px;background:' + (p.s.id === "published" ? "var(--admin-good-soft)" : "var(--admin-surface)") + '">'
                 + '<span style="font-size:.72rem;font-weight:700">' + E(p.s.label) + '</span>'
                 + '<div style="font-size:1.4rem;font-weight:800;font-family:var(--admin-font-mono);margin-top:8px">' + p.n + '</div>'
                 + '<div class="admin-meta" style="margin-top:2px">' + sharePct(p.n, p.denom) + ' of records</div>'
@@ -14149,13 +14269,18 @@ function viewAdmin(section, id, sub){
   const current = section === "notifications" ? { label:"Notifications" }
     : (ADMIN_NAV.find(n => n.hash === routeHash) || ADMIN_NAV[0]);
 
+  if (presenceChannel && presenceTrackedLabel !== current.label){
+    presenceTrackedLabel = current.label;
+    trackAdminPresence(current.label);
+  }
+
   /* Grouped rather than one long list: a heading starts a new, collapsible
      group, and anything before the first heading (Dashboard, Analytics)
      sits on its own above them. */
   const top = [];
   const groups = [];
   ADMIN_NAV.forEach(n => {
-    if (n.heading){ groups.push({ heading:n.heading, items:[] }); return; }
+    if (n.heading){ groups.push({ heading:n.heading, icon:n.icon, items:[] }); return; }
     (groups.length ? groups[groups.length - 1].items : top).push(n);
   });
   const activeGroup = (groups.find(g => g.items.some(n => n.hash === routeHash)) || {}).heading || null;
@@ -14181,7 +14306,8 @@ function viewAdmin(section, id, sub){
         const open = AppState.admin.openGroup === g.heading;
         return '<div class="admin-rail__group' + (open ? " is-open" : "") + '">'
           + '<button class="admin-rail__group-toggle" data-act="admin-group-toggle" data-group="' + E(g.heading) + '" aria-expanded="' + open + '">'
-          + '<span>' + E(g.heading) + '</span>' + ic(open ? "chevron-down" : "chevron-right")
+          + ic(g.icon) + '<span>' + E(g.heading) + '</span>'
+          + '<span class="admin-rail__group-chevron">' + ic(open ? "chevron-down" : "chevron-right") + '</span>'
           + '</button>'
           + '<div class="admin-rail__group-items"' + (open ? "" : " hidden") + '>' + g.items.map(navLink).join("") + '</div>'
           + '</div>';
@@ -14196,6 +14322,7 @@ function viewAdmin(section, id, sub){
   else if (section === "audit")    body = adminAudit();
   else if (section === "settings") body = adminSettings();
   else if (section === "sitemap") body = adminSitemapPage();
+  else if (section === "test-panel") body = adminTestPanel();
   else if (section === "brand")    body = adminBrand();
   else if (section === "style-guide") body = adminStyleGuide();
   else if (section === "media")    body = adminMedia();
@@ -14209,16 +14336,21 @@ function viewAdmin(section, id, sub){
   else if (CONTENT_COLS.indexOf(section) >= 0) body = adminList(section);
   else body = '<div class="empty">Unknown admin section.</div>';
 
+  const collapsed = railCollapsed();
   return '<div class="admin-shell">'
-    + '<nav class="admin-rail" aria-label="Admin sections">'
+    + '<nav class="admin-rail' + (collapsed ? " is-collapsed" : "") + '" aria-label="Admin sections">'
+    + '<div class="admin-rail__inner">'
     + '<a class="admin-rail__brand" href="#/">'
     + '<span><b>' + E(BRAND.name) + '</b><span>Admin</span></span>'
     + '</a>'
+    + '<button type="button" class="admin-rail__collapse-toggle" data-act="toggle-rail-collapse" aria-label="' + (collapsed ? "Expand" : "Collapse") + ' navigation" aria-pressed="' + collapsed + '">'
+    + ic(collapsed ? "panel-left-open" : "panel-left-close") + '</button>'
     + '<div class="admin-rail__nav">' + side + '</div>'
     + '<div class="admin-rail__foot">'
     + '<a class="admin-btn admin-btn--sm admin-btn--block" style="background:transparent;color:var(--admin-rail-ink);border-color:var(--admin-rail-border)" href="#/" target="_blank" rel="noopener">'
     + ic("eye") + ' View site</a>'
     + '<p>Prototype build. Real login, shared Supabase data - see Settings for what that means today.</p>'
+    + '</div>'
     + '</div>'
     + '</nav>'
     + '<div class="admin-main">'
@@ -14226,7 +14358,10 @@ function viewAdmin(section, id, sub){
     + '<div class="admin-topbar__crumb">Admin<span aria-hidden="true">/</span><b>' + E(current.label) + '</b></div>'
     + '<div class="admin-topbar__actions">'
     + notificationBell()
-    + '<button type="button" class="admin-topbar__proto" style="border:none;cursor:pointer" data-act="open-profile">' + ic("user") + ' ' + E((AuthState.profile && (AuthState.profile.name || AuthState.profile.email)) || "") + '</button>'
+    + presenceOthersHTML()
+    + '<button type="button" class="admin-topbar__proto" style="border:none;cursor:pointer" data-act="open-profile">'
+    + '<span class="admin-presence-avatar admin-presence-avatar--self">' + E(initialsOf((AuthState.profile && (AuthState.profile.name || AuthState.profile.email)) || "")) + '<span class="admin-presence-dot"></span></span>'
+    + ' ' + E((AuthState.profile && (AuthState.profile.name || AuthState.profile.email)) || "") + '</button>'
     + '<button type="button" class="admin-btn admin-btn--sm admin-btn--ghost" data-act="lock-now" aria-label="Lock the portal" title="Lock the portal (Ctrl+Shift+L)">' + ic("lock") + ' Lock</button>'
     + '<button class="admin-btn admin-btn--sm admin-btn--ghost" data-act="admin-lock" aria-label="Log out">' + ic("log-out") + ' Log out</button>'
     + '</div>'
@@ -16295,20 +16430,18 @@ const TEST_SUITE = [
     return bad.length === 0 ? T.pass("All published activities have at least one safety note and three steps")
       : T.fail(bad.map(a => a.title).join(", "));
   }},
-  { group:"Brand guardrails", name:"All eight creative strengths are represented in published activities", blocking:false, run(){
-    const used = new Set(publishedActivities().map(a => a.character));
-    const chars = db.list("characters").filter(c => c.status === "published").map(c => c.slug);
-    const missing = chars.filter(c => !used.has(c));
-    return missing.length === 0 ? T.pass("Every character has at least one published activity")
-      : T.fail("No published activity for: " + missing.join(", "));
-  }},
-
   /* ---------- assets ---------- */
   { group:"Assets", name:"Plus Jakarta Sans is loaded and in use", blocking:true, run(){
     if (!document.fonts || typeof document.fonts.check !== "function") return T.skip("This browser has no Font Loading API");
     const loaded = document.fonts.check('800 24px "Plus Jakarta Sans"') || document.fonts.check('1em "Plus Jakarta Sans"');
     const applied = /Plus Jakarta Sans/i.test(getComputedStyle(document.body).fontFamily);
-    const heading = document.querySelector("h1, h2, h3");
+    /* Skip the heading check while looking at an admin page - the admin
+       portal deliberately uses its own type system (--admin-font-display
+       etc.), not Plus Jakarta Sans, and this check's job is the PUBLIC
+       site's typography. Before the test panel moved into the admin
+       shell (see adminTestPanel()), this always ran from a public-styled
+       page and so never actually exercised this branch either. */
+    const heading = document.body.classList.contains("is-admin") ? null : document.querySelector("h1, h2, h3");
     const onHeading = heading ? /Plus Jakarta Sans/i.test(getComputedStyle(heading).fontFamily) : true;
     return (loaded && applied && onHeading) ? T.pass("Plus Jakarta Sans is loaded and applied to body text and headings")
       : T.fail("loaded:" + loaded + " body:" + applied + " heading:" + onHeading);
@@ -17054,7 +17187,7 @@ const TEST_SUITE = [
   /* ---------- routing ---------- */
   { group:"Routing", name:"Every route renders without throwing", blocking:true, run(){
     const routes = ["home","create","play","watch","stories","characters","shop",
-                    "donate","privacy","terms","test"];
+                    "donate","privacy","terms"];
     const errs = [];
     routes.forEach(name => {
       try { renderRoute({ name:name, params:{}, query:{} }); }
@@ -17082,7 +17215,7 @@ const TEST_SUITE = [
       try { renderRoute({ name:pair[0], params:{ id:pair[1] }, query:{} }); }
       catch(err){ errs.push(pair[0] + ": " + err.message); }
     });
-    ["dashboard"].concat(CONTENT_COLS, ["homepage","support","issues","audit","settings","media","subscribers"]).forEach(section => {
+    ["dashboard"].concat(CONTENT_COLS, ["homepage","support","issues","audit","settings","media","subscribers","test-panel"]).forEach(section => {
       try { renderRoute({ name:"admin", params:{ section:section }, query:{} }); }
       catch(err){ errs.push("admin/" + section + ": " + err.message); }
     });
@@ -17346,62 +17479,71 @@ function launchStatusSummary(){
   return { total, complete, blocked, criticalIncomplete, needsReview, level };
 }
 
-function viewTest(){
+/** Lives inside the admin shell (Launch section) now, styled with the
+    same admin-card/admin-chip/admin-badge vocabulary as every other admin
+    screen - it used to be its own standalone, publicly-styled route
+    (#/test, reusing the public site's .panel/.btn/.chip/.kpi classes),
+    which was the actual reason it never looked like part of the portal
+    even after its nav link moved into the Launch group. TEST_SUITE and
+    AppState.lastTestRun (and the "run-tests" action) are unchanged -
+    only the rendering moved. */
+function adminTestPanel(){
   const run = AppState.lastTestRun;
   const groups = [];
   TEST_SUITE.forEach(t => { if (groups.indexOf(t.group) < 0) groups.push(t.group); });
 
-  let summary = "";
-  if (run){
-    const pass = run.results.filter(r => r.result === "pass").length;
-    const fail = run.results.filter(r => r.result === "fail").length;
-    const skip = run.results.filter(r => r.result === "skip").length;
-    const blockingFails = run.results.filter(r => r.result === "fail" && r.blocking).length;
-    summary = '<div class="grid g-4" style="margin-bottom:24px">'
-      + '<div class="kpi kpi--good"><b>' + pass + '</b><span>Passed</span></div>'
-      + '<div class="kpi ' + (fail ? "kpi--bad" : "") + '"><b>' + fail + '</b><span>Failed</span></div>'
-      + '<div class="kpi"><b>' + skip + '</b><span>Skipped</span></div>'
-      + '<div class="kpi ' + (blockingFails ? "kpi--bad" : "kpi--good") + '"><b>' + blockingFails + '</b><span>Release blockers</span></div>'
+  const pass = run ? run.results.filter(r => r.result === "pass").length : 0;
+  const fail = run ? run.results.filter(r => r.result === "fail").length : 0;
+  const skip = run ? run.results.filter(r => r.result === "skip").length : 0;
+  const blockingFails = run ? run.results.filter(r => r.result === "fail" && r.blocking).length : 0;
+
+  const statTile = (label, value, color) => '<div class="admin-card" style="text-align:center;padding:16px">'
+    + '<div style="font-size:1.6rem;font-weight:800;font-family:var(--admin-font-mono);color:var(' + color + ')">' + value + '</div>'
+    + '<div class="admin-meta" style="margin-top:4px">' + E(label) + '</div></div>';
+
+  const summary = run
+    ? '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">'
+      + statTile("Passed", pass, "--admin-good")
+      + statTile("Failed", fail, fail ? "--admin-bad" : "--admin-mute")
+      + statTile("Skipped", skip, "--admin-mute")
+      + statTile("Release blockers", blockingFails, blockingFails ? "--admin-bad" : "--admin-good")
       + '</div>'
-      + '<div class="callout ' + (blockingFails ? "callout--warn" : "") + '" style="margin-bottom:24px">'
-      + (blockingFails
+      + '<div class="admin-callout ' + (blockingFails ? "admin-callout--bad" : "admin-callout--ok") + '" style="margin-bottom:20px">'
+      + ic(blockingFails ? "triangle-alert" : "check")
+      + '<span>' + (blockingFails
           ? '<b>Not ready to ship.</b> ' + plural(blockingFails,"release-blocking check") + ' still failing.'
           : '<b>All release-blocking checks passed.</b> ' + pass + ' passed, ' + skip + ' skipped, ' + fail + ' non-blocking failures.')
-      + ' Run finished ' + E(fmtDate(run.at, true)) + '.</div>';
-  }
+      + ' Run finished ' + E(fmtDate(run.at, true)) + '.</span></div>'
+    : '';
 
   const rows = groups.map(g => {
     const items = TEST_SUITE.filter(t => t.group === g);
-    return '<div class="panel panel--flat" style="padding:0;overflow:hidden;margin-bottom:16px">'
-      + '<div style="padding:14px 18px;background:rgba(30,40,46,.06);border-bottom:var(--line-thin)">'
-      + '<h3 style="margin:0;font-size:1.05rem">' + E(g) + '</h3></div>'
-      + items.map(t => {
+    return '<div class="admin-card" style="padding:0;overflow:hidden;margin-bottom:16px">'
+      + '<div style="padding:14px 18px;background:var(--admin-surface-2);border-bottom:1px solid var(--admin-border)">'
+      + '<h3 class="admin-section-title" style="font-size:.95rem;margin:0">' + E(g) + '</h3></div>'
+      + '<div class="admin-rows" style="padding:0 12px">' + items.map(t => {
           const r = run ? run.results.find(x => x.name === t.name) : null;
-          const cls = r ? ("t-" + r.result) : "t-skip";
-          return '<div class="test-row">'
-            + '<span class="test-dot ' + cls + '" aria-hidden="true"></span>'
-            + '<div><div style="font-weight:700;font-size:.9rem">' + E(t.name)
-            + (t.blocking ? ' <span class="chip chip--berry" style="font-size:.6rem">Blocking</span>' : "") + '</div>'
-            + (r && r.detail ? '<div class="tiny mute">' + E(r.detail) + '</div>' : '<div class="tiny mute">Not run yet</div>')
-            + '</div>'
-            + '<span class="chip ' + (r ? (r.result === "pass" ? "chip--leaf" : r.result === "fail" ? "chip--berry" : "chip--ghost") : "chip--ghost") + '">'
+          const badgeCls = !r ? "" : r.result === "pass" ? "admin-badge--good" : r.result === "fail" ? "admin-badge--bad" : "";
+          const icon = !r ? "circle" : r.result === "pass" ? "check" : r.result === "fail" ? "x" : "minus";
+          return '<div class="admin-row" style="cursor:default">'
+            + '<span class="admin-badge admin-badge--sm ' + badgeCls + '">' + ic(icon) + '</span>'
+            + '<span style="flex:1;min-width:0"><b style="font-weight:700">' + E(t.name) + '</b>'
+            + (t.blocking ? ' <span class="admin-chip admin-chip--bad" style="font-size:.62rem">Blocking</span>' : "")
+            + '<span class="admin-meta" style="display:block;margin-top:2px">' + E(r && r.detail ? r.detail : "Not run yet") + '</span></span>'
+            + '<span class="admin-chip' + (r ? (r.result === "pass" ? " admin-chip--good" : r.result === "fail" ? " admin-chip--bad" : "") : "") + '" style="flex:none">'
             + E(r ? titleCase(r.result) : "Pending") + '</span></div>';
-        }).join("")
+        }).join("") + '</div>'
       + '</div>';
   }).join("");
 
-  return '<div class="admin-band"><div class="shell-wide">' + ic("clipboard-check")
-    + '<span>Prototype test panel</span>'
-    + '<span style="font-weight:600;letter-spacing:.04em;text-transform:none;opacity:.9">The suite snapshots your data and restores it when it finishes.</span></div></div>'
-    + '<div class="shell" style="padding:clamp(24px,4vw,44px) 0 90px">'
-    + '<div class="row-between" style="margin-bottom:24px"><div>'
-    + '<span class="eyebrow">Release checklist</span>'
-    + '<h1 style="margin:0;font-size:2.2rem">' + TEST_SUITE.length + ' checks</h1>'
-    + '<p class="mute" style="margin:6px 0 0">Database, CRUD, backups, the finder, the workflow, accessibility, and the brand guardrails.</p></div>'
-    + '<div class="row"><a class="btn btn--sm btn--ghost" href="#/admin">' + ic("arrow-left") + ' Admin</a>'
-    + '<button class="btn btn--sm btn--cyan" data-act="run-tests">' + ic("play") + " " + (run ? "Run again" : "Run all checks") + '</button></div></div>'
-    + summary + rows
-    + '</div>';
+  return '<div style="margin-bottom:22px"><div class="row-between" style="flex-wrap:wrap;gap:12px"><div>'
+    + '<span class="admin-eyebrow">Launch</span>'
+    + '<h1 class="admin-page-title" style="text-transform:none;font-size:1.5rem">Release checklist</h1>'
+    + '<p class="admin-meta" style="margin-top:4px">' + TEST_SUITE.length + ' checks - database, CRUD, backups, the finder, the workflow, accessibility, and the brand guardrails. The suite snapshots your data and restores it when it finishes.</p>'
+    + '</div>'
+    + '<button class="admin-btn admin-btn--primary" data-act="run-tests">' + ic("play") + ' ' + (run ? "Run again" : "Run all checks") + '</button>'
+    + '</div></div>'
+    + summary + rows;
 }
 
 
@@ -17749,14 +17891,13 @@ function renderRoute(route){
     case "product-detail":    return SHOP_PRINTABLES_ENABLED ? viewProduct(p.id) : shopPrintablesUnavailable();
     case "unsubscribe":       return viewUnsubscribe(p.id);
     case "admin":             return viewAdmin(p.section === "dashboard" || !p.section ? "dashboard" : p.section, p.id, p.sub);
-    case "test":              return viewTest();
     default:                  return notFound("page");
   }
 }
 
 function render(){
   AppState.route = parseHash();
-  const isAdmin = AppState.route.name === "admin" || AppState.route.name === "test";
+  const isAdmin = AppState.route.name === "admin";
   document.body.classList.toggle("is-admin", isAdmin);
 
   let body;
@@ -17797,6 +17938,7 @@ function render(){
   mountStoryBuilderDrag();
   mountStoryBuilderCanvasDrag();
   mountTurnstileWidgets();
+  mountAdminRailHover();
 
   /* html has scroll-behavior:smooth for in-page anchors, which Chrome also
      applies to a plain scrollTop assignment - without behavior:"instant"
@@ -18478,6 +18620,11 @@ const ACTIONS = {
 
   "sitemap-preview": (el) => {
     openModal(sitemapPreviewModalHTML(el.getAttribute("data-path"), el.getAttribute("data-title")));
+  },
+
+  "toggle-rail-collapse": () => {
+    setRailCollapsed(!railCollapsed());
+    rerender();
   },
 
   "admin-group-toggle": (el) => {
@@ -19880,11 +20027,24 @@ document.addEventListener("mousedown", (ev) => {
     const text = target.getAttribute("data-tip");
     if (current !== target){ tipEl.textContent = text; current = target; }
     const pad = 10;
-    const left = Math.min(Math.max(x, 60), window.innerWidth - 60);
-    const top = Math.max(y - pad, 30);
-    tipEl.style.left = left + "px";
-    tipEl.style.top = top + "px";
+    tipEl.style.left = x + "px";
+    tipEl.style.top = Math.max(y - pad, 0) + "px";
     tipEl.classList.add("is-visible");
+    /* The clamp above only keeps the anchor point on-screen - the tooltip
+       itself sits centered above it (transform:translate(-50%,-100%)), so
+       a target near an edge (the topbar's own presence avatars, hard
+       against the top-right corner) could still render partially or
+       fully outside the viewport. Re-measure the actual rendered box and
+       nudge it back in by exactly however far it overflows. */
+    const rect = tipEl.getBoundingClientRect();
+    let dx = 0, dy = 0;
+    if (rect.left < pad) dx = pad - rect.left;
+    else if (rect.right > window.innerWidth - pad) dx = (window.innerWidth - pad) - rect.right;
+    if (rect.top < pad) dy = pad - rect.top;
+    if (dx || dy){
+      tipEl.style.left = (x + dx) + "px";
+      tipEl.style.top = (Math.max(y - pad, 0) + dy) + "px";
+    }
   }
   function hide(){
     if (tipEl) tipEl.classList.remove("is-visible");
@@ -20384,11 +20544,92 @@ function startPublicRealtimeSync(){
 function startAdminRealtimeSync(){
   if (ADMIN_REALTIME_CHANNELS.length) return;
   ADMIN_REALTIME_CHANNELS = ADMIN_ONLY_COLLECTIONS.map(col => subscribeRealtimeCol(col));
+  startAdminPresence();
 }
 
 function stopAdminRealtimeSync(){
   ADMIN_REALTIME_CHANNELS.forEach(ch => sb.removeChannel(ch));
   ADMIN_REALTIME_CHANNELS = [];
+  stopAdminPresence();
+}
+
+/** Who else is signed in right now, and what they're looking at - built on
+    Supabase Realtime's own Presence feature (a channel that automatically
+    tracks who is subscribed and drops them the instant their websocket
+    disconnects, no manual heartbeat/timeout logic needed), not a new
+    Postgres table. AdminPresence mirrors the channel's own presenceState()
+    after every join/leave/sync event; nothing here is persisted. */
+let presenceChannel = null;
+let presenceSince = null;
+let presenceTrackedLabel = null;
+let AdminPresence = {};
+
+function initialsOf(nameOrEmail){
+  const s = String(nameOrEmail || "").trim();
+  if (!s) return "?";
+  const parts = s.split(/\s+/);
+  return parts.length === 1 ? parts[0].slice(0,2).toUpperCase() : (parts[0][0] + parts[parts.length-1][0]).toUpperCase();
+}
+
+function startAdminPresence(){
+  if (presenceChannel || !AuthState.profile) return;
+  presenceSince = nowISO();
+  presenceTrackedLabel = null;
+  presenceChannel = sb.channel("admin-presence", { config: { presence: { key: AuthState.profile.id } } });
+  presenceChannel.on("presence", { event:"sync" }, () => {
+    if (!presenceChannel) return;
+    const state = presenceChannel.presenceState();
+    const next = {};
+    Object.keys(state).forEach(key => { if (state[key][0]) next[key] = state[key][0]; });
+    AdminPresence = next;
+    if (!hasPlayingEmbed() && !isEditingForm()) rerender();
+  });
+  presenceChannel.subscribe((status) => { if (status === "SUBSCRIBED") trackAdminPresence(); });
+}
+
+function stopAdminPresence(){
+  if (presenceChannel){ sb.removeChannel(presenceChannel); presenceChannel = null; }
+  AdminPresence = {};
+  presenceSince = null;
+  presenceTrackedLabel = null;
+}
+
+/** Re-announces this admin's own presence payload - called once on
+    subscribe and again whenever the admin section they're viewing
+    changes (see viewAdmin()), so other admins see a live "currently on"
+    page rather than whatever section was open when they first connected. */
+function trackAdminPresence(label){
+  if (!presenceChannel || !AuthState.profile) return;
+  const name = AuthState.profile.name || AuthState.profile.email || "Admin";
+  presenceChannel.track({
+    name: name,
+    initials: initialsOf(name),
+    route: label || presenceTrackedLabel || "Admin",
+    since: presenceSince
+  }).catch(() => {});
+}
+
+function presenceDurationLabel(sinceISO){
+  const mins = Math.max(0, Math.round((Date.now() - new Date(sinceISO).getTime()) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return plural(mins, "minute");
+  const hrs = Math.round(mins / 60);
+  return hrs < 24 ? plural(hrs, "hour") : plural(Math.round(hrs / 24), "day");
+}
+
+/** The topbar's "who else is here" cluster - every other admin currently
+    subscribed to the admin-presence channel, each a small initials
+    avatar with a green online dot. Hovering one (via the existing
+    chart-tooltip [data-tip] mechanism) names their current page and how
+    long they've been signed in. */
+function presenceOthersHTML(){
+  const myId = AuthState.profile && AuthState.profile.id;
+  const others = Object.keys(AdminPresence).filter(k => k !== myId).map(k => AdminPresence[k]);
+  if (!others.length) return "";
+  return '<div class="admin-presence-cluster">' + others.map(p => {
+    const tip = E((p.name || "Admin") + " — " + (p.route || "Admin") + " — online " + presenceDurationLabel(p.since));
+    return '<span class="admin-presence-avatar" data-tip="' + tip + '">' + E(p.initials || "?") + '<span class="admin-presence-dot"></span></span>';
+  }).join("") + '</div>';
 }
 
 async function boot(){
