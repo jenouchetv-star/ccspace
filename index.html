@@ -1852,6 +1852,10 @@ body.has-bottom-nav .back-to-top{ bottom:calc(18px + var(--bottom-nav-h, 0px)); 
 .tour-avatar img{ width:100%; height:100%; object-fit:cover; display:block; filter:brightness(1.22); }
 .tour-avatar:hover{ transform:translateY(-2px); }
 body.has-bottom-nav .tour-avatar{ bottom:calc(8px + var(--bottom-nav-h, 0px)); }
+/* A step's own card already carries Chike's portrait and every control
+   the avatar offers (skip, restart via Back/Next) - showing the corner
+   avatar too while a step is up just duplicates it on screen. */
+body:has(.tour-card) .tour-avatar{ display:none; }
 .tour-bubble{
   position:fixed; right:18px; z-index:960;
   bottom:calc(8px + 72px + 10px);
@@ -1890,15 +1894,50 @@ body.has-bottom-nav .tour-bubble{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 7
 @media (prefers-reduced-motion: reduce){ .tour-spotlight{ transition:none; } }
 
 .tour-card{
-  position:fixed; z-index:982; width:min(300px, calc(100vw - 36px));
+  position:fixed; z-index:982; width:min(400px, calc(100vw - 36px));
   background:var(--paper-card); border:var(--line); border-radius:14px;
   box-shadow:var(--hard-sm); padding:16px;
   transition:top .2s ease, left .2s ease;
+  overflow:visible;
 }
 @media (prefers-reduced-motion: reduce){ .tour-card{ transition:none; } }
+.tour-card__body{ display:flex; gap:12px; align-items:flex-start; }
+.tour-card__pose{ width:68px; height:68px; object-fit:contain; object-position:bottom; flex:none; }
+.tour-card__text{ min-width:0; }
+/* Desktop: the pose art stays on the left (already first in markup) but
+   grows large and bleeds past the card's own top/bottom/left edges - a
+   bigger, friendlier presence than the small inline mobile portrait
+   affords. overflow:visible above lets the art spill past the card's
+   rounded corner instead of being clipped by it. */
+@media (min-width:768px){
+  .tour-card{ width:min(480px, calc(100vw - 36px)); }
+  .tour-card__body{ gap:14px; }
+  .tour-card__pose{
+    width:228px; height:236px; object-position:center;
+    /* Sized to match the text column's own min-height exactly, so there's
+       no leftover slack for align-self:center to split above/below - the
+       gap around the image is then the card's own padding on every side,
+       same as the text column's. All 5 pose crops share the same framing,
+       so this one rule places every one of them identically. */
+    align-self:center; margin:0;
+  }
+  /* Body copy length varies stop to stop (About's is a third the length of
+     Contact's) - without a floor, the pinned bottom-right card visibly
+     changed size and jumped position between steps. Matches the tallest
+     stop's natural height so every step reads as the same card. Laid out
+     as a centered flex column so a shorter stop's leftover space splits
+     evenly above the title and below Skip tour, instead of collecting as
+     one big gap underneath (flex-start's default). */
+  .tour-card__text{ min-height:236px; display:flex; flex-direction:column; justify-content:center; }
+}
 .tour-card h3{ margin:0 0 6px; font-size:1rem; }
-.tour-card p{ margin:0 0 12px; font-size:.88rem; color:var(--ink-mute); }
-.tour-card__foot{ display:flex; flex-direction:column; align-items:center; gap:8px; }
+.tour-card p{ margin:0 0 12px; font-size:.88rem; line-height:1.35; color:var(--ink-mute); }
+.tour-card__foot{ display:flex; flex-direction:column; align-items:stretch; gap:10px; }
+/* Smaller than .btn--sm's own default - this card is already compact, and
+   the standard small button reads as oversized next to its title/body
+   text at the card's own scale. */
+.tour-card__foot .btn{ padding:6px 12px; min-height:34px; font-size:.78rem; gap:5px; }
+.tour-card__foot-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .tour-card__step{ font-size:.75rem; font-weight:800; color:var(--ink-mute); }
 /* Small screens: a fixed bottom bar instead of edge-relative placement -
    next to a highlighted element on a phone-width viewport, an edge-
@@ -1920,6 +1959,7 @@ body.is-admin .tour-spotlight, body.is-admin .tour-card{ display:none; }
    :has(), rather than for every other modal in the app. */
 .tour-modal{ width:min(480px,100%); }
 .scrim:has(.tour-modal){ background:rgba(20,12,4,.25); backdrop-filter:blur(1px); -webkit-backdrop-filter:blur(1px); }
+.tour-modal__intro{ line-height:1.35; }
 @media (max-width:767px){
   .tour-modal__intro{ font-size:.92rem; }
   .tour-modal__cta{ padding:11px 27px; min-height:46px; }
@@ -6670,7 +6710,7 @@ const PUBLIC_NAV = [
    whole page width, which highlighted as a "full-width strip" rather
    than a box around the actual content. */
 const TOUR_STOPS = [
-  { key:"home", hash:"#/", navLabel:"Home", title:"Welcome to the studio", icon:"house",
+  { key:"home", hash:"#/", navLabel:"Home", title:"Welcome to our new website", icon:"house",
     target:".hero .hero__in", fallbackTarget:"#main",
     body:"Hi, I'm Chike! This is home base - from here you can jump into Create, Play, Watch, or Read whenever you're ready.",
     next:"Let's see where the making happens." },
@@ -7668,20 +7708,36 @@ function teardownTourStep(){
   detachTourListeners();
 }
 
+const TOUR_POSES = [
+  "assets/characters/chike-pose-wave.png",
+  "assets/characters/chike-pose-point.png",
+  "assets/characters/chike-pose-arms-crossed.png",
+  "assets/characters/chike-pose-point-up.png",
+  "assets/characters/chike-pose-thumbs-up.png"
+];
+
 function tourCardHTML(stop, index){
   const stepLabel = "Stop " + (index + 1) + " of " + TOUR_STOPS.length;
   const nextBtn = index < TOUR_STOPS.length - 1
-    ? '<button type="button" class="btn btn--cyan btn--sm" data-act="tour-next" style="flex:1">Next ' + ic("arrow-right") + '</button>'
+    ? '<button type="button" class="btn btn--cyan btn--sm" data-act="tour-next" style="flex:1">' + E(TOUR_STOPS[index + 1].navLabel) + ' ' + ic("arrow-right") + '</button>'
     : '<button type="button" class="btn btn--cyan btn--sm" data-act="tour-finish" style="flex:1">Finish</button>';
-  return '<p class="tour-card__step">' + E(stepLabel) + '</p>'
+  const pose = TOUR_POSES[index % TOUR_POSES.length];
+  return '<div class="tour-card__body">'
+    + '<img class="tour-card__pose" src="' + E(pose) + '" alt="" aria-hidden="true">'
+    + '<div class="tour-card__text">'
     + '<h3 tabindex="-1">' + E(stop.title) + '</h3>'
     + '<p>' + E(stop.body) + '</p>'
     + '<div class="tour-card__foot">'
     + '<div class="row" style="gap:8px">'
-    + (index > 0 ? '<button type="button" class="btn btn--paper btn--sm" data-act="tour-back" style="flex:1">' + ic("arrow-left") + ' Back</button>' : "")
+    + (index > 0 ? '<button type="button" class="btn btn--paper btn--sm" data-act="tour-back" aria-label="Back" style="flex:none">' + ic("arrow-left") + '</button>' : "")
     + nextBtn
     + '</div>'
+    + '<div class="tour-card__foot-row">'
+    + '<span class="tour-card__step">' + E(stepLabel) + '</span>'
     + '<button type="button" class="tour-link-btn" data-act="tour-skip">Skip tour</button>'
+    + '</div>'
+    + '</div>'
+    + '</div>'
     + '</div>';
 }
 
@@ -7718,14 +7774,24 @@ function positionTourOverlay(targetEl, card, targetEndEl){
     spot.style.width = (r.width + TOUR_SPOTLIGHT_PAD * 2) + "px";
     spot.style.height = (r.height + TOUR_SPOTLIGHT_PAD * 2) + "px";
   }
-  if (card && !window.matchMedia("(max-width:767px)").matches){
-    const margin = 14, cardWidth = 300, minTop = margin;
-    const bottom = r.bottom + TOUR_SPOTLIGHT_PAD, top0 = r.top - TOUR_SPOTLIGHT_PAD;
-    let top = bottom + margin;
-    if (top + 180 > window.innerHeight) top = Math.max(top0 - 180 - margin, minTop);
-    let left = Math.min(Math.max(r.left, margin), window.innerWidth - cardWidth - margin);
-    card.style.top = top + "px";
-    card.style.left = left + "px";
+  if (card){
+    if (window.matchMedia("(max-width:767px)").matches){
+      /* The mobile CSS rule (left:0;right:0;bottom:0) only wins over an
+         inline style left behind by an earlier desktop-width positioning
+         pass (e.g. the viewport was resized below the breakpoint while a
+         step was open) if that inline style is cleared here. */
+      card.style.top = ""; card.style.left = "";
+    } else {
+      /* Pinned to the bottom-right corner instead of following the
+         target's own rect - a target near the top of the page (Home's
+         hero, a pagehead) used to place the card right over the site
+         header/nav. A fixed corner never fights the chrome above it,
+         and the spotlight (positioned separately, above) still does the
+         job of pointing at the actual target. */
+      card.style.top = ""; card.style.left = "";
+      card.style.right = "18px";
+      card.style.bottom = "18px";
+    }
   }
 }
 
@@ -7834,6 +7900,11 @@ function mountTourStep(stop, index){
       card.style.top = ""; card.style.left = "";
       card.style.right = "18px";
       card.style.bottom = "18px";
+    } else {
+      /* Mobile: let the CSS bottom-bar rule take over, clearing whatever
+         desktop positioning (from this step or an earlier one) may have
+         left inline. */
+      card.style.top = ""; card.style.left = ""; card.style.right = ""; card.style.bottom = "";
     }
     const h3 = card.querySelector("h3");
     if (h3) h3.focus();
@@ -7847,7 +7918,7 @@ function tourWelcomeDialogHTML(){
     + '<h3 style="margin:0;font-size:1.5rem">Welcome to Chike’s Creative Space!</h3></div>'
     + '<button class="btn btn--ghost btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
     + '<div class="row" style="gap:14px;align-items:flex-start;flex-wrap:nowrap;margin-bottom:18px">'
-    + '<img src="assets/characters/chike-avatar.png" alt="" style="width:80px;height:80px;border-radius:50%;object-fit:cover;flex:none;filter:brightness(1.22)">'
+    + '<img src="assets/characters/chike-avatar.png" alt="" style="width:104px;height:104px;border-radius:50%;object-fit:cover;flex:none;filter:brightness(1.22)">'
     + '<p class="tour-modal__intro" style="margin:0">Explore games, stories, creative activities, and resources made to help young minds learn and have fun. Choose a stop below, or begin the full tour.</p>'
     + '</div>'
     + '<button type="button" class="btn btn--cyan btn--block tour-modal__cta" data-act="tour-start" style="margin-bottom:14px">' + (resuming ? "Continue the tour" : "Start the tour") + '</button>'
@@ -7865,7 +7936,10 @@ function tourCompleteDialogHTML(){
     + '<span class="eyebrow">Site tour</span>'
     + '<h3 style="margin:0;font-size:1.5rem">You’re all set!</h3></div>'
     + '<button class="btn btn--ghost btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
-    + '<p>You now know where to play, read, create, and explore. The tour is always available from the avatar in the corner.</p>'
+    + '<div class="row" style="gap:14px;align-items:flex-start;flex-wrap:nowrap;margin-bottom:18px">'
+    + '<img src="assets/characters/chike-avatar.png" alt="" style="width:104px;height:104px;border-radius:50%;object-fit:cover;flex:none;filter:brightness(1.22)">'
+    + '<p class="tour-modal__intro" style="margin:0">You now know where to play, read, create, and explore. The tour is always available from the avatar in the corner.</p>'
+    + '</div>'
     + '<div class="modal__foot">'
     + '<button class="btn btn--paper btn--sm" data-act="tour-restart">Restart tour</button>'
     + '<button class="btn btn--cyan btn--sm" data-act="tour-explore">Explore on my own</button>'
