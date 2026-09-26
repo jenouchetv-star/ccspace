@@ -521,6 +521,18 @@ img.skel.is-loaded, video.skel.is-loaded{ animation:none; background-image:none;
 @media (prefers-reduced-motion: reduce){
   img.skel, video.skel{ animation:none; background-image:none; background-color:rgba(30,40,46,.08); }
 }
+/* Same shimmer, on a plain block rather than an <img> - boot()'s own
+   loading state (before db.hydrate() resolves) uses this to rough in the
+   shape of a page instead of a bare "Loading..." message, so the real
+   content doesn't pop in against empty space once it arrives. */
+.skel-block{
+  border-radius:var(--r,14px);
+  background-image:linear-gradient(100deg, rgba(30,40,46,.05) 28%, rgba(30,40,46,.12) 45%, rgba(30,40,46,.05) 62%);
+  background-size:200% 100%; animation:skel-shimmer 1.3s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce){
+  .skel-block{ animation:none; background-image:none; background-color:rgba(30,40,46,.08); }
+}
 .card__body{ padding:17px 19px 20px; display:flex; flex-direction:column; gap:10px; flex:1; }
 .card__title{ font-size:1.22rem; font-weight:800; line-height:1.2; letter-spacing:-.022em; margin:0; }
 .card__foot{ margin-top:auto; padding-top:13px; border-top:2px dashed rgba(30,40,46,.22); display:flex; gap:12px; align-items:center; flex-wrap:wrap; font-size:.88rem; font-weight:700; color:var(--ink-mute); }
@@ -1974,6 +1986,11 @@ body.is-admin .tour-spotlight, body.is-admin .tour-card{ display:none; }
   text-decoration:underline; text-underline-offset:3px;
 }
 .tour-link-btn:hover{ color:var(--cyan-deep); }
+/* In the footer (a dark section, see .foot) the cyan default reads fine on
+   its own, but doesn't match the rest of the footer's paper-colored links
+   the way it should for something sitting right under the logo. */
+.foot__tour-link{ color:var(--paper); margin-top:14px; }
+.foot__tour-link:hover{ color:var(--paper); opacity:.82; }
 
 /* ============================================================ QUICK UPDATE PANEL
    Rendered once in the app shell (#quick-update-panel-root, a sibling of
@@ -3055,6 +3072,19 @@ if (typeof window.supabase === "undefined") {
      it has no self-hostable bundle - the widget is served live from
      Cloudflare's own edge), so there's no self-host-first fallback here. -->
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<!-- Activity Finder matching engine: a real ES module (not inlined below)
+     so the exact same code that runs here can also be imported, with no
+     duplication, by its own test file - see assets/lib/activityFinder.js
+     and test/activityFinder.test.js. A module script defers until the
+     document has parsed, same as the classic script below, so by the
+     time anything calls findTopMatches()/scoreFind() (never at the
+     classic script's own top level - only from inside functions the app
+     calls later, after boot()), these names are already on window. -->
+<script type="module">
+  import * as ActivityFinder from "./assets/lib/activityFinder.js";
+  import * as AcceptInvite from "./assets/lib/acceptInvite.js";
+  Object.assign(window, ActivityFinder, AcceptInvite);
+</script>
 <script>
 "use strict";
 
@@ -7550,6 +7580,7 @@ function footer(){
     + '<div><div class="brand" style="margin-bottom:16px">'
     + '<span class="brand__mark" style="height:132px"><img src="assets/brand/logo.webp" alt="' + E(BRAND.name) + '" width="196" height="268"></span>'
     + '</div>'
+    + '<button type="button" class="tour-link-btn foot__tour-link" data-act="tour-open">' + ic("map") + ' Site Tour</button>'
     + '</div>'
     + cols.map(c => '<div><h4>' + E(c.h) + '</h4><ul>'
         + c.links.map(l => '<li><a href="' + l[1] + '">' + E(l[0]) + '</a></li>').join("")
@@ -7572,7 +7603,6 @@ function footer(){
     + '</div></div></div>'
     + '<div class="foot__bar">'
     + '<span>&copy; ' + new Date().getFullYear() + ' ' + E(BRAND.name) + '</span>'
-    + '<button type="button" class="tour-link-btn" data-act="tour-open">' + ic("map") + ' Site Tour</button>'
     + '</div></div></footer>';
 }
 
@@ -7997,49 +8027,15 @@ const HERO_WORDS = [
 ];
 const HERO_WORD_MS = 3000;
 
-const FIND_MATERIALS = [
-  { id:"paper",    label:"Paper & drawing",      eg:"printer paper, construction paper, index cards, newspaper, crayons, markers, pencils, colored pencils" },
-  { id:"boxes",    label:"Boxes & recyclables",  eg:"cardboard boxes, cereal boxes, paper tubes, egg cartons, plastic bottles, bottle caps, clean containers" },
-  { id:"connect",  label:"Connect & build",      eg:"tape, glue, rubber bands, string, yarn, pipe cleaners, craft sticks, toothpicks, clothespins, paper clips" },
-  { id:"cut",      label:"Cut, shape & measure", eg:"safety scissors, ruler, measuring tape, hole punch, clay, dough, aluminum foil" },
-  { id:"kitchen",  label:"Kitchen science",      eg:"cups, bowls, spoons, straws, baking soda, vinegar, salt, sugar, food coloring, cooking oil, dish soap, coffee filters" },
-  { id:"launch",   label:"Move & launch",        eg:"balloons, toy cars, marbles, ping-pong balls, small balls, cups, cardboard tubes" },
-  { id:"lightsnd", label:"Light & sound",        eg:"flashlight, mirror, clear cup, plastic wrap, rubber bands, rice, beans, empty containers" },
-  { id:"outside",  label:"Outside discoveries",  eg:"leaves, sticks, rocks, pinecones, soil, flowers, seed pods, water, ice, sand" },
-  { id:"toys",     label:"Toys",                 eg:"toy cars, figures, blocks, and the toys already on the floor" },
-  { id:"basics",   label:"Basics only",          eg:"paper, pencil, tape, and common household objects" },
-  { id:"surprise", label:"Surprise me",          eg:"any activity with easy-to-find materials" }
-];
-const findMaterial = id => FIND_MATERIALS.find(m => m.id === id) || { id:id, label:id, eg:"" };
-
-/* Step 2. What do you want to explore? */
-const FIND_THEMES = [
-  { id:"fly",      label:"Fly & Move",       icon:"rocket",        bg:"#CFE7F7" },
-  { id:"build",    label:"Build & Test",     icon:"hammer",        bg:"#FFE6A6" },
-  { id:"mix",      label:"Mix & Observe",    icon:"flask-conical", bg:"#BFEDE3" },
-  { id:"nature",   label:"Nature Detective", icon:"leaf",          bg:"#CDE9C2" },
-  { id:"light",    label:"Light & Sound",    icon:"lightbulb",     bg:"#FBE3A8" },
-  { id:"space",    label:"Space Explorer",   icon:"telescope",     bg:"#E7DAF6" },
-  { id:"code",     label:"Code & Think",     icon:"binary",        bg:"#C6E1F2" },
-  { id:"surprise", label:"Surprise Me",      icon:"dices",         bg:"#F8C0B9" }
-];
-const findTheme = id => FIND_THEMES.find(t => t.id === id) || { id:id, label:id, icon:"dices" };
-
-/* Step 3. How much time do you have? */
-const FIND_TIMES = [
-  { id:"quick",  label:"Quick Make",    note:"5 to 10 minutes" },
-  { id:"create", label:"Create & Test", note:"15 to 30 minutes" },
-  { id:"big",    label:"Big Build",     note:"30 minutes or more" }
-];
-const findTime = id => FIND_TIMES.find(t => t.id === id) || { id:id, label:id, note:"" };
-
-/* The filters that appear once there are results to narrow. */
-const FIND_AGES      = [{id:"3-5",label:"3 to 5",min:3,max:5},{id:"6-8",label:"6 to 8",min:6,max:8},{id:"9-12",label:"9 to 12",min:9,max:12}];
+/* FIND_MATERIALS/findMaterial, FIND_THEMES/findTheme, FIND_TIMES/findTime,
+   FIND_AGES, FIND_SUPPORT, FIND_CHALLENGE, findLabel, findBands, and
+   scoreFind/findTopMatches now live in assets/lib/activityFinder.js (a real
+   ES module, imported near the top of the file) instead of here, so the
+   Activity Finder's matching logic has an automated test
+   (test/activityFinder.test.js) that runs the exact same code, not a copy
+   of it. See that module's own header comment for why. */
 const FIND_PLACES    = [{id:"indoors",label:"Indoors"},{id:"outdoors",label:"Outdoors"},{id:"either",label:"Either"}];
-const FIND_SUPPORT   = [{id:"kid",label:"Kid can lead"},{id:"nearby",label:"Grown-up nearby"},{id:"hands-on",label:"Grown-up hands-on"}];
-const FIND_CHALLENGE = [{id:"easy",label:"Easy start"},{id:"stretch",label:"Stretch challenge"},{id:"big",label:"Big challenge"}];
 const FIND_ACCESS    = [{id:"free",label:"Free"},{id:"printable",label:"Printable included"}];
-const findLabel = (list, id) => (list.find(x => x.id === id) || { label:id }).label;
 
 /* Guide sources. Every link is public, parent-facing, and opens in a new tab. */
 const GUIDES = {
@@ -8419,15 +8415,6 @@ const FIND_CATALOG = (function(){
   ];
 })();
 
-/** The time band an activity falls in. Thirty minutes counts as both. */
-function findBands(a){
-  const bands = [];
-  if (a.mins <= 10) bands.push("quick");
-  if (a.mins >= 15 && a.mins <= 30 && !a.plus) bands.push("create");
-  if (a.mins >= 30 || a.plus) bands.push("big");
-  return bands;
-}
-
 const FINDER_RULES = [
   { key:"materials",  points:"4 each, up to 12", label:"Something you have" },
   { key:"theme",      points:"5",  label:"What you want to explore" },
@@ -8445,86 +8432,12 @@ function publishedActivities(){
   return db.list("activities").filter(a => a.status === "published");
 }
 
-/**
- * Weighted matching. An activity does not need to match every input, and no
- * single answer can rule one out - a low score simply loses to a higher one.
- */
-function scoreFind(a, f){
-  let score = 0;
-  const why = [];
-  const gaps = [];
-
-  /* Step 1: something you have. Four points each, twelve at most. */
-  const picked = (f.materials || []).filter(m => m !== "surprise");
-  if (picked.length){
-    const shared = picked.filter(m => a.materials.indexOf(m) >= 0);
-    score += Math.min(shared.length * 4, 12);
-    if (shared.length) why.push("Uses " + shared.map(m => findMaterial(m).label.toLowerCase()).join(" and "));
-    const missing = picked.filter(m => a.materials.indexOf(m) < 0);
-    if (shared.length && missing.length) gaps.push("Does not use " + missing.map(m => findMaterial(m).label.toLowerCase()).join(" or "));
-    /* rule 4: nothing matched every category, so say what else is needed */
-    if (!shared.length) gaps.push("Ask a grown-up for help finding this");
-  }
-
-  /* Step 2: what you want to explore. */
-  if (f.theme && f.theme !== "surprise" && a.themes.indexOf(f.theme) >= 0){
-    score += 5; why.push(findTheme(f.theme).label);
-  }
-
-  /* Step 3: how much time. */
-  if (f.time && findBands(a).indexOf(f.time) >= 0){
-    score += 4; why.push(findTime(f.time).label + ", " + findTime(f.time).note);
-  }
-
-  /* Rule 3: Surprise Me leans on the gentlest activities. */
-  if (f.theme === "surprise" || (f.materials || []).indexOf("surprise") >= 0){
-    if (a.challenge === "easy") score += 3;
-    if (a.support === "kid") score += 3;
-    if (a.mins >= 5 && a.mins <= 20 && !a.plus) score += 3;
-  }
-
-  /* The filters underneath the results. */
-  if (f.age){
-    const band = FIND_AGES.find(x => x.id === f.age);
-    if (band && a.ageMin <= band.max && a.ageMax >= band.min){
-      score += 4; why.push("Written for ages " + a.ageMin + " to " + a.ageMax);
-    }
-    /* rule 5: under-fives are not sent to hands-on-only activities */
-    if (f.age === "3-5" && a.support === "hands-on"){
-      score -= 12; gaps.push("A grown-up needs to be hands-on for this one");
-    }
-  }
-  if (f.place && (a.place === f.place || a.place === "either" || f.place === "either")){ score += 2; }
-  if (f.support && a.support === f.support){ score += 2; why.push(findLabel(FIND_SUPPORT, f.support)); }
-  if (f.challenge && a.challenge === f.challenge){ score += 2; why.push(findLabel(FIND_CHALLENGE, f.challenge)); }
-  if (f.character && a.character === f.character){ score += 3; why.push("One of " + charName(a.character) + "\u2019s"); }
-  if (f.topic && a.topic === f.topic){ score += 3; why.push(topicMeta(a.topic).label); }
-  if (f.access && a.access === f.access){ score += 2; }
-
-  return { activity:a, score:score, why:why.slice(0,4), gaps:gaps.slice(0,2) };
-}
-
-/**
- * The three to show. Rule 2 caps any one character at two of the three, so a
- * run of Chike's activities cannot fill the whole answer.
- */
+/** Thin wrapper around the imported findTopMatches() - the real charName/
+    topicMeta (both look a live record up in the database) are supplied
+    here, at the one call site that renders to an actual visitor; the
+    module itself only ever sees id-based fallbacks, in tests. */
 function runFind(){
-  const f = AppState.finder;
-  const scored = FIND_CATALOG.map(a => scoreFind(a, f));
-  scored.sort((x, y) => (y.score - x.score) || x.activity.id.localeCompare(y.activity.id));
-
-  const chosen = [];
-  const seen = {};
-  scored.forEach(r => {
-    if (chosen.length >= 3) return;
-    const c = r.activity.character;
-    if ((seen[c] || 0) >= 2) return;
-    seen[c] = (seen[c] || 0) + 1;
-    chosen.push(r);
-  });
-  /* if the cap left us short, top up in score order */
-  scored.forEach(r => { if (chosen.length < 3 && chosen.indexOf(r) < 0) chosen.push(r); });
-  return chosen.slice(0, 3);
+  return findTopMatches(FIND_CATALOG, AppState.finder, { charName, topicMeta });
 }
 
 function findAnswered(){
@@ -11740,7 +11653,20 @@ function adminList(col){
           + '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--icon" data-act="arch-record" data-col="' + E(col) + '" data-id="' + E(r.id) + '" aria-label="' + (r.status === "archived" ? "Restore" : "Archive") + '" title="' + (r.status === "archived" ? "Restore" : "Archive") + '">' + ic(r.status === "archived" ? "archive-restore" : "archive") + '</button>'
           + '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--icon admin-btn--danger" data-act="del-record" data-col="' + E(col) + '" data-id="' + E(r.id) + '" aria-label="Delete" title="Delete">' + ic("trash-2") + '</button>'
           + '</td></tr>';
-      }).join("") : '<tr><td colspan="' + (cols.length + 4) + '" style="border:0"><div class="admin-empty">Nothing matches those filters.</div></td></tr>')
+      }).join("") : '<tr><td colspan="' + (cols.length + 4) + '" style="border:0"><div class="admin-empty">'
+          + (all.length === 0
+              /* A genuinely empty collection (a brand-new account, or one
+                 that's simply never had a record of this type) looks
+                 identical to "your filters matched nothing" otherwise -
+                 the one case where a person has the least idea what to do
+                 next gets the same generic sentence as an already-familiar
+                 admin who just over-filtered. Naming the empty state and
+                 repeating the header's own "New X" action right where the
+                 empty table is looking at them is the whole fix. */
+              ? 'No ' + E((COLLECTION_PLURALS[col] || label).toLowerCase()) + ' yet.'
+                + '<div style="margin-top:12px"><button class="admin-btn admin-btn--primary" data-act="new-record" data-col="' + E(col) + '">' + ic("plus") + ' Add your first ' + E(label.toLowerCase()) + '</button></div>'
+              : 'Nothing matches those filters.')
+          + '</div></td></tr>')
     + '</tbody></table></div>';
 }
 
@@ -18415,7 +18341,7 @@ const FAQS = [
     actual updatedAt instead - editing either page through the portal keeps
     this date honest automatically, rather than needing a developer to
     hand-edit this constant and redeploy every time the text changes. */
-const LEGAL_UPDATED = { privacy: "19 September 2026", terms: "18 September 2026" };
+const LEGAL_UPDATED = { privacy: "26 September 2026", terms: "18 September 2026" };
 
 /** Converts a legal page's section outline (heading + paragraphs, some as
     bullet lists) into the same plain rich-text markup an admin's editor
@@ -18450,7 +18376,7 @@ const PRIVACY_SECTIONS = [
       ]},
       { h:"What this build stores, and where", p:[
         "Two different things happen depending on what you do on this site.",
-        ["Activities you save with the heart button, activities and stories you have opened recently (capped at twelve), and which announcement banners you have closed live only in your own browser's storage. Clearing your browsing data erases these."],
+        ["Activities and stories you have opened recently (capped at twelve), and which announcement banners you have closed, live only in your own browser's storage. Clearing your browsing data erases these."],
         "The forms below send what you type to a hosted database that we can read from an admin screen. That information does not disappear when you clear your browser.",
         ["Joining the mailing list stores the email address you give us.",
          "Writing to us through the Grown-Ups contact form or the business contact form stores your message and the category you picked, and, for the business form, an organization name if you gave one. Neither form currently asks for a reply-to email address.",
@@ -20378,8 +20304,8 @@ async function handleSubmit(form, act){
   if (act === "accept-invite-submit"){
     const password = form.elements["password"].value;
     const confirmPw = form.elements["passwordConfirm"].value;
-    if (password.length < 8){ ADMIN_ACCEPT_ERROR = "Password needs to be at least 8 characters."; render(); return; }
-    if (password !== confirmPw){ ADMIN_ACCEPT_ERROR = "Passwords don't match."; render(); return; }
+    const validationError = validateNewPassword(password, confirmPw);
+    if (validationError){ ADMIN_ACCEPT_ERROR = validationError; render(); return; }
     const { error: updateErr } = await sb.auth.updateUser({ password: password });
     if (updateErr){ ADMIN_ACCEPT_ERROR = updateErr.message; render(); return; }
     const { error: acceptErr } = await sb.rpc("accept_invite");
@@ -21454,8 +21380,24 @@ function presenceOthersHTML(){
 
 async function boot(){
   if (Router.mode === "hash" && !location.hash) location.hash = "#/";
-  $("#app").innerHTML = '<div class="section" style="padding-top:80px;text-align:center">'
-    + '<p class="mute">Loading Chike’s Creative Space&hellip;</p></div>';
+  /* Reserves roughly the shape a real page will take (nav bar + a hero
+     block + a row of cards) instead of leaving the wait empty, the same
+     idea as the .skel shimmer already used for individual images. Kept
+     to markup with no data dependency (PUBLIC_NAV is a static list; the
+     real navBar() reads cartCount(), which needs db.hydrate() to have
+     already run) - this only has to look roughly right for a moment, not
+     match whatever content or nav state actually loads. */
+  $("#app").innerHTML = '<header class="nav"><div class="shell-wide nav__in">'
+    + '<span class="brand"><span class="brand__mark"><img src="assets/brand/logo.webp" alt="" width="196" height="268"></span></span>'
+    + '<nav class="nav__links" aria-label="Main" aria-hidden="true">' + PUBLIC_NAV.map(() => '<span class="nav__link">&nbsp;</span>').join("") + '</nav>'
+    + '</div></header>'
+    + '<div class="section" aria-live="polite">'
+    + '<div class="shell">'
+    + '<p class="sr-only">Loading Chike’s Creative Space&hellip;</p>'
+    + '<div class="skel-block" style="height:280px;margin-bottom:24px"></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px">'
+    + Array(3).fill('<div class="skel-block" style="height:200px"></div>').join("")
+    + '</div></div></div>';
   await refreshAuthState();
   primeIdleLockFromStorage();
   try {

@@ -129,6 +129,9 @@ Deno.serve(async (req) => {
     try {
       return new Date(String(d)).toISOString().slice(0, 10);
     } catch (_e) {
+      // A missing/malformed updatedAt|createdAt on one record shouldn't fail
+      // the whole sitemap - today's date is a harmless <lastmod> fallback,
+      // not a value anything downstream treats as authoritative.
       return today;
     }
   };

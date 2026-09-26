@@ -1,0 +1,62 @@
+name: CI
+
+# One job, one file, on purpose: install, type check, build, test. No
+# deployment, no caching, no matrix - a config nobody can read at a glance
+# is one nobody fixes when it goes red. update-sitemap.yml is separate and
+# unrelated (it republishes sitemap.xml from live content, not code health).
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set up Deno (for the Supabase Edge Functions' own TypeScript)
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type check the Edge Functions
+        run: deno check supabase/functions/*/index.ts
+
+      # This project has no bundler - index.html ships as-is, with no
+      # compile step to catch a typo before it reaches production. This is
+      # the closest real equivalent: extract every inline <script> and
+      # confirm it's still valid JavaScript, the same check already run by
+      # hand throughout this project's own history.
+      - name: "Build check: verify index.html's inline scripts parse"
+        run: |
+          node -e "
+          const fs = require('fs');
+          const html = fs.readFileSync('index.html', 'utf8');
+          const scriptRe = /<script([^>]*)>([\s\S]*?)<\/script>/g;
+          let m, i = 0, errors = 0, checked = 0;
+          while ((m = scriptRe.exec(html))) {
+            i++;
+            const attrs = m[1], body = m[2];
+            if (/\bsrc=/.test(attrs)) continue;
+            if (/application\/ld\+json/.test(attrs)) continue;
+            if (/type=\"module\"/.test(attrs)) continue;
+            checked++;
+            try { new Function(body); }
+            catch (e) { errors++; console.error('Script block ' + i + ':', e.message); }
+          }
+          console.log('Checked ' + checked + ' of ' + i + ' script blocks, ' + errors + ' errors');
+          if (errors > 0) process.exit(1);
+          "
+
+      - name: Run tests
+        run: npm test
