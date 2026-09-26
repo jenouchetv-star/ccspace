@@ -13204,9 +13204,12 @@ function adminSupport(){
     return new Date(a.at) - new Date(b.at); // oldest open ticket first within the same urgency
   });
   const states = ["open","waiting","resolved"];
-  return '<div class="row-between" style="margin-bottom:20px"><div>'
+  const resolvedCount = tickets.filter(t => t.state === "resolved").length;
+  return '<div class="row-between" style="margin-bottom:20px;align-items:flex-start"><div>'
     + '<span class="admin-eyebrow">Support queue</span><h1 class="admin-page-title" style="text-transform:none;font-size:1.5rem">Tickets</h1>'
-    + '<p class="admin-meta">Messages sent from the Grown-Ups and business pages land here. Sorted so the oldest urgent-sounding open tickets surface first.</p></div></div>'
+    + '<p class="admin-meta">Messages sent from the Grown-Ups and business pages land here. Sorted so the oldest urgent-sounding open tickets surface first.</p></div>'
+    + (resolvedCount ? '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--danger" data-act="clear-resolved-tickets">' + ic("trash-2") + ' Clear resolved (' + resolvedCount + ')</button>' : "")
+    + '</div>'
     + '<div class="row" style="margin-bottom:16px;gap:8px">'
     + states.map(s => '<span class="admin-chip">' + E(titleCase(s)) + ' ' + tickets.filter(t => t.state === s).length + '</span>').join("")
     + '</div>'
@@ -19779,6 +19782,23 @@ const ACTIONS = {
       }
     };
     input.click();
+  },
+  /* Same shape as admin-bulk-delete, but the record set is "every
+     currently-resolved ticket" rather than a checkbox selection - a
+     resolved ticket has no further action pending on it, so there's
+     nothing to lose by clearing the ones already there in one go instead
+     of one trash-icon click at a time. */
+  "clear-resolved-tickets": () => {
+    const ids = db.list("supportTickets").filter(t => t.state === "resolved").map(t => t.id);
+    if (!ids.length) return;
+    confirmDelete(plural(ids.length, "resolved ticket"), async () => {
+      for (const id of ids){
+        try { await db.remove("supportTickets", id); } catch(_e){ /* keep going */ }
+      }
+      closeModal();
+      toast(plural(ids.length, "resolved ticket") + " cleared");
+      rerender();
+    });
   },
   "admin-bulk-delete": (el) => {
     const col = el.getAttribute("data-col");
