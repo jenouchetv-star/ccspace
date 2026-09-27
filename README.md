@@ -8,6 +8,7 @@ This is the source for [chikescreativespace.com](https://www.chikescreativespace
 - `supabase/` — database schema/migrations and the Edge Functions the app calls (`supabase/functions/*`).
 - `games/`, `books/` — standalone HTML games and story-reader pages, loaded in a sandboxed iframe from the main app.
 - `MAINTENANCE.md` — the recurring post-launch checklist (run this monthly).
+- `.env.example` — every environment variable/secret this project reads, which Edge Function or script needs it, and where to actually set it (nothing here is loaded from a committed file).
 
 ## Running it locally
 
@@ -15,4 +16,4 @@ This is the source for [chikescreativespace.com](https://www.chikescreativespace
 python .claude/serve.py 4321
 ```
 
-then open `http://localhost:4321`. There's no build step — edits to `index.html` show up on refresh.
+then open `http://localhost:4321`. There's no build step — edits to `index.html` show up on refresh. The site itself needs no local secrets to browse; see `.env.example` before deploying or working on an Edge Function.

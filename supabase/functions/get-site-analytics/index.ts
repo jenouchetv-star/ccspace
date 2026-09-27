@@ -114,6 +114,23 @@ function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+// Shapes for the one GraphQL response this function reads - narrow enough to
+// cover exactly the aliases requested in QUERY above, not a general GraphQL
+// Analytics API client.
+interface CfPageloadGroup { count: number; sum: { visits: number }; dimensions?: { date?: string; requestPath?: string; refererHost?: string; countryName?: string } }
+interface CfWebVitalsGroup { sum: Record<string, number> }
+interface CfQuantiles { pageLoadTimeP50?: number; pageLoadTimeP75?: number; pageLoadTimeP90?: number; pageLoadTimeP99?: number }
+interface CfPerformanceGroup { quantiles: CfQuantiles; dimensions?: { date?: string } }
+interface CfAccount {
+  totals?: CfPageloadGroup[]; prevTotals?: CfPageloadGroup[]; byDate?: CfPageloadGroup[];
+  byPath?: CfPageloadGroup[]; byReferer?: CfPageloadGroup[]; byCountry?: CfPageloadGroup[];
+  webVitals?: CfWebVitalsGroup[]; performance?: CfPerformanceGroup[]; performanceByDate?: CfPerformanceGroup[];
+}
+interface CfGraphqlResponse {
+  data?: { viewer?: { accounts?: CfAccount[] } };
+  errors?: { message: string }[];
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -162,7 +179,7 @@ Deno.serve(async (req) => {
   const prevSince = new Date(prevUntil.getTime() - (days - 1) * 86400000);
 
   // Step 3: one call to Cloudflare's GraphQL Analytics API.
-  let cfJson: any;
+  let cfJson: CfGraphqlResponse;
   try {
     const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
       method: "POST",
@@ -184,7 +201,7 @@ Deno.serve(async (req) => {
     });
     cfJson = await res.json();
     if (!res.ok || cfJson.errors) {
-      const detail = cfJson.errors ? cfJson.errors.map((e: any) => e.message).join("; ") : `HTTP ${res.status}`;
+      const detail = cfJson.errors ? cfJson.errors.map((e) => e.message).join("; ") : `HTTP ${res.status}`;
       return json({ error: "Cloudflare API error: " + detail }, 502);
     }
   } catch (err) {
@@ -200,17 +217,17 @@ Deno.serve(async (req) => {
   // GraphQL-shaped nesting leaking into the client.
   const totals = account.totals?.[0] || { count: 0, sum: { visits: 0 } };
   const prevTotals = account.prevTotals?.[0] || { count: 0, sum: { visits: 0 } };
-  const byDate = (account.byDate || []).map((r: any) => ({
-    date: r.dimensions.date, views: r.count, visits: r.sum.visits,
+  const byDate = (account.byDate || []).map((r) => ({
+    date: r.dimensions?.date, views: r.count, visits: r.sum.visits,
   }));
-  const byPath = (account.byPath || []).map((r: any) => ({
-    path: r.dimensions.requestPath || "/", views: r.count,
+  const byPath = (account.byPath || []).map((r) => ({
+    path: r.dimensions?.requestPath || "/", views: r.count,
   }));
   const byReferer = (account.byReferer || [])
-    .filter((r: any) => r.dimensions.refererHost)
-    .map((r: any) => ({ host: r.dimensions.refererHost, views: r.count }));
-  const byCountry = (account.byCountry || []).map((r: any) => ({
-    country: r.dimensions.countryName || "Unknown", views: r.count,
+    .filter((r) => r.dimensions?.refererHost)
+    .map((r) => ({ host: r.dimensions?.refererHost, views: r.count }));
+  const byCountry = (account.byCountry || []).map((r) => ({
+    country: r.dimensions?.countryName || "Unknown", views: r.count,
   }));
 
   // Cloudflare reports RUM durations in microseconds; every UI (its own
@@ -226,8 +243,8 @@ Deno.serve(async (req) => {
   // A per-day trend for each percentile - the same sparkline treatment
   // the page-views/visits stat tiles already get, applied to page load
   // time instead of guessing at a shape for data that isn't fetched.
-  const pageLoadTimeByDate = (account.performanceByDate || []).map((r: any) => ({
-    date: r.dimensions.date,
+  const pageLoadTimeByDate = (account.performanceByDate || []).map((r) => ({
+    date: r.dimensions?.date,
     p50: msFromMicros(r.quantiles?.pageLoadTimeP50),
     p75: msFromMicros(r.quantiles?.pageLoadTimeP75),
     p90: msFromMicros(r.quantiles?.pageLoadTimeP90),

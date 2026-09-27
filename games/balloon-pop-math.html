@@ -92,6 +92,62 @@
     position: relative; z-index: 2;
   }
 
+  #keyboard-instructions {
+    position: fixed;
+    left: 50%;
+    bottom: 1.4vmin;
+    transform: translateX(-50%);
+    font-size: clamp(10px, 1.3vmin, 13px);
+    color: var(--ink);
+    opacity: .75;
+    margin: 0;
+    max-width: 94vw;
+    text-align: center;
+    z-index: 2;
+  }
+
+  #answer-form {
+    display: flex;
+    gap: 1.2vmin;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2vmin;
+    position: relative; z-index: 2;
+  }
+
+  #answer-input {
+    font-family: inherit;
+    font-size: 2.6vmin;
+    font-weight: 700;
+    text-align: center;
+    width: 20vmin;
+    min-width: 140px;
+    padding: 1vmin 1.4vmin;
+    border-radius: 999px;
+    border: 3px solid var(--ink);
+    color: var(--ink);
+    background: var(--paper-card);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,.08);
+  }
+  #answer-input:focus {
+    outline: 3px solid var(--cyan-deep);
+    outline-offset: 2px;
+  }
+
+  #answer-submit {
+    padding: 1vmin 2.4vmin;
+    font-size: 2.4vmin;
+    background: var(--cyan-deep);
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    color: #FFF6EE;
+    font-family: inherit;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 0 rgba(30,34,38,.4);
+  }
+  #answer-submit:hover { background: var(--leaf-deep); }
+
   #game-container {
     width: 100%;
     height: 100%;
@@ -289,6 +345,12 @@
   <h1>Balloon Pop Math</h1>
   <div id="challenge-counter"></div>
   <div id="prompt"></div>
+  <p id="keyboard-instructions">Playing with a mouse? Click the balloon with the right answer. Playing with a keyboard? Press Enter, type the number, then press Enter to pop it.</p>
+  <form id="answer-form">
+    <label for="answer-input">Type your answer</label>
+    <input type="text" id="answer-input" inputmode="numeric" pattern="-?[0-9]*" autocomplete="off" placeholder="Type answer, press Enter">
+    <button type="submit" id="answer-submit">Pop!</button>
+  </form>
   <div id="game-container"></div>
   <div id="message"></div>
   <button id="next-btn" style="display:none;">Next Round</button>
@@ -314,6 +376,8 @@
     const modalAnswerEl = document.getElementById("modal-answer");
     const modalNextBtn = document.getElementById("modal-next-btn");
     const counterEl = document.getElementById("challenge-counter");
+    const answerForm = document.getElementById("answer-form");
+    const answerInput = document.getElementById("answer-input");
 
     // Array of colors for the balloons
     const colors = [
@@ -476,6 +540,42 @@
       }
     }
 
+    // Function to handle a typed keyboard answer - same correctness rules as
+    // clicking a balloon (handleBalloonClick), driven by #answer-input
+    // instead of a click. If the typed number matches a balloon still on
+    // screen, popping it goes through the exact same code path as a click,
+    // so scoring/round-completion stay in one place.
+    function submitTypedAnswer() {
+      const raw = answerInput.value.trim();
+      answerInput.value = "";
+      if (raw === "" || modal.style.display === "flex") return;
+      const num = Number(raw);
+      if (Number.isNaN(num)) return;
+      const matchingBalloon = balloons.find(b => Number(b.dataset.number) === num && !b.classList.contains("popped"));
+      if (matchingBalloon) {
+        handleBalloonClick(matchingBalloon);
+      } else {
+        messageEl.textContent = "That number isn't floating up there. Try again!";
+        messageEl.style.color = '#C13B31';
+        setTimeout(() => { messageEl.textContent = ""; }, 1500);
+      }
+    }
+    answerForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      submitTypedAnswer();
+    });
+    // Pressing Enter anywhere on the page (not already typing in the input)
+    // moves focus into it, matching the on-screen instructions: the first
+    // Enter "opens" the answer box, typing fills it in, and the second
+    // Enter (the form submit above) pops the matching balloon.
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      if (document.activeElement === answerInput) return;
+      if (modal.style.display === "flex") return;
+      e.preventDefault();
+      answerInput.focus();
+    });
+
     // Function to handle the end of a round
     function endRound(success) {
       if (success) {
@@ -494,6 +594,9 @@
           modalNextBtn.style.display = "block";
         }
         modal.style.display = "flex";
+        // Keep the modal reachable by keyboard once it's up - the button
+        // is the only thing in it, so it's also where focus should land.
+        if (modalNextBtn.style.display !== "none") modalNextBtn.focus();
       }
     }
 
@@ -679,6 +782,7 @@
       counterEl.textContent = `Challenge ${currentChallenge} of ${totalChallenges}`;
       setPrompt();
       animateBalloons();
+      answerInput.focus();
     }
 
     // Call startGame() and set up event listeners once the window has loaded

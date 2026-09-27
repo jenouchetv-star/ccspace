@@ -352,6 +352,8 @@
                         <li><strong>Pan View:</strong> Right-click and drag (or hold Shift + Left drag).</li>
                         <li><strong>Zoom:</strong> Use the scroll wheel to approach planets or inspect the solar system.</li>
                         <li><strong>Quick Travel:</strong> Click names in the sidebar list to anchor camera tracking directly to that body.</li>
+                        <li><strong>Keyboard Flight:</strong> <kbd class="px-1 py-0.5 bg-gray-800 rounded text-[10px]">W</kbd><kbd class="px-1 py-0.5 bg-gray-800 rounded text-[10px]">A</kbd><kbd class="px-1 py-0.5 bg-gray-800 rounded text-[10px]">S</kbd><kbd class="px-1 py-0.5 bg-gray-800 rounded text-[10px]">D</kbd> or the arrow keys fly the camera through the scene.</li>
+                        <li><strong>Keyboard Selection:</strong> <kbd class="px-1 py-0.5 bg-gray-800 rounded text-[10px]">Tab</kbd> moves between destinations and controls, <kbd class="px-1 py-0.5 bg-gray-800 rounded text-[10px]">Enter</kbd> activates the focused one.</li>
                     </ul>
                 </div>
 
@@ -683,6 +685,58 @@
         let interactionMode = 'inspect'; // 'inspect' or 'reposition'
         let currentlySelected = null;
         let trackedBodyId = null; // Camera tracking target
+
+        // --- KEYBOARD FLIGHT CONTROLS (WASD / arrow keys) ---
+        // OrbitControls only ever gave this scene mouse navigation. This
+        // translates the camera and its orbit target together along the
+        // camera's own forward/right vectors, so the keyboard flies through
+        // the scene the same way the mouse drags around it - reusing a
+        // couple of scratch Vector3s rather than allocating one every frame.
+        const KEY_MOVE_SPEED = 220; // world units per second
+        const keysPressed = { forward: false, back: false, left: false, right: false };
+        const _keyForward = new THREE.Vector3();
+        const _keyRight = new THREE.Vector3();
+        const _keyMoveDelta = new THREE.Vector3();
+        function updateKeyboardMovement(deltaSeconds) {
+            if (!keysPressed.forward && !keysPressed.back && !keysPressed.left && !keysPressed.right) return;
+            // Manual flight overrides "Quick Travel" camera tracking - once
+            // the player is driving, the target should stop snapping back
+            // to a tracked body every frame (see updateCameraTracking()).
+            trackedBodyId = null;
+
+            camera.getWorldDirection(_keyForward);
+            _keyForward.y = 0;
+            if (_keyForward.lengthSq() > 0) _keyForward.normalize();
+            _keyRight.crossVectors(_keyForward, camera.up).normalize();
+
+            _keyMoveDelta.set(0, 0, 0);
+            if (keysPressed.forward) _keyMoveDelta.add(_keyForward);
+            if (keysPressed.back) _keyMoveDelta.sub(_keyForward);
+            if (keysPressed.right) _keyMoveDelta.add(_keyRight);
+            if (keysPressed.left) _keyMoveDelta.sub(_keyRight);
+            if (_keyMoveDelta.lengthSq() === 0) return;
+
+            _keyMoveDelta.normalize().multiplyScalar(KEY_MOVE_SPEED * deltaSeconds);
+            camera.position.add(_keyMoveDelta);
+            controls.target.add(_keyMoveDelta);
+        }
+        document.addEventListener('keydown', (e) => {
+            if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+            switch (e.key) {
+                case 'w': case 'W': case 'ArrowUp': keysPressed.forward = true; e.preventDefault(); break;
+                case 's': case 'S': case 'ArrowDown': keysPressed.back = true; e.preventDefault(); break;
+                case 'a': case 'A': case 'ArrowLeft': keysPressed.left = true; e.preventDefault(); break;
+                case 'd': case 'D': case 'ArrowRight': keysPressed.right = true; e.preventDefault(); break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            switch (e.key) {
+                case 'w': case 'W': case 'ArrowUp': keysPressed.forward = false; break;
+                case 's': case 'S': case 'ArrowDown': keysPressed.back = false; break;
+                case 'a': case 'A': case 'ArrowLeft': keysPressed.left = false; break;
+                case 'd': case 'D': case 'ArrowRight': keysPressed.right = false; break;
+            }
+        });
 
         // Keep pointers to rendered meshes
         const meshes = {};
@@ -1981,6 +2035,7 @@
         function animate() {
             requestAnimationFrame(animate);
 
+            updateKeyboardMovement(1 / 60);
             controls.update();
             updatePhysics();
             updateCameraTracking();

@@ -1,11 +1,12 @@
 // Chike's Creative Space - submit-ticket Edge Function
 //
-// Gates the two public contact forms (Grown-Ups contact, Business
-// inquiries) behind Cloudflare Turnstile before writing to support_tickets.
-// Previously both forms wrote straight from the browser to Supabase with
-// the anon key - this function is now the only thing that does, with two
-// added steps in front: a deterministic content filter, and a Turnstile
-// check, both server-side.
+// Gates the three public forms that write to support_tickets (Grown-Ups
+// contact, Business inquiries, and the site-wide "Report a problem" form -
+// see reportProblemFormHTML()/footer() in index.html) behind Cloudflare
+// Turnstile. Previously the two contact forms wrote straight from the
+// browser to Supabase with the anon key - this function is now the only
+// thing that does, with two added steps in front: a deterministic content
+// filter, and a Turnstile check, both server-side.
 //
 // The support_tickets write itself still goes through the anon key only -
 // no privilege change there, same RLS/rate-limit/fake-email triggers as
@@ -39,7 +40,7 @@ function json(body: unknown, status = 200) {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ACTION_BY_KIND: Record<string, string> = { contact: "contact", business: "business_contact" };
+const ACTION_BY_KIND: Record<string, string> = { contact: "contact", business: "business_contact", report: "report_problem" };
 
 // --- Content moderation ---------------------------------------------------
 // A deterministic keyword filter, same "pattern-match, no AI" spirit as
@@ -237,6 +238,7 @@ Deno.serve(async (req) => {
     kind?: string; turnstileToken?: string;
     subject?: string; message?: string; email?: string;
     from?: string; type?: string; org?: string; ticketKind?: string;
+    route?: string; url?: string;
   };
   try {
     body = await req.json();
@@ -244,7 +246,7 @@ Deno.serve(async (req) => {
     return json({ error: "Invalid request body" }, 400);
   }
 
-  const kind = body.kind === "business" ? "business" : "contact";
+  const kind = body.kind === "business" ? "business" : body.kind === "report" ? "report" : "contact";
   const expectedAction = ACTION_BY_KIND[kind];
   const email = String(body.email ?? "").trim().toLowerCase();
   const ip = clientIp(req);
@@ -265,6 +267,22 @@ Deno.serve(async (req) => {
   const subject = String(body.subject ?? "").trim();
   const message = String(body.message ?? "").trim();
   const org = String(body.org ?? "").trim();
+  // Free-text informational labels only (which page the reporter was on) -
+  // never used for dedup or routing here the way report-client-error uses
+  // its own closed route allowlist, so no allowlist is needed for route: it
+  // only ever ends up in the subject line (short, e.g. "watch"). pageUrl is
+  // different - it's rendered as a real <a href> in adminSupport() (see
+  // index.html), so an arbitrary scheme here (javascript:, data:) would be
+  // a stored XSS against whichever admin clicks it. Only http(s) survives;
+  // anything else - including a malformed string - becomes "".
+  const route = String(body.route ?? "").trim().slice(0, 60);
+  let pageUrl = String(body.url ?? "").trim().slice(0, 300);
+  try {
+    const parsed = new URL(pageUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") pageUrl = "";
+  } catch {
+    pageUrl = "";
+  }
   const combined = [subject, message, org].join(" ");
   const flagged = containsBannedContent(combined, SELF_HARM_TERMS);
   if (!flagged) {
@@ -309,9 +327,16 @@ Deno.serve(async (req) => {
 
   // Step 4: the same validation the client already did before this
   // function existed - kept here too, since this is now the actual
-  // boundary a request has to cross, not just a UI nicety.
-  if (!subject || !message) return json({ error: "Add a subject and a message." }, 400);
-  if (!EMAIL_RE.test(email)) return json({ error: "That email doesn't look quite right." }, 400);
+  // boundary a request has to cross, not just a UI nicety. A problem
+  // report has no subject field (built below) and no required email -
+  // it's the one kind someone might send without expecting a reply.
+  if (kind === "report"){
+    if (!message) return json({ error: "Tell us what went wrong." }, 400);
+    if (email && !EMAIL_RE.test(email)) return json({ error: "That email doesn't look quite right." }, 400);
+  } else {
+    if (!subject || !message) return json({ error: "Add a subject and a message." }, 400);
+    if (!EMAIL_RE.test(email)) return json({ error: "That email doesn't look quite right." }, 400);
+  }
 
   // Step 5: the actual write - same anon key + same table the browser
   // used directly before, so RLS and the rate-limit/fake-email triggers
@@ -329,6 +354,15 @@ Deno.serve(async (req) => {
         body: message, email, ip,
         from: "business",
         type: String(body.ticketKind ?? "other"),
+        priority: "normal", state: "open", at: new Date().toISOString(), status: "published",
+        ...flagFields,
+      }
+    : kind === "report"
+    ? {
+        subject: "Problem report" + (route ? " - " + route : ""),
+        body: message, email, ip, pageUrl,
+        from: "report",
+        type: "bug",
         priority: "normal", state: "open", at: new Date().toISOString(), status: "published",
         ...flagFields,
       }

@@ -136,6 +136,7 @@
         <!-- Difficulty Selection Screen -->
         <div id="difficulty-selection" class="flex flex-col items-center justify-center p-8 bg-gray-700 rounded-lg shadow-xl">
             <h2 class="text-2xl font-bold text-yellow-400 mb-6">Select Difficulty</h2>
+            <p class="text-sm text-gray-300 mb-4">Playing with a keyboard? Press Tab to move between difficulties, then Enter to select one.</p>
             <div class="flex flex-col sm:flex-row gap-6">
                 <button data-difficulty="easy" class="difficulty-button difficulty-button--easy px-8 py-3 rounded-full text-white font-semibold transition transform hover:scale-105 shadow-lg bg-green-500 hover:bg-green-600">
                     <span class="difficulty-button__title">Easy</span>
@@ -191,6 +192,7 @@
             <div id="message-box" class="mt-4 text-center">
                 <p id="game-message" class="text-xl font-semibold text-gray-200"></p>
             </div>
+            <p class="mt-2 text-xs text-gray-400 text-center">Move your paddle with the mouse, or with the Arrow keys.</p>
         </div>
     </div>
     </div>
@@ -298,6 +300,24 @@
         // Input tracking
         let mouseX = HALF_COURT / 2;
         let mouseY = GAME_HEIGHT / 2;
+
+        // Arrow-key movement nudges the same mouseX/mouseY the mouse
+        // drives (see gameLoop below), so paddleUpdate() never needs to
+        // know whether the target came from a pointer or the keyboard.
+        const KEY_PADDLE_SPEED = 14; // px per ~16.7ms frame
+        const keysPressed = { up: false, down: false, left: false, right: false };
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') { keysPressed.up = true; e.preventDefault(); }
+            else if (e.key === 'ArrowDown') { keysPressed.down = true; e.preventDefault(); }
+            else if (e.key === 'ArrowLeft') { keysPressed.left = true; e.preventDefault(); }
+            else if (e.key === 'ArrowRight') { keysPressed.right = true; e.preventDefault(); }
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowUp') keysPressed.up = false;
+            else if (e.key === 'ArrowDown') keysPressed.down = false;
+            else if (e.key === 'ArrowLeft') keysPressed.left = false;
+            else if (e.key === 'ArrowRight') keysPressed.right = false;
+        });
 
         // --- Game Objects ---
         class HockeyObject {
@@ -736,7 +756,20 @@
             drawCourt();
 
             if (gameActive) {
-                // Update player paddle (tracks mouse)
+                // Arrow keys nudge the shared mouse target by a
+                // frame-rate-independent step, clamped to the same bounds
+                // paddleUpdate() itself enforces for the player's half.
+                if (keysPressed.up || keysPressed.down || keysPressed.left || keysPressed.right) {
+                    const moveStep = KEY_PADDLE_SPEED * ((deltaTime || 16.7) / 16.7);
+                    if (keysPressed.up) mouseY -= moveStep;
+                    if (keysPressed.down) mouseY += moveStep;
+                    if (keysPressed.left) mouseX -= moveStep;
+                    if (keysPressed.right) mouseX += moveStep;
+                    mouseX = Math.max(PADDLE_RADIUS, Math.min(mouseX, HALF_COURT - PADDLE_RADIUS));
+                    mouseY = Math.max(PADDLE_RADIUS, Math.min(mouseY, GAME_HEIGHT - PADDLE_RADIUS));
+                }
+
+                // Update player paddle (tracks mouse or keyboard)
                 const playerTargetX = Math.min(mouseX, HALF_COURT - playerPaddle.radius);
                 paddleUpdate(playerPaddle, playerTargetX, mouseY);
 

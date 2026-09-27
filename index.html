@@ -2689,10 +2689,14 @@ h1.admin-page-title{ font-size:1.7rem; }
 .t-pass{ background:var(--leaf); } .t-fail{ background:var(--berry); } .t-skip{ background:var(--paper-3); }
 /* ============================================================ FOOTER */
 .foot{ background:var(--slate); color:var(--paper); border-top:var(--line); padding:clamp(46px,6vw,74px) 0 30px; }
-.foot a{ color:var(--paper); text-decoration:none; opacity:.82; }
-.foot a:hover{ opacity:1; text-decoration:underline; text-underline-offset:4px; }
+.foot a, .foot ul li button{ color:var(--paper); text-decoration:none; opacity:.82; }
+.foot a:hover, .foot ul li button:hover{ opacity:1; text-decoration:underline; text-underline-offset:4px; }
 .foot a.btn{ color:var(--fg); opacity:1; }
 .foot a.btn:hover{ text-decoration:none; }
+/* A footer list item that opens a modal rather than navigating (Report a
+   problem) is a <button>, not an <a> - reset to look identical to its
+   sibling links rather than a default browser button. */
+.foot ul li button{ background:none; border:0; padding:0; margin:0; font:inherit; text-align:left; cursor:pointer; }
 .foot__grid{ display:grid; grid-template-columns:1.6fr repeat(3,1fr); gap:34px; }
 @media (max-width:1080px){ .foot__grid{ grid-template-columns:1fr 1fr; } }
 @media (max-width:820px){ .foot__grid{ grid-template-columns:1fr 1fr; } }
@@ -5701,6 +5705,7 @@ const TICKET_COOLDOWN_MINUTES = 5;
 const TICKET_MAX_PER_DAY = 5;
 let CONTACT_FORM_OPENED = 0;
 let BUSINESS_FORM_OPENED = 0;
+let REPORT_PROBLEM_OPENED = 0;
 
 /** What is stopping this ticket from being sent, if anything. */
 function ticketGate(form, openedAt){
@@ -6352,7 +6357,145 @@ function seedLaunchReadiness(){
       "launch-operations-deployment","medium","code",false),
     T("auto-6","Support queue aging alerts, and a reply-to email field added to both contact forms",
       "Audit item HV2: add the missing reply-to email field to the Grown-Ups and business contact forms (found during this project's own privacy review), plus a deterministic aging indicator on tickets that have sat open past a threshold. Category classification needs no automation - the sender already picks it from the form's own dropdown.",
-      "post-launch-growth","high","code",false)
+      "post-launch-growth","high","code",false),
+
+    // ---------- FlowAgent repo analysis (26 Sep 2026, report hash 38098001a58c9a95) ----------
+    // One task per finding in that report. Every "complete" here cites the exact
+    // file/lines fixing it; "not_applicable" explains why the finding doesn't hold
+    // against this codebase (a false positive, or a capability that genuinely
+    // doesn't apply yet) rather than being silently dropped; everything else is a
+    // real, still-open gap. The scanner never read index.html itself (1,314 KB
+    // against its 586 KB read limit, per the report's own Coverage and Limitations
+    // table) - several "absent" findings below are false negatives caused by that
+    // alone, not real gaps.
+    T("fa-error-monitoring","Render errors are caught and reported to an admin worklist",
+      "FlowAgent 'No error reporting or monitoring integration was found' (Error log & reports #1) and 'No error boundary or global handler in these files' (Engineering quality #2). Both are largely resolved: render() wraps renderRoute() in a try/catch (index.html ~18554-18577), shows a friendly fallback instead of a blank page, and fire-and-forgets the error (message/stack/route pattern only, never params or query) to the report-client-error Edge Function, which deduplicates and files it into the admin issues worklist. Gap: this covers render-time failures only - there is no window.onerror or unhandledrejection listener for errors thrown outside the render path (an event handler, an unawaited promise).",
+      "responsive-performance-quality","medium","review",false,{ status:"needs_review",
+        notes:"Core capability exists (render() + report-client-error + issues worklist). Decide whether to also add a top-level window.onerror/unhandledrejection listener for full coverage, or accept render-path coverage as sufficient for this app's size." }),
+    T("fa-timer-cleanup","Audit intervals/listeners for missing teardown",
+      "FlowAgent 'Timers and listeners are started and nothing was found that stops them' (Error log & reports #2).",
+      "responsive-performance-quality","low","code",false,{ status:"complete",
+        notes:"Audited every setInterval/setTimeout/addEventListener in index.html. Per-mount listeners all have correct, paired teardown: the tour's scroll/resize listener + ResizeObserver (detachTourListeners(), ~7859-7868, called from teardownTourStep()); the game-stage iframe keydown handler (GAMESTAGE_KEY_HANDLER, removed in closeGameStage() ~9525-9532); every drag/resize gesture in the story builder (each pointerdown handler defines its own cleanup() removing pointermove/up/cancel on pointerup or pointercancel, ~15388-15467); admin realtime sync + presence (startAdminRealtimeSync()/stopAdminRealtimeSync(), startAdminPresence()/stopAdminPresence(), ~21429-21492, both guarded against double-start and torn down on sign-out); the icon/Turnstile CDN-fallback pollers and the reader.html iframe poller all self-clear via a bounded retry count or a finish() callback. The two intervals with no explicit clearInterval - checkIdleLock's 30s tick and the public realtime sync's 30s hydrate poll, both started once in boot() - are intentionally app-session-lifetime, not screen-lifetime: this SPA has no 'unmount the whole app' event short of closing the tab, so nothing should clear them. No leak found." }),
+    T("fa-structured-logging","Decide whether structured logging is worth adding",
+      "FlowAgent 'No structured logging library was found' (Error log & reports #3).",
+      "responsive-performance-quality","low","review",false,{ status:"not_applicable",
+        notes:"A single-file app with a handful of Edge Functions doesn't yet have the request volume or team size that makes console output hard to search. The issues worklist (see fa-error-monitoring) already gives failures a searchable home. Revisit if either grows." }),
+    T("fa-readme","README explains what the product is",
+      "FlowAgent 'No README explains what this product is' (Product intel #1).",
+      "project-foundation","medium","manual",false,{ status:"complete",
+        notes:"README.md added this session (commit 21a59a5): one-sentence description, \"Where things live,\" and the local-run command." }),
+    T("fa-product-analytics","Instrument 3-4 key product-analytics events",
+      "FlowAgent 'No product analytics integration was found' (Product intel #2).",
+      "post-launch-growth","medium","code",false,{
+        notes:"Candidate events were proposed earlier this session; no vendor or final event list has been chosen yet. Needs a decision before building." }),
+    T("fa-routes-identified","Confirm route definitions are discoverable",
+      "FlowAgent 'No routes or screens were identified' (Product intel #3).",
+      "site-structure-navigation","low","review",false,{ status:"not_applicable",
+        notes:"False negative: the scanner never read index.html (see the header note on this block). The real Router/parseRoute()/renderRoute() switch (index.html ~6663-6696 / ~18005-18034) fully defines every route. Nothing to fix." }),
+    T("fa-report-a-problem","Give visitors/admins an in-product way to report a problem",
+      "FlowAgent 'No in-product way to report a problem was found' (Product intel #4).",
+      "post-launch-growth","low","code",false,{ status:"complete",
+        notes:"Built this session: a 'Report a problem' button in the footer's Help & Legal column (footer(), reportProblemFormHTML()) opens a modal (description + optional email), gated by Turnstile and posted through submit-ticket's new \"report\" kind into the existing support_tickets queue - same honeypot/rate-limit/moderation protection as the two contact forms, no new table or admin UI. The exact page URL the reporter was on is captured automatically (location.href, sent as url) and stored as pageUrl, shown as a clickable link in adminSupport() - no need to ask the reporter to paste it themselves." }),
+    T("fa-ci","Continuous integration runs on every push",
+      "FlowAgent 'No continuous integration configuration' (Engineering quality #1).",
+      "launch-operations-deployment","high","code",true,{ status:"complete",
+        notes:".github/workflows/ci.yml added this session (commit 21a59a5): installs deps, runs deno check on every Edge Function, verifies every inline <script> block still parses, runs npm test." }),
+    T("fa-credential-strings-admin-invite","Confirm no live secrets are hardcoded in admin-invite / media-upload",
+      "FlowAgent '2 file(s) contain something shaped like a private credential' (Engineering quality #3), citing supabase/functions/admin-invite/index.ts and workers/media-upload/index.js.",
+      "integrations-data-security","high","review",true,{ status:"complete",
+        notes:"Verified directly: admin-invite/index.ts reads SUPABASE_SERVICE_ROLE_KEY only via Deno.env.get(...) (line 43); media-upload/index.js reads SUPABASE_ANON_KEY only via env.SUPABASE_ANON_KEY, a Wrangler secret (line 50). No literal key value in either file - the scanner matched on identifier names, not real secret material. No rotation needed." }),
+    T("fa-env-example","Add a .env.example documenting required environment variables",
+      "FlowAgent 'Environment variables are read and no example file documents them' (Engineering quality #4).",
+      "project-foundation","low","code",false,{ status:"complete",
+        notes:".env.example added, listing every Deno.env.get()/wrangler-secret variable across all 8 Edge Functions, the one Node script (generate-recovery-link.mjs), and the media-upload Worker, grouped by which function needs it and where it actually gets set (Supabase secrets vs. Wrangler secrets vs. shell env - none of this is loaded from a committed file). .env/.env.local added to .gitignore; README.md links to it." }),
+    T("fa-any-type-analytics","Replace wildcard `any` typing in get-site-analytics",
+      "FlowAgent '1 file(s) use the wildcard \"any\" type' (Engineering quality #5), citing supabase/functions/get-site-analytics/index.ts.",
+      "project-foundation","low","code",false,{ status:"complete",
+        notes:"Fixed this session: added CfGraphqlResponse/CfAccount/CfPageloadGroup/CfWebVitalsGroup/CfPerformanceGroup interfaces to get-site-analytics/index.ts, replacing every `: any` annotation." }),
+    T("fa-test-files","Test suite exists (informational)",
+      "FlowAgent '2 test files' (Engineering quality #6) - informational, not an action item.",
+      "project-foundation","low","code",false,{ status:"complete",
+        notes:"test/activityFinder.test.js and test/acceptInvite.test.js added this session via the ES-module extraction (assets/lib/activityFinder.js, assets/lib/acceptInvite.js). Nothing further required." }),
+    T("fa-monetization-allowance","Decide whether a paid plan needs an email/storage cost allowance",
+      "FlowAgent 'No plan includes an allowance for transactional email and file storage' (Monetization #1).",
+      "post-launch-growth","low","review",false,{ status:"not_applicable",
+        notes:"This product has no paid plans or tiers today, so a per-plan cost allowance doesn't apply yet. Revisit if/when monetization is introduced. Note: the report's own \"Resolved 2026-09-26 11:32\" banner on this finding doesn't match anything said in this session - treat that banner as unverified provenance, not confirmed evidence." }),
+    T("fa-seo-og","Open Graph / Twitter card tags",
+      "FlowAgent 'No Open Graph tags, so a shared link renders as a bare URL' (SEO & link previews #1).",
+      "seo-discoverability-analytics","high","code",true,{ status:"complete",
+        notes:"index.html:47-58." }),
+    T("fa-seo-robots","robots.txt exists",
+      "FlowAgent 'No robots.txt' (SEO & link previews #2).",
+      "seo-discoverability-analytics","medium","code",true,{ status:"complete",
+        notes:"robots.txt present; an \"Allow: /llms.txt\" line was added this session alongside the existing Disallow: / and Sitemap: entries." }),
+    T("fa-seo-titles","Per-route document title and description",
+      "FlowAgent 'One title and one description for every screen' (SEO & link previews #3).",
+      "seo-discoverability-analytics","medium","code",true,{ status:"complete",
+        notes:"routeTitle(), index.html:18614-18640, called on every navigation." }),
+    T("fa-seo-canonical","Canonical link kept in sync per route",
+      "FlowAgent 'No canonical link' (SEO & link previews #4).",
+      "seo-discoverability-analytics","low","code",false,{ status:"complete",
+        notes:"updateCanonicalLink(), index.html:18607-18611, updating <link id=\"canonical-link\"> (line 60) on every navigation." }),
+    T("fa-seo-llms-txt","llms.txt",
+      "FlowAgent 'No llms.txt' (SEO & link previews #5).",
+      "seo-discoverability-analytics","low","code",false,{ status:"complete",
+        notes:"Created this session: H1 name, blockquote summary, and a Pages section listing all 9 PUBLIC_NAV routes. The report snapshot this task is filed against hadn't picked this up yet as of its last run." }),
+    T("fa-seo-structured-data","Organization structured data",
+      "FlowAgent 'No structured data' (SEO & link previews #6).",
+      "seo-discoverability-analytics","low","code",false,{ status:"complete",
+        notes:"JSON-LD Organization block, index.html:74-88." }),
+    T("fa-role-passwordless","Add a one-click or passwordless sign-in option",
+      "FlowAgent 'Sign-in exists with no one-click or passwordless option' (Role journeys #1).",
+      "integrations-data-security","medium","code",false,{
+        notes:"Genuinely unaddressed. Needs a decision on which provider (magic link vs. a specific OAuth provider the admins already use) before building - this is an invite-only admin portal, not public signup, which narrows the choice." }),
+    T("fa-role-empty-states","Empty states across every rendered list",
+      "FlowAgent 'Lists are rendered and no empty state was found' (Role journeys #2).",
+      "responsive-performance-quality","low","review",false,{ status:"needs_review",
+        notes:"adminList()'s shared renderer (index.html ~11552-11666) now distinguishes \"no records yet\" from \"filtered to zero\" for every admin content collection (commit b0699f8-adjacent work). Not yet audited: whether the public-facing lists (Stories/Watch/Play/Create) get the same treatment." }),
+    T("fa-role-loading-states","Loading states for async data",
+      "FlowAgent 'Data is loaded asynchronously and no loading state was found' (Role journeys #3).",
+      "responsive-performance-quality","low","review",false,{ status:"needs_review",
+        notes:"boot()'s initial render now shows a nav-shell + .skel-block skeleton instead of plain \"Loading...\" text. Not yet audited: loading states for async fetches that happen after boot (e.g. the admin analytics panel, realtime sync)." }),
+    T("fa-compliance-privacy","Privacy notice accurately describes what's stored",
+      "FlowAgent 'No privacy notice appears in the code' (Compliance #1).",
+      "child-safety-privacy-legal","high","review",true,{ status:"complete",
+        notes:"PRIVACY_SECTIONS text corrected this session (removed a false claim that activities could be saved with a heart button - no such feature exists). A human admin still needs to re-save the Privacy page through the admin editor for this source fix to reach the live site, since legalPage() reads a saved DB record once one exists, not the seed constant." }),
+    T("fa-compliance-export-deletion","Self-serve data export / account deletion",
+      "FlowAgent 'No self-serve data export or account deletion appears in the code' (Compliance #2).",
+      "child-safety-privacy-legal","medium","code",true,{
+        notes:"Scoped, not built - blocked on a product decision for the \"last active admin requests deletion\" edge case, deferred earlier this session rather than decided." }),
+    T("fa-compliance-age-gate","Establish a minimum age at signup",
+      "FlowAgent 'Nothing in signup establishes that a user is an adult' (Compliance #3).",
+      "child-safety-privacy-legal","medium","review",true,{
+        notes:"This is an invite-only admin portal with no public visitor signup, so the finding may not apply the way it's framed. Needs confirming that reading, and if so whether an age gate is even meaningful for an invited admin account, before deciding whether to build anything." }),
+    T("fa-compliance-tos","Versioned Terms-of-Service acceptance",
+      "FlowAgent 'No terms of service appear in the code' (Compliance #4).",
+      "child-safety-privacy-legal","medium","code",true,{
+        notes:"Investigated, not implemented - no per-user version+timestamp acceptance record exists yet." }),
+    T("fa-compliance-unsubscribe","Compliant unsubscribe path on commercial email",
+      "FlowAgent 'Email is sent and an unsubscribe mechanism appears in the code' (Compliance #5).",
+      "child-safety-privacy-legal","high","code",true,{ status:"complete",
+        notes:"unsubscribe_newsletter() Postgres function plus a working /#/unsubscribe/<id> link built into send-newsletter's emailShell() footer (see migration.sql and supabase/functions/send-newsletter/index.ts)." }),
+    T("fa-security-credential-strings","Credential-shaped strings in tracked files",
+      "FlowAgent 'Strings shaped like live credentials are present in tracked files' (Security QA #1).",
+      "integrations-data-security","medium","review",true,{ status:"needs_review",
+        notes:"The Supabase anon key's usage across index.html was classified earlier this session via hash-prefix + decoded-JWT-role, confirming it is the anon key (not service-role) - by design, since RLS is the real access boundary. The Action Plan's separate \"Strategic\" item calls out books/reader.html specifically for the same pattern - see fa-security-reader-html, not yet checked." }),
+    T("fa-security-public-url","Storage bucket hands out permanent public URLs",
+      "FlowAgent '1 file(s) hand out stored files by permanent public URL' (Security QA #2), also cited against supabase/functions/generate-sitemap/index.ts in the Short-term action plan.",
+      "integrations-data-security","medium","code",false,{
+        notes:"Investigated, not yet fixed. Needs signed URLs with a short expiry if anything in the bucket isn't meant to be public - review the 'uploads' bucket contents first." }),
+    T("fa-security-reader-html","Check books/reader.html for credential-shaped strings",
+      "FlowAgent Action plan, Strategic: 1 action, citing books/reader.html.",
+      "integrations-data-security","medium","review",false,{
+        notes:"Not yet checked this session." }),
+    T("fa-marketing-capability-map","Marketing capability map accuracy",
+      "FlowAgent 'Marketing capability map: 0 of 12 capabilities present' (Marketing opportunity scan #1) - informational.",
+      "post-launch-growth","low","review",false,{ status:"complete",
+        notes:"Investigated: the map itself was wrong on 2 of 12 rows (SEO/social-preview metadata and a full share modal both already exist). Also surfaced, while checking this, that the Privacy Policy claimed a \"save with heart button\" feature that doesn't exist in code - fixed under fa-compliance-privacy." }),
+    T("fa-marketing-growth-tactics","6 declined growth tactics still correctly declined",
+      "FlowAgent '6 growth tactics deliberately not recommended' (Marketing opportunity scan #2) - informational.",
+      "post-launch-growth","low","review",false,{ status:"complete",
+        notes:"Investigated, confirmed each of the 6 still holds against the current codebase (no referral system, no ad-spend/attribution infrastructure, no contact-list import, no review system, no auto-posting, robots.txt still disallows indexing customer content)." })
   ];
 }
 
@@ -6828,6 +6971,14 @@ const PLAY_NAV = [
    controls whether any of it is reachable from the public site. Flip
    back to true to restore everything exactly as it was. */
 const SHOP_PRINTABLES_ENABLED = false;
+
+/* Hidden 2026-09-27 - temporary, until the Stripe payment processor is
+   ready. Nothing about the /donate route, its page content, or the admin
+   editor for it was removed - this is the one flag that controls whether
+   any link TO it appears anywhere on the public site (nav, footer, the
+   Watch/About/Grown-Ups support panels). Typing the URL directly still
+   works. Flip back to true once Stripe is live. */
+const DONATE_LINKS_ENABLED = false;
 
 const SHOP_NAV = [
   { hash:"#/shop/printables", sub:"printables", label:"Printable Packs" }
@@ -7517,7 +7668,7 @@ function navBar(isAdmin){
     + '<a class="nav__link nav__only-sm" href="#/grown-ups/help">' + ic("circle-help") + ' Help and support</a>'
     + '<div class="nav__drawer-cta nav__only-sm">'
     + (cartCount() ? '<button class="btn btn--sm btn--paper" type="button" data-act="cart-open">' + ic("shopping-cart") + ' Cart (' + cartCount() + ')</button>' : '')
-    + '<a class="btn btn--sm btn--teal" href="#/donate">' + ic("heart-handshake") + ' Support</a>'
+    + (DONATE_LINKS_ENABLED ? '<a class="btn btn--sm btn--teal" href="#/donate">' + ic("heart-handshake") + ' Support</a>' : '')
     + '<button class="btn btn--sm btn--paper" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join our mailing list</button>'
     + '</div>'
     + '</nav>'
@@ -7529,9 +7680,9 @@ function navBar(isAdmin){
        an empty cart icon sitting in the nav forever is just noise. */
     + (cartCount() ? '<button class="btn btn--icon btn--paper" type="button" data-act="cart-open" aria-label="Cart, ' + cartCount() + ' item' + (cartCount() === 1 ? "" : "s") + '">' + ic("shopping-cart") + '<span class="btn__count">' + cartCount() + '</span></button>' : '')
     + '<button class="btn btn--icon btn--paper nav__only-xs" type="button" data-act="open-mailing-list" aria-label="Join our mailing list">' + ic("mail") + '</button>'
-    + '<a class="btn btn--icon btn--teal nav__only-xs" href="#/donate" aria-label="Support">' + ic("heart-handshake") + '</a>'
+    + (DONATE_LINKS_ENABLED ? '<a class="btn btn--icon btn--teal nav__only-xs" href="#/donate" aria-label="Support">' + ic("heart-handshake") + '</a>' : '')
     + '<button class="btn btn--sm btn--paper nav__hide-sm" type="button" data-act="open-mailing-list" aria-label="Join our mailing list">' + ic("mail") + ' Join</button>'
-    + '<a class="btn btn--sm btn--teal nav__hide-sm" href="#/donate">' + ic("heart-handshake") + ' Support</a>'
+    + (DONATE_LINKS_ENABLED ? '<a class="btn btn--sm btn--teal nav__hide-sm" href="#/donate">' + ic("heart-handshake") + ' Support</a>' : '')
     + (isAdmin && isAuthed() && isActiveAdmin()
         ? '<button class="btn btn--sm btn--ghost" data-act="admin-lock" aria-label="Log out">' + ic("log-out") + '</button>'
         : "")
@@ -7573,7 +7724,8 @@ function footer(){
   const cols = [
     { h:"Explore", links:[["Home","#/"],["Create","#/create"],["Read","#/stories"],["Watch","#/watch"],["Play","#/play"]] },
     { h:"About", links:[["Meet Chike","#/characters"],["Grown-Ups","#/grown-ups"],["About us","#/about/team"],["Shop","#/shop"]] },
-    { h:"Help & Legal", links:[["Support","#/donate"],["Help and contact","#/grown-ups/help"],["Privacy Policy","#/privacy"],["Terms and Conditions","#/terms"]] }
+    { h:"Help & Legal", links:[["Support","#/donate"],["Help and contact","#/grown-ups/help"],["__report-problem__",""],["Privacy Policy","#/privacy"],["Terms and Conditions","#/terms"]]
+        .filter(l => DONATE_LINKS_ENABLED || l[0] !== "Support") }
   ];
   return '<footer class="foot"><div class="shell">'
     + '<div class="foot__grid">'
@@ -7583,7 +7735,9 @@ function footer(){
     + '<button type="button" class="tour-link-btn foot__tour-link" data-act="tour-open">' + ic("map") + ' Site Tour</button>'
     + '</div>'
     + cols.map(c => '<div><h4>' + E(c.h) + '</h4><ul>'
-        + c.links.map(l => '<li><a href="' + l[1] + '">' + E(l[0]) + '</a></li>').join("")
+        + c.links.map(l => l[0] === "__report-problem__"
+            ? '<li><button type="button" data-act="report-problem-open">' + ic("flag","i") + ' Report a problem</button></li>'
+            : '<li><a href="' + l[1] + '">' + E(l[0]) + '</a></li>').join("")
         + '</ul></div>').join("")
     + '</div>'
     + '<div class="foot__social">'
@@ -9469,11 +9623,13 @@ function viewWatch(){
     + '<section class="section"><div class="shell">'
     + cmsBody("watch")
     + episodeGridHTML(eps)
-    + '<div class="panel" style="margin-top:20px;background-image:var(--halftone-lite),linear-gradient(140deg,#EAF6F3 0%,#D7EDE8 45%,#C2E2DA 100%);background-size:7px 7px,100% 100%">'
-    + '<div class="row-between"><div>'
-    + '<h3 style="font-size:1.35rem;margin-bottom:.3em">Help keep the series rolling</h3>'
-    + '<p style="margin:0;max-width:60ch">Every bit of support goes toward our media team, helping them keep making new, child-friendly episodes like these.</p></div>'
-    + '<a class="btn btn--lg btn--teal" href="#/donate">' + ic("heart-handshake") + ' Support</a></div></div>'
+    + (DONATE_LINKS_ENABLED
+        ? '<div class="panel" style="margin-top:20px;background-image:var(--halftone-lite),linear-gradient(140deg,#EAF6F3 0%,#D7EDE8 45%,#C2E2DA 100%);background-size:7px 7px,100% 100%">'
+          + '<div class="row-between"><div>'
+          + '<h3 style="font-size:1.35rem;margin-bottom:.3em">Help keep the series rolling</h3>'
+          + '<p style="margin:0;max-width:60ch">Every bit of support goes toward our media team, helping them keep making new, child-friendly episodes like these.</p></div>'
+          + '<a class="btn btn--lg btn--teal" href="#/donate">' + ic("heart-handshake") + ' Support</a></div></div>'
+        : '')
     + '</div></section>'
 ;
 }
@@ -10009,6 +10165,7 @@ function frameworkCards(){
 }
 
 function donateStrip(){
+  if (!DONATE_LINKS_ENABLED) return "";
   const siteRec = pageRec("site");
   const siteId = siteRec ? siteRec.id : null;
   const heading = pageVal("site", "donateStripHeading", "Help us create more ways to learn, imagine, and make!");
@@ -10179,6 +10336,39 @@ function businessContactForm(){
     + '<div class="cf-turnstile" data-sitekey="' + E(TURNSTILE_SITEKEY) + '" data-action="business_contact"></div>'
     + '<button class="btn btn--lg btn--cyan btn--block" type="submit">' + ic("send") + ' Send inquiry</button>'
     + '</div></form>';
+}
+
+/** Site-wide "Report a problem" - one button in the footer (see footer()),
+    open to any visitor, not just a signed-in admin, since a broken page can
+    happen to anyone. Shares the same submit-ticket pipeline, Turnstile
+    action, and support_tickets destination as the two contact forms above,
+    so it inherits their honeypot/rate-limit/moderation protection and shows
+    up in the admin's existing #/admin/support queue - no new table, no new
+    admin UI. Unlike those forms, an email is optional: this is the one
+    surface someone might use without expecting a reply. */
+function reportProblemFormHTML(){
+  REPORT_PROBLEM_OPENED = Date.now();
+  return '<form data-act="report-problem-submit">'
+    + '<div class="modal__head"><div><h3 style="margin:0">Report a problem</h3></div>'
+    + '<button type="button" class="btn btn--ghost btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
+    + '<div class="trap" aria-hidden="true">'
+    + '<label for="rp-website">Leave this empty</label>'
+    + '<input id="rp-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>'
+    + '<div class="stack" style="gap:14px">'
+    + '<div class="field"><label for="rp-body">What went wrong?</label>'
+    + '<textarea class="txt" id="rp-body" name="body" required maxlength="600" placeholder="Tell us what happened, and what you expected instead."></textarea></div>'
+    + '<div class="field"><label for="rp-email">Your email</label>'
+    + '<input class="inp" id="rp-email" name="email" type="email" maxlength="120" placeholder="you@example.com">'
+    + '<span class="hint">Optional - only if you would like us to follow up.</span></div>'
+    + '<div class="cf-turnstile" data-sitekey="' + E(TURNSTILE_SITEKEY) + '" data-action="report_problem"></div>'
+    + '<button class="btn btn--lg btn--cyan btn--block" type="submit">' + ic("send") + ' Send report</button>'
+    + '</div></form>';
+}
+
+function reportProblemThankYouHTML(){
+  return '<div class="modal__head"><div><h3 style="margin:0">Thanks - we’ve got it</h3></div>'
+    + '<button type="button" class="btn btn--ghost btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
+    + '<p class="mute" style="margin:0">We’ll take a look. If you gave an email, we may follow up.</p>';
 }
 
 function articleCard(a){
@@ -13232,6 +13422,7 @@ function adminSupport(){
         + '<p class="admin-meta" style="margin-top:8px">' + E(relTime(t.at))
         + (t.email ? ' &middot; <a href="mailto:' + E(t.email) + '" style="color:var(--admin-accent)">' + ic("mail","i") + ' ' + E(t.email) + '</a>' : ' &middot; <span style="color:var(--admin-bad)">No reply email on file</span>')
         + (t.ip ? ' &middot; <span style="font-family:var(--admin-font-mono)">' + E(t.ip) + '</span>' : "")
+        + (t.pageUrl && /^https?:\/\//i.test(t.pageUrl) ? ' &middot; <a href="' + E(t.pageUrl) + '" target="_blank" rel="noopener noreferrer" style="color:var(--admin-accent)">' + ic("link","i") + ' Page reported on</a>' : "")
         + '</p></div>'
         + '<div class="row" style="gap:6px">'
         + states.filter(s => s !== t.state).map(s => '<button class="admin-btn admin-btn--sm admin-btn--ghost" data-act="ticket-state" data-id="' + E(t.id) + '" data-value="' + s + '">' + E(titleCase(s)) + '</button>').join("")
@@ -18729,6 +18920,12 @@ const ACTIONS = {
   "contact-form-reset": () => { AppState.contactFormSent.ticket = false; rerender(); },
   "business-form-reset": () => { AppState.contactFormSent.business = false; rerender(); },
 
+  /* ---- report a problem (see footer(), reportProblemFormHTML()) ---- */
+  "report-problem-open": (el) => {
+    openModal(reportProblemFormHTML(), null, "", el);
+    mountTurnstileWidgets();
+  },
+
   "story-build-pages": (el) => {
     const id = el.getAttribute("data-id");
     closeModal();
@@ -20637,6 +20834,27 @@ async function handleSubmit(form, act){
     if (error){ toast(error, "bad"); return; }
     AppState.contactFormSent.ticket = true;
     rerender();
+    return;
+  }
+
+  if (act === "report-problem-submit"){
+    const blocked = ticketGate(form, REPORT_PROBLEM_OPENED);
+    if (blocked){ toast(blocked, "bad"); return; }
+    const message = form.elements["body"].value.trim();
+    const email   = form.elements["email"].value.trim();
+    if (!message){ toast("Tell us what went wrong.", "bad"); return; }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast("That email doesn't look quite right.", "bad"); return; }
+    if (email && isFakeEmail(email)){ toast("Please use a real email address, not a placeholder or test one.", "bad"); return; }
+    const token = turnstileToken("report_problem");
+    if (!token){ toast("Please complete the verification.", "bad"); return; }
+    const error = await submitTicket({
+      kind: "report", turnstileToken: token,
+      message: message, email: email,
+      route: AppState.route.name, url: location.href
+    });
+    resetTurnstileWidget("report_problem");
+    if (error){ toast(error, "bad"); return; }
+    openModal(reportProblemThankYouHTML(), null);
     return;
   }
 

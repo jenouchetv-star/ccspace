@@ -117,9 +117,10 @@ Deno.serve(async (req) => {
       // plainly rather than reading like any other contact message.
       const flagged = Boolean(record.flagged);
       const flagReason = String(record.flagReason ?? "");
+      const kindLabel = from === "business" ? "business inquiry" : from === "report" ? "problem report" : "contact";
       await sendEmail(
         adminTo,
-        (flagged ? "URGENT - please review: " : `New ${from === "business" ? "business inquiry" : "contact"} message: `) + subject,
+        (flagged ? "URGENT - please review: " : `New ${kindLabel} message: `) + subject,
         (flagged
           ? `<p style="background:#fdecea;color:#b00;font-weight:bold;padding:10px;border-radius:6px">` +
             escapeHtml(flagReason || "This message was automatically flagged for possible self-harm language.") +
