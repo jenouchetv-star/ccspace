@@ -9026,6 +9026,30 @@ function viewHome(){
     html += '<section class="section finder" id="finder"><div class="shell">' + finderPanel("home") + '</div></section>';
   }
 
+  /* A single featured book. The module only says WHICH recommendation to
+     show (items[0] is an amazonProducts id) and which photo goes with it;
+     the title, blurb and Amazon link come from that recommendation, so
+     they stay in step with the Shop page. Skipped quietly when the
+     recommendation is missing or not published. */
+  if (on("book")){
+    const bookMod = mods.find(m => m.kind === "book");
+    const rec = (bookMod.items || []).map(id => db.find("amazonProducts", id)).find(r => r && r.status === "published");
+    if (rec){
+      const img = bookMod.image || {};
+      html += '<section class="section"><div class="shell"><div class="panel" style="background-image:var(--halftone-lite),linear-gradient(140deg,#FFF6E2 0%,#FCE9B6 60%,#F8D77E 140%);background-size:7px 7px,100% 100%">'
+        + '<div class="finder__grid" style="align-items:center">'
+        + '<div><span class="eyebrow">New book on Amazon</span>'
+        + '<h2 style="margin-bottom:.3em">' + E(String(rec.title).split(/:\s+/)[0]) + '</h2>'
+        + '<p class="lede">' + E(rec.why) + '</p>'
+        + '<div class="row" style="margin-top:24px;flex-wrap:wrap">'
+        + '<a class="btn btn--cyan" href="' + E(rec.url) + '" target="_blank" rel="noopener noreferrer nofollow">' + ic("external-link") + ' View on Amazon</a>'
+        + '<a class="btn btn--paper" href="#/shop">' + ic("arrow-right") + ' See all our books</a></div></div>'
+        + '<div class="taped"><img class="skel" src="' + E(img.src || "assets/products/ultimate-kids-activity-book.webp") + '"'
+        + ' alt="' + E(img.alt || ("The cover of " + rec.title)) + '" width="1600" height="893" style="height:auto" loading="lazy"></div>'
+        + '</div></div></div></section>';
+    }
+  }
+
   if (featuredMod){
     const items = featuredMod.items.map(id => db.find("activities", id)).filter(a => a && a.status === "published");
     const list = items.length ? items : publishedActivities().filter(a => a.featured).slice(0,6);
@@ -12747,7 +12771,7 @@ function adminHomepage(){
         + '<h4 style="margin:0;font-size:.95rem">' + E(m.title) + '</h4>'
         + (m.enabled ? '<span class="admin-chip admin-chip--good">On</span>' : '<span class="admin-chip">Off</span>') + '</div>'
         + '<p class="admin-meta" style="margin:8px 0 0">' + E(m.note) + '</p>'
-        + (m.items.length ? '<p style="font-size:.8rem;margin:6px 0 0">' + plural(m.items.filter(id => db.find("activities",id)).length,"item") + ' pinned</p>' : "")
+        + (m.items.length ? '<p style="font-size:.8rem;margin:6px 0 0">' + plural(m.items.filter(id => db.find(m.kind === "book" ? "amazonProducts" : "activities",id)).length,"item") + ' pinned</p>' : "")
         + '</div>'
         + '<div class="row" style="gap:6px">'
         + '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--icon" data-act="hm-move" data-id="' + E(m.id) + '" data-dir="-1"' + (i===0?" disabled":"") + ' aria-label="Move up" title="Move up">' + ic("chevron-up") + '</button>'
