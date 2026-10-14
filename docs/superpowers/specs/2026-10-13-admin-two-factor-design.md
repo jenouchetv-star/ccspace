@@ -171,8 +171,10 @@ Recovery is deployed and proven **before** enforcement, never after.
 4. **Live project, enforcement still off:** run `supabase/mfa-hardening.sql` (NOT the whole
    `migration.sql`; it adds the switch, the hardened invitation functions and the reset audit
    table, and makes signed-out or revoked tokens stop working at once; nothing else changes
-   until step 7), deploy the changed Edge Functions (including `admin-reset-mfa`) and the
-   Worker, then publish the site. Admins are prompted to set up an authenticator at sign-in.
+   until step 7), deploy the changed Edge Functions (including `admin-reset-mfa`), then publish
+   the site. (The `workers/media-upload` Worker is not deployed and not needed: the site
+   uploads to Supabase Storage, whose policy already uses `is_active_admin()`.) Admins are
+   prompted to set up an authenticator at sign-in.
 5. **Prove recovery on the live project before enforcing:** the owner (or a second admin)
    exercises "Reset 2FA" against a disposable test admin invited for the purpose, confirms the
    reset email arrives, that the old password and sessions are dead, and that the test admin
