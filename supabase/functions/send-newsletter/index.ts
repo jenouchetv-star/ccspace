@@ -89,13 +89,12 @@ Deno.serve(async (req) => {
 
   const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-  const { data: callerProfile, error: profileErr } = await adminClient
-    .from("profiles")
-    .select("status")
-    .eq("id", callerData.user.id)
-    .single();
-
-  if (profileErr || !callerProfile || callerProfile.status !== "active") {
+  // Same rule as every RLS policy: an active admin whose session has also
+  // passed the second factor once enforcement is on (see migration.sql,
+  // admin_mfa_settings). Asked with the caller's own token so the function
+  // sees their real session.
+  const { data: isAdmin, error: adminErr } = await callerClient.rpc("is_active_admin");
+  if (adminErr || isAdmin !== true) {
     return json({ error: "Not authorized" }, 403);
   }
 

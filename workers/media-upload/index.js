@@ -12,9 +12,8 @@
 //   npx wrangler secret put SUPABASE_URL
 //   npx wrangler secret put SUPABASE_ANON_KEY
 // (Same anon key already used in index.html - this Worker never needs
-// the service_role key: `profiles` is readable by any authenticated
-// user, per migration.sql, so the caller's own bearer token is enough
-// to check admin status without a privileged key on this side too.)
+// the service_role key: it asks the is_active_admin() database function
+// with the caller's own bearer token.)
 //
 // Called from index.html's uploadToStorage() as a plain authenticated
 // POST - see the client-side wiring note in that function once this is
@@ -53,18 +52,25 @@ export default {
     const user = await userRes.json();
     if (!user?.id) return json({ error: "Not authenticated" }, 401);
 
-    // Step 2: verify the caller is an active admin. `profiles` is
-    // readable by any authenticated user (RLS: "profiles read" ... using
-    // (true)), so the caller's own token is sufficient here - this
-    // Worker never needs the service_role key.
-    const profileRes = await fetch(
-      env.SUPABASE_URL + "/rest/v1/profiles?id=eq." + encodeURIComponent(user.id) + "&select=status",
-      { headers: { Authorization: "Bearer " + token, apikey: env.SUPABASE_ANON_KEY } }
-    );
-    const profiles = await profileRes.json();
-    if (!Array.isArray(profiles) || !profiles[0] || profiles[0].status !== "active") {
-      return json({ error: "Not authorized" }, 403);
+    // Step 2: verify the caller is an active admin by asking the same
+    // database function every RLS policy uses, with the caller's own token
+    // (so it sees the real session). Once enforcement is switched on
+    // (supabase/mfa-enforce.sql) that function also requires a verified
+    // second factor, so this check can't drift from the rest of the app.
+    // Anything other than a literal `true` - a failed call, a non-boolean,
+    // non-JSON - is a refusal.
+    let isAdmin = false;
+    try {
+      const adminRes = await fetch(env.SUPABASE_URL + "/rest/v1/rpc/is_active_admin", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, apikey: env.SUPABASE_ANON_KEY, "content-type": "application/json" },
+        body: "{}",
+      });
+      isAdmin = adminRes.ok && (await adminRes.json()) === true;
+    } catch (_e) {
+      isAdmin = false;
     }
+    if (!isAdmin) return json({ error: "Not authorized" }, 403);
 
     // Step 3: the file itself. Sent as a raw body (not multipart) with
     // the name/folder/content-type in headers - mirrors how

@@ -126,22 +126,81 @@ alter table profiles enable row level security;
 drop policy if exists "authenticated read" on profiles;
 create policy "authenticated read" on profiles for select to authenticated using (true);
 
+-- Admin two-factor enforcement is DATA, not code: one row says "from this
+-- moment on, an admin session must have passed a second factor (aal2)".
+-- NULL means not enforced. Because the switch is a row, and this file only
+-- ever creates it if it doesn't exist and never writes to it, re-running
+-- this whole migration cannot turn enforcement off. Flip it with
+-- supabase/mfa-enforce.sql and supabase/mfa-rollback.sql, which contain no
+-- function definitions at all. Nobody but the database owner and the
+-- service role can read or write it: RLS is on with no policy.
+-- BEGIN MFA-HARDENING:settings
+create table if not exists admin_mfa_settings (
+  id boolean primary key default true check (id),
+  enforce_after timestamptz,
+  updated_at timestamptz not null default now()
+);
+alter table admin_mfa_settings enable row level security;
+revoke all on admin_mfa_settings from anon, authenticated;
+insert into admin_mfa_settings (id) values (true) on conflict (id) do nothing;
+-- END MFA-HARDENING:settings
+
 -- Reused by every other table's RLS in the later cutover phase, and by
--- the invite Edge Function to authorize its caller.
+-- the invite Edge Function (and the other admin-only Edge Functions and
+-- the upload Worker) to authorize its caller.
+--
+-- Active admin, AND:
+--   * the token's session must still exist in auth.sessions - always, not just
+--     once enforcement is on - so signing out, "sign out other sessions" and
+--     revoke_user_sessions() (the 2FA reset) kill already-issued tokens at once
+--     instead of when they would have expired;
+--   * once enforcement is on (enforce_after reached), the session must also
+--     have passed the second factor (aal2);
+--   * a token with no session_id claim at all is only accepted before
+--     enforcement, so an old-style token can't slip past it afterwards.
+-- With enforcement off this is today's behaviour, plus the session-exists check.
+-- BEGIN MFA-HARDENING:is_active_admin
 create or replace function is_active_admin() returns boolean
 language sql security definer set search_path = public stable as $$
   select exists (
-    select 1 from profiles where id = auth.uid() and status = 'active'
-  );
+           select 1 from profiles where id = auth.uid() and status = 'active'
+         )
+     and case
+           when nullif(auth.jwt() ->> 'session_id', '') is null then
+             coalesce((select enforce_after from admin_mfa_settings where id), 'infinity'::timestamptz) > now()
+           else
+             exists (
+               select 1 from auth.sessions s
+               where s.id = nullif(auth.jwt() ->> 'session_id', '')::uuid
+                 and s.user_id = auth.uid()
+             )
+             and (
+               coalesce((select enforce_after from admin_mfa_settings where id), 'infinity'::timestamptz) > now()
+               or coalesce(auth.jwt() ->> 'aal', '') = 'aal2'
+             )
+         end;
 $$;
+-- END MFA-HARDENING:is_active_admin
 
 -- Fires for both paths that create an auth.users row - the invite Edge
 -- Function and the one manual dashboard bootstrap - so both end up with
 -- a matching profiles row through the same mechanism, no double-insert
 -- logic needed in either caller.
+-- Invitation hardening: only a person who was actually INVITED gets a
+-- profile. The invite flow stamps auth.users.invited_at; a self-service
+-- sign-up (if that setting were ever switched on) or any other way an auth
+-- user appears does not, so it gets no profile and can never be activated.
+-- The trigger fires on insert AND on an update of invited_at, so it works
+-- whether Supabase sets invited_at as the row is created or just after.
+-- To bootstrap a first admin by hand, use the dashboard's "Invite user", or
+-- insert the profiles row with SQL.
+-- BEGIN MFA-HARDENING:handle_new_user
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
+  if new.invited_at is null then
+    return new;
+  end if;
   insert into public.profiles (id, email, name, status)
   values (
     new.id, new.email,
@@ -154,19 +213,43 @@ end;
 $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
-  after insert on auth.users
+  after insert or update of invited_at on auth.users
   for each row execute function public.handle_new_user();
+-- END MFA-HARDENING:handle_new_user
 
 -- Self-service: an invited user calls this once, right after setting
 -- their password on the accept-invite screen, to activate their own
 -- account. Nobody can activate someone else's account with this.
+-- Hardened: an invited profile can only activate itself if its auth user
+-- really was invited (invited_at set) and within the last 7 days; after that
+-- the admin must be re-invited, and the person is told so instead of the
+-- call silently doing nothing. Anyone whose profile isn't 'invited' (already
+-- active, revoked, or no profile at all) is a quiet no-op, as before, so the
+-- password-reset flow that also lands here keeps working.
+-- BEGIN MFA-HARDENING:accept_invite
 create or replace function public.accept_invite() returns void
 language plpgsql security definer set search_path = public as $$
+declare
+  current_status text;
 begin
-  update public.profiles set status = 'active', updated_at = now()
-  where id = auth.uid() and status = 'invited';
+  select status into current_status from public.profiles where id = auth.uid();
+  if current_status is distinct from 'invited' then
+    return;
+  end if;
+  update public.profiles p set status = 'active', updated_at = now()
+  where p.id = auth.uid() and p.status = 'invited'
+    and exists (
+      select 1 from auth.users u
+      where u.id = p.id
+        and u.invited_at is not null
+        and u.invited_at > now() - interval '7 days'
+    );
+  if not found then
+    raise exception 'This invitation has expired. Ask an admin to remove you from the Admins screen and invite you again.';
+  end if;
 end;
 $$;
+-- END MFA-HARDENING:accept_invite
 
 -- Revoke / reinstate another admin. Requires the caller to already be an
 -- active admin, and explicitly forbids changing your own status so
@@ -207,6 +290,86 @@ begin
   delete from auth.users where id = target_id;
 end;
 $$;
+
+-- Admin two-factor reset support. mfa_reset_log is the audit trail (and the
+-- source for the "2 per target, 5 per resetting admin, per 24 hours" rate
+-- limits) written only by the admin-reset-mfa Edge Function; it has no FK to
+-- auth.users so the record outlives a deleted account. begin_mfa_reset() checks
+-- the limits and records the attempt in ONE step, serialised per target and
+-- per resetting admin with advisory locks, so a burst of parallel requests
+-- cannot all slip under the limit. A reset counts toward the limits once it
+-- has completed, or while it is still in flight (started in the last 10
+-- minutes); one that failed part-way ('failed') doesn't, so it can be retried.
+-- revoke_user_sessions deletes every session of one user (their refresh
+-- tokens go with them), and - because is_active_admin() requires the JWT's
+-- session to still exist - their already-issued tokens stop working
+-- immediately. Only the service role may call either function.
+-- BEGIN MFA-HARDENING:reset_log
+create table if not exists mfa_reset_log (
+  id uuid primary key default gen_random_uuid(),
+  target_id uuid not null,
+  actor_id uuid,
+  verified_how text not null,
+  outcome text not null default 'started',
+  created_at timestamptz not null default now()
+);
+alter table mfa_reset_log add column if not exists outcome text not null default 'started';
+create index if not exists mfa_reset_log_target_idx on mfa_reset_log (target_id, created_at desc);
+create index if not exists mfa_reset_log_actor_idx on mfa_reset_log (actor_id, created_at desc);
+alter table mfa_reset_log enable row level security;
+revoke all on mfa_reset_log from anon, authenticated;
+
+create or replace function public.begin_mfa_reset(target uuid, actor uuid, how text)
+returns table (code text, log_id uuid)
+language plpgsql security definer set search_path = public as $$
+declare
+  t_count integer;
+  a_count integer;
+  new_id uuid;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('mfa_reset:target:' || target::text, 0));
+  if actor is not null then
+    perform pg_advisory_xact_lock(hashtextextended('mfa_reset:actor:' || actor::text, 0));
+  end if;
+
+  select count(*) into t_count from mfa_reset_log
+   where target_id = target and created_at > now() - interval '24 hours'
+     and (outcome = 'completed' or (outcome = 'started' and created_at > now() - interval '10 minutes'));
+  if t_count >= 2 then
+    return query select 'target_limit'::text, null::uuid;
+    return;
+  end if;
+
+  if actor is not null then
+    select count(*) into a_count from mfa_reset_log
+     where actor_id = actor and created_at > now() - interval '24 hours'
+       and (outcome = 'completed' or (outcome = 'started' and created_at > now() - interval '10 minutes'));
+    if a_count >= 5 then
+      return query select 'actor_limit'::text, null::uuid;
+      return;
+    end if;
+  end if;
+
+  insert into mfa_reset_log (target_id, actor_id, verified_how) values (target, actor, how) returning id into new_id;
+  return query select 'ok'::text, new_id;
+end;
+$$;
+revoke execute on function public.begin_mfa_reset(uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.begin_mfa_reset(uuid, uuid, text) to service_role;
+
+create or replace function public.revoke_user_sessions(target uuid) returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  n integer;
+begin
+  delete from auth.sessions where user_id = target;
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+revoke execute on function public.revoke_user_sessions(uuid) from public, anon, authenticated;
+grant execute on function public.revoke_user_sessions(uuid) to service_role;
+-- END MFA-HARDENING:reset_log
 
 -- Confirm the new schema landed before moving to phase 2 (the manual
 -- dashboard bootstrap of the first real admin account).

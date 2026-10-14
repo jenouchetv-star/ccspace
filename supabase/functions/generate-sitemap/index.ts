@@ -110,13 +110,10 @@ Deno.serve(async (req) => {
 
   const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-  const { data: callerProfile, error: profileErr } = await adminClient
-    .from("profiles")
-    .select("status")
-    .eq("id", callerData.user.id)
-    .single();
-
-  if (profileErr || !callerProfile || callerProfile.status !== "active") {
+  // Active admin AND second factor passed once enforcement is on - see
+  // migration.sql, admin_mfa_settings.
+  const { data: isAdmin, error: adminErr } = await callerClient.rpc("is_active_admin");
+  if (adminErr || isAdmin !== true) {
     return json({ error: "Not authorized" }, 403);
   }
 

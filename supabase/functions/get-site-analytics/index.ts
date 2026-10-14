@@ -137,7 +137,6 @@ Deno.serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const CF_TOKEN = Deno.env.get("CLOUDFLARE_API_TOKEN")!;
   const CF_ACCOUNT_ID = Deno.env.get("CLOUDFLARE_ACCOUNT_ID")!;
   const CF_SITE_TAG = Deno.env.get("CLOUDFLARE_SITE_TAG")!;
@@ -154,14 +153,10 @@ Deno.serve(async (req) => {
     return json({ error: "Not authenticated" }, 401);
   }
 
-  const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-  const { data: callerProfile, error: profileErr } = await adminClient
-    .from("profiles")
-    .select("status")
-    .eq("id", callerData.user.id)
-    .single();
-
-  if (profileErr || !callerProfile || callerProfile.status !== "active") {
+  // Active admin AND second factor passed once enforcement is on - see
+  // migration.sql, admin_mfa_settings.
+  const { data: isAdmin, error: adminErr } = await callerClient.rpc("is_active_admin");
+  if (adminErr || isAdmin !== true) {
     return json({ error: "Not authorized" }, 403);
   }
 
