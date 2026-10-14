@@ -18,6 +18,11 @@
 # Nothing is written to disk by this script - closing the terminal clears
 # the token, and it is safe to keep this file in the repo as-is.
 
+# Deploys to the LIVE project unless you pass -ProjectRef <ref> (use that to
+# deploy to a throwaway project for testing, e.g.
+#   .\supabase\deploy-admin-invite.ps1 -ProjectRef abcdefghijklmnop ).
+param([string]$ProjectRef = "wdctkfhwygwwulipwnys")
+
 $ErrorActionPreference = "Stop"
 
 if (-not $env:SUPABASE_ACCESS_TOKEN) {
@@ -27,7 +32,8 @@ if (-not $env:SUPABASE_ACCESS_TOKEN) {
 }
 
 Write-Host "Linking project..." -ForegroundColor Cyan
-npx supabase link --project-ref wdctkfhwygwwulipwnys
+Write-Host "Target project: $ProjectRef" -ForegroundColor Yellow
+npx supabase link --project-ref $ProjectRef
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
 Write-Host "Deploying admin-invite..." -ForegroundColor Cyan

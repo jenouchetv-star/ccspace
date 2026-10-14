@@ -3088,7 +3088,8 @@ if (typeof window.supabase === "undefined") {
 <script type="module">
   import * as ActivityFinder from "./assets/lib/activityFinder.js";
   import * as AcceptInvite from "./assets/lib/acceptInvite.js";
-  Object.assign(window, ActivityFinder, AcceptInvite);
+  import * as Mfa from "./assets/lib/mfa.js";
+  Object.assign(window, ActivityFinder, AcceptInvite, Mfa);
 </script>
 <script>
 "use strict";
@@ -3115,9 +3116,16 @@ const SUPABASE_ORG_SLUG = "rzrlumtywgfiqafdwphu";
    Supabase's own auth session; `profile` is that user's row in `profiles`
    (see migration.sql) - the one place "is this person an active admin"
    is actually decided, enforced server-side by RLS, not just here. */
-let AuthState = { session: null, profile: null };
+let AuthState = { session: null, profile: null, aal: null, hasFactor: false, totpFactor: null };
 function isAuthed(){ return !!AuthState.session; }
-function isActiveAdmin(){ return !!(AuthState.profile && AuthState.profile.status === "active"); }
+/* An admin is only "active" in the app once the session has passed the
+   second factor (aal2). Every gate in the app reads this one function, so
+   a password-only (aal1) session renders none of the portal and loads
+   none of its data. The database's is_active_admin() enforces the same
+   rule server-side (see supabase/migration.sql, admin_mfa_settings). */
+function isActiveAdmin(){
+  return !!(AuthState.profile && AuthState.profile.status === "active" && AuthState.aal === "aal2");
+}
 function isInvitedAdmin(){ return !!(AuthState.profile && AuthState.profile.status === "invited"); }
 
 /** Re-reads the current Supabase auth session and the matching profiles
@@ -3127,13 +3135,41 @@ function isInvitedAdmin(){ return !!(AuthState.profile && AuthState.profile.stat
 async function refreshAuthState(){
   const { data: { session } } = await sb.auth.getSession();
   AuthState.session = session;
-  if (!session){ AuthState.profile = null; return; }
+  if (!session){ AuthState.profile = null; clearMfaState(); return; }
   const { data: profile } = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
   AuthState.profile = profile || null;
   if (profile && profile.status === "revoked"){
     await sb.auth.signOut();
     AuthState.session = null;
     AuthState.profile = null;
+    clearMfaState();
+    return;
+  }
+  await refreshMfaState();
+}
+
+function clearMfaState(){
+  AuthState.aal = null;
+  AuthState.hasFactor = false;
+  AuthState.totpFactor = null;
+}
+
+/** Reads the session's assurance level and the admin's verified
+    authenticator. If either lookup fails the level stays null, which the
+    rest of the app treats as "not verified" - never as signed in. */
+async function refreshMfaState(){
+  /* Read everything first and only then swap it in, so a render that happens
+     while these two requests are in flight (a token refresh, say) never sees a
+     half-cleared state and shows "set up" to an admin who already has a factor. */
+  try {
+    const { data: aalData } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+    const { data: fData } = await sb.auth.mfa.listFactors();
+    const totps = (fData && fData.totp) || [];
+    AuthState.aal = aalData ? aalData.currentLevel : null;
+    AuthState.hasFactor = totps.length > 0;
+    AuthState.totpFactor = totps[0] ? { id: totps[0].id } : null;
+  } catch (_e){
+    clearMfaState();   /* fail closed: an unknown level is "not verified" */
   }
 }
 
@@ -14085,6 +14121,9 @@ function adminAdmins(){
           + '<p class="admin-meta" style="margin:2px 0 0">' + E(p.email) + ' &middot; ' + E(titleCase(p.status)) + '</p></div>'
           + '</div>'
           + (self ? '' : '<div class="row" style="gap:6px;flex-wrap:wrap">'
+              + (p.status === "active"
+                  ? '<button class="admin-btn admin-btn--sm admin-btn--ghost" data-act="reset-admin-mfa" data-id="' + E(p.id) + '" data-name="' + E(p.name || p.email) + '" data-email="' + E(p.email) + '">' + ic("smartphone") + ' Reset 2FA</button>'
+                  : '')
               + (p.status === "revoked"
                   ? '<button class="admin-btn admin-btn--sm admin-btn--ghost" data-act="toggle-admin-status" data-id="' + E(p.id) + '" data-status="active">' + ic("rotate-ccw") + ' Reinstate</button>'
                   : '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--danger" data-act="toggle-admin-status" data-id="' + E(p.id) + '" data-status="revoked">' + ic("ban") + ' Revoke</button>')
@@ -14882,6 +14921,144 @@ let ADMIN_ACCEPT_ERROR = "";
 let ADMIN_SHOW_FORGOT = false;
 let ADMIN_FORGOT_SENT = "";
 
+/* Second-factor screens. MFA_ENROLL holds the in-progress authenticator
+   enrollment ({ factorId, qr, secret }) between creating it and verifying
+   the first code. MFA_BUSY stops a second tap, or a re-render, from
+   starting a second request while one is in flight. */
+let MFA_ERROR = "";
+let MFA_ENROLL = null;
+let MFA_BUSY = false;
+
+/** Removes any unverified authenticator left behind by an abandoned or
+    reloaded set-up, so a half-finished attempt can never block the next. */
+async function removeUnverifiedTotpFactors(){
+  const { data: fData } = await sb.auth.mfa.listFactors();
+  const stale = ((fData && fData.all) || []).filter(f => f.factor_type === "totp" && f.status === "unverified");
+  for (const f of stale) await sb.auth.mfa.unenroll({ factorId: f.id });
+}
+
+/** Creates a fresh authenticator enrollment for the signed-in admin. Runs
+    once per call; a failure leaves MFA_ENROLL null with MFA_ERROR set, and
+    the screen then offers a "Try again" button instead of retrying. */
+async function startMfaEnroll(){
+  if (MFA_BUSY) return;
+  MFA_BUSY = true;
+  try {
+    await removeUnverifiedTotpFactors();
+    const { data, error } = await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "Authenticator " + new Date().toISOString() });
+    if (error) throw error;
+    MFA_ENROLL = { factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret };
+    MFA_ERROR = "";
+  } catch (err){
+    MFA_ERROR = classifyMfaError(err).message;
+  }
+  MFA_BUSY = false;
+  render();
+}
+
+function mfaErrorHint(){
+  return MFA_ERROR ? '<span class="admin-hint" role="alert" style="color:var(--admin-bad);font-weight:600">' + E(MFA_ERROR) + '</span>' : "";
+}
+
+function mfaCodeField(){
+  return '<div class="admin-field" style="margin-top:14px"><label for="mfa-code">6-digit code</label>'
+    + '<input class="admin-input" id="mfa-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder=" " required>'
+    + mfaErrorHint() + '</div>';
+}
+
+function adminMfaView(step){
+  const email = E((AuthState.session && AuthState.session.user && AuthState.session.user.email) || "");
+  const signOut = '<button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" style="margin-top:14px" data-act="mfa-sign-out">Sign out</button>';
+  const eyebrow = '<span class="admin-eyebrow">Two-step verification</span>';
+
+  if (step === "verify"){
+    return adminShellFrame('<div class="admin-card">' + eyebrow
+      + '<h1 class="admin-page-title" style="margin-top:6px;text-transform:none;font-size:1.4rem">Enter your code.</h1>'
+      + '<p class="admin-meta">Signed in as ' + email + '. Open your authenticator app and type the 6-digit code for Chike’s Creative Space.</p>'
+      + '<form data-act="mfa-verify-submit" style="margin-top:18px">' + mfaCodeField()
+      + '<button class="admin-btn admin-btn--primary admin-btn--block" style="margin-top:16px" type="submit">' + ic("check") + ' Verify</button>'
+      + '</form>'
+      + '<p class="admin-meta" style="margin-top:14px">Lost your phone? Ask another admin to reset your two-step verification from the Admins screen.</p>'
+      + signOut + '</div>');
+  }
+
+  /* step === "setup" */
+  if (!MFA_ENROLL){
+    if (MFA_ERROR){
+      return adminShellFrame('<div class="admin-card">' + eyebrow
+        + '<h1 class="admin-page-title" style="margin-top:6px;text-transform:none;font-size:1.4rem">Set up two-step verification.</h1>'
+        + '<div class="admin-callout admin-callout--bad" style="margin-top:14px">' + ic("triangle-alert") + '<span>' + E(MFA_ERROR) + '</span></div>'
+        + '<button type="button" class="admin-btn admin-btn--primary" style="margin-top:14px" data-act="mfa-retry">' + ic("rotate-ccw") + ' Try again</button>'
+        + signOut + '</div>');
+    }
+    startMfaEnroll();
+    return adminShellFrame('<div class="admin-card"><p class="admin-meta">Preparing two-step verification…</p></div>');
+  }
+  return adminShellFrame('<div class="admin-card">' + eyebrow
+    + '<h1 class="admin-page-title" style="margin-top:6px;text-transform:none;font-size:1.4rem">Set up two-step verification.</h1>'
+    + '<p class="admin-meta">Admin accounts need a second step. Scan this with a free authenticator app (Google Authenticator, Microsoft Authenticator, Authy, 1Password), then type the 6-digit code it shows.</p>'
+    + '<div style="display:flex;justify-content:center;margin:16px 0"><img src="' + E(MFA_ENROLL.qr) + '" alt="QR code to add this account to your authenticator app" width="180" height="180" style="background:#fff;padding:8px;border-radius:8px"></div>'
+    + '<p class="admin-meta" style="text-align:center">Can’t scan? Enter this key instead:<br><code style="font-size:.85rem;word-break:break-all">' + E(MFA_ENROLL.secret) + '</code></p>'
+    + '<form data-act="mfa-setup-submit" style="margin-top:14px">' + mfaCodeField()
+    + '<button class="admin-btn admin-btn--primary admin-btn--block" style="margin-top:16px" type="submit">' + ic("check") + ' Turn on and sign in</button>'
+    + '</form>' + signOut + '</div>');
+}
+
+/* Change authenticator (from the profile modal, so always an aal2
+   session). The NEW authenticator is enrolled and verified first; only
+   then is the old one removed, so there is never a moment with no working
+   factor. */
+let TOTP_CHANGE = null;   // { error, factorId, qr, secret }
+
+function showTotpChange(){
+  closeModal();
+  openModal(changeTotpModalHTML(), null, "admin-modal");
+}
+
+function changeTotpModalHTML(){
+  const tc = TOTP_CHANGE || { error: "", factorId: null };
+  const err = tc.error ? '<span class="admin-hint" role="alert" style="color:var(--admin-bad);font-weight:600">' + E(tc.error) + '</span>' : "";
+  const head = '<div class="admin-scope" style="font-family:var(--admin-font-body);color:var(--admin-ink)">'
+    + '<div class="modal__head"><div><span class="admin-eyebrow">Your account</span>'
+    + '<h3 class="admin-section-title" style="margin-top:4px;text-transform:none">Change authenticator</h3></div>'
+    + '<button type="button" class="admin-btn admin-btn--ghost admin-btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>';
+  if (!tc.factorId){
+    return head + '<div class="modal__body">'
+      + (tc.error
+          ? '<div class="admin-callout admin-callout--bad">' + ic("triangle-alert") + '<span>' + E(tc.error) + '</span></div>'
+          : '<p class="admin-meta">Preparing…</p>')
+      + '</div><div class="modal__foot"><button type="button" class="admin-btn admin-btn--ghost" data-act="close-modal">Cancel</button>'
+      + (tc.error ? '<button type="button" class="admin-btn admin-btn--primary" data-act="change-totp">' + ic("rotate-ccw") + ' Try again</button>' : '')
+      + '</div></div>';
+  }
+  return head + '<form data-act="change-totp-verify"><div class="modal__body">'
+    + '<p class="admin-meta">Your current authenticator keeps working until the new one is confirmed. Scan this with the new device, then type the 6-digit code it shows.</p>'
+    + '<div style="display:flex;justify-content:center;margin:14px 0"><img src="' + E(tc.qr) + '" alt="QR code to add this account to your new authenticator" width="160" height="160" style="background:#fff;padding:8px;border-radius:8px"></div>'
+    + '<p class="admin-meta" style="text-align:center">Can’t scan? Enter this key instead:<br><code style="font-size:.85rem;word-break:break-all">' + E(tc.secret) + '</code></p>'
+    + '<div class="admin-field" style="margin-top:12px"><label for="change-code">6-digit code</label>'
+    + '<input class="admin-input" id="change-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder=" " required>' + err + '</div>'
+    + '</div><div class="modal__foot"><button type="button" class="admin-btn admin-btn--ghost" data-act="close-modal">Cancel</button>'
+    + '<button type="submit" class="admin-btn admin-btn--primary">' + ic("check") + ' Confirm new authenticator</button></div></form></div>';
+}
+
+async function startTotpChange(){
+  const mine = { error: "", factorId: null, qr: "", secret: "" };
+  TOTP_CHANGE = mine;
+  openModal(changeTotpModalHTML(), null, "admin-modal");
+  try {
+    await removeUnverifiedTotpFactors();
+    const { data, error } = await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "Authenticator " + new Date().toISOString() });
+    if (error) throw error;
+    if (TOTP_CHANGE !== mine) return;          /* superseded (the person started over) */
+    TOTP_CHANGE = { error: "", factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret };
+  } catch (err){
+    if (TOTP_CHANGE !== mine) return;
+    TOTP_CHANGE = { error: classifyMfaError(err).message, factorId: null, qr: "", secret: "" };
+  }
+  /* Don't pop the dialog back open if the person closed it while we were working. */
+  if (document.querySelector("#modal-root .modal")) showTotpChange();
+}
+
 function adminShellFrame(inner){
   return '<div class="admin-scope" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--admin-bg);padding:24px;font-family:var(--admin-font-body);color:var(--admin-ink)">'
     + '<div style="display:flex;align-items:center;justify-content:center;gap:48px;max-width:900px;width:100%">'
@@ -14897,6 +15074,13 @@ function adminShellFrame(inner){
 }
 
 function adminLoginView(){
+  const mfa = mfaStep({
+    authed: isAuthed(),
+    status: AuthState.profile && AuthState.profile.status,
+    aal: AuthState.aal,
+    hasFactor: AuthState.hasFactor
+  });
+  if (mfa === "setup" || mfa === "verify") return adminMfaView(mfa);
   /* Signed in, but their invite has not been accepted yet (they navigated
      to a plain #/admin instead of the emailed link) - point them at the
      right place rather than showing a blank login form they can't use. */
@@ -14970,6 +15154,11 @@ function adminAcceptInviteView(){
       + '</div>'
     );
   }
+  /* An admin who already has an authenticator and arrives from a "Forgot your
+     password?" link has only a password-level (aal1) session, and Supabase can
+     refuse a password change from one. Ask for the code first; after it is
+     verified they come straight back to this form (see mfa-verify-submit). */
+  if (AuthState.hasFactor && AuthState.aal !== "aal2") return adminMfaView("verify");
   return adminShellFrame(
     '<div class="admin-card">'
     + '<span class="admin-eyebrow">Welcome</span>'
@@ -19574,7 +19763,11 @@ const ACTIONS = {
 
   "lock-sign-out": async () => {
     unlockSession();
-    await sb.auth.signOut();
+    /* scope "local": sign out THIS device only. A global sign-out would also end
+       the admin's sessions on every other device, and since is_active_admin()
+       requires the token's session to exist, those devices would silently stop
+       being able to save. */
+    await sb.auth.signOut({ scope: "local" });
     await refreshAuthState();
     stopAdminRealtimeSync();
     await realDb.hydrate();
@@ -19583,7 +19776,7 @@ const ACTIONS = {
   },
 
   "admin-lock": async () => {
-    await sb.auth.signOut();
+    await sb.auth.signOut({ scope: "local" });   /* this device only - see "lock-sign-out" */
     await refreshAuthState();
     stopAdminRealtimeSync();
     await realDb.hydrate();
@@ -19627,6 +19820,22 @@ const ACTIONS = {
     render();
   },
 
+  "mfa-sign-out": async () => {
+    MFA_ENROLL = null;
+    MFA_ERROR = "";
+    await sb.auth.signOut({ scope: "local" });   /* this device only - see "lock-sign-out" */
+    await refreshAuthState();
+    render();
+  },
+
+  "mfa-retry": () => {
+    MFA_ERROR = "";
+    MFA_ENROLL = null;
+    render();
+  },
+
+  "change-totp": () => { startTotpChange(); },
+
   "toggle-password-visibility": (el) => {
     const input = document.getElementById(el.getAttribute("data-target"));
     if (!input) return;
@@ -19663,6 +19872,14 @@ const ACTIONS = {
       + passwordFieldHTML({ id:"new-password-confirm", name:"passwordConfirm", autocomplete:"new-password", minlength:8 }) + '</div>'
       + '<button type="submit" class="admin-btn admin-btn--ghost admin-btn--sm" style="margin-top:10px">' + ic("lock-open") + ' Update password</button>'
       + '</form>'
+
+      + '<div style="border-top:1px solid var(--admin-border);margin:22px 0"></div>'
+
+      + '<h4 class="admin-section-title" style="font-size:.95rem;margin:0 0 6px">Two-step verification</h4>'
+      + '<div class="admin-callout admin-callout--ok" style="margin-bottom:6px">' + ic("check")
+      + '<span>On. Required for every admin account.</span></div>'
+      + '<button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" style="margin:8px 0" data-act="change-totp">' + ic("smartphone") + ' Change authenticator</button>'
+      + '<p class="admin-meta" style="margin:0">Lost your phone? Another admin can reset this from the Admins screen.</p>'
 
       + '<div style="border-top:1px solid var(--admin-border);margin:22px 0"></div>'
 
@@ -19788,6 +20005,40 @@ const ACTIONS = {
     toast("Admin deleted.");
     await loadAdminRoster();
   },
+  /* Resetting someone's two-step verification is the most dangerous thing an
+     admin can do to another admin: it removes the second factor, so the
+     person who asks for it has to be confirmed to be who they say they are.
+     This form records HOW the resetting admin confirmed that, and makes them
+     type the target's email back. The server checks both again and does the
+     rest (signs them out everywhere, replaces their password, emails them). */
+  "reset-admin-mfa": (el) => {
+    const id = el.getAttribute("data-id");
+    const name = el.getAttribute("data-name") || "this admin";
+    const email = el.getAttribute("data-email") || "";
+    openModal('<div class="admin-scope" style="font-family:var(--admin-font-body);color:var(--admin-ink)">'
+      + '<div class="modal__head"><div><span class="admin-eyebrow">Admins</span>'
+      + '<h3 class="admin-section-title" style="margin-top:4px;text-transform:none">Reset 2FA for ' + E(name) + '?</h3></div>'
+      + '<button type="button" class="admin-btn admin-btn--ghost admin-btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
+      + '<form data-act="reset-admin-mfa-submit" data-id="' + E(id) + '" data-name="' + E(name) + '" data-email="' + E(email) + '">'
+      + '<div class="modal__body">'
+      + '<div class="admin-callout admin-callout--bad">' + ic("triangle-alert")
+      + '<span>This signs ' + E(name) + ' out everywhere, replaces their password so the old one stops working, and removes their authenticator. They get an email to set a new password and then set up an authenticator again. Only do this if you are sure it is really them asking.</span></div>'
+      + '<div class="admin-field" style="margin-top:14px"><label for="reset-how">How did you confirm it is really them?</label>'
+      + '<select class="admin-select" id="reset-how" name="verifiedHow" required>'
+      + '<option value="">Choose one…</option>'
+      + '<option value="in_person">In person</option>'
+      + '<option value="video_call">On a video call</option>'
+      + '<option value="known_phone_number">Phoned a number I already had for them</option>'
+      + '</select></div>'
+      + '<div class="admin-field" style="margin-top:14px"><label for="reset-email">Type their email to confirm: <b>' + E(email) + '</b></label>'
+      + '<input class="admin-input" id="reset-email" name="confirmEmail" type="email" autocomplete="off" placeholder=" " required></div>'
+      + '</div>'
+      + '<div class="modal__foot"><button type="button" class="admin-btn admin-btn--ghost" data-act="close-modal">Cancel</button>'
+      + '<button type="submit" class="admin-btn admin-btn--danger">' + ic("smartphone") + ' Reset 2FA</button></div>'
+      + '</form></div>',
+      null, "admin-modal");
+  },
+
   "edit-record": (el) => openEditor(el.getAttribute("data-col"), el.getAttribute("data-id")),
   "resolve-issue": async (el) => {
     const id = el.getAttribute("data-id");
@@ -20536,6 +20787,14 @@ async function handleSubmit(form, act){
       return;
     }
     if (isInvitedAdmin()){ Router.go("#/admin/accept-invite"); return; }
+    if (AuthState.profile && AuthState.profile.status === "active"){
+      /* Password was right; the second step is still to come. */
+      ADMIN_LOGIN_ERROR = "";
+      MFA_ERROR = "";
+      MFA_ENROLL = null;
+      render();
+      return;
+    }
     /* Authenticated fine, but no active-admin profile - not a route this
        app's own invite flow produces, but a safety net regardless. */
     await sb.auth.signOut();
@@ -20545,17 +20804,94 @@ async function handleSubmit(form, act){
     return;
   }
 
+  if (act === "change-totp-verify"){
+    const change = TOTP_CHANGE;
+    if (!change || !change.factorId || MFA_BUSY) return;   /* nothing to confirm, or already confirming */
+    const check = validateTotpCode(form.elements["code"].value);
+    if (!check.ok){ change.error = check.error; showTotpChange(); return; }
+    if (!isActiveAdmin()){ toast("Sign in again first.", "bad"); return; }
+    MFA_BUSY = true;
+    try {
+      let error;
+      try {
+        ({ error } = await sb.auth.mfa.challengeAndVerify({ factorId: change.factorId, code: check.code }));
+      } catch (thrown){ error = thrown; }
+      if (error){ change.error = classifyMfaError(error).message; showTotpChange(); return; }
+      /* The new authenticator is verified. Only now remove the old one(s). */
+      const { data: fData } = await sb.auth.mfa.listFactors();
+      const old = ((fData && fData.totp) || []).filter(f => f.id !== change.factorId);
+      for (const f of old) await sb.auth.mfa.unenroll({ factorId: f.id });
+      /* An attacker's session must not survive the change. */
+      try { await sb.auth.signOut({ scope: "others" }); } catch(_e){ /* best effort */ }
+      TOTP_CHANGE = null;
+      await refreshAuthState();
+      closeModal();
+      toast("Authenticator updated.");
+    } finally {
+      MFA_BUSY = false;
+    }
+    return;
+  }
+
+  if (act === "mfa-setup-submit" || act === "mfa-verify-submit"){
+    const check = validateTotpCode(form.elements["code"].value);
+    if (!check.ok){ MFA_ERROR = check.error; render(); return; }
+    let factorId;
+    if (act === "mfa-setup-submit"){
+      if (!MFA_ENROLL){ MFA_ERROR = "Setup expired. Try again."; render(); return; }
+      factorId = MFA_ENROLL.factorId;
+    } else {
+      if (!AuthState.totpFactor){ MFA_ERROR = "No authenticator found for this account."; render(); return; }
+      factorId = AuthState.totpFactor.id;
+    }
+    if (MFA_BUSY) return;
+    MFA_BUSY = true;
+    let error;
+    try {
+      ({ error } = await sb.auth.mfa.challengeAndVerify({ factorId, code: check.code }));
+    } catch (thrown){
+      /* supabase-js re-throws an error from an auth-state listener; never leave
+         the screen stuck "busy". */
+      error = thrown;
+    } finally {
+      MFA_BUSY = false;
+    }
+    if (error){ MFA_ERROR = classifyMfaError(error).message; render(); return; }
+    MFA_ERROR = "";
+    MFA_ENROLL = null;
+    await refreshAuthState();
+    if (isActiveAdmin()){
+      await realDb.hydrate();
+      startAdminRealtimeSync();
+      toast("Signed in.");
+      /* Arrived from a password-reset link: stay on that page so they can set the new password. */
+      if (AppState.route && AppState.route.name === "admin" && AppState.route.params && AppState.route.params.section === "accept-invite"){ render(); return; }
+      Router.go("#/admin");
+      return;
+    }
+    MFA_ERROR = "Couldn’t finish signing in. Try again.";
+    render();
+    return;
+  }
+
   if (act === "accept-invite-submit"){
     const password = form.elements["password"].value;
     const confirmPw = form.elements["passwordConfirm"].value;
     const validationError = validateNewPassword(password, confirmPw);
     if (validationError){ ADMIN_ACCEPT_ERROR = validationError; render(); return; }
-    const { error: updateErr } = await sb.auth.updateUser({ password: password });
-    if (updateErr){ ADMIN_ACCEPT_ERROR = updateErr.message; render(); return; }
+    /* Accept first, then set the password: an invitation older than 7 days is
+       refused by accept_invite() (migration.sql), and refusing it BEFORE the
+       password is set leaves nothing half-done. (If setting the password then
+       fails, the person can simply submit again, or use "Forgot your
+       password?".) For someone who is already active - the password-reset flow
+       also lands here - accept_invite() is a quiet no-op. */
     const { error: acceptErr } = await sb.rpc("accept_invite");
     if (acceptErr){ ADMIN_ACCEPT_ERROR = acceptErr.message; render(); return; }
+    const { error: updateErr } = await sb.auth.updateUser({ password: password });
+    if (updateErr){ ADMIN_ACCEPT_ERROR = updateErr.message; render(); return; }
     ADMIN_ACCEPT_ERROR = "";
     await refreshAuthState();
+    if (!isActiveAdmin()){ MFA_ERROR = ""; MFA_ENROLL = null; Router.go("#/admin"); return; }
     await realDb.hydrate();
     startAdminRealtimeSync();
     toast("Welcome - you're all set.");
@@ -20647,6 +20983,38 @@ async function handleSubmit(form, act){
     closeModal();
     toast("Invite sent to " + email + ".");
     await loadAdminRoster();
+    return;
+  }
+
+  if (act === "reset-admin-mfa-submit"){
+    const id = form.getAttribute("data-id");
+    const name = form.getAttribute("data-name") || "admin";
+    const email = form.getAttribute("data-email") || "";
+    const verifiedHow = form.elements["verifiedHow"].value;
+    const confirmEmail = form.elements["confirmEmail"].value.trim();
+    if (!verifiedHow){ toast("Say how you confirmed it is really them.", "bad"); return; }
+    if (confirmEmail.toLowerCase() !== email.toLowerCase()){
+      toast("That email doesn’t match. Type it exactly to confirm.", "bad");
+      return;
+    }
+    const res = await sb.functions.invoke("admin-reset-mfa", { body: { targetId: id, confirmEmail: confirmEmail, verifiedHow: verifiedHow } });
+    /* Same unwrap as "send-invite": a non-2xx response's error.message is a
+       generic wrapper; the function's own {error} body is on error.context. */
+    let detail = res.error ? res.error.message : (res.data && res.data.error);
+    if (res.error){
+      try {
+        if (res.error.context && typeof res.error.context.json === "function"){
+          const body = await res.error.context.json();
+          if (body && body.error) detail = body.error;
+        }
+      } catch(_e){ /* keep the generic message */ }
+    }
+    if (detail){ toast("Could not reset 2FA: " + detail, "bad"); return; }
+    closeModal();
+    db.log("reset-2fa", "admins", id, "Reset two-step verification for " + name + " (confirmed: " + verifiedHow + ")");
+    const d = res.data || {};
+    toast(name + " was signed out everywhere and their password was reset."
+      + (d.recoverySent ? " They were emailed a link to set a new one." : " The recovery email could not be sent: ask them to use “Forgot your password?”."), d.recoverySent ? undefined : "bad");
     return;
   }
 
