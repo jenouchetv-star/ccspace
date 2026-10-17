@@ -1365,9 +1365,11 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
   gap:clamp(22px,3.2vw,44px); align-items:center;
 }
 .newest__title{ font-size:clamp(1.5rem,2.6vw,2.1rem); margin-bottom:.3em; }
+.newest__grid--flip{ grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr); }
+.newest__grid--flip .newest__player{ margin-left:0; margin-right:auto; }
 .newest__player{ min-width:0; margin-left:auto; width:100%; max-width:min(100%, calc(58vh * 16 / 9)); }
 @media (max-width:900px){
-  .newest__grid{ grid-template-columns:1fr; }
+  .newest__grid, .newest__grid--flip{ grid-template-columns:1fr; }
   .newest__player{ max-width:100%; margin-left:0; }
 }
 /* the poster that sits on the game's page */
@@ -5368,6 +5370,14 @@ function seedGames(){
       players:"1", minutes:5, ageMin:6, ageMax:11,
       rules:["Move your ship by moving the mouse.","Click, or hold the button down, to fire.","Blue saucers score 1, green score 2, red score 3.","Press 1, 2 or 3 to switch between shot types.","Hits and misses add up to an efficiency score — tap \"what's this?\" to see how it's worked out."],
       leadsTo:"act-orrery" }),
+    G({ id:"game-doodle-dash", title:"Doodle Dash", slug:"doodle-dash",
+      kind:"embed", interactive:true, featured:true, path:"games/Doodle-Dash.html",
+      icon:"pencil", p1:"#A9D8FF", p2:"#1F5FBF",
+      cover:{ src:"assets/games/doodle-dash.jpg", alt:"Six Chike's Creative Space friends run out of a sketchbook along a rainbow path, next to a hand drawing a Doodle Dash level in a notebook" },
+      summary:"Draw a level on paper or on screen, then run, jump and collect coins as your favourite character. Share a six-digit code to play in the same world as a friend.",
+      players:"1 or more (share a code)", minutes:10, ageMin:5, ageMax:12,
+      rules:["Pick a hero and a world, then press Launch game.","Draw a level with markers or crayons, snap a photo, or try a sample level. Black is ground, red is danger, green is where you start, yellow is coins, blue is the goal, orange is enemies, purple is power-ups and teal is a moving platform.","Arrow keys or A and D move. Space or W jumps. Hold jump for a higher hop.","Jump on orange enemies to squash them and grab purple orbs for special powers.","Press Share code to get a six-digit code. A friend types it under Join a friend to play in the same world."],
+      leadsTo:"" }),
     G({ id:"game-air-hockey", title:"Air Hockey Arcade", slug:"air-hockey",
       kind:"embed", interactive:true, featured:true, path:"games/air-hockey.html",
       icon:"circle-dot", p1:"#A9E4EE", p2:"#0C7387",
@@ -5937,6 +5947,7 @@ function seedHomepage(){
     M("hero","hero","Treehouse hero","Parallax background with the studio illustration.",[]),
     M("promise","strip","Promise strip","Scrolling band of brand promises.",[]),
     M("episodes","videos","Newest episode","The most recent published episode, on its own.",[]),
+    M("newgame","newgame","Newest game","The newest online game, with a Play button. Pinned to Doodle Dash for now; if that game is ever unpublished, the most recently added online game shows instead.",["game-doodle-dash"]),
     M("finder","finder","Hmmm, what should we create today?","The rule-based activity finder.",[]),
     M("featured","activities","Popular projects to start with","Featured activities pulled from the activity manager.",
       ["act-cardboard-city","act-backyard-sound-song","act-paper-airplane","act-orrery","act-story-cubes","act-clay-volcano"], false),
@@ -9059,6 +9070,32 @@ function viewHome(){
     }
   }
 
+  /* The newest game: the pinned game if the module names one that is published,
+     otherwise the most recently added online game. Same shape as the newest episode. */
+  if (on("newgame")){
+    const gm = mods.find(m => m.kind === "newgame");
+    const ng = (gm.items || []).map(id => db.find("games", id)).find(r => r && r.status === "published")
+      || db.list("games").filter(r => r.status === "published" && r.kind === "embed")
+           .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+    if (ng){
+      const pic = (gm.image && gm.image.src) || (ng.cover && ng.cover.src) || "assets/games/doodle-dash.jpg";
+      html += '<section class="section section--tight newest" style="border-bottom:var(--line)"><div class="shell">'
+        + '<div class="newest__grid newest__grid--flip">'
+        + '<div class="newest__player"><div class="embed"><a class="embed__facade" href="#/play/' + E(ng.id) + '" aria-label="Play ' + E(ng.title) + '">'
+        + '<img class="skel" src="' + E(pic) + '" alt="' + E((ng.cover && ng.cover.alt) || ng.title) + '" width="1200" height="892" loading="lazy">'
+        + '<span class="embed__play">' + ic("play") + '</span>'
+        + '<span class="embed__note">' + ic("gamepad-2") + ' Plays right here in your browser</span></a></div></div>'
+        + '<div><span class="eyebrow">Newest game</span>'
+        + '<h2 class="newest__title">' + E(ng.title) + '</h2>'
+        + '<p class="lede">' + E(ng.summary) + '</p>'
+        + '<div class="row" style="margin-top:20px">'
+        + '<a class="btn btn--berry" href="#/play/' + E(ng.id) + '">' + ic("play") + ' Play ' + E(ng.title) + '</a>'
+        + '<a class="btn btn--paper" href="#/play">' + ic("arrow-right") + ' All games</a>'
+        + '</div></div>'
+        + '</div></div></section>';
+    }
+  }
+
   if (on("finder")){
     html += '<section class="section finder" id="finder"><div class="shell">' + finderPanel("home") + '</div></section>';
   }
@@ -9568,7 +9605,7 @@ function gameStage(g){
     + '</div>'
     + '<iframe id="gamestage-frame" src="' + E(g.path) + '" title="' + E(g.title) + '"'
     + ' sandbox="allow-scripts allow-same-origin allow-popups"'
-    + ' allow="fullscreen"></iframe>'
+    + ' allow="fullscreen; camera; clipboard-write"></iframe>'
     + '</div>';
 }
 
@@ -12807,7 +12844,7 @@ function adminHomepage(){
         + '<h4 style="margin:0;font-size:.95rem">' + E(m.title) + '</h4>'
         + (m.enabled ? '<span class="admin-chip admin-chip--good">On</span>' : '<span class="admin-chip">Off</span>') + '</div>'
         + '<p class="admin-meta" style="margin:8px 0 0">' + E(m.note) + '</p>'
-        + (m.items.length ? '<p style="font-size:.8rem;margin:6px 0 0">' + plural(m.items.filter(id => db.find(m.kind === "book" ? "amazonProducts" : "activities",id)).length,"item") + ' pinned</p>' : "")
+        + (m.items.length ? '<p style="font-size:.8rem;margin:6px 0 0">' + plural(m.items.filter(id => db.find(m.kind === "book" ? "amazonProducts" : m.kind === "newgame" ? "games" : "activities",id)).length,"item") + ' pinned</p>' : "")
         + '</div>'
         + '<div class="row" style="gap:6px">'
         + '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--icon" data-act="hm-move" data-id="' + E(m.id) + '" data-dir="-1"' + (i===0?" disabled":"") + ' aria-label="Move up" title="Move up">' + ic("chevron-up") + '</button>'
