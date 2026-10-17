@@ -156,6 +156,15 @@ describe("the game page", () => {
     expect(page).toContain("ICON_OFF");
   });
 
+  it("does not depend on form submission: the site frames the game with no allow-forms, which blocks submit events", () => {
+    expect(page).not.toContain('type="submit"');
+    expect(page).toContain('id="bJoin" type="button"');
+    expect(page).toContain('id="bJoin2" type="button"');
+    expect(page).toContain("btn.addEventListener('click'");
+    expect(page).toContain("e.key==='Enter'");
+    expect(index).not.toMatch(/gamestage-frame[^>]*allow-forms/); // the fix is in the game, not a looser sandbox
+  });
+
   it("lists the colours in the agreed order", () => {
     const order = [...page.matchAll(/<li><span class="dot"[^>]*><\/span><canvas class="lg" data-k="(\w+)"/g)].map((m) => m[1]);
     expect(order).toEqual(["plat", "start", "flag", "coin", "orb", "mover", "spike", "enemy"]);

@@ -217,7 +217,7 @@ body.in-play{overflow:hidden}
     <form class="join" id="joinForm" autocomplete="off" onsubmit="return false">
       <label for="joinIn">Join a friend</label>
       <input id="joinIn" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="7" placeholder="6 characters" aria-describedby="joinMsg">
-      <button class="cy" id="bJoin" type="submit"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Join</button>
+      <button class="cy" id="bJoin" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Join</button>
     </form>
     <p class="joinmsg" id="joinMsg" role="status" aria-live="polite"></p>
     </div>
@@ -242,7 +242,7 @@ body.in-play{overflow:hidden}
       <form class="join" id="joinForm2" autocomplete="off" onsubmit="return false">
         <label for="joinIn2">Join a friend</label>
         <input id="joinIn2" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="7" placeholder="6-character code" aria-describedby="joinMsg2">
-        <button class="cy" id="bJoin2" type="submit"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Join</button>
+        <button class="cy" id="bJoin2" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Join</button>
         <p class="joinmsg" id="joinMsg2" role="status" aria-live="polite"></p>
       </form>
     </div>
@@ -899,16 +899,19 @@ $('#bShClose').onclick=()=>$('#sharePanel').hidden=true;
 $('#bShLeave').onclick=async()=>{$('#sharePanel').hidden=true;await leaveRoom();toast('You left the room.')};
 $('#bShCopy').onclick=async()=>{try{await navigator.clipboard.writeText(MP.code);toast('Code '+fmtCode(MP.code)+' copied!')}catch(e){toast('Tell your friend: '+fmtCode(MP.code))}};
 function wireJoin(form){
-  const inp=form.querySelector('input'),btn=form.querySelector('button[type=submit]'),msg=form.querySelector('.joinmsg')||form.parentElement.querySelector('.joinmsg');
+  const inp=form.querySelector('input'),btn=form.querySelector('button.cy'),msg=form.querySelector('.joinmsg')||form.parentElement.querySelector('.joinmsg');
   inp.addEventListener('input',e=>{const d=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);e.target.value=d.length>3?d.slice(0,3)+' '+d.slice(3):d});
-  form.onsubmit=async e=>{
-    e.preventDefault();const code=cleanCode(inp.value);msg.className='joinmsg';dlog('Join pressed, code '+(code||'(invalid: '+inp.value+')'));
+  const run=async e=>{
+    if(e&&e.preventDefault)e.preventDefault();if(btn.disabled)return;const code=cleanCode(inp.value);msg.className='joinmsg';dlog('Join pressed, code '+(code||'(invalid: '+inp.value+')'));
     if(!code){msg.className='joinmsg bad';msg.textContent='Type the 6 letters and numbers your friend gave you.';return}
     btn.disabled=true;msg.textContent='Looking for room '+fmtCode(code)+'…';MP.waitMsg=()=>{msg.textContent='Waiting for your friend to open room '+fmtCode(code)+'… keep this page open.'};
     try{await joinRoom(code);msg.textContent='';roomUi();toast('You joined room '+fmtCode(code)+'!')}
     catch(err){dlog('join failed: '+err.message);await leaveRoom();msg.className='joinmsg bad';
       msg.textContent=err.message==='full'?'Room '+fmtCode(code)+' already has 2 players. Ask your friend for a new code, or press Share code to start your own.':err.message==='empty'?'Nobody is in room '+fmtCode(code)+' right now. Check the code, and ask your friend to keep Doodle Dash open.':err.message==='nolevel'?'Found the room, but the level did not arrive. Try again.':'Could not reach the room. Check your internet and try again.'}
-    MP.waitMsg=null;btn.disabled=false}}
+    MP.waitMsg=null;btn.disabled=false};
+  form.onsubmit=run;                                                       /* in case a browser does submit the form */
+  btn.addEventListener('click',e=>{e.preventDefault();run()});
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();run()}})}
 addEventListener('pagehide',()=>{if(MP.ch)leaveRoom()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden||!MP.ch)return;hello();mpSend({t:'who'})});
 
