@@ -764,7 +764,7 @@ function sunnyBG(x){const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#4
 function clouds(x){x.fillStyle='rgba(255,255,255,.92)';for(let i=0;i<4;i++){const cx=((T*6+i*95)%(W+80))-40,cy=22+i*17+Math.sin(T+i)*2;[[0,0,18,7],[10,-4,12,7],[-10,-2,10,6]].forEach(e=>{x.beginPath();x.ellipse(cx+e[0],cy+e[1],e[2],e[3],0,0,7);x.fill()})}}
 function paintBG(x,i){const oi=TI,oh=TH;TI=i;TH=THS[i];if(i)drawBG(x);else sunnyBG(x);TI=oi;TH=oh}
 function paintChar(cv,c){const x=cv.getContext('2d');x.setTransform(1,0,0,1,0,0);const g=x.createLinearGradient(0,0,0,192);g.addColorStop(0,'#bfe9ff');g.addColorStop(1,'#fff3cf');x.fillStyle=g;x.fillRect(0,0,192,192);x.fillStyle='rgba(0,0,0,.15)';x.beginPath();x.ellipse(96,178,40,7,0,0,7);x.fill();x.translate(96,176);x.scale(10.4,10.4);sprite(x,c,1,false,false)}
-function repaintChars(){document.querySelectorAll('#chars canvas').forEach((cv,k)=>paintChar(cv,CHS[k]));paintLegend()}
+function repaintChars(){document.querySelectorAll('#chars canvas').forEach(cv=>paintChar(cv,CHS[+cv.parentElement.dataset.i]));paintLegend()}
 function paintThumb(cv,i){const x=cv.getContext('2d'),oi=TI,oh=TH,oT=T;x.setTransform(1,0,0,1,0,0);T=1.7;paintBG(x,i);TI=i;TH=THS[i];if(i)amb(x);else clouds(x);
   blk(x,0,196,W,44,30);blk(x,190,130,100,16,30);
   x.fillStyle='#e8334a';[120,140,160].forEach(px=>{x.beginPath();x.moveTo(px-9,196);x.lineTo(px,172);x.lineTo(px+9,196);x.fill()});
@@ -799,10 +799,11 @@ async function dec(s){s=s.trim();if(s.slice(0,2)!=='DD')throw 0;let b=s.slice(3)
   while(i<u.length){const v=u[i++];if(v>8)throw 0;let n=0,sh=0,c;do{c=u[i++];n|=(c&127)<<sh;sh+=7}while(c&128);if(pos+n>N)throw 0;cls.fill(v,pos,pos+n);pos+=n}
   if(pos!==N||ti>=THS.length)throw 0;return ti}
 function setTheme(i){TI=i;TH=THS[i];$('#bTheme').textContent='World: '+TH.n;document.querySelectorAll('#worlds button').forEach((b,k)=>{b.classList.toggle('on',k===i);b.setAttribute('aria-pressed',k===i)});heroBG=document.createElement('canvas');heroBG.width=W;heroBG.height=H;paintBG(heroBG.getContext('2d'),i);try{localStorage.setItem('dd-world',i)}catch(e){}}
-CHS.forEach((c,i)=>{const b=document.createElement('button'),cv=document.createElement('canvas'),n=document.createElement('b');b.type='button';b.className='tool-button pk';b.setAttribute('aria-label','Play as '+c.n);cv.width=cv.height=192;cv.className='cc';paintChar(cv,c);n.textContent=c.n;b.append(cv,n);b.onclick=()=>setChar(i);$('#chars').appendChild(b)});
+const CORDER=(()=>{const r=[];for(let k=2;k<CHS.length;k++)r.push(k);for(let k=r.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[r[k],r[j]]=[r[j],r[k]]}return [0,1].concat(r)})();
+CORDER.forEach(i=>{const c=CHS[i],b=document.createElement('button'),cv=document.createElement('canvas'),n=document.createElement('b');b.type='button';b.dataset.i=i;b.className='tool-button pk';b.setAttribute('aria-label','Play as '+c.n);cv.width=cv.height=192;cv.className='cc';paintChar(cv,c);n.textContent=c.n;b.append(cv,n);b.onclick=()=>setChar(i);$('#chars').appendChild(b)});
 THS.forEach((t,i)=>{const b=document.createElement('button'),cv=document.createElement('canvas'),n=document.createElement('b');b.type='button';b.className='tool-button pk';b.title=WD[i];b.setAttribute('aria-label',t.n+' world: '+WD[i]);cv.width=W;cv.height=H;n.textContent=t.n;b.append(cv,n);b.onclick=()=>setTheme(i);$('#worlds').appendChild(b)});
 function repaintWorlds(){document.querySelectorAll('#worlds canvas').forEach((cv,k)=>paintThumb(cv,k))}
-function setChar(i){CI=i;CH=CHS[i];document.querySelectorAll('#chars button').forEach((b,k)=>{b.classList.toggle('on',k===i);b.setAttribute('aria-pressed',k===i)});repaintWorlds();try{localStorage.setItem('dd-char',i)}catch(e){}if(MP.ch&&MP.meta)setMeta(Object.assign({},MP.meta,{c:CI}))}
+function setChar(i){CI=i;CH=CHS[i];document.querySelectorAll('#chars button').forEach(b=>{const on=+b.dataset.i===i;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});repaintWorlds();try{localStorage.setItem('dd-char',i)}catch(e){}if(MP.ch&&MP.meta)setMeta(Object.assign({},MP.meta,{c:CI}))}
 let sc=0,sw=0;try{sc=+localStorage.getItem('dd-char')||0;sw=+localStorage.getItem('dd-world')||0}catch(e){}
 setTheme(Math.min(sw,THS.length-1));setChar(Math.min(sc,CHS.length-1));hx=$('#hero').getContext('2d');heroRaf=requestAnimationFrame(heroFrame);
 $('#bTheme').onclick=()=>{setTheme((TI+1)%THS.length);startGame();if(MP.ch&&MP.host)broadcastLevel()};

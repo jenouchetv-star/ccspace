@@ -165,6 +165,15 @@ describe("the game page", () => {
     expect(index).not.toMatch(/gamestage-frame[^>]*allow-forms/); // the fix is in the game, not a looser sandbox
   });
 
+  it("shuffles the player buttons but keeps Chike and Zech first, and never reorders the real character list", () => {
+    expect(page).toContain("return [0,1].concat(r)");
+    expect(page).toContain("CORDER.forEach(i=>");
+    expect(page).toContain("b.dataset.i=i");
+    // the shared character numbers must stay in a fixed order so two players agree on who is who
+    const order = [...page.split("const CHS=[")[1].split("];")[0].matchAll(/n:'(\w+)'/g)].map((m) => m[1]);
+    expect(order).toEqual(["Chike", "Zech", "Mateo", "Corey", "Kiyah", "Yuna", "Averi", "Stacey"]);
+  });
+
   it("lists the colours in the agreed order", () => {
     const order = [...page.matchAll(/<li><span class="dot"[^>]*><\/span><canvas class="lg" data-k="(\w+)"/g)].map((m) => m[1]);
     expect(order).toEqual(["plat", "start", "flag", "coin", "orb", "mover", "spike", "enemy"]);
