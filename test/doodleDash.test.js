@@ -117,6 +117,15 @@ describe("the game page", () => {
     expect(page).toMatch(/<div class="top">[\s\S]*<div class="tjoin">[\s\S]*id="joinForm"[\s\S]*id="bHow"/);
   });
 
+  it("still works on phones without canvas roundRect: it is polyfilled first and Join is wired before start-up can throw", () => {
+    const script = page.split("<script>")[1];
+    expect(script.indexOf("CanvasRenderingContext2D.prototype.roundRect=")).toBeGreaterThan(-1);
+    expect(script.indexOf("CanvasRenderingContext2D.prototype.roundRect=")).toBeLessThan(script.indexOf("const W=320"));
+    expect(script.indexOf("wireJoin($('#joinForm'))")).toBeGreaterThan(-1);
+    expect(script.indexOf("wireJoin($('#joinForm'))")).toBeLessThan(script.indexOf("setChar(Math.min("));
+    expect(page).toContain('id="joinForm" autocomplete="off" onsubmit="return false"');
+  });
+
   it("lists the colours in the agreed order", () => {
     const order = [...page.matchAll(/<li><span class="dot"[^>]*><\/span><canvas class="lg" data-k="(\w+)"/g)].map((m) => m[1]);
     expect(order).toEqual(["plat", "start", "flag", "coin", "orb", "mover", "spike", "enemy"]);

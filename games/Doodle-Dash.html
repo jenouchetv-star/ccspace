@@ -208,7 +208,7 @@ body.in-play{overflow:hidden}
   <div class="top">
     <img src="../assets/brand/logo.webp" alt="Chike's Creative Space" width="603" height="320">
     <div class="tjoin">
-    <form class="join" id="joinForm" autocomplete="off">
+    <form class="join" id="joinForm" autocomplete="off" onsubmit="return false">
       <label for="joinIn">Join a friend</label>
       <input id="joinIn" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="7" placeholder="6 characters" aria-describedby="joinMsg">
       <button class="cy" id="bJoin" type="submit"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Join</button>
@@ -233,7 +233,7 @@ body.in-play{overflow:hidden}
   <main>
     <div class="mtop">
       <button id="bMakeBack" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>Back</button>
-      <form class="join" id="joinForm2" autocomplete="off">
+      <form class="join" id="joinForm2" autocomplete="off" onsubmit="return false">
         <label for="joinIn2">Join a friend</label>
         <input id="joinIn2" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="7" placeholder="6-character code" aria-describedby="joinMsg2">
         <button class="cy" id="bJoin2" type="submit"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Join</button>
@@ -378,6 +378,16 @@ body.in-play{overflow:hidden}
 <div id="toast" hidden role="status" aria-live="polite"></div>
 
 <script>
+/* Older phones have no CanvasRenderingContext2D.roundRect. Without it the page threw part-way through
+   starting up, which left Join a friend (and everything after that point) without a handler. */
+if(window.CanvasRenderingContext2D&&!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+    let a=Array.isArray(r)?r.slice():[r||0];if(!a.length)a=[0];
+    while(a.length<4)a=a.length===1?[a[0],a[0],a[0],a[0]]:a.length===2?[a[0],a[1],a[0],a[1]]:[a[0],a[1],a[2],a[1]];
+    a=a.slice(0,4).map(v=>Math.max(0,Math.min(+v||0,Math.abs(w)/2,Math.abs(h)/2)));
+    const tl=a[0],tr=a[1],br=a[2],bl=a[3];
+    this.moveTo(x+tl,y);this.lineTo(x+w-tr,y);this.arcTo(x+w,y,x+w,y+tr,tr);this.lineTo(x+w,y+h-br);this.arcTo(x+w,y+h,x+w-br,y+h,br);
+    this.lineTo(x+bl,y+h);this.arcTo(x,y+h,x,y+h-bl,bl);this.lineTo(x,y+tl);this.arcTo(x,y,x+tl,y,tl);this.closePath()}}
 const W=320,H=240,N=W*H,$=s=>document.querySelector(s);
 const wc=document.createElement('canvas');wc.width=W;wc.height=H;
 const wx=wc.getContext('2d',{willReadFrequently:true});
@@ -406,6 +416,7 @@ function approach(cur,tgt,dt,rate){return cur+(tgt-cur)*Math.min(1,dt*rate)}
 
 const PW=9,PH=12,K={l:0,r:0,j:0};let pl,tries,score,flash,done,layer;
 const SB_URL="https://wdctkfhwygwwulipwnys.supabase.co",SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
+wireJoin($('#joinForm'));wireJoin($('#joinForm2'));   /* wired first: wireJoin and what it calls are hoisted function declarations */
 const MP={sb:null,ch:null,code:'',host:false,t0:0,peers:{},asm:null,send:0,lv:'',
   id:((window.crypto&&crypto.randomUUID)?crypto.randomUUID():String(Math.random()).slice(2)).replace(/-/g,'').slice(0,10)};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -863,7 +874,6 @@ function wireJoin(form){
     catch(err){await leaveRoom();msg.className='joinmsg bad';
       msg.textContent=err.message==='full'?'Room '+fmtCode(code)+' already has 2 players. Ask your friend for a new code, or press Share code to start your own.':err.message==='empty'?'Nobody is in room '+fmtCode(code)+' right now. Check the code, and ask your friend to keep Doodle Dash open.':err.message==='nolevel'?'Found the room, but the level did not arrive. Try again.':'Could not reach the room. Check your internet and try again.'}
     MP.waitMsg=null;btn.disabled=false}}
-wireJoin($('#joinForm'));wireJoin($('#joinForm2'));
 addEventListener('pagehide',()=>{if(MP.ch)leaveRoom()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden||!MP.ch)return;const me=(roomState()[MP.id]||[])[0]||{c:CI,host:MP.host,lv:!!L,at:Date.now()},m=Object.assign({},me);delete m.presence_ref;try{const r=MP.ch.track(m);if(r&&r.catch)r.catch(()=>{})}catch(e){}});
 
