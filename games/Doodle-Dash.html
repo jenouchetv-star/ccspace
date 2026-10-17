@@ -173,9 +173,13 @@ main{width:100%}
 /* ---------- playing ---------- */
 #bPlayBack{padding:5px 14px!important;min-height:38px!important}
 #bPlayBack .i{width:17px;height:17px}
+#bMute{gap:6px}
+#bMute .i{width:18px;height:18px;flex:none}
 .hud{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px;font-weight:800;font-size:.95rem}
 .hud>span:not(.row){border:3px solid var(--ink);border-radius:999px;padding:3px 14px;box-shadow:2px 2px 0 var(--ink);color:var(--ink)}
-.hud>span:nth-of-type(1){background:var(--sun)}
+.hud>span:nth-of-type(1){background:#fff}
+.hud .coins{display:inline-flex;align-items:center;gap:6px;font-size:1.05rem}
+.coinI{width:22px;height:22px;flex:none}
 .hud>span:nth-of-type(2){background:#fff}
 .hud>span:nth-of-type(3){background:var(--cyan)}
 .hud button{padding:5px 13px!important;min-height:40px!important;font-size:.85rem;background:var(--card)}
@@ -336,10 +340,10 @@ body.in-play{overflow:hidden}
 <section id="play" hidden>
   <div class="hud">
     <button id="bPlayBack" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>Back</button>
-    <span>Coins <b id="hCoin">0</b>/<b id="hTot">0</b></span>
+    <span class="coins" role="img" aria-label="Coins collected"><svg class="coinI" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><ellipse cx="12" cy="12" rx="8" ry="10" fill="#ffc400" stroke="#1E2226" stroke-width="2"/><ellipse cx="12" cy="12" rx="4.6" ry="6.8" fill="none" stroke="#b37a00" stroke-width="1.6"/><ellipse cx="8.6" cy="8" rx="1.5" ry="2.6" fill="#fff3a6"/></svg><b id="hCoin">0</b>/<b id="hTot">5</b></span>
     <span>Tries <b id="hTry">1</b></span>
-    <span>Time <b id="hTime">0.0</b>s</span>
-    <span class="row"><span id="roomBadge" hidden style="border:3px solid var(--ink);border-radius:999px;padding:3px 12px;box-shadow:2px 2px 0 var(--ink)">Room <b id="roomCode"></b> &middot; <b id="roomN">1</b> playing</span><button class="sun" id="bShare" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg><span class="t">Share code</span></button><button id="bTheme" type="button">World: Sunny</button><button id="bMute" type="button">Sound on</button></span>
+    <span>Time <b id="hTime">00:00</b></span>
+    <span class="row"><span id="roomBadge" hidden style="border:3px solid var(--ink);border-radius:999px;padding:3px 12px;box-shadow:2px 2px 0 var(--ink)">Room <b id="roomCode"></b> &middot; <b id="roomN">1</b> playing</span><button class="sun" id="bShare" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg><span class="t">Share code</span></button><button id="bTheme" type="button">World: Sunny</button><button id="bMute" type="button" aria-pressed="false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg><span class="t">Sound on</span></button></span>
   </div>
   <div class="stage">
     <canvas id="gc" width="640" height="480"></canvas>
@@ -424,12 +428,14 @@ function fmtCode(c){return c.slice(0,3)+' '+c.slice(3)}
 function splitChunks(s,n){const o=[];for(let i=0;i<s.length;i+=n)o.push(s.slice(i,i+n));return o}
 function leaderOf(state){const ids=Object.keys(state||{}).filter(k=>state[k]&&state[k][0]&&state[k][0].lv);const host=ids.filter(k=>state[k][0].host).sort()[0];return host||ids.sort()[0]||''}
 function approach(cur,tgt,dt,rate){return cur+(tgt-cur)*Math.min(1,dt*rate)}
+function fmtTime(t){t=Math.max(0,+t||0);return String(Math.floor(t/60)).padStart(2,'0')+':'+String(Math.floor(t%60)).padStart(2,'0')}
 /* END pure */
 
 const PW=9,PH=12,K={l:0,r:0,j:0};let pl,tries,score,flash,done,layer;
 const SB_URL="https://wdctkfhwygwwulipwnys.supabase.co",SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
 wireJoin($('#joinForm'));wireJoin($('#joinForm2'));   /* wired first: wireJoin and what it calls are hoisted function declarations */
 const MP={sb:null,ch:null,code:'',host:false,t0:0,peers:{},asm:null,send:0,lv:'',
+  pres:{},meta:null,hb:0,
   id:((window.crypto&&crypto.randomUUID)?crypto.randomUUID():String(Math.random()).slice(2)).replace(/-/g,'').slice(0,10)};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
@@ -628,7 +634,7 @@ function upd(dt){T+=dt;
   for(const id in MP.peers){const q=MP.peers[id];if(now-q.seen>6000){delete MP.peers[id];continue}q.x=approach(q.x,q.tx,dt,14);q.y=approach(q.y,q.ty,dt,14)}
   if(shake>0)shake--}
 function buildLayers(){
-  parts=[];T=0;shake=0;tm=0;$('#hTime').textContent='0.0';
+  parts=[];T=0;shake=0;tm=0;$('#hTime').textContent='00:00';
   L.mp=L.comps[8].map((c,idx)=>{let a=W,b=0,d=H,e=0;c.cells.forEach(q=>{const x=q%W,y=(q/W)|0;if(x<a)a=x;if(x>b)b=x;if(y<d)d=y;if(y>e)e=y});const v=(e-d)>(b-a)*1.3;return{ox:a,oy:d,x:a,y:d,w:Math.max(16,b-a+1),h:Math.max(5,e-d+1),v,R:v?30:40,t0:idx*1.7,t:idx*1.7}});
   L.en=L.comps[6].map((c,idx)=>{const e={x:c.cx-5,y:c.cy-6,vy:0,dir:idx%2?1:-1,alive:true,gd:0};while(hb(e.x,e.y,10,9)&&e.y>0)e.y--;return e});
   L.pu=L.comps[7].map((c,i)=>({x:c.cx,y:c.cy,r:7,t:['st','sj','sp'][i%3],got:false}));
@@ -777,7 +783,7 @@ function heroFrame(t){if($('#home').hidden){heroRaf=0;return}heroRaf=requestAnim
 
 /* ---------- Best times and level codes ---------- */
 function lkey(){let h=2166136261;for(let p=0;p<N;p+=3){h^=cls[p];h=Math.imul(h,16777619)}return 'dd-'+(h>>>0)}
-function bestMsg(){try{const k=lkey(),o=+localStorage.getItem(k)||0;if(!o||tm<o){localStorage.setItem(k,tm.toFixed(2));return o?'  New best!':'  First clear!'}return '  Best '+o.toFixed(1)+'s'}catch(e){return ''}}
+function bestMsg(){try{const k=lkey(),o=+localStorage.getItem(k)||0;if(!o||tm<o){localStorage.setItem(k,tm.toFixed(2));return o?'  New best!':'  First clear!'}return '  Best '+fmtTime(o)}catch(e){return ''}}
 async function enc(raw){const a=[TI];let v=cls[0],n=0;const put=x=>{while(x>127){a.push((x&127)|128);x>>=7}a.push(x)};
   for(let p=0;p<N;p++){if(cls[p]===v)n++;else{a.push(v);put(n);v=cls[p];n=1}}a.push(v);put(n);
   let u=new Uint8Array(a),pre='u';
@@ -793,11 +799,12 @@ function setTheme(i){TI=i;TH=THS[i];$('#bTheme').textContent='World: '+TH.n;docu
 CHS.forEach((c,i)=>{const b=document.createElement('button'),cv=document.createElement('canvas'),n=document.createElement('b');b.type='button';b.className='tool-button pk';b.setAttribute('aria-label','Play as '+c.n);cv.width=cv.height=192;cv.className='cc';paintChar(cv,c);n.textContent=c.n;b.append(cv,n);b.onclick=()=>setChar(i);$('#chars').appendChild(b)});
 THS.forEach((t,i)=>{const b=document.createElement('button'),cv=document.createElement('canvas'),n=document.createElement('b');b.type='button';b.className='tool-button pk';b.title=WD[i];b.setAttribute('aria-label',t.n+' world: '+WD[i]);cv.width=W;cv.height=H;n.textContent=t.n;b.append(cv,n);b.onclick=()=>setTheme(i);$('#worlds').appendChild(b)});
 function repaintWorlds(){document.querySelectorAll('#worlds canvas').forEach((cv,k)=>paintThumb(cv,k))}
-function setChar(i){CI=i;CH=CHS[i];document.querySelectorAll('#chars button').forEach((b,k)=>{b.classList.toggle('on',k===i);b.setAttribute('aria-pressed',k===i)});repaintWorlds();try{localStorage.setItem('dd-char',i)}catch(e){}if(MP.ch)MP.ch.track({c:CI,host:MP.host,lv:!!L}).catch(()=>{})}
+function setChar(i){CI=i;CH=CHS[i];document.querySelectorAll('#chars button').forEach((b,k)=>{b.classList.toggle('on',k===i);b.setAttribute('aria-pressed',k===i)});repaintWorlds();try{localStorage.setItem('dd-char',i)}catch(e){}if(MP.ch&&MP.meta)setMeta(Object.assign({},MP.meta,{c:CI}))}
 let sc=0,sw=0;try{sc=+localStorage.getItem('dd-char')||0;sw=+localStorage.getItem('dd-world')||0}catch(e){}
 setTheme(Math.min(sw,THS.length-1));setChar(Math.min(sc,CHS.length-1));hx=$('#hero').getContext('2d');heroRaf=requestAnimationFrame(heroFrame);
 $('#bTheme').onclick=()=>{setTheme((TI+1)%THS.length);startGame();if(MP.ch&&MP.host)broadcastLevel()};
-$('#bMute').onclick=e=>{muted=!muted;e.target.textContent=muted?'Sound off':'Sound on'};
+const ICON_ON='<svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>',ICON_OFF='<svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/></svg>';
+$('#bMute').onclick=()=>{muted=!muted;const b=$('#bMute');b.innerHTML=(muted?ICON_OFF:ICON_ON)+'<span class="t">'+(muted?'Sound off':'Sound on')+'</span>';b.setAttribute('aria-pressed',muted?'true':'false')};
 
 /* ---------- Playing together: a 6-character room code, two players per room ---------- */
 /* Rooms are live-only. They use Supabase Realtime broadcast and presence, so nothing is saved
@@ -809,31 +816,41 @@ async function sbClient(){if(MP.sb)return MP.sb;await sbLoad();
   /* its own anonymous client: it never reads or writes the site's sign-in */
   MP.sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},realtime:{params:{eventsPerSecond:30}}});return MP.sb}
 function mpSend(p){if(!MP.ch)return;p.i=MP.id;try{const r=MP.ch.send({type:'broadcast',event:'m',payload:p});if(r&&r.catch)r.catch(()=>{})}catch(e){}}
-function roomState(){return MP.ch?MP.ch.presenceState():{}}
+const PRES_TTL=15000;
+function roomState(){
+  if(!MP.ch)return {};
+  const now=performance.now(),s={};
+  for(const k in MP.pres){if(now-MP.pres[k].seen<PRES_TTL)s[k]=[MP.pres[k].m]}
+  if(MP.meta)s[MP.id]=[MP.meta];
+  return s}
+function hello(){if(MP.ch&&MP.meta)mpSend({t:'hi',m:MP.meta})}
+function setMeta(m){MP.meta=m;hello()}
+function sweepPeers(){const now=performance.now();let ch=false;
+  for(const k in MP.pres){if(now-MP.pres[k].seen>=PRES_TTL){const q=MP.peers[k];if(q)toast((CHS[q.c]||CHS[0]).n+' left the room.');delete MP.peers[k];delete MP.pres[k];ch=true}}
+  if(ch)roomUi()}
+function startBeat(){clearInterval(MP.hb);MP.hb=setInterval(()=>{hello();sweepPeers()},2000)}
 function others(){return Object.keys(roomState()).filter(k=>k!==MP.id)}
 async function openRoom(code){
   const sb=await sbClient();
   return new Promise((ok,no)=>{
-    const ch=sb.channel('dd-room-'+code,{config:{broadcast:{self:false},presence:{key:MP.id}}});
+    const ch=sb.channel('dd-room-'+code,{config:{broadcast:{self:false}}});
     ch.on('broadcast',{event:'m'},e=>onMsg(e.payload));
-    ch.on('presence',{event:'sync'},()=>roomUi());
-    ch.on('presence',{event:'leave'},e=>{(e.leftPresences||[]).forEach(p=>{const k=p.key||'';if(MP.peers[k]){toast((CHS[MP.peers[k].c]||CHS[0]).n+' left the room.');delete MP.peers[k]}});roomUi()});
     const to=setTimeout(()=>{no(new Error('timeout'))},9000);
     ch.subscribe(st=>{dlog('channel '+code+': '+st);if(st==='SUBSCRIBED'){clearTimeout(to);ok(ch)}else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){clearTimeout(to);no(new Error(st))}})})}
 async function dropChannel(ch){try{if(MP.sb&&ch)await MP.sb.removeChannel(ch)}catch(e){}}
 async function createRoom(){
   for(let i=0;i<8;i++){
     const code=genCode(crypto.getRandomValues(new Uint32Array(1))[0]);
-    const ch=await openRoom(code);MP.ch=ch;await sleep(900);               /* let presence settle */
+    const ch=await openRoom(code);MP.ch=ch;MP.pres={};MP.meta=null;mpSend({t:'who'});await sleep(900);   /* ask who is here and wait for the answers */
     if(others().length){MP.ch=null;await dropChannel(ch);continue}        /* someone already has this code: pick another */
-    dlog('room created '+code);MP.code=code;MP.host=true;MP.t0=Date.now();MP.peers={};await ch.track({c:CI,host:true,lv:true,at:Date.now()});roomUi();return code}
+    dlog('room created '+code);MP.code=code;MP.host=true;MP.t0=Date.now();MP.peers={};setMeta({c:CI,host:true,lv:true,at:Date.now()});startBeat();roomUi();return code}
   throw new Error('busy')}
 async function joinRoom(code){
   dlog('joining '+code);
-  const ch=await openRoom(code);MP.ch=ch;MP.code=code;MP.host=false;MP.peers={};
-  await sleep(700);                                                          /* see who is already in the room */
+  const ch=await openRoom(code);MP.ch=ch;MP.code=code;MP.host=false;MP.peers={};MP.pres={};MP.meta=null;
+  mpSend({t:'who'});await sleep(700);                                        /* ask who is already in the room */
   if(others().length>=2){await leaveRoom();throw new Error('full')}
-  await ch.track({c:CI,host:false,lv:false,at:Date.now()});
+  setMeta({c:CI,host:false,lv:false,at:Date.now()});startBeat();
   for(let t=0;t<30&&!others().length;t++){if(t===3&&MP.waitMsg)MP.waitMsg();await sleep(t<1?900:1000)}   /* up to about 30 seconds */
   dlog('after waiting: '+others().length+' other player(s) in the room');
   if(!others().length){await leaveRoom();throw new Error('empty')}
@@ -841,7 +858,7 @@ async function joinRoom(code){
   const got=new Promise((ok,no)=>{MP.asm={ok,no,parts:[],n:0};setTimeout(()=>no(new Error('nolevel')),9000)});
   mpSend({t:'need'});
   await got}
-async function leaveRoom(){const ch=MP.ch;MP.ch=null;MP.code='';MP.host=false;MP.peers={};MP.asm=null;roomUi();await dropChannel(ch)}
+async function leaveRoom(){const ch=MP.ch;if(ch)mpSend({t:'bye'});clearInterval(MP.hb);MP.pres={};MP.meta=null;MP.ch=null;MP.code='';MP.host=false;MP.peers={};MP.asm=null;roomUi();await dropChannel(ch)}
 function roomUi(){
   const n=MP.ch?Object.keys(roomState()).length||1:0;
   $('#roomBadge').hidden=!MP.ch;$('#roomCode').textContent=MP.code?fmtCode(MP.code):'';$('#roomN').textContent=n;
@@ -855,18 +872,21 @@ function broadcastLevel(){if(MP.ch&&MP.host){MP.t0=Date.now();MP.lvN=(MP.lvN||0)
 async function onMsg(p){
   if(!p||p.i===MP.id)return;
   if(p.t==='s'){const q=MP.peers[p.i]||(MP.peers[p.i]={x:p.x,y:p.y,tx:p.x,ty:p.y});q.tx=p.x;q.ty=p.y;q.f=p.f;q.c=p.c;q.o=p.o;q.st=p.st;q.seen=performance.now();return}
+  if(p.t==='hi'){const known=MP.pres[p.i]&&performance.now()-MP.pres[p.i].seen<PRES_TTL;MP.pres[p.i]={m:p.m,seen:performance.now()};if(!known)hello();roomUi();return}
+  if(p.t==='who'){hello();return}
+  if(p.t==='bye'){const q=MP.peers[p.i];if(q)toast((CHS[q.c]||CHS[0]).n+' left the room.');delete MP.peers[p.i];delete MP.pres[p.i];roomUi();return}
   if(p.t==='need'){if(L&&leaderOf(roomState())===MP.id)sendLevel(p.i);return}
   if(p.t==='lv'&&(p.to==='*'||p.to===MP.id)){
     const a=MP.asm||(MP.asm={ok:null,no:null,parts:[],n:0,live:true});
     if(a.n!==p.n||a.sp!==p.sp){a.parts=[];a.n=p.n;a.sp=p.sp}a.parts[p.ci]=p.d;
     if(a.parts.filter(Boolean).length===a.n){const s=a.parts.join('');const ok=a.ok;MP.asm=null;
-      try{const ti=await dec(s);MP.t0=p.t0||Date.now();setTheme(ti);skipC=true;fromDraw=false;analyse();startGame();MP.ch&&MP.ch.track({c:CI,host:MP.host,lv:true,at:(roomState()[MP.id]&&roomState()[MP.id][0]&&roomState()[MP.id][0].at)||Date.now()}).catch(()=>{});if(ok)ok();else toast('The host started a new level.')}
+      try{const ti=await dec(s);MP.t0=p.t0||Date.now();setTheme(ti);skipC=true;fromDraw=false;analyse();startGame();if(MP.ch&&MP.meta)setMeta(Object.assign({},MP.meta,{lv:true}));if(ok)ok();else toast('The host started a new level.')}
       catch(e){toast('That level did not load. Ask your friend to share again.')}}
     return}
   if(p.t==='coin'){const k=L&&L.coins[p.k];if(k&&!k.got){k.got=true;score++;burst(k.x,k.y,12,['#ffc400','#fff6b0'],80);hud()}return}
   if(p.t==='pu'){const u=L&&L.pu[p.k];if(u&&!u.got){u.got=true;burst(u.x,u.y,14,['#b24dff','#fff'],90)}return}
   if(p.t==='en'){const e=L&&L.en[p.k];if(e&&e.alive){e.alive=false;burst(e.x+5,e.y+5,14,['#ff8a00','#fff'],90)}return}
-  if(p.t==='win'){const ch=CHS[p.c]||CHS[0];toast(ch.n+' reached the flag in '+p.tm+'s!');return}}
+  if(p.t==='win'){const ch=CHS[p.c]||CHS[0];toast(ch.n+' reached the flag in '+fmtTime(p.tm)+'!');return}}
 function mpTick(){const n=performance.now();if(!MP.ch||n-MP.send<100)return;MP.send=n;mpSend({t:'s',c:CI,x:+pl.x.toFixed(1),y:+pl.y.toFixed(1),f:pl.face,o:pl.on?1:0,st:pl.st>0?1:0})}
 function openShare(){roomUi();$('#sharePanel').hidden=false;$('#bShCopy').focus()}
 $('#bShare').onclick=async()=>{
@@ -890,7 +910,7 @@ function wireJoin(form){
       msg.textContent=err.message==='full'?'Room '+fmtCode(code)+' already has 2 players. Ask your friend for a new code, or press Share code to start your own.':err.message==='empty'?'Nobody is in room '+fmtCode(code)+' right now. Check the code, and ask your friend to keep Doodle Dash open.':err.message==='nolevel'?'Found the room, but the level did not arrive. Try again.':'Could not reach the room. Check your internet and try again.'}
     MP.waitMsg=null;btn.disabled=false}}
 addEventListener('pagehide',()=>{if(MP.ch)leaveRoom()});
-document.addEventListener('visibilitychange',()=>{if(document.hidden||!MP.ch)return;const me=(roomState()[MP.id]||[])[0]||{c:CI,host:MP.host,lv:!!L,at:Date.now()},m=Object.assign({},me);delete m.presence_ref;try{const r=MP.ch.track(m);if(r&&r.catch)r.catch(()=>{})}catch(e){}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden||!MP.ch)return;hello();mpSend({t:'who'})});
 
 /* ---------- Game ---------- */
 function hit(x,y){if(L.mp&&L.mp.some(p=>x<p.x+p.w&&x+PW>p.x&&y<p.y+p.h&&y+PH>p.y))return true;const x0=Math.floor(x),x1=Math.floor(x+PW-.001),y0=Math.floor(y),y1=Math.floor(y+PH-.001);
@@ -923,7 +943,7 @@ function step(dt){
   L.mp.forEach(p=>{const ox=p.x,oy=p.y;if(MP.ch)p.t=(Date.now()-MP.t0)/1000+p.t0;else p.t+=dt;const s=Math.sin(p.t*.9)*p.R;if(p.v)p.y=p.oy+s;else p.x=p.ox+s;const dx=p.x-ox,dy=p.y-oy;
     if(pl.y+PH>=oy-1.5&&pl.y+PH<=oy+2&&pl.x+PW>ox&&pl.x<ox+p.w){pl.x+=dx;pl.y+=dy}
     else if(pl.x<p.x+p.w&&pl.x+PW>p.x&&pl.y<p.y+p.h&&pl.y+PH>p.y){if(p.v)pl.y+=dy;else pl.x+=dx}});
-  tm+=dt;if((tm*10|0)!==((tm-dt)*10|0))$('#hTime').textContent=tm.toFixed(1);
+  tm+=dt;if((tm|0)!==((tm-dt)|0))$('#hTime').textContent=fmtTime(tm);
   const dir=K.r-K.l,tgt=dir*92*(pl.sp>0?1.45:1);pl.st-=dt;pl.sj-=dt;pl.sp-=dt;
   if(dir){pl.face=dir;pl.vx+=Math.sign(tgt-pl.vx)*620*(TH.ice?.5:1)*dt;if(Math.abs(tgt-pl.vx)<8)pl.vx=tgt}else{const f=800*(TH.ice?.2:1)*dt;pl.vx=Math.abs(pl.vx)<f?0:pl.vx-Math.sign(pl.vx)*f}
   pl.on=hit(pl.x,pl.y+1);pl.coy=pl.on?.1:pl.coy-dt;
@@ -950,7 +970,7 @@ function step(dt){
       if(pl.st>0||(pl.vy>30&&pl.y+PH-e.y<9)){e.alive=false;mpSend({t:'en',k:ei});if(pl.st<=0){pl.vy=-170;pl.sy=1.3}burst(e.x+5,e.y+5,22,['#ff8a00','#ffd04d','#fff'],120);pop(e.x+5,e.y-4,'Boing!');beep(240,.2,'square',620)}
       else dead=1}});
   if(dead)return die();
-  if(g5){done=true;celebrate();mpSend({t:'win',c:CI,tm:+tm.toFixed(1)});beep(520,.6,'triangle',1040);$('#winTxt').textContent='Coins: '+score+' of '+L.coins.length+' · Tries: '+tries+'  '+tm.toFixed(1)+'s  '+stars()+bestMsg();{const last=BI===LVS.length-1,nx=BI>=0&&!last&&!(MP.ch&&!MP.host);$('#bNext').hidden=!nx;$('#bAgain').classList.toggle('sun',!nx);if(last)$('#winTxt').textContent+='  That was the last sample level!'}$('#win').hidden=false}}
+  if(g5){done=true;celebrate();mpSend({t:'win',c:CI,tm:+tm.toFixed(1)});beep(520,.6,'triangle',1040);$('#winTxt').textContent='Coins: '+score+' of '+L.coins.length+' · Tries: '+tries+'  '+fmtTime(tm)+'  '+stars()+bestMsg();{const last=BI===LVS.length-1,nx=BI>=0&&!last&&!(MP.ch&&!MP.host);$('#bNext').hidden=!nx;$('#bAgain').classList.toggle('sun',!nx);if(last)$('#winTxt').textContent+='  That was the last sample level!'}$('#win').hidden=false}}
 
 /* ---------- Controls ---------- */
 const km={ArrowLeft:'l',a:'l',A:'l',ArrowRight:'r',d:'r',D:'r',' ':'j',ArrowUp:'j',w:'j',W:'j'};

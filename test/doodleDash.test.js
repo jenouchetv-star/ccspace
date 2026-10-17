@@ -7,8 +7,8 @@ import { readFileSync, existsSync } from "node:fs";
 const page = readFileSync(new URL("../games/Doodle-Dash.html", import.meta.url), "utf8");
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const block = page.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const { genCode, cleanCode, fmtCode, splitChunks, leaderOf, seatOf } = new Function(
-  block + "; return { genCode, cleanCode, fmtCode, splitChunks, leaderOf, seatOf };"
+const { genCode, cleanCode, fmtCode, splitChunks, leaderOf, seatOf, fmtTime } = new Function(
+  block + "; return { genCode, cleanCode, fmtCode, splitChunks, leaderOf, seatOf, fmtTime };"
 )();
 
 describe("room codes", () => {
@@ -34,6 +34,17 @@ describe("room codes", () => {
 
   it("show the code in two easy to read groups", () => {
     expect(fmtCode("ABC234")).toBe("ABC 234");
+  });
+});
+
+describe("clock", () => {
+  it("shows time as 00:00", () => {
+    expect(fmtTime(0)).toBe("00:00");
+    expect(fmtTime(7.9)).toBe("00:07");
+    expect(fmtTime(94.5)).toBe("01:34");
+    expect(fmtTime(3600)).toBe("60:00");
+    expect(fmtTime(-3)).toBe("00:00");
+    expect(fmtTime(undefined)).toBe("00:00");
   });
 });
 
@@ -131,6 +142,18 @@ describe("the game page", () => {
     expect(play).toContain('id="bPlayBack"');
     expect(page).toContain("$('#bPlayBack').onclick=");
     expect(page).toContain("/[?&]debug=1/.test(location.search)");
+  });
+
+  it("keeps track of who is in a room with plain broadcast, not Realtime Presence (which is rate limited)", () => {
+    expect(page).not.toContain("presenceState");
+    expect(page).not.toMatch(/\.track\(/);
+    expect(page).toContain("mpSend({t:'who'})");
+    expect(page).toContain("t:'hi'");
+  });
+
+  it("shows coins as a coin picture and sound as a speaker icon", () => {
+    expect(page).toContain('class="coinI"');
+    expect(page).toContain("ICON_OFF");
   });
 
   it("lists the colours in the agreed order", () => {
