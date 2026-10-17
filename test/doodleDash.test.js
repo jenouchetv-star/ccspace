@@ -93,6 +93,20 @@ describe("the game page", () => {
     expect(page).toContain("a.parts[p.ci]=p.d");
   });
 
+  it("puts Back and Join a friend above the Make your level heading, with no long level code box left", () => {
+    const make = page.split('<section id="make"')[1].split("</section>")[0];
+    expect(make.indexOf('id="bMakeBack"')).toBeGreaterThan(-1);
+    expect(make.indexOf('id="joinForm2"')).toBeGreaterThan(make.indexOf('id="bMakeBack"'));
+    expect(make.indexOf("<h1>Make your level</h1>")).toBeGreaterThan(make.indexOf('id="joinForm2"'));
+    expect(page).not.toContain("codeIn");
+  });
+
+  it("draws on a big pad with the options underneath, and shows each pen size as a sample line", () => {
+    const draw = page.split('<section id="draw"')[1].split("</section>")[0];
+    expect(draw.indexOf('id="dc"')).toBeLessThan(draw.indexOf('id="tools"'));
+    for (const s of ["6", "12", "22"]) expect(draw).toMatch(new RegExp(`data-s="${s}"[^>]*><span class="sz"`));
+  });
+
   it("lists the colours in the agreed order", () => {
     const order = [...page.matchAll(/<li><span class="dot"[^>]*><\/span><canvas class="lg" data-k="(\w+)"/g)].map((m) => m[1]);
     expect(order).toEqual(["plat", "start", "flag", "coin", "orb", "mover", "spike", "enemy"]);
