@@ -7,27 +7,55 @@ import { readFileSync, existsSync } from "node:fs";
 const page = readFileSync(new URL("../games/Doodle-Dash.html", import.meta.url), "utf8");
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const block = page.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const { genCode, cleanCode, fmtCode, splitChunks, leaderOf } = new Function(
-  block + "; return { genCode, cleanCode, fmtCode, splitChunks, leaderOf };"
+const { genCode, cleanCode, fmtCode, splitChunks, leaderOf, seatOf } = new Function(
+  block + "; return { genCode, cleanCode, fmtCode, splitChunks, leaderOf, seatOf };"
 )();
 
 describe("room codes", () => {
-  it("always make a six digit code that never starts with 0", () => {
-    for (const u of [0, 1, 899999, 900000, 123456789, 4294967295, -1]) {
-      expect(genCode(u)).toMatch(/^[1-9]\d{5}$/);
+  it("always make a six character code with at least one letter and one number", () => {
+    for (let i = 0; i < 5000; i++) {
+      const u = (i * 2654435761) >>> 0;
+      const c = genCode(u);
+      expect(c).toMatch(/^[A-HJ-NP-Z2-9]{6}$/); // no I, O, 0 or 1: they look alike
+      expect(c).toMatch(/[A-Z]/);
+      expect(c).toMatch(/[2-9]/);
     }
+    for (const u of [0, 1, 4294967295, -1]) expect(genCode(u)).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
   });
 
-  it("clean up what a player types and reject anything that is not six digits", () => {
-    expect(cleanCode("123 456")).toBe("123456");
-    expect(cleanCode("123-456")).toBe("123456");
-    expect(cleanCode("12345")).toBe("");
-    expect(cleanCode("1234567")).toBe("");
+  it("clean up what a player types, in any case, and reject anything else", () => {
+    expect(cleanCode("abc 234")).toBe("ABC234");
+    expect(cleanCode("a-b-c-2-3-4")).toBe("ABC234");
+    expect(cleanCode("ABC23")).toBe("");
+    expect(cleanCode("ABC2345")).toBe("");
+    expect(cleanCode("ABCO12")).toBe(""); // O, 0, I and 1 are never in a code
     expect(cleanCode(null)).toBe("");
   });
 
   it("show the code in two easy to read groups", () => {
-    expect(fmtCode("123456")).toBe("123 456");
+    expect(fmtCode("ABC234")).toBe("ABC 234");
+  });
+});
+
+describe("two players per room", () => {
+  const P = (at, extra) => [Object.assign({ at }, extra || {})];
+
+  it("seats players in the order they arrived", () => {
+    const st = { host: P(100), friend: P(200), third: P(300) };
+    expect(seatOf(st, "host")).toBe(0);
+    expect(seatOf(st, "friend")).toBe(1);
+    expect(seatOf(st, "third")).toBe(2); // seat 2 or later means the room is full
+  });
+
+  it("settles two players arriving in the same instant the same way for everyone", () => {
+    const st = { host: P(100), b: P(200), a: P(200) };
+    expect(seatOf(st, "a")).toBe(1);
+    expect(seatOf(st, "b")).toBe(2);
+  });
+
+  it("gives a seat back when someone leaves", () => {
+    const st = { friend: P(200), third: P(300) };
+    expect(seatOf(st, "third")).toBe(1);
   });
 });
 
@@ -52,6 +80,22 @@ describe("the game page", () => {
     expect(page).not.toMatch(/\.from\(['"]/); // no table access
     expect(page).not.toMatch(/supabase\.co\/storage/);
     expect(page).not.toMatch(/\.upload\(/);
+  });
+
+  it("refuses a third player and tells them why", () => {
+    expect(page).toContain("others().length>=2");
+    expect(page).toContain("already has 2 players");
+  });
+
+  it("numbers level pieces with their own field, not the sender id that mpSend stamps on every message", () => {
+    expect(page).toContain("p.i=MP.id");
+    expect(page).toContain("ci:i,n:parts.length");
+    expect(page).toContain("a.parts[p.ci]=p.d");
+  });
+
+  it("lists the colours in the agreed order", () => {
+    const order = [...page.matchAll(/<li><span class="dot"[^>]*><\/span><canvas class="lg" data-k="(\w+)"/g)].map((m) => m[1]);
+    expect(order).toEqual(["plat", "start", "flag", "coin", "orb", "mover", "spike", "enemy"]);
   });
 
   it("has a Launch game button in the banner and a Next level button for the sample levels", () => {
