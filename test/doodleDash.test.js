@@ -107,6 +107,16 @@ describe("the game page", () => {
     for (const s of ["6", "12", "22"]) expect(draw).toMatch(new RegExp(`data-s="${s}"[^>]*><span class="sz"`));
   });
 
+  it("sends rooms an uncompressed level, so older phones can read it", () => {
+    expect(page).toContain("await enc(true)");
+    expect(page).toContain("if(!raw)try{");
+  });
+
+  it("lets a joiner wait for a host who stepped away, and puts Join a friend in the top bar", () => {
+    expect(page).toContain("Waiting for your friend to open room");
+    expect(page).toMatch(/<div class="top">[\s\S]*<div class="tjoin">[\s\S]*id="joinForm"[\s\S]*id="bHow"/);
+  });
+
   it("lists the colours in the agreed order", () => {
     const order = [...page.matchAll(/<li><span class="dot"[^>]*><\/span><canvas class="lg" data-k="(\w+)"/g)].map((m) => m[1]);
     expect(order).toEqual(["plat", "start", "flag", "coin", "orb", "mover", "spike", "enemy"]);
