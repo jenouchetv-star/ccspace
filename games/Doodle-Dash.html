@@ -171,11 +171,13 @@ main{width:100%}
 .tools .dot{width:8px;height:19px;margin:0 3px;filter:drop-shadow(1.5px 0 0 var(--ink)) drop-shadow(-1.5px 0 0 var(--ink)) drop-shadow(0 1.5px 0 var(--ink)) drop-shadow(0 -1.5px 0 var(--ink))}
 
 /* ---------- playing ---------- */
+#bPlayBack{padding:5px 14px!important;min-height:38px!important}
+#bPlayBack .i{width:17px;height:17px}
 .hud{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px;font-weight:800;font-size:.95rem}
 .hud>span:not(.row){border:3px solid var(--ink);border-radius:999px;padding:3px 14px;box-shadow:2px 2px 0 var(--ink);color:var(--ink)}
-.hud>span:first-child{background:var(--sun)}
-.hud>span:nth-child(2){background:#fff}
-.hud>span:nth-child(3){background:var(--cyan)}
+.hud>span:nth-of-type(1){background:var(--sun)}
+.hud>span:nth-of-type(2){background:#fff}
+.hud>span:nth-of-type(3){background:var(--cyan)}
 .hud button{padding:5px 13px!important;min-height:40px!important;font-size:.85rem;background:var(--card)}
 .hud button.sun{background:var(--sun)}
 #roomBadge{background:var(--plum)!important;color:#fff!important}
@@ -333,6 +335,7 @@ body.in-play{overflow:hidden}
 
 <section id="play" hidden>
   <div class="hud">
+    <button id="bPlayBack" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>Back</button>
     <span>Coins <b id="hCoin">0</b>/<b id="hTot">0</b></span>
     <span>Tries <b id="hTry">1</b></span>
     <span>Time <b id="hTime">0.0</b>s</span>
@@ -388,6 +391,15 @@ if(window.CanvasRenderingContext2D&&!CanvasRenderingContext2D.prototype.roundRec
     const tl=a[0],tr=a[1],br=a[2],bl=a[3];
     this.moveTo(x+tl,y);this.lineTo(x+w-tr,y);this.arcTo(x+w,y,x+w,y+tr,tr);this.lineTo(x+w,y+h-br);this.arcTo(x+w,y+h,x+w-br,y+h,br);
     this.lineTo(x+bl,y+h);this.arcTo(x,y+h,x,y+h-bl,bl);this.lineTo(x,y+tl);this.arcTo(x,y,x+tl,y,tl);this.closePath()}}
+window.dlog=function(){};
+if(/[?&]debug=1/.test(location.search)){
+  const d=document.createElement('div');d.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,.82);color:#9f9;font:11px/1.35 monospace;padding:6px 10px;max-height:34vh;overflow:auto;white-space:pre-wrap';
+  document.body.appendChild(d);
+  window.dlog=m=>{d.textContent+=new Date().toISOString().slice(11,19)+' '+m+'\n';d.scrollTop=1e9};
+  addEventListener('error',e=>dlog('ERROR '+e.message+' (line '+e.lineno+')'));
+  addEventListener('unhandledrejection',e=>dlog('REJECTED '+((e.reason&&e.reason.message)||e.reason)));
+  dlog('debug on. '+navigator.userAgent);dlog('WebSocket '+(typeof WebSocket)+', roundRect '+(typeof CanvasRenderingContext2D.prototype.roundRect)+', Compression '+(typeof CompressionStream));
+}
 const W=320,H=240,N=W*H,$=s=>document.querySelector(s);
 const wc=document.createElement('canvas');wc.width=W;wc.height=H;
 const wx=wc.getContext('2d',{willReadFrequently:true});
@@ -533,6 +545,7 @@ function drawPreview(){
   (L.comps[3][0])&&tag('Start',L.comps[3][0]);L.goal&&tag('Goal',L.goal);L.comps[2].forEach(c=>tag('Lava',c));L.comps[4].forEach(c=>tag('Coin',c));L.comps[6].forEach(c=>tag('Enemy',c));L.comps[7].forEach(c=>tag('Power-up',c));L.comps[8].forEach(c=>tag('Moving',c))}
 ['sDark','sSat'].forEach(i=>$('#'+i).oninput=()=>analyse());
 $('#bBack').onclick=()=>show(fromDraw?'draw':'make');
+$('#bPlayBack').onclick=()=>{if(MP.ch&&!MP.host)leaveRoom();show('make')};
 $('#bNew').onclick=()=>{if(MP.ch&&!MP.host)leaveRoom();show('make')};
 $('#bPlay').onclick=()=>playNew();
 
@@ -806,21 +819,23 @@ async function openRoom(code){
     ch.on('presence',{event:'sync'},()=>roomUi());
     ch.on('presence',{event:'leave'},e=>{(e.leftPresences||[]).forEach(p=>{const k=p.key||'';if(MP.peers[k]){toast((CHS[MP.peers[k].c]||CHS[0]).n+' left the room.');delete MP.peers[k]}});roomUi()});
     const to=setTimeout(()=>{no(new Error('timeout'))},9000);
-    ch.subscribe(st=>{if(st==='SUBSCRIBED'){clearTimeout(to);ok(ch)}else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){clearTimeout(to);no(new Error(st))}})})}
+    ch.subscribe(st=>{dlog('channel '+code+': '+st);if(st==='SUBSCRIBED'){clearTimeout(to);ok(ch)}else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){clearTimeout(to);no(new Error(st))}})})}
 async function dropChannel(ch){try{if(MP.sb&&ch)await MP.sb.removeChannel(ch)}catch(e){}}
 async function createRoom(){
   for(let i=0;i<8;i++){
     const code=genCode(crypto.getRandomValues(new Uint32Array(1))[0]);
     const ch=await openRoom(code);MP.ch=ch;await sleep(900);               /* let presence settle */
     if(others().length){MP.ch=null;await dropChannel(ch);continue}        /* someone already has this code: pick another */
-    MP.code=code;MP.host=true;MP.t0=Date.now();MP.peers={};await ch.track({c:CI,host:true,lv:true,at:Date.now()});roomUi();return code}
+    dlog('room created '+code);MP.code=code;MP.host=true;MP.t0=Date.now();MP.peers={};await ch.track({c:CI,host:true,lv:true,at:Date.now()});roomUi();return code}
   throw new Error('busy')}
 async function joinRoom(code){
+  dlog('joining '+code);
   const ch=await openRoom(code);MP.ch=ch;MP.code=code;MP.host=false;MP.peers={};
   await sleep(700);                                                          /* see who is already in the room */
   if(others().length>=2){await leaveRoom();throw new Error('full')}
   await ch.track({c:CI,host:false,lv:false,at:Date.now()});
   for(let t=0;t<30&&!others().length;t++){if(t===3&&MP.waitMsg)MP.waitMsg();await sleep(t<1?900:1000)}   /* up to about 30 seconds */
+  dlog('after waiting: '+others().length+' other player(s) in the room');
   if(!others().length){await leaveRoom();throw new Error('empty')}
   if(seatOf(roomState(),MP.id)>=2){await leaveRoom();throw new Error('full')}  /* two joined at the same moment: the later one steps out */
   const got=new Promise((ok,no)=>{MP.asm={ok,no,parts:[],n:0};setTimeout(()=>no(new Error('nolevel')),9000)});
@@ -867,11 +882,11 @@ function wireJoin(form){
   const inp=form.querySelector('input'),btn=form.querySelector('button[type=submit]'),msg=form.querySelector('.joinmsg')||form.parentElement.querySelector('.joinmsg');
   inp.addEventListener('input',e=>{const d=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);e.target.value=d.length>3?d.slice(0,3)+' '+d.slice(3):d});
   form.onsubmit=async e=>{
-    e.preventDefault();const code=cleanCode(inp.value);msg.className='joinmsg';
+    e.preventDefault();const code=cleanCode(inp.value);msg.className='joinmsg';dlog('Join pressed, code '+(code||'(invalid: '+inp.value+')'));
     if(!code){msg.className='joinmsg bad';msg.textContent='Type the 6 letters and numbers your friend gave you.';return}
     btn.disabled=true;msg.textContent='Looking for room '+fmtCode(code)+'…';MP.waitMsg=()=>{msg.textContent='Waiting for your friend to open room '+fmtCode(code)+'… keep this page open.'};
     try{await joinRoom(code);msg.textContent='';roomUi();toast('You joined room '+fmtCode(code)+'!')}
-    catch(err){await leaveRoom();msg.className='joinmsg bad';
+    catch(err){dlog('join failed: '+err.message);await leaveRoom();msg.className='joinmsg bad';
       msg.textContent=err.message==='full'?'Room '+fmtCode(code)+' already has 2 players. Ask your friend for a new code, or press Share code to start your own.':err.message==='empty'?'Nobody is in room '+fmtCode(code)+' right now. Check the code, and ask your friend to keep Doodle Dash open.':err.message==='nolevel'?'Found the room, but the level did not arrive. Try again.':'Could not reach the room. Check your internet and try again.'}
     MP.waitMsg=null;btn.disabled=false}}
 addEventListener('pagehide',()=>{if(MP.ch)leaveRoom()});

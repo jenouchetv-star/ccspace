@@ -126,6 +126,13 @@ describe("the game page", () => {
     expect(page).toContain('id="joinForm" autocomplete="off" onsubmit="return false"');
   });
 
+  it("has a Back button on the play screen and an opt-in ?debug=1 log for diagnosing joins", () => {
+    const play = page.split('<section id="play"')[1].split("</section>")[0];
+    expect(play).toContain('id="bPlayBack"');
+    expect(page).toContain("$('#bPlayBack').onclick=");
+    expect(page).toContain("/[?&]debug=1/.test(location.search)");
+  });
+
   it("lists the colours in the agreed order", () => {
     const order = [...page.matchAll(/<li><span class="dot"[^>]*><\/span><canvas class="lg" data-k="(\w+)"/g)].map((m) => m[1]);
     expect(order).toEqual(["plat", "start", "flag", "coin", "orb", "mover", "spike", "enemy"]);
