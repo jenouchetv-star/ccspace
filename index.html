@@ -3070,6 +3070,11 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 .callout--warn{ border-left-color:var(--berry); background:rgba(216,68,58,.11); }
 .callout--info{ border-left-color:var(--cyan); background:rgba(23,179,206,.13); }
 .callout--good{ border-left-color:var(--leaf); background:rgba(58,122,55,.12); }
+/* a short "best on desktop or tablet" style note on a game's card and page */
+.game__note{ display:flex; align-items:center; gap:6px; margin:0; font-weight:700; color:var(--cyan); }
+.game__note .i{ width:15px; height:15px; flex:none; }
+.game__callout{ display:flex; align-items:center; gap:10px; margin-top:18px; font-weight:700; }
+.game__callout .i{ flex:none; }
 
 .pill-count{
   display:inline-grid; place-items:center; min-width:22px; height:22px; padding:0 7px;
@@ -5464,7 +5469,7 @@ function seedGames(){
       players:"1", minutes:5, ageMin:5, ageMax:10,
       rules:["Move the ball left and right with the arrow keys, or the mouse.","Press the down arrow, or click, to drop it.","Green pegs bounce much harder than blue ones.","You get six balls each round — before you drop the first one, spend bank money to buy up to two extra balls, or one 2x ball that doubles whatever slot it lands in.","Buying the 2x ball turns the two $0 slots into a $50 loss for the rest of the round.","Deposit your cheque after each round and work toward a $1,000 bank goal."],
       leadsTo:"act-marble-run" }),
-    G({ id:"game-spacetime", title:"Solar System Sandbox", slug:"spacetime-sandbox-simulator",
+    G({ id:"game-spacetime", title:"Solar System Sandbox", slug:"spacetime-sandbox-simulator", note:"Best viewed on desktop or tablet.",
       kind:"embed", interactive:true, path:"games/spacetime-sandbox-simulator.html",
       icon:"orbit", p1:"#A9E4EE", p2:"#0C7387",
       cover:{ src:"assets/games/spacetime-sandbox-simulator.jpg", alt:"A 3D solar system with orbit paths and planet labels in the Solar System Sandbox game" },
@@ -9755,7 +9760,9 @@ function viewPlay(sub){
   const games   = db.list("games").filter(g => g.status === "published");
   const offline = sub === "offline";
   const list    = games.filter(g => offline ? !g.interactive : g.interactive)
-    .sort((a, b) => (b.badge ? 1 : 0) - (a.badge ? 1 : 0) || a.title.localeCompare(b.title));
+    /* a game with an "order" number goes first, lowest first; then New ones; then A to Z */
+    .sort((a, b) => (typeof a.order === "number" ? a.order : 1e9) - (typeof b.order === "number" ? b.order : 1e9)
+      || (b.badge ? 1 : 0) - (a.badge ? 1 : 0) || a.title.localeCompare(b.title));
   const note    = offline
     ? "Check how to play, then put the device away and start playing. Most games use paper, a few everyday items, and often a friend or family member."
     : "Challenge your reflexes with quick online games that put a smart spin on classic play. Designed for five to ten minutes of fun, every game incorporates an educational or memory-testing twist.";
@@ -9785,6 +9792,7 @@ function gameCard(g){
     + '</div>'
     + '<div class="card__body"><h3 class="card__title">' + E(g.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(g.summary) + '</p>'
+    + (g.note ? '<p class="tiny game__note">' + ic("monitor") + ' ' + E(g.note) + '</p>' : "")
     + '<div class="card__foot"><span>' + ic("users") + " " + E(playersLabel(g.players)) + '</span></div>'
     + '</div></article>';
 }
@@ -9910,6 +9918,7 @@ function viewGame(id){
     + '<span class="chip chip--ink">' + ic("users") + " " + E(playersLabel(g.players)) + '</span></div>'
     + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem)">' + E(g.title) + '</h1>'
     + '<p class="lede">' + E(g.summary) + '</p>'
+    + (g.note ? '<div class="callout callout--info game__callout" role="note">' + ic("monitor") + ' <span>' + E(g.note) + '</span></div>' : "")
     + board
     + '<div class="panel panel--flat" style="margin-top:26px"><h3>' + ic("list-checks","i-lg") + ' How to play</h3>'
     + '<ol class="steps">' + g.rules.map(r => '<li>' + E(r) + '</li>').join("") + '</ol></div>'
