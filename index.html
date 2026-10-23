@@ -6859,8 +6859,11 @@ const TEXT_STYLE_CSS = {
   heading: "font-family:'Poppins',sans-serif;font-weight:700;font-size:clamp(20px,4.5vw,2.2em);line-height:1.18",
   body:    "font-weight:600;font-size:clamp(13px,2.2vw,1.3em);line-height:1.5",
   quote:   "font-weight:600;font-style:italic;font-size:clamp(13px,2.2vw,1.3em);line-height:1.5",
-  tag:     "display:inline-block;font-weight:700;font-size:0.72em;letter-spacing:.08em;text-transform:uppercase;color:#7A1F19;background:rgba(255,255,255,.6);padding:6px 14px;border-radius:999px"
+  /* a tag is a small pill that hugs its words: the layer box only positions it (it has the layer's own
+     width and height), so the pill look lives on an inner span - see TAG_PILL_CSS */
+  tag:     "font-weight:700"
 };
+const TAG_PILL_CSS = "display:inline-block;max-width:100%;box-sizing:border-box;font-weight:700;font-size:0.72em;line-height:1.3;letter-spacing:.08em;text-transform:uppercase;color:#7A1F19;background:rgba(255,255,255,.6);padding:6px 14px;border-radius:999px";
 const IMAGE_PLACEMENT_CSS = {
   "full-bg":      "left:0;top:0;width:100%;height:100%;object-fit:cover",
   "top-half":     "left:0;top:0;width:100%;height:50%;object-fit:cover",
@@ -6932,8 +6935,9 @@ function layerToBuilderHTML(layer, selected){
       + ' data-act="story-build-select-layer" data-layer-id="' + E(layer.id) + '"'
       + ' style="left:' + layer.x + '%;top:' + layer.y + '%;width:' + layer.w + '%;height:' + layer.h + '%;'
       + 'text-align:' + E(layer.align) + ';color:' + E(layer.color || "inherit") + ';' + TEXT_STYLE_CSS[layer.style]
-      + (layerFontSizeCSS(layer) ? ';' + layerFontSizeCSS(layer) : '') + '">'
-      + sanitizeHTML(layer.content) + '</div>';
+      + (layer.style === "tag" ? '' : (layerFontSizeCSS(layer) ? ';' + layerFontSizeCSS(layer) : '')) + '">'
+      + (layer.style === "tag" ? '<span style="' + TAG_PILL_CSS + (layerFontSizeCSS(layer) ? ';' + layerFontSizeCSS(layer) : '') + '">' : '')
+      + sanitizeHTML(layer.content) + (layer.style === "tag" ? '</span>' : '') + '</div>';
   }
   const rect = imageLayerRect(layer);
   /* A plain <img> can't be the layer element itself: mountLayerDragResize()
@@ -6963,14 +6967,16 @@ const THUMB_TEXT_STYLE_CSS = {
   heading: "font-family:'Poppins',sans-serif;font-weight:700;font-size:7px;line-height:1.15",
   body:    "font-weight:600;font-size:5px;line-height:1.25",
   quote:   "font-weight:600;font-style:italic;font-size:5px;line-height:1.25",
-  tag:     "font-weight:700;font-size:4px;letter-spacing:.04em;text-transform:uppercase;color:#7A1F19;background:rgba(255,255,255,.6);padding:1px 3px;border-radius:4px;display:inline-block"
+  tag:     "font-weight:700"
 };
+const THUMB_TAG_PILL_CSS = "display:inline-block;max-width:100%;box-sizing:border-box;font-weight:700;font-size:4px;line-height:1.3;letter-spacing:.04em;text-transform:uppercase;color:#7A1F19;background:rgba(255,255,255,.6);padding:1px 3px;border-radius:4px";
 function layerToThumbnailHTML(layer){
   if (layer.type === "text"){
     return '<div style="position:absolute;overflow:hidden;left:' + layer.x + '%;top:' + layer.y + '%;width:' + layer.w + '%;height:' + layer.h + '%;'
       + 'text-align:' + E(layer.align) + ';color:' + E(layer.color || "inherit") + ';' + (THUMB_TEXT_STYLE_CSS[layer.style] || THUMB_TEXT_STYLE_CSS.body)
-      + (layerThumbFontSizeCSS(layer) ? ';' + layerThumbFontSizeCSS(layer) : '') + '">'
-      + E(richTextToText(layer.content)) + '</div>';
+      + (layer.style === "tag" ? '' : (layerThumbFontSizeCSS(layer) ? ';' + layerThumbFontSizeCSS(layer) : '')) + '">'
+      + (layer.style === "tag" ? '<span style="' + THUMB_TAG_PILL_CSS + (layerThumbFontSizeCSS(layer) ? ';' + layerThumbFontSizeCSS(layer) : '') + '">' : '')
+      + E(richTextToText(layer.content)) + (layer.style === "tag" ? '</span>' : '') + '</div>';
   }
   const rect = imageLayerRect(layer);
   const posStyle = 'position:absolute;left:' + rect.x + '%;top:' + rect.y + '%;width:' + rect.w + '%;height:' + rect.h + '%;object-fit:' + rect.fit;
