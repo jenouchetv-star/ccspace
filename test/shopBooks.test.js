@@ -17,6 +17,16 @@ describe("shop books", () => {
     expect(html).toContain("(b.isNew ? 1 : 0) - (a.isNew ? 1 : 0)");
   });
 
+  it("no longer lists the Drawing & Notetaking Notebook for Kids", () => {
+    expect(html).not.toContain("B0F2ZRVS1T");
+  });
+
+  it("draws the tilted book with crisp box-shadows, not a filter on the transformed element (which blurs it)", () => {
+    const rule = html.split(".cover .book{")[1].split("}")[0];
+    expect(rule).not.toMatch(/filter/);
+    expect(html).toMatch(/\.cover \.book img\{[^}]*13px 15px 13px -4px/);
+  });
+
   it("builds each cover as a book (spine, pages, shadow) inside a compact card", () => {
     expect(html).toContain('<article class="card rec"');
     expect(html).toContain('<div class="cover"><span class="book"><img');
