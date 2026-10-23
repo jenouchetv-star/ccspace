@@ -23,6 +23,13 @@ describe("shop books", () => {
     expect(html).toContain(".cover .book::before");
   });
 
+  it("puts the price, New and Pick of the shelf pills along the top of the card, above the cover", () => {
+    const card = html.split("function recCard(r){")[1].split("function recListRow")[0];
+    expect(card.indexOf('class="rec__tags"')).toBeGreaterThan(-1);
+    expect(card.indexOf('class="rec__tags"')).toBeLessThan(card.indexOf('<div class="cover">'));
+    expect(card.indexOf('class="rec__tags"')).toBeLessThan(card.indexOf('<div class="card__body">'));
+  });
+
   it("gives the cover no background of its own and no line under it, so the card is one colour", () => {
     const rule = html.split("\n.cover{")[1].split("}")[0];
     expect(rule).toMatch(/background:none/);
