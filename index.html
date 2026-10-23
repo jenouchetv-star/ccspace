@@ -1262,15 +1262,40 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
    thing on this page you can actually open and read here. */
 /* A book cover keeps its own proportions, on a plain ground, because the
    covers are all different shapes and cropping them square loses the title. */
+/* The cover sits on the same colour as the rest of the card (no second tone, no
+   dividing line) and is shown as a book: slightly turned, with a spine, a block of
+   pages, and a soft shadow on the "table" under it. */
 .cover{
-  display:grid; place-items:center; padding:18px 18px 4px;
-  background:var(--paper-2); border-bottom:var(--line);
-  border-radius:var(--r-lg) var(--r-lg) 0 0;
+  display:grid; justify-items:center; padding:16px 14px 0; perspective:900px;
+  background:none; border:0;
+}
+.cover .book{
+  position:relative; display:block; line-height:0;
+  transform:rotateY(-22deg) rotateX(2deg); transform-style:preserve-3d;
+  filter:drop-shadow(9px 11px 8px rgba(30,40,46,.32));
 }
 .cover img{
-  width:auto; max-width:100%; height:200px; object-fit:contain; display:block;
-  border:var(--line-thin); border-radius:4px; box-shadow:var(--hard-xs);
+  width:auto; max-width:100%; height:160px; object-fit:contain; display:block;
+  border:0; border-radius:2px 4px 4px 2px; box-shadow:none;
 }
+/* spine: a darker edge and a bright crease on the left of the cover */
+.cover .book::before{
+  content:""; position:absolute; left:0; top:0; bottom:0; width:9%; border-radius:2px 0 0 2px; pointer-events:none;
+  background:linear-gradient(90deg, rgba(0,0,0,.30) 0%, rgba(0,0,0,.08) 38%, rgba(255,255,255,.42) 52%, rgba(255,255,255,0) 100%);
+}
+/* a gloss across the cover, like light on a printed book */
+.cover .book::after{
+  content:""; position:absolute; inset:0; border-radius:2px 4px 4px 2px; pointer-events:none;
+  background:linear-gradient(115deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,0) 38%, rgba(0,0,0,.08) 100%);
+}
+/* the pages: a thin cream block along the right edge */
+.cover .book img{ box-shadow:3px 0 0 #fbf6ea, 4px 0 0 #d9d1bd, 6px 1px 0 #fbf6ea, 7px 1px 0 #cfc6b1; }
+.cover + .card__body{ padding-top:10px; }
+.rec .card__body{ padding:10px 16px 16px; gap:7px; }
+.rec .card__title{ font-size:1.02rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.rec .card__body > p{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:.84rem; }
+.rec .card__foot{ padding-top:10px; }
+.rec .card__foot .btn{ min-height:38px; }
 
 .booklist{ display:grid; gap:clamp(18px,2.4vw,28px); }
 .bookcard{
@@ -5640,11 +5665,11 @@ function seedAmazon(){
   }, o);
   const s = q => "https://www.amazon.com/s?k=" + encodeURIComponent(q);
   /* One of ours: a real product page, not a search. */
-  const B = (asin, title, category, why, featured) => R({
+  const B = (asin, title, category, why, featured, isNew) => R({
     id: "amz-" + asin.toLowerCase(), title: title, category: category, why: why,
     url: "https://www.amazon.com/dp/" + asin, linkType: "product",
     cover: "https://m.media-amazon.com/images/P/" + asin + ".01._SCLZZZZZZZ_.jpg",
-    priceBand: "$", featured: !!featured, ours: true
+    priceBand: "$", featured: !!featured, isNew: !!isNew, ours: true
   });
   return [
     /* Written by LeeAndria Anusiem. Each entry links to its own product page,
@@ -5668,6 +5693,10 @@ function seedAmazon(){
 
     B("B0F2ZRVS1T", "Drawing & Notetaking Notebook for Kids", "notebooks",
       "A daily journal with room to draw on the page as well as write."),
+    B("B0HMMB9CD2", "Composition Journal: Chike's Creative Space", "notebooks",
+      "A composition journal for drawing and notetaking.", false, true),
+    B("B0HN2V2TZF", "Creative Sketch Book: Chike's Creative Space", "drawing",
+      "A sketch book with drawing paper for your own creations.", false, true),
     B("B0DYDMG2TP", "Composition Notebook: Coding", "notebooks",
       "A coding notebook for kids. 110 pages, 7.5 by 9.5 inches."),
     B("B0DY1JS6YD", "Composition Notebook: Coding Journal", "notebooks",
@@ -10725,7 +10754,10 @@ function viewShop(sub){
         "Activity cards, materials lists, and discussion prompts, ready to print.", shareBtn);
   const prods = db.list("products").filter(p => p.status === "published");
   const recs  = db.list("amazonProducts").filter(r => r.status === "published");
-  const ours  = recs.filter(r => r.ours);
+  /* Books marked New come first, newest first; everything else keeps its usual order. */
+  const ours  = recs.filter(r => r.ours)
+    .sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0)
+      || (a.isNew && b.isNew ? String(b.createdAt).localeCompare(String(a.createdAt)) : 0));
   const rest  = recs.filter(r => !r.ours);
 
   const body = amazon
@@ -10860,12 +10892,12 @@ function viewProduct(id){
 
 function recCard(r){
   const direct = r.linkType === "product";
-  return '<article class="card" style="cursor:default">'
+  return '<article class="card rec" style="cursor:default">'
     + (r.cover
-        ? '<div class="cover"><img class="skel" src="' + E(thumbSrc(r.cover)) + '" alt="Cover of ' + E(r.title) + '" data-full="' + E(r.cover) + '" loading="lazy"></div>'
+        ? '<div class="cover"><span class="book"><img class="skel" src="' + E(thumbSrc(r.cover)) + '" alt="Cover of ' + E(r.title) + '" data-full="' + E(r.cover) + '" loading="lazy"></span></div>'
         : "")
-    + '<div class="card__body" style="padding:20px">'
-    + '<div class="row" style="gap:8px;margin-bottom:8px"><span class="chip chip--ghost">' + E(r.priceBand) + '</span>'
+    + '<div class="card__body">'
+    + '<div class="row" style="gap:6px"><span class="chip chip--ghost">' + E(r.priceBand) + '</span>'
     + (r.isNew ? '<span class="chip chip--berry">New</span>' : "")
     + (r.featured ? '<span class="chip chip--sun">Pick of the shelf</span>' : "") + '</div>'
     + '<h3 class="card__title">' + quEditable("amazon-title", r.id, E(r.title)) + '</h3>'
