@@ -1755,6 +1755,41 @@ body.is-admin .btn--lg:hover{ box-shadow:0 4px 14px rgba(20,34,44,.16); }
    the sheet's own pinned head/foot, keeps Save reachable without a long
    scroll ever hiding it. */
 .modal--full{ width:96vw; max-width:1200px; height:92vh; max-height:92vh; }
+
+/* ---------- Play all: a full-screen player that runs through every episode ---------- */
+.scrim:has(.modal--playall){ padding:0; place-items:stretch; overflow:hidden; background:#12171B; backdrop-filter:none; -webkit-backdrop-filter:none; }
+.modal--playall{
+  width:100%; max-width:none; height:100vh; height:100dvh; max-height:none; overflow:hidden;
+  display:flex; flex-direction:column; padding:0; border:0; border-radius:0; box-shadow:none;
+  background:#12171B; color:#FFF6EE;
+}
+.pa__top{ flex:none; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:clamp(12px,2vw,22px) clamp(14px,3vw,30px) 4px; }
+.pa__eyebrow{ display:block; margin-bottom:4px; font-size:.78rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:#F8D77E; }
+.pa__title{ margin:0; font-size:clamp(1.25rem,3vw,2.1rem); line-height:1.15; color:#FFF6EE; text-wrap:balance; }
+.pa__ctrls{ flex:none; display:flex; flex-wrap:wrap; gap:10px; padding:10px clamp(14px,3vw,30px) 14px; }
+.pa__stage{ position:relative; flex:1 1 auto; min-height:0; display:grid; place-items:center; padding:0 clamp(10px,3vw,30px) clamp(12px,2.4vw,26px); }
+.pa__video{
+  position:relative; width:min(100%, calc((100dvh - 210px) * 16 / 9)); aspect-ratio:16/9;
+  background:#000; border:3px solid #FFF6EE; border-radius:14px; overflow:hidden; box-shadow:6px 6px 0 rgba(0,0,0,.5);
+}
+.pa__video iframe, .pa__video > div{ position:absolute; inset:0; width:100%; height:100%; border:0; }
+.pa__msg{ position:absolute; inset:0; display:grid; place-content:center; gap:14px; padding:24px; text-align:center; background:#12171B; }
+.pa__list{
+  position:absolute; inset:0; overflow-y:auto; background:#12171B;
+  padding:4px clamp(14px,3vw,30px) 28px;
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr)); gap:14px; align-content:start;
+}
+.pa__list[hidden]{ display:none; }
+.pa__card{
+  display:flex; flex-direction:column; gap:8px; text-align:left; padding:0 0 10px; cursor:pointer;
+  background:#1E262C; color:#FFF6EE; border:3px solid #FFF6EE; border-radius:14px; overflow:hidden; font:inherit;
+}
+.pa__card img, .pa__card .plate{ display:block; width:100%; aspect-ratio:16/9; object-fit:cover; position:relative; }
+.pa__card b{ padding:0 12px; font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:#F8D77E; }
+.pa__card span{ padding:0 12px; font-weight:700; line-height:1.25; }
+.pa__card:hover, .pa__card:focus-visible{ border-color:#F8D77E; }
+.pa__card.is-now{ border-color:#F8D77E; box-shadow:0 0 0 3px #F8D77E; }
+@media (max-width:640px){ .pa__ctrls .btn{ flex:1 1 0; min-width:0; } .pa__video{ width:100%; } }
 /* ============================================================ RICH TEXT */
 .rt{ border:var(--line-thin); border-radius:12px; overflow:hidden; background:var(--paper-card); }
 body.is-admin .rt{ background:#FFFFFF; }
@@ -3096,7 +3131,8 @@ if (typeof window.supabase === "undefined") {
   import * as ActivityFinder from "./assets/lib/activityFinder.js";
   import * as AcceptInvite from "./assets/lib/acceptInvite.js";
   import * as Mfa from "./assets/lib/mfa.js";
-  Object.assign(window, ActivityFinder, AcceptInvite, Mfa);
+  import * as PlayAll from "./assets/lib/playAll.js";
+  Object.assign(window, ActivityFinder, AcceptInvite, Mfa, PlayAll);
 </script>
 <script>
 "use strict";
@@ -7288,6 +7324,7 @@ function openModal(html, onSubmit, extraClass, triggerEl){
   if (first) first.focus();
 }
 function closeModal(){
+  playAllStop();
   if (ANNOUNCEMENT_SHOWING){
     dismissAnnouncement(ANNOUNCEMENT_SHOWING);
     ANNOUNCEMENT_SHOWING = "";
@@ -7536,6 +7573,143 @@ async function fetchYouTubeOEmbed(idOrUrlOrInput){
   if (!res.ok) throw new Error("YouTube did not recognize that video - it may be private, deleted, or age-restricted.");
   const data = await res.json();
   return { videoId: parsed, watchUrl: watchUrl, title: data.title || "", thumbnailUrl: data.thumbnail_url || "" };
+}
+
+/* ============================================================
+   PLAY ALL - every episode, in order, in a full-screen player.
+   Episode 1 through the newest, then back to Episode 1. When a
+   video ends the next one starts by itself. Which episode comes
+   next is decided by assets/lib/playAll.js (tested); this is the
+   player and the modal around it. Nothing is requested from
+   YouTube until somebody presses Play all.
+   ============================================================ */
+let PLAYALL = null;
+let YT_API_READY = null;
+
+/** YouTube's own player script, fetched only when Play all is pressed. It
+    is what tells us a video has ended, so the next one can start. */
+function loadYouTubeApi(){
+  if (window.YT && window.YT.Player) return Promise.resolve();
+  if (YT_API_READY) return YT_API_READY;
+  YT_API_READY = new Promise((resolve, reject) => {
+    const earlier = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { if (typeof earlier === "function") earlier(); resolve(); };
+    const s = document.createElement("script");
+    s.src = "https://www.youtube.com/iframe_api";
+    s.async = true;
+    s.onerror = () => { YT_API_READY = null; reject(new Error("The YouTube player did not load.")); };
+    document.head.appendChild(s);
+    setTimeout(() => {
+      if (!(window.YT && window.YT.Player)){ YT_API_READY = null; reject(new Error("The YouTube player timed out.")); }
+    }, 15000);
+  });
+  return YT_API_READY;
+}
+
+function playAllHTML(list){
+  const cards = list.map((v, i) =>
+    '<button type="button" class="pa__card" data-act="pa-pick" data-i="' + i + '">'
+    + ((v.thumb && v.thumb.src) ? '<img src="' + E(v.thumb.src) + '" alt="" loading="lazy">' : plate("story", "Episode " + v.episode))
+    + '<b>Episode ' + E(v.episode) + '</b><span>' + E(v.title) + '</span></button>').join("");
+  return '<div class="pa__top"><div><span class="pa__eyebrow" id="pa-count"></span>'
+    + '<h2 class="pa__title" id="pa-title" aria-live="polite"></h2></div>'
+    + '<button type="button" class="btn btn--paper btn--icon" data-act="close-modal" aria-label="Close player">' + ic("x","i-lg") + '</button></div>'
+    + '<div class="pa__ctrls">'
+    + '<button type="button" class="btn btn--sm btn--paper" id="pa-all" data-act="pa-all" aria-expanded="false" aria-controls="pa-list">' + ic("list") + ' <span>View all</span></button>'
+    + '<button type="button" class="btn btn--sm btn--paper" data-act="pa-prev">' + ic("skip-back") + ' Previous</button>'
+    + '<button type="button" class="btn btn--sm btn--paper" data-act="pa-next">Next ' + ic("skip-forward") + '</button>'
+    + '</div>'
+    + '<div class="pa__stage"><div class="pa__video"><div id="pa-player"></div></div>'
+    + '<div class="pa__list" id="pa-list" hidden>' + cards + '</div></div>';
+}
+
+function playAllOpen(trigger){
+  const list = playAllOrder(db.list("videos"));
+  if (!list.length){ toast("No episodes are ready to play yet."); return; }
+  PLAYALL = { list: list, i: 0, player: null, api: false, errors: 0 };
+  openModal(playAllHTML(list), null, "modal--playall", trigger);
+  rootAssetPaths($("#modal-root"));
+  playAllShow(0);
+  loadYouTubeApi()
+    .then(() => {
+      if (!PLAYALL) return;
+      PLAYALL.api = true;
+      playAllBuildPlayer(PLAYALL.list[PLAYALL.i]);
+    })
+    .catch(() => { if (PLAYALL) playAllFail(); });
+}
+
+/** Show episode `i` (wrapping at both ends): update the title, then start it. */
+function playAllShow(i){
+  const s = PLAYALL;
+  if (!s) return;
+  s.i = ((i % s.list.length) + s.list.length) % s.list.length;
+  const v = s.list[s.i];
+  const title = $("#pa-title"), count = $("#pa-count");
+  if (title) title.textContent = v.title;
+  if (count) count.textContent = "Episode " + v.episode + " · " + (s.i + 1) + " of " + s.list.length;
+  document.querySelectorAll("#pa-list .pa__card").forEach((el, k) => {
+    el.classList.toggle("is-now", k === s.i);
+    if (k === s.i) el.setAttribute("aria-current", "true"); else el.removeAttribute("aria-current");
+  });
+  playAllList(false);
+  if (s.player && typeof s.player.loadVideoById === "function") s.player.loadVideoById(v.youtubeId);
+  else if (s.api && !s.player) playAllBuildPlayer(v);
+}
+
+function playAllBuildPlayer(v){
+  const s = PLAYALL;
+  if (!s || s.player || !$("#pa-player")) return;
+  s.player = new window.YT.Player("pa-player", {
+    host: "https://www.youtube-nocookie.com",
+    videoId: v.youtubeId,
+    width: "100%",
+    height: "100%",
+    playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1, cc_load_policy: 1, cc_lang_pref: "en", origin: location.origin },
+    events: {
+      onReady: (e) => { try { e.target.playVideo(); } catch (_e) {} },
+      onStateChange: (e) => {
+        if (!PLAYALL) return;
+        if (e.data === 1) PLAYALL.errors = 0;                                       /* playing */
+        if (e.data === 0) {                                                          /* ended: on to the next, and round to Episode 1 after the last */
+          PLAYALL.errors = 0;
+          playAllShow(playAllStep(PLAYALL.i, PLAYALL.list.length, 1));
+        }
+      },
+      onError: () => {
+        if (!PLAYALL) return;
+        PLAYALL.errors++;
+        if (PLAYALL.errors >= PLAYALL.list.length) { playAllFail("These episodes cannot be played right now."); return; }
+        setTimeout(() => { if (PLAYALL) playAllShow(playAllStep(PLAYALL.i, PLAYALL.list.length, 1)); }, 900);   /* skip one that will not play */
+      }
+    }
+  });
+}
+
+/** Opens or closes the "View all" list of episodes inside the player. */
+function playAllList(open){
+  const list = $("#pa-list"), btn = $("#pa-all");
+  if (!list || !btn) return;
+  const show = (open === undefined) ? list.hidden : !!open;
+  list.hidden = !show;
+  btn.setAttribute("aria-expanded", show ? "true" : "false");
+  const label = btn.querySelector("span");
+  if (label) label.textContent = show ? "Back to video" : "View all";
+}
+
+function playAllFail(text){
+  const box = document.querySelector("#modal-root .pa__video");
+  if (!box) return;
+  box.innerHTML = '<div class="pa__msg"><p style="margin:0;font-weight:700">' + E(text || "The player could not load. Check your connection and try again.") + '</p>'
+    + '<a class="btn btn--berry" href="' + E(BRAND.youtube) + '" target="_blank" rel="noopener noreferrer">' + ic("youtube") + ' Watch on YouTube</a></div>';
+  drawIcons();
+}
+
+/** Called whenever the modal closes: stops the video so nothing keeps playing. */
+function playAllStop(){
+  if (!PLAYALL) return;
+  try { if (PLAYALL.player && PLAYALL.player.destroy) PLAYALL.player.destroy(); } catch (_e) {}
+  PLAYALL = null;
 }
 
 /**
@@ -9744,7 +9918,10 @@ function episodeGridHTML(eps){
   const totalPages = Math.max(1, Math.ceil(eps.length / PAGE_SIZE));
   const page = Math.min(totalPages, Math.max(1, AppState.watchPage || 1));
   const pageEps = eps.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  return '<div class="section-head" style="margin-bottom:20px"><h2 style="font-size:1.9rem">' + E(plural(eps.length,"episode","episodes")) + ' available</h2></div>'
+  const playable = playAllOrder(eps).length;
+  return '<div class="section-head" style="margin-bottom:20px;gap:14px;flex-wrap:wrap"><h2 style="font-size:1.9rem">' + E(plural(eps.length,"episode","episodes")) + ' available</h2>'
+    + (playable ? '<button type="button" class="btn btn--berry" data-act="playall-open">' + ic("play") + ' Play all</button>' : "")
+    + '</div>'
     + '<div class="grid ep-grid">' + pageEps.map(v => episodeRow(v)).join("") + '</div>'
     + (totalPages > 1
         ? '<nav class="pager" aria-label="Episode pages">'
@@ -19642,6 +19819,13 @@ const ACTIONS = {
       frame.src = url.href;
     }
   },
+
+  /* ---- Play all: the full-screen episode player ---- */
+  "playall-open": (el) => playAllOpen(el),
+  "pa-all": () => playAllList(),
+  "pa-prev": () => { if (PLAYALL) playAllShow(playAllStep(PLAYALL.i, PLAYALL.list.length, -1)); },
+  "pa-next": () => { if (PLAYALL) playAllShow(playAllStep(PLAYALL.i, PLAYALL.list.length, 1)); },
+  "pa-pick": (el) => { if (PLAYALL) playAllShow(parseInt(el.getAttribute("data-i"), 10) || 0); },
 
   "play-embed": (el) => {
     const wrap = el.closest(".embed");
