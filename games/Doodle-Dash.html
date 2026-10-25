@@ -175,6 +175,10 @@ main{width:100%}
 /* ---------- playing ---------- */
 #bPlayBack{padding:5px 14px!important;min-height:38px!important}
 #bPlayBack .i{width:17px;height:17px}
+#bEdit{padding:5px 14px!important;min-height:38px!important}
+#bEdit .i{width:17px;height:17px}
+#bEdit[hidden]{display:none!important}
+@media(max-width:560px){#bEdit{padding:5px 11px!important}}
 #bMute{padding:5px 12px!important}
 #bMute .t{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}   /* words stay for screen readers, only the icon shows */
 #bMute .i{width:20px;height:20px;flex:none}
@@ -343,6 +347,7 @@ body.in-play{overflow:hidden}
 <section id="play" hidden>
   <div class="hud">
     <button id="bPlayBack" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>Back</button>
+    <button id="bEdit" type="button" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>Edit my drawing</button>
     <span class="coins" role="img" aria-label="Coins collected"><svg class="coinI" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><ellipse cx="12" cy="12" rx="8" ry="10" fill="#ffc400" stroke="#1E2226" stroke-width="2"/><ellipse cx="12" cy="12" rx="4.6" ry="6.8" fill="none" stroke="#b37a00" stroke-width="1.6"/><ellipse cx="8.6" cy="8" rx="1.5" ry="2.6" fill="#fff3a6"/></svg><b id="hCoin">0</b>/<b id="hTot">5</b></span>
     <span>Tries <b id="hTry">1</b></span>
     <span>Time <b id="hTime">00:00</b></span>
@@ -485,11 +490,11 @@ const LVS=[
    spikes:[[150,210],[330,390]],start:[60,415],coins:[[180,372],[360,362],[470,372],[545,332],[590,292]],flag:[586,320],en:[[270,424],[580,424]],orbs:[[300,395]],mv:[[240,370,70]]})},
  {t:4,f:()=>build({lines:[[20,150,440],[230,330,440],[410,500,440],[500,560,400],[540,620,360]],
    spikes:[[170,210],[350,390]],start:[60,415],coins:[[190,358],[270,400],[370,358],[450,400],[590,332]],flag:[586,360],en:[[270,424],[450,424]],orbs:[[370,330],[120,410]],mv:[[160,396,64],[340,396,64]]})}];
-let BI=-1;
-function loadBuiltin(n){BI=n;const lv=LVS[n];wx.fillStyle='#fff';wx.fillRect(0,0,W,H);wx.drawImage(lv.f(),0,0,W,H);normalize();fromDraw=false;$('#bBack').textContent='Retake';setTheme(lv.t);analyse();playNew()}
+let BI=-1,SRC='none',LAST_IMG=null;   /* SRC: how the level was made: 'draw' (in the app), 'image' (photo, upload or sample) or 'none' (shared by a friend) */
+function loadBuiltin(n){BI=n;const lv=LVS[n],pic=lv.f();SRC='image';LAST_IMG=pic;wx.fillStyle='#fff';wx.fillRect(0,0,W,H);wx.drawImage(pic,0,0,W,H);normalize();fromDraw=false;$('#bBack').textContent='Retake';setTheme(lv.t);analyse();playNew()}
 
 /* ---------- Image processing ---------- */
-function ingest(el){BI=-1;
+function ingest(el){BI=-1;SRC='image';LAST_IMG=null;
   const sw=el.videoWidth||el.naturalWidth||el.width,sh=el.videoHeight||el.naturalHeight||el.height;
   if(!sw||!sh){toast('No image to read yet. Try again.');return}
   const s=Math.max(W/sw,H/sh),dw=sw*s,dh=sh*s;
@@ -554,6 +559,10 @@ function drawPreview(){
   (L.comps[3][0])&&tag('Start',L.comps[3][0]);L.goal&&tag('Goal',L.goal);L.comps[2].forEach(c=>tag('Lava',c));L.comps[4].forEach(c=>tag('Coin',c));L.comps[6].forEach(c=>tag('Enemy',c));L.comps[7].forEach(c=>tag('Power-up',c));L.comps[8].forEach(c=>tag('Moving',c))}
 ['sDark','sSat'].forEach(i=>$('#'+i).oninput=()=>analyse());
 $('#bBack').onclick=()=>show(fromDraw?'draw':'make');
+$('#bEdit').onclick=()=>{
+  if(SRC==='image'){                       /* a photo, upload or sample: put its picture on the pad to draw over */
+    clr();dx.imageSmoothingEnabled=true;dx.imageSmoothingQuality='high';dx.drawImage(LAST_IMG||wc,0,0,640,480);hist=[];inked=true;SRC='draw';LAST_IMG=null}
+  show('draw')};
 $('#bPlayBack').onclick=()=>{if(MP.ch&&!MP.host)leaveRoom();show('make')};
 $('#bNew').onclick=()=>{if(MP.ch&&!MP.host)leaveRoom();show('make')};
 $('#bPlay').onclick=()=>playNew();
@@ -579,7 +588,7 @@ $('#bGo').onclick=()=>{
   wx.fillStyle='#fff';wx.fillRect(0,0,W,H);wx.drawImage(dc,0,0,W,H);const d=wx.getImageData(0,0,W,H).data;
   for(let p=0;p<N;p++){const i=p*4,r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255,v=Math.max(r,g,b),mn=Math.min(r,g,b),df=v-mn;let h=0;
     if(df>0){h=v===r?((g-b)/df+6)%6:v===g?(b-r)/df+2:(r-g)/df+4;h*=60}HV[p]=h;SV[p]=v?df/v:0;VV[p]=v}
-  fromDraw=true;$('#bBack').textContent='Keep drawing';
+  fromDraw=true;SRC='draw';LAST_IMG=null;$('#bBack').textContent='Keep drawing';
   analyse();if(!L.comps[3].length||!L.hasGoal)show('preview');else playNew()};
 
 /* ---------- Worlds ---------- */
@@ -863,7 +872,7 @@ async function joinRoom(code){
   mpSend({t:'need'});
   await got}
 async function leaveRoom(){const ch=MP.ch;if(ch)mpSend({t:'bye'});clearInterval(MP.hb);MP.pres={};MP.meta=null;MP.ch=null;MP.code='';MP.host=false;MP.peers={};MP.asm=null;roomUi();await dropChannel(ch)}
-function roomUi(){
+function roomUi(){editUi();
   const n=MP.ch?Object.keys(roomState()).length||1:0;
   $('#roomBadge').hidden=!MP.ch;$('#roomCode').textContent=MP.code?fmtCode(MP.code):'';$('#roomN').textContent=n;
   $('#bShare .t').textContent=MP.ch?'Room code':'Share code';
@@ -884,7 +893,7 @@ async function onMsg(p){
     const a=MP.asm||(MP.asm={ok:null,no:null,parts:[],n:0,live:true});
     if(a.n!==p.n||a.sp!==p.sp){a.parts=[];a.n=p.n;a.sp=p.sp}a.parts[p.ci]=p.d;
     if(a.parts.filter(Boolean).length===a.n){const s=a.parts.join('');const ok=a.ok;MP.asm=null;
-      try{const ti=await dec(s);MP.t0=p.t0||Date.now();setTheme(ti);skipC=true;fromDraw=false;analyse();startGame();if(MP.ch&&MP.meta)setMeta(Object.assign({},MP.meta,{lv:true}));if(ok)ok();else toast('The host started a new level.')}
+      try{const ti=await dec(s);MP.t0=p.t0||Date.now();setTheme(ti);skipC=true;fromDraw=false;SRC='none';LAST_IMG=null;analyse();startGame();if(MP.ch&&MP.meta)setMeta(Object.assign({},MP.meta,{lv:true}));if(ok)ok();else toast('The host started a new level.')}
       catch(e){toast('That level did not load. Ask your friend to share again.')}}
     return}
   if(p.t==='coin'){const k=L&&L.coins[p.k];if(k&&!k.got){k.got=true;score++;burst(k.x,k.y,12,['#ffc400','#fff6b0'],80);hud()}return}
@@ -925,12 +934,13 @@ function hit(x,y){if(L.mp&&L.mp.some(p=>x<p.x+p.w&&x+PW>p.x&&y<p.y+p.h&&y+PH>p.y
   for(let j=Math.max(0,y0);j<=Math.min(H-1,y1);j++)for(let i=x0;i<=x1;i++)if(L.solid[j*W+i])return true;return false}
 function respawn(){pl={x:L.spawn.x-PW/2,y:L.spawn.y-PH/2,vx:0,vy:0,on:false,coy:0,buf:0,held:false,face:1,sy:1,st:0,sj:0,sp:0};
   while(hit(pl.x,pl.y)&&pl.y>0)pl.y--}
+function editUi(){const b=$('#bEdit');if(b)b.hidden=SRC==='none'||!!(MP.ch&&!MP.host)}
 function playNew(){startGame();if(MP.ch&&MP.host)broadcastLevel()}
 function startGame(){
   L.coins.forEach(c=>c.got=false);tries=1;score=0;flash=0;done=false;respawn();
   const o=document.createElement('canvas');o.width=W;o.height=H;const x=o.getContext('2d'),im=x.createImageData(W,H);
   for(let p=0;p<N;p++){let c=[251,248,240];if(L.solid[p])c=[34,32,40];if(cls[p]===2)c=[235,64,64];if(cls[p]===5)c=[47,107,255];im.data.set([...c,255],p*4)}
-  x.putImageData(im,0,0);layer=o;buildLayers();$('#win').hidden=true;hud();show('play');roomUi();
+  x.putImageData(im,0,0);layer=o;buildLayers();$('#win').hidden=true;hud();show('play');roomUi();editUi();
   $('#pad').classList.toggle('on',matchMedia('(pointer:coarse)').matches||'ontouchstart' in window);
   let last=performance.now(),acc=0;
   const tick=t=>{raf=requestAnimationFrame(tick);acc+=Math.min(.1,(t-last)/1000);last=t;while(acc>=1/60){if(!done)step(1/60);upd(1/60);acc-=1/60}mpTick();draw()};

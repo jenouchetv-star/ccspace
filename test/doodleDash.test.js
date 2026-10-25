@@ -174,6 +174,19 @@ describe("the game page", () => {
     expect(order).toEqual(["Chike", "Zech", "Mateo", "Corey", "Kiyah", "Yuna", "Averi", "Stacey"]);
   });
 
+  it("has an Edit my drawing button that returns to the drawing pad, and hides it for a friend's level", () => {
+    const play = page.split('<section id="play"')[1].split("</section>")[0];
+    expect(play).toContain('id="bEdit"');
+    expect(play).toContain("Edit my drawing");
+    expect(page).toContain("$('#bEdit').onclick=");
+    expect(page).toContain("function editUi(){");
+    expect(page).toContain("b.hidden=SRC==='none'||!!(MP.ch&&!MP.host)");
+    // every way of making a level records where it came from
+    expect(page).toContain("SRC='draw'");
+    expect(page).toContain("SRC='image'");
+    expect(page).toContain("SRC='none'");
+  });
+
   it("lists the colours in the agreed order", () => {
     const order = [...page.matchAll(/<li><span class="dot"[^>]*><\/span><canvas class="lg" data-k="(\w+)"/g)].map((m) => m[1]);
     expect(order).toEqual(["plat", "start", "flag", "coin", "orb", "mover", "spike", "enemy"]);
