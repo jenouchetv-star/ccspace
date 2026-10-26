@@ -540,6 +540,14 @@ img.skel.is-loaded, video.skel.is-loaded{ animation:none; background-image:none;
 .card__badge{
   position:absolute; top:11px; left:11px; z-index:2;
 }
+/* a round Share button in the top-right corner of a card; the whole card is a link, so this
+   sits above it and opens the share dialog instead of opening the card */
+.card__share{
+  position:absolute; top:10px; right:10px; z-index:3;
+  width:36px; height:36px; min-height:0; padding:0; border-radius:50%;
+  display:grid; place-items:center;
+}
+.card__share .i{ width:17px; height:17px; }
 /* generated cover plates (used when no photograph exists) */
 .plate{
   position:absolute; inset:0; display:grid; place-items:center;
@@ -5942,8 +5950,19 @@ function shareModalHTML(url, title){
     { label:"WhatsApp", icon:"phone", href:"https://wa.me/?text=" + enc(title + " " + url) },
     { label:"Email", icon:"mail", href:"mailto:?subject=" + enc(title) + "&body=" + enc(url) }
   ];
+  /* On a phone or tablet the device's own share sheet is the best way to send something to the people in
+     your contacts (Messages, WhatsApp, Mail and whatever else is installed), so it comes first. It only
+     appears where the browser offers it. "Text message" opens the Messages app with the link ready. */
+  const canNative = typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const touch = typeof matchMedia === "function" && matchMedia("(pointer:coarse)").matches;
+  const nativeBtn = canNative
+    ? '<button type="button" class="btn btn--cyan btn--lg" style="width:100%;margin-bottom:16px" data-act="share-native" data-url="' + E(url) + '" data-title="' + E(title) + '">'
+      + ic("send") + ' Share with my contacts</button>'
+    : "";
+  if (touch) links.unshift({ label:"Text message", icon:"message-square", href:"sms:?&body=" + enc(title + " " + url) });
   return '<h3 style="margin:0 0 4px;font-size:1.4rem">Share</h3>'
-    + '<p class="tiny mute" style="margin:0 0 18px">' + E(title) + '</p>'
+    + '<p class="tiny mute" style="margin:0 0 16px">' + E(title) + '</p>'
+    + nativeBtn
     + '<div class="row" style="gap:10px;flex-wrap:nowrap;margin-bottom:18px">'
     + '<input class="inp" id="share-url" readonly value="' + E(url) + '" style="flex:1">'
     + '<button type="button" class="btn btn--cyan" data-act="share-copy" data-url="' + E(url) + '">' + ic("copy") + ' Copy</button>'
@@ -7570,12 +7589,19 @@ function charAvatarHTML(ch, sizePx, extraStyle){
     + ' data-full="' + E(ch.image.src) + '" style="border-radius:50%;object-fit:cover;object-position:center 22%;' + style + '" loading="lazy">';
 }
 
+/** The round Share button on a card. `path` is the page it shares, e.g. "/play/game-ballinko". */
+function cardShareBtn(path, title){
+  return '<button type="button" class="btn btn--paper btn--icon card__share no-print" data-act="share"'
+    + ' data-url="' + E(location.origin + path) + '" data-title="' + E(title) + '" aria-label="Share ' + E(title) + '">' + ic("share-2") + '</button>';
+}
+
 function activityCard(a){
   const t = typeMeta(a.type);
   return '<article class="card" data-act="go" data-hash="#/activity/' + E(a.id) + '" tabindex="0" role="link">'
     + '<div class="card__media">' + cover(a, a.type, t.label, true)
     + '<span class="card__badge chip chip--ink">' + E(t.label) + '</span>'
     + '</div>'
+    + cardShareBtn("/activity/" + a.id, a.title)
     + '<div class="card__body">'
     + '<h3 class="card__title">' + E(a.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(a.summary) + '</p>'
@@ -9790,6 +9816,7 @@ function gameCard(g){
     + '<div class="card__media">' + gamePlate(g)
     + (g.badge ? '<span class="card__badge chip chip--new">' + E(g.badge) + '</span>' : "")
     + '</div>'
+    + cardShareBtn("/play/" + g.id, g.title)
     + '<div class="card__body"><h3 class="card__title">' + E(g.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(g.summary) + '</p>'
     + (g.note ? '<p class="tiny game__note">' + ic("monitor") + ' ' + E(g.note) + '</p>' : "")
@@ -9819,12 +9846,17 @@ function gamePoster(g){
  * and withholds top-level navigation.
  */
 let GAMESTAGE_KEY_HANDLER = null;
+/** The page a game or book in the player belongs to, so Share sends people there. */
+function stageSharePath(g){
+  return db.find("games", g.id) ? "/play/" + g.id : "/stories/" + g.id;
+}
 function gameStage(g){
   return '<div class="gamestage" role="dialog" aria-modal="true" aria-label="' + E(g.title) + '">'
     + '<div class="gamestage__bar">'
     + '<span class="gamestage__brand">'
     + '<span class="brand__mark brand__mark--sm"><img src="assets/brand/logo.webp" alt="Chike&#39;s Creative Space" width="603" height="320"></span></span>'
     + '<span class="gamestage__title">' + ic(g.icon || "dices") + '<span>' + E(g.title) + '</span></span>'
+    + '<button class="btn btn--sm btn--paper gamestage__iconbtn" data-act="share-over" data-url="' + E(location.origin + stageSharePath(g)) + '" data-title="' + E(g.title) + '" aria-label="Share">' + ic("share-2") + '<span class="gamestage__btn-label"> Share</span></button>'
     + '<button class="btn btn--sm btn--paper gamestage__iconbtn" data-act="game-reload" aria-label="Start over">' + ic("rotate-ccw") + '<span class="gamestage__btn-label"> Start over</span></button>'
     + '<button class="btn btn--sm btn--sun gamestage__iconbtn" data-act="close-game" aria-label="Close">' + ic("x") + '<span class="gamestage__btn-label"> Close</span></button>'
     + '</div>'
@@ -9915,7 +9947,8 @@ function viewGame(id){
   return '<section class="section"><div class="shell" style="max-width:900px">'
     + '<div class="crumb"><a href="#/play">Play</a>' + ic("chevron-right") + '<span>' + E(g.title) + '</span></div>'
     + '<div class="tagrow" style="margin-bottom:14px">'
-    + '<span class="chip chip--ink">' + ic("users") + " " + E(playersLabel(g.players)) + '</span></div>'
+    + '<span class="chip chip--ink">' + ic("users") + " " + E(playersLabel(g.players)) + '</span>'
+    + '<button type="button" class="btn btn--sm btn--paper no-print" style="margin-left:auto" data-act="share" data-url="' + E(location.origin + "/play/" + g.id) + '" data-title="' + E(g.title) + '">' + ic("share-2") + ' Share</button></div>'
     + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem)">' + E(g.title) + '</h1>'
     + '<p class="lede">' + E(g.summary) + '</p>'
     + (g.note ? '<div class="callout callout--info game__callout" role="note">' + ic("monitor") + ' <span>' + E(g.note) + '</span></div>' : "")
@@ -10076,6 +10109,7 @@ function bookListCard(b){
       + '<div class="plate__mark">' + ic(b.icon || "book-open") + '</div></div>';
   return '<article class="card" data-act="open-book" data-id="' + E(b.id) + '" tabindex="0" role="button" aria-label="Read ' + E(b.title) + '">'
     + '<div class="card__media">' + media + '</div>'
+    + cardShareBtn("/stories/" + b.id, b.title)
     + '<div class="card__body"><h3 class="card__title">' + E(b.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(b.blurb) + '</p>'
     + '<div class="card__foot">'
@@ -10134,6 +10168,7 @@ function storyCard(s){
   return '<article class="card" data-act="go" data-hash="#/stories/' + E(s.id) + '" tabindex="0" role="link">'
     + '<div class="card__media">' + (s.image && s.image.src ? '<img class="skel" src="' + E(thumbSrc(s.image.src)) + '" alt="' + E(s.image.alt) + '" data-full="' + E(s.image.src) + '" loading="lazy">' : plate("story","Story"))
     + '<span class="card__badge chip chip--ink">' + E(ch ? ch.name : "Story") + '</span></div>'
+    + cardShareBtn("/stories/" + s.id, s.title)
     + '<div class="card__body"><h3 class="card__title">' + E(s.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(s.blurb) + '</p>'
 
@@ -10170,7 +10205,8 @@ function viewCharacters(){
 
   return cmsHeader("characters", "", 'Meet Chike, Zech, and their six <span class="hl">creative friends</span>.',
         "Chike, Zech, and their friends are a creative ensemble. Each character has their own distinct creative outlet, which shows there is no single \u201Cright\u201D kind of creativity. Tap a friend to see their activities, episodes, and story.",
-        "", { aside: bannerAside("characters", feature) })
+        '<button type="button" class="btn btn--paper no-print" data-act="share" data-url="' + E(location.origin + "/characters") + '" data-title="Meet Chike, Zech, and their six creative friends">' + ic("share-2") + ' Share</button>',
+        { aside: bannerAside("characters", feature) })
     + '<section class="section"><div class="shell">'
     + '<div class="section-head" style="margin-bottom:20px"><div>'
     + '<h2 style="font-size:1.9rem">Tap a friend to see what they make.</h2></div></div>'
@@ -19670,6 +19706,20 @@ const ACTIONS = {
     const url = el.getAttribute("data-url") || location.href;
     const title = el.getAttribute("data-title") || document.title;
     openModal(shareModalHTML(url, title), null);
+  },
+  /* Share from inside the full-screen game/book player: the usual share dialog would replace the
+     player (they share one layer), so this opens it as a sheet on top and leaves the player running. */
+  "share-over": (el) => {
+    const url = el.getAttribute("data-url") || location.href;
+    const title = el.getAttribute("data-title") || document.title;
+    openSheet(shareModalHTML(url, title).replace(/data-act="close-modal"/g, 'data-act="sheet-close"'), "Share", el);
+  },
+  /* The device's own share sheet (phones and tablets): lists the person's real contacts and apps. */
+  "share-native": async (el) => {
+    const url = el.getAttribute("data-url") || location.href;
+    const title = el.getAttribute("data-title") || document.title;
+    try { await navigator.share({ title: title, text: title, url: url }); }
+    catch (_e) { /* they closed the sheet without sending - nothing to do */ }
   },
   "share-copy": (el) => {
     const url = el.getAttribute("data-url") || "";
