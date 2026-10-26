@@ -540,14 +540,26 @@ img.skel.is-loaded, video.skel.is-loaded{ animation:none; background-image:none;
 .card__badge{
   position:absolute; top:11px; left:11px; z-index:2;
 }
-/* a round Share button in the top-right corner of a card; the whole card is a link, so this
-   sits above it and opens the share dialog instead of opening the card */
-.card__share{
-  position:absolute; top:10px; right:10px; z-index:3;
-  width:36px; height:36px; min-height:0; padding:0; border-radius:50%;
-  display:grid; place-items:center;
+/* The Share button on a card sits in the bottom row: right next to the card's main button, or at the
+   end of the row when the card has none. It is a round icon that shows its "Share" label on hover or
+   keyboard focus. The whole card is a link, so this opens the share dialog instead of the card. */
+/* the card's main button (Read, Watch, Try it) and its Share button are the same height, so they line up */
+.card__foot .btn--sm{ height:44px; min-height:44px; padding-top:0; padding-bottom:0; box-sizing:border-box; }
+.btn.card__share{
+  position:relative; flex:none; display:inline-flex; align-items:center; justify-content:center;
+  width:44px; height:44px; min-height:44px; padding:0; border-radius:999px; white-space:nowrap; box-sizing:border-box;
 }
-.card__share .i{ width:17px; height:17px; }
+.card__share .i{ width:19px; height:19px; flex:none; }
+/* the word "Share" appears as a small label above the icon on hover or keyboard focus (it never moves the row) */
+.card__share .card__share-label{
+  display:none; position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); z-index:6;
+  padding:3px 10px; border-radius:6px; background:var(--ink); color:#FFF6EE; font-size:.75rem; font-weight:800; line-height:1.3; pointer-events:none;
+}
+.card__share .card__share-label::after{
+  content:""; position:absolute; top:100%; left:50%; margin-left:-5px; border:5px solid transparent; border-top-color:var(--ink);
+}
+.card__share:hover .card__share-label, .card__share:focus-visible .card__share-label{ display:block; }
+.card__share--end{ margin-left:auto; }
 /* generated cover plates (used when no photograph exists) */
 .plate{
   position:absolute; inset:0; display:grid; place-items:center;
@@ -7590,9 +7602,10 @@ function charAvatarHTML(ch, sizePx, extraStyle){
 }
 
 /** The round Share button on a card. `path` is the page it shares, e.g. "/play/game-ballinko". */
-function cardShareBtn(path, title){
-  return '<button type="button" class="btn btn--paper btn--icon card__share no-print" data-act="share"'
-    + ' data-url="' + E(location.origin + path) + '" data-title="' + E(title) + '" aria-label="Share ' + E(title) + '">' + ic("share-2") + '</button>';
+function cardShareBtn(path, title, atEnd){
+  return '<button type="button" class="btn btn--paper btn--icon card__share no-print' + (atEnd ? ' card__share--end' : '') + '" data-act="share"'
+    + ' data-url="' + E(location.origin + path) + '" data-title="' + E(title) + '" aria-label="Share ' + E(title) + '" title="Share">'
+    + ic("share-2") + '<span class="card__share-label">Share</span></button>';
 }
 
 function activityCard(a){
@@ -7601,10 +7614,13 @@ function activityCard(a){
     + '<div class="card__media">' + cover(a, a.type, t.label, true)
     + '<span class="card__badge chip chip--ink">' + E(t.label) + '</span>'
     + '</div>'
-    + cardShareBtn("/activity/" + a.id, a.title)
     + '<div class="card__body">'
     + '<h3 class="card__title">' + E(a.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(a.summary) + '</p>'
+    + '<div class="card__foot">'
+    + '<button type="button" class="btn btn--sm btn--cyan" data-act="go" data-hash="#/activity/' + E(a.id) + '">' + ic("wand-sparkles") + ' Try it</button>'
+    + cardShareBtn("/activity/" + a.id, a.title)
+    + '</div>'
     + '</div></article>';
 }
 
@@ -7843,7 +7859,7 @@ function episodeRow(v){
     /* The whole card is the link, so this reads as the button it behaves like.
        The status pill beside it stays a flat tag, because it is not an action. */
     + (live ? '<span class="btn btn--sm btn--cyan">' + ic("play") + ' Watch</span>' : '<span class="chip chip--ghost">In production</span>')
-    + '<button type="button" class="btn btn--sm btn--paper btn--icon" style="margin-left:auto;border-radius:50%" data-act="share" data-url="' + E(location.origin + "/watch/" + v.id) + '" data-title="' + E(v.title) + '" aria-label="Share this episode">' + ic("share-2") + '</button>'
+    + cardShareBtn("/watch/" + v.id, v.title)
     + '</div></div>'
     + '</article>';
 }
@@ -9816,11 +9832,10 @@ function gameCard(g){
     + '<div class="card__media">' + gamePlate(g)
     + (g.badge ? '<span class="card__badge chip chip--new">' + E(g.badge) + '</span>' : "")
     + '</div>'
-    + cardShareBtn("/play/" + g.id, g.title)
     + '<div class="card__body"><h3 class="card__title">' + E(g.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(g.summary) + '</p>'
     + (g.note ? '<p class="tiny game__note">' + ic("monitor") + ' ' + E(g.note) + '</p>' : "")
-    + '<div class="card__foot"><span>' + ic("users") + " " + E(playersLabel(g.players)) + '</span></div>'
+    + '<div class="card__foot"><span>' + ic("users") + " " + E(playersLabel(g.players)) + '</span>' + cardShareBtn("/play/" + g.id, g.title, true) + '</div>'
     + '</div></article>';
 }
 
@@ -10109,13 +10124,12 @@ function bookListCard(b){
       + '<div class="plate__mark">' + ic(b.icon || "book-open") + '</div></div>';
   return '<article class="card" data-act="open-book" data-id="' + E(b.id) + '" tabindex="0" role="button" aria-label="Read ' + E(b.title) + '">'
     + '<div class="card__media">' + media + '</div>'
-    + cardShareBtn("/stories/" + b.id, b.title)
     + '<div class="card__body"><h3 class="card__title">' + E(b.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(b.blurb) + '</p>'
     + '<div class="card__foot">'
     + '<button class="btn btn--sm btn--cyan" data-act="open-book" data-id="' + E(b.id) + '">'
     + ic("book-open") + ' Read</button>'
-    + '<span class="tiny mute" style="margin-left:auto">' + E(plural(b.pages, "page")) + '</span>'
+    + cardShareBtn("/stories/" + b.id, b.title)
     + '</div></div></article>';
 }
 
@@ -10168,10 +10182,9 @@ function storyCard(s){
   return '<article class="card" data-act="go" data-hash="#/stories/' + E(s.id) + '" tabindex="0" role="link">'
     + '<div class="card__media">' + (s.image && s.image.src ? '<img class="skel" src="' + E(thumbSrc(s.image.src)) + '" alt="' + E(s.image.alt) + '" data-full="' + E(s.image.src) + '" loading="lazy">' : plate("story","Story"))
     + '<span class="card__badge chip chip--ink">' + E(ch ? ch.name : "Story") + '</span></div>'
-    + cardShareBtn("/stories/" + s.id, s.title)
     + '<div class="card__body"><h3 class="card__title">' + E(s.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(s.blurb) + '</p>'
-
+    + '<div class="card__foot">' + cardShareBtn("/stories/" + s.id, s.title, true) + '</div>'
     + '</div></article>';
 }
 function viewStory(id){
