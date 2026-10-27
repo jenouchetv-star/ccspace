@@ -13,7 +13,7 @@ export const PORTAL_LAYOUTS = [
   { id: "gallery", label: "Photos", icon: "images", hint: "A grid of pictures", category: "Photos" },
 ];
 
-export const PORTAL_CATEGORIES = ["Stories", "Videos", "New games", "New books", "Photos", "Behind the scenes", "Updates"];
+export const PORTAL_CATEGORIES = ["Stories", "Videos", "New games", "New books", "Photos", "Creative tips", "AI for kids", "Behind the scenes", "Updates"];
 
 /** A quick check before anything is sent. The server does its own, stricter one. */
 export function portalEmailOk(v) {
@@ -128,6 +128,8 @@ export function portalValidate(e, others) {
   if (e.slug && (others || []).some((o) => o && o.id !== e.id && o.slug === e.slug)) err("slug", "Another entry already uses this address.");
   if (e.slug && !/^[a-z0-9][a-z0-9-]{0,80}$/.test(e.slug)) err("slug", "Use lowercase letters, numbers and dashes only.");
 
+  if (!blank(e.vocabWord) && blank(e.vocabMeaning)) err("vocabMeaning", "A word card needs its meaning. Add it, or clear the word.");
+  if (!blank(e.aiPrompt) && String(e.aiPrompt).length > 1200) warn("aiPrompt", "That prompt is long. Short, simple prompts are easiest for kids to read and paste.");
   if (!blank(e.buttonLabel) && blank(e.buttonUrl)) err("buttonUrl", "The extra button needs a link.");
   if (!blank(e.buttonUrl) && !portalLinkUrl(e.buttonUrl)) err("buttonUrl", "Use a full https:// address, a page on this site like /play, or a mailto: link.");
   const layout = e.layout || "article";
@@ -137,7 +139,7 @@ export function portalValidate(e, others) {
     else if (!portalVideoEmbed(e.videoUrl)) err("videoUrl", "Only YouTube and Vimeo links can be embedded.");
   }
   if (layout === "game") {
-    if (blank(e.gamePath) && blank(e.gameId) && blank(e.privateGameId)) err("gamePath", "A game entry needs a game from the site, or a game file or link.");
+    if (blank(e.gamePath) && blank(e.gameId) && blank(e.privateGameId) && blank(e.privateGameCode)) err("gamePath", "A game entry needs a game from the site, pasted game code, or a game file or link.");
     else if (!blank(e.gamePath) && !portalSafeUrl(e.gamePath)) err("gamePath", "Use a file on this site (games/example.html) or a full https:// address.");
   }
   if (layout === "ebook" && !portalBookPath(e)) err("bookId", "Choose which book this is, or add a link to it under More options.");

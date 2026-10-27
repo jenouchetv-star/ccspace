@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   PORTAL_LAYOUTS, portalEntryUrl, portalReadQuery, portalVideoEmbed, portalSafeUrl, portalParseGallery, portalFormatGallery,
-  portalSlug, portalLinkUrl, portalBookPath, portalValidate, portalGateMessage, portalErrorState, portalEmailOk,
+  portalSlug, portalLinkUrl, portalBookPath, portalValidate, portalGateMessage, portalErrorState, portalEmailOk, PORTAL_CATEGORIES,
 } from "../assets/lib/portal.js";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -33,6 +33,37 @@ describe("a members-only game in the page", () => {
     const reload = html.split('"game-reload": () => {')[1].split("\n  },")[0];
     expect(reload).toContain('frame.hasAttribute("srcdoc")');
     expect(reload.indexOf('hasAttribute("srcdoc")')).toBeLessThan(reload.indexOf("location.reload()"));
+  });
+
+  it("lets an admin paste a game's code in the entry editor, which goes to the locked table and never into the entry", () => {
+    const fields = html.split("portalEntries: [")[1].split("\n  ],")[0];
+    expect(fields).toContain('key:"privateGameCode", label:"Members-only game code", type:"textarea"');
+    expect(fields).toContain('layouts:["game"]');
+    const apply = html.split("async function portalApplyPrivateGame(c){")[1].split("\nfunction openPortalEditor")[0];
+    expect(apply).toContain("delete c.privateGameCode");
+    expect(apply).toContain('sb.from("portal_game_files").upsert(');
+    expect(apply).toContain("CopilotLib.extractHtml(code)");
+    expect(apply).toContain("a.blocked");
+    expect(apply).not.toContain('from("game_files")');                  /* never the public games table */
+    const save = html.split('if (act === "save-record"){')[1].split("\n    return;\n  }")[0];
+    expect(save.indexOf("portalApplyPrivateGame(candidate)")).toBeGreaterThan(-1);
+    expect(save.indexOf("portalApplyPrivateGame(candidate)")).toBeLessThan(save.indexOf("canSetStatus(col, candidate, wanted)"));
+  });
+
+  it("accepts pasted game code as a game, before it is saved", () => {
+    const base = { title: "T", description: "d", category: "New games", publishedAt: "2026-10-01", layout: "game" };
+    expect(portalValidate({ ...base, privateGameCode: "<html>...</html>" }, []).filter((v) => v.level === "error")).toEqual([]);
+  });
+
+  it("shows a game entry's cover picture above its Play button, but not when the game is on the page", () => {
+    const game = body("portalGameHTML");
+    expect(game).toContain("const cover = (e.cover && e.cover.src)");
+    expect(game.split("return hero(").length - 1).toBe(3);                /* private game, site game and file launches */
+    expect(game).toContain('<div class="pposter">');
+    expect(game).toContain('<div class="pposter__cta">');
+    expect(game).toContain('<div class="prow prow--hero">');              /* no cover: the buttons are a row of their own */
+    const embed = game.slice(game.indexOf('e.gameMode === "embed"'));
+    expect(embed.slice(0, embed.indexOf("return"))).not.toContain("cover");
   });
 
   it("counts a private game as a valid game entry", () => {
@@ -257,6 +288,88 @@ describe("how the site wires the portal in", () => {
     expect(body("portalSync")).toContain("!portalIsAdmin()");
   });
 
+  it("shows a Word to know card below How to play, only when it has both the word and its meaning", () => {
+    const card = body("portalWordHTML");
+    expect(card).toContain("if (!word || !meaning) return");
+    for (const f of ["vocabWord", "vocabSay", "vocabMeaning", "vocabExample"]) expect(card).toContain(f);
+    expect(card).toContain('ic("book-open")');                              /* the book icon */
+    expect(card).toContain('data-act="portal-say-word"');                  /* the Hear it button */
+    expect(card).toContain('"speechSynthesis" in window');                 /* only where the browser can speak */
+    const say = html.split('"portal-say-word": (el) => {')[1].split("\n  },")[0];
+    expect(say).toContain("new SpeechSynthesisUtterance(word)");
+    expect(say).toContain("x.localService");                                /* a voice on the device, not one fetched from a server */
+    expect(say).not.toMatch(/fetch\(|XMLHttpRequest|sendBeacon|new Audio/);  /* nothing is sent or downloaded */
+    expect(html).toContain(".panel.pword{ margin:0 0 22px; padding:14px 18px 16px; background:#E3F3DC; }");   /* small and green */
+    expect(card).toContain("E(word)");                                      /* text, never markup */
+    expect(card).toContain("E(meaning)");
+    const base = { title: "T", description: "d", category: "Updates", publishedAt: "2026-10-01", layout: "article", body: "x" };
+    expect(portalValidate({ ...base, vocabWord: "gravity" }, []).some((v) => v.field === "vocabMeaning" && v.level === "error")).toBe(true);
+    expect(portalValidate({ ...base, vocabWord: "gravity", vocabMeaning: "A pull." }, []).filter((v) => v.level === "error")).toEqual([]);
+  });
+
+  it("has a yellow Play button, and a How to play box under it when the entry has steps", () => {
+    const game = body("portalGameHTML");
+    expect(game).not.toContain("btn--cyan");
+    expect(game.split("btn btn--sun btn--sm").length - 1).toBe(3);
+    expect(game).toContain("Share with your friends</button>");
+    expect(game).toContain("btn btn--paper btn--sm");                      /* the Share beside it, same size */
+    expect(game).not.toContain("btn--lg");
+    const how = body("portalHowToHTML");
+    expect(how).toContain('if (!steps.length) return ""');
+    expect(how).toContain("How to play");
+    expect(how).toContain('class="panel panel--flat"');                     /* the same panel as a game's Play page */
+    expect(how).toContain('<ol class="steps">');
+    expect(how).toContain("E(x)");                                          /* steps are shown as text, never as markup */
+    const page = body("portalEntryHTML");
+    expect(page).toContain("media + portalHowToHTML(e) + portalWordHTML(e) + text");   /* the steps straight under the Play button, then the word card */
+    expect(html.split("portalEntries: [")[1].split("\n  ],")[0]).toContain('key:"howToPlay"');
+  });
+
+  it("shows a game entry's cover in the same 16:9 shape as the picture on a game's Play page", () => {
+    expect(body("portalGameHTML")).toContain("pmedia pmedia--cover pmedia--wide");
+    expect(html).toContain(".pmedia--wide{ aspect-ratio:16/9; }");
+    expect(html).toContain(".gameposter{\n  position:relative; overflow:hidden;\n  border:var(--line); border-radius:var(--r-lg); box-shadow:var(--hard);\n  aspect-ratio:16/9;");
+    expect(html).toContain(".pprompt__note{ margin:14px 0 0; font-size:.95rem; font-weight:800;");
+  });
+
+  it("offers a copy-ready prompt box on any entry that has one, and nothing when it does not", () => {
+    const box = body("portalPromptHTML");
+    expect(box).toContain('if (!text) return ""');
+    expect(box).toContain('data-act="portal-copy-prompt"');
+    expect(box).toContain('href="https://gemini.google.com/app"');
+    expect(box).toContain('rel="noopener noreferrer"');
+    /* the grown-up message comes first, on every prompt box, before the steps */
+    expect(box).toContain("Ask a grown-up first!");
+    expect(box).toContain("not affiliated with, endorsed by, or sponsored by Google Gemini or any other AI platform");
+    expect(box).toContain("any website that can collect information");
+    expect(box).toContain('role="note"');
+    expect(box.indexOf("pprompt__ask")).toBeLessThan(box.indexOf("pprompt__steps"));
+    expect(box.indexOf("pprompt__ask")).toBeLessThan(box.indexOf("aiPromptTip"));
+    expect(box).toContain("E(text)");                                       /* shown as text, never as markup */
+    expect(box).toContain("E(String(e.aiPromptTip).trim())");               /* the creator tip too */
+    expect(body("portalEntryHTML")).toContain("portalPromptHTML(e)");
+    const copy = html.split('"portal-copy-prompt": async (el) => {')[1].split("\n  },")[0];
+    expect(copy).toContain("navigator.clipboard.writeText(box.textContent)");
+    expect(copy).toContain("Ctrl+C");                                       /* the fallback when the clipboard is blocked */
+    expect(portalValidate({ title: "T", description: "d", category: "AI for kids", publishedAt: "2026-10-01", layout: "article", body: "x", aiPrompt: "a".repeat(1300) }, []).some((v) => v.field === "aiPrompt" && v.level === "warn")).toBe(true);
+  });
+
+  it("has one Share button on an entry: at the bottom, or next to Play on a game", () => {
+    const page = body("portalEntryHTML");
+    expect((page.match(/data-act="share"/g) || []).length).toBe(1);
+    expect(page).toContain('(e.layout === "game" ? "" :');                  /* no second one at the bottom of a game */
+    const game = body("portalGameHTML");
+    expect(game).toContain('data-act="share"');
+    expect(game).toContain("portalEntryUrl(location.origin, e)");           /* the plain address, never a private link */
+    expect(game.split("btn + share").length - 1).toBe(2);                   /* beside Play, on the picture or in a row */
+    expect(game.split("share + '</div>").length - 1).toBe(4);               /* poster, row, and the two on-the-page games */
+    expect(game).toContain("hero(g ?");                                      /* even when the site game can't be found */
+  });
+
+  it("knows the archive also holds creative tips and AI lessons for kids", () => {
+    expect(PORTAL_CATEGORIES).toEqual(expect.arrayContaining(["Creative tips", "AI for kids"]));
+  });
+
   it("shares every entry by its plain address, in a button on the page", () => {
     const page = body("portalEntryHTML");
     expect(page).toContain('data-act="share"');
@@ -343,7 +456,7 @@ describe("how the site wires the portal in", () => {
 
   it("lets an entry carry an extra button and choose whether its text comes first", () => {
     expect(body("portalExtraButton")).toContain("portalLinkUrl(e.buttonUrl)");
-    expect(body("portalEntryHTML")).toContain('e.textFirst === "before" ? text + media : media + text');
+    expect(body("portalEntryHTML")).toContain('e.textFirst === "before" ? text + media + portalHowToHTML(e) + portalWordHTML(e) : media + portalHowToHTML(e) + portalWordHTML(e) + text');
   });
 
   it("puts each subscriber's private key in newsletters", () => {

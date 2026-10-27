@@ -114,6 +114,13 @@ describe("the game page", () => {
     for (const f of ["../assets/vendor/three.min.js", "../assets/vendor/three-orbit-controls.js"]) expect(existsSync(new URL(f, import.meta.url))).toBe(true);
   });
 
+  it("does not use another company's game name, in the game or in the portal entry that goes with it", () => {
+    const seed = readFileSync(new URL("../supabase/portal-gravity-four.sql", import.meta.url), "utf8");
+    const name = /connect[ -]?(four|4)\b/i;
+    expect(html).not.toMatch(name);
+    expect(seed).not.toMatch(name);
+  });
+
   it("works inside the player's sealed frame: no alert, no popups of its own, no clipboard shim", () => {
     expect(html).not.toMatch(/\balert\s*\(|\bconfirm\s*\(|\bprompt\s*\(|execCommand/);
     expect(html).not.toMatch(/localStorage|sessionStorage|document\.cookie/);
