@@ -118,7 +118,9 @@ Deno.serve(async (req) => {
   const action = String(body.action ?? "");
 
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const siteOrigin = (Deno.env.get("SITE_URL") || req.headers.get("origin") || "https://www.chikescreativespace.com").replace(/\/+$/, "");
+  // Never taken from a request header: the caller controls Origin, and this
+  // origin is put into the emailed sign-in link.
+  const siteOrigin = (Deno.env.get("SITE_URL") || "https://www.chikescreativespace.com").replace(/\/+$/, "");
   const now = Date.now();
 
   async function allSubscribers() {

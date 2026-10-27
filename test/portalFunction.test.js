@@ -296,6 +296,12 @@ describe("the newsletter senders", () => {
     expect(read("send-newsletter")).toContain("personalizePortalLinks(html.split(\"__UNSUB_URL__\").join(siteOrigin), null)");
   });
 
+  it("never builds the emailed sign-in link from a request header", () => {
+    const src = read("portal");
+    expect(src).not.toMatch(/headers\.get\(["']origin["']\)/i);
+    expect(src).toContain('Deno.env.get("SITE_URL") || "https://www.chikescreativespace.com"');
+  });
+
   it("only read the archive after a session has been checked", () => {
     const src = read("portal");
     const content = src.slice(src.indexOf('if (action === "list" || action === "entry")'));
