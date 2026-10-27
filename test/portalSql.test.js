@@ -75,7 +75,7 @@ describe("newsletter-portal.sql", () => {
   });
 });
 
-describe("portal_game_files and the Gravity Four seed", () => {
+describe("portal_game_files and the Gravity 4 seed", () => {
   const seedSql = readFileSync(new URL("../supabase/portal-gravity-four.sql", import.meta.url), "utf8");
 
   it("is closed to the public key and open to admins only", async () => {

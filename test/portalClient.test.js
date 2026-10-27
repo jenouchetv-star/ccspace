@@ -501,7 +501,7 @@ describe("what the portal calls its readers", () => {
   });
 });
 
-describe("the Gravity Four invitation on the home page", () => {
+describe("the Gravity 4 invitation on the home page", () => {
   const promo = body("gravityFourPromoHTML");
   const home = body("viewHome");
 

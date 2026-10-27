@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 
-/* Chike's Gravity Four is a members-only game: its source is kept in supabase/private-games (never deployed as a file)
+/* Chike's Gravity 4 is a members-only game: its source is kept in supabase/private-games (never deployed as a file)
    and served by the portal Edge Function after a session check. */
 const html = readFileSync(new URL("../supabase/private-games/chikes-gravity-four.html", import.meta.url), "utf8");
 
@@ -152,6 +152,16 @@ describe("the game page", () => {
     expect(html).not.toContain('showModal("mWin"');
     expect(html).toContain('"You win!"');
     expect(html).toContain('"Chike wins!"');
+  });
+
+  it("is called Gravity 4 everywhere, with the 4 in italics where the name is a heading", () => {
+    const seed = readFileSync(new URL("../supabase/portal-gravity-four.sql", import.meta.url), "utf8");
+    const site = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+    for (const text of [html, seed, site]) expect(text).not.toMatch(/gravity four/i);
+    expect(html).toContain("<title>Chike's Gravity 4</title>");
+    expect(html).toContain("<b>Chike&rsquo;s Gravity <em>4</em></b>");
+    expect(html).toContain('<h2 id="tMenu">Chike&rsquo;s Gravity <em>4</em></h2>');
+    expect(seed).toContain('"title":"Gravity 4"');
   });
 
   it("does not use another company's game name, in the game or in the portal entry that goes with it", () => {
