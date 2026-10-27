@@ -16,15 +16,16 @@
 //     subscribers (the newsletter form) - confirms the subscription
 //     action itself, nothing more; the moment a "welcome" email starts
 //     advertising specific content or products, it stops being
-//     transactional and belongs in send-newsletter/emailShell() instead,
-//     with the same unsubscribe link and postal address every other
-//     commercial send carries
+//     transactional and belongs in send-newsletter/emailShell() instead.
+//     The welcome email still ends with the same footer as every newsletter
+//     (website, contact address, postal address, why they are receiving it,
+//     newsletter archive link and an unsubscribe link) - see
+//     subscriberFooter() below.
 //
 // The actual marketing/commercial path lives entirely elsewhere - see
 // send-newsletter and send-scheduled-newsletters (Resend batch sends
-// through index.html's emailShell() template, which is the one place a
-// postal address and an unsubscribe link get built in) - this function
-// must never gain either of those.
+// through index.html's emailShell() template). Keep the footer lines here
+// in step with emailShell()'s footer.
 //
 // This function is never called from index.html. It is called from inside
 // Postgres itself, by the two AFTER INSERT triggers appended to
@@ -40,6 +41,8 @@
 //   WEBHOOK_SECRET       - a random string you make up; must match the one
 //                          baked into the trigger SQL, so nothing but that
 //                          trigger can ever call this function successfully
+
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -79,6 +82,37 @@ function escapeHtml(s: string) {
   return String(s ?? "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/** The footer under every email a subscriber receives - the same lines as the
+    newsletter footer (emailShell() in index.html). The site, contact address and
+    postal address come from Admin -> Settings -> Brand settings (meta "global"),
+    so there is one place to change them. */
+async function subscriberFooter(subscriberId: string): Promise<string> {
+  const siteOrigin = (Deno.env.get("SITE_URL") || "https://www.chikescreativespace.com").replace(/\/+$/, "");
+  let brand: Record<string, unknown> = {};
+  try {
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await db.from("meta").select("data").eq("id", "global").maybeSingle();
+    brand = ((data?.data as Record<string, unknown> | undefined)?.brand ?? {}) as Record<string, unknown>;
+  } catch (_e) {
+    // The welcome email still goes out; it just falls back to the default site and contact address.
+  }
+  const site = String(brand.site || "www.chikescreativespace.com");
+  const contact = String(brand.email || "info@chikescreativespace.com");
+  const address = String(brand.postalAddress || "").trim();
+  const unsubscribe = subscriberId
+    ? `${siteOrigin}/#/unsubscribe/${encodeURIComponent(subscriberId)}`
+    : siteOrigin;
+  const line = "margin:0 0 6px;";
+  return `<div style="margin-top:28px;padding-top:18px;border-top:1px solid #dddddd;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#5B6673;text-align:center;">` +
+    `<p style="${line}"><a href="${escapeHtml(siteOrigin)}" style="color:#1E2226;font-weight:700;text-decoration:none;">${escapeHtml(site)}</a></p>` +
+    `<p style="${line}">Questions? <a href="mailto:${escapeHtml(contact)}" style="color:#1E2226;">${escapeHtml(contact)}</a></p>` +
+    (address ? `<p style="${line}font-weight:700;">${escapeHtml(address)}</p>` : "") +
+    `<p style="${line}">You\u2019re receiving this because you signed up for Chike\u2019s Creative Space updates.</p>` +
+    `<p style="${line}"><a href="${escapeHtml(siteOrigin)}/newsletter" style="color:#1E2226;font-weight:700;">Newsletter archive</a> &ndash; stories, videos and launches just for subscribers</p>` +
+    `<p style="margin:0;"><a href="${escapeHtml(unsubscribe)}" style="color:#5B6673;text-decoration:underline;">Unsubscribe</a></p>` +
+    `</div>`;
 }
 
 Deno.serve(async (req) => {
@@ -143,7 +177,8 @@ Deno.serve(async (req) => {
         to,
         "Welcome to Chike's Creative Space",
         `<p>Thanks for joining the list! You'll hear from us when a new episode, activity, or story goes up.</p>` +
-          `<p>If this wasn't you, you can ignore this email - you won't be signed up for anything else.</p>`
+          `<p>If this wasn't you, you can ignore this email - you won't be signed up for anything else.</p>` +
+          (await subscriberFooter(String(record.id ?? "")))
       );
       return json({ ok: true, sent: "welcome" });
     }
