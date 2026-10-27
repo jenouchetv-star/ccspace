@@ -500,3 +500,59 @@ describe("what the portal calls its readers", () => {
     expect(html).toContain('<span class="eyebrow">Subscribers only</span>\'\n    + \'<h1');
   });
 });
+
+describe("the Gravity Four invitation on the home page", () => {
+  const promo = body("gravityFourPromoHTML");
+  const home = body("viewHome");
+
+  it("invites people to join the mailing list and play, and says what else they get", () => {
+    expect(promo).toContain("Subscribe and play");
+    expect(promo).toContain('data-act="open-mailing-list"');                    /* the same sign-up as the nav and footer */
+    expect(promo).toContain("Subscribers only content");
+    expect(promo).toContain("<h2 id=\"g4-title\">Play Gravity Four with Chike!</h2>");
+    expect(promo).toContain("A 3D chip-dropping game made just for newsletter subscribers. Play against Chike, or challenge a friend online. Then make your own game with AI!");
+    for (const perk of ["Exclusive content", "Free AI lessons for kids", "Downloadables", "Stories, videos and more"]) expect(promo).toContain(perk);
+    expect(promo).toContain('href="#/newsletter"');                              /* people who already have a place in the archive */
+    expect(promo).toContain("Free mailing list");                                /* so "subscribe" is clear about what it means */
+    expect(promo).toContain("ask a grown-up before using AI");
+  });
+
+  it("keeps its buttons small and its icon boxes centred", () => {
+    const actions = promo.slice(promo.indexOf("g4promo__actions"), promo.indexOf("g4promo__fine"));
+    expect(actions).not.toContain("btn--lg");
+    expect(actions.split("btn--sm").length - 1).toBe(2);
+    expect(html).toContain(".g4promo__actions{ display:flex; flex-wrap:nowrap;");   /* one row, even on a phone */
+    expect(html).toContain("height:42px; min-height:42px;");                          /* the same height */
+    /* the perk icon box out-ranks the plain text rule for the line under each perk, so it stays a centred grid */
+    expect(html).toContain(".g4perks .g4perks__mark{");
+    expect(html).toContain(".g4perks div span{");
+  });
+
+  it("uses the cover picture, holds still for people who ask for less motion, and never uses another company's game name", () => {
+    expect(promo).toContain('srcset="assets/games/gravity-four.webp"');
+    expect(promo).toContain("assets/games/gravity-four-loop.gif");
+    expect(promo).toContain('loading="lazy"');
+    expect(promo).not.toMatch(/connect[ -]?(four|4)\b/i);
+    for (const f of ["../assets/games/gravity-four.webp", "../assets/games/gravity-four-loop.gif"]) expect(existsSync(new URL(f, import.meta.url))).toBe(true);
+  });
+
+  it("is a homepage module the admin can switch off, sitting right under the promise strip", () => {
+    expect(home).toContain('if (on("gravityfour")) html += gravityFourPromoHTML();');
+    expect(home.indexOf('on("strip")')).toBeLessThan(home.indexOf('on("gravityfour")'));
+    expect(home.indexOf('on("gravityfour")')).toBeLessThan(home.indexOf('on("videos")'));
+    const seed = body("seedHomepage");
+    expect(seed).toContain('M("gravityfour","gravityfour"');
+    expect(seed.indexOf('M("promise"')).toBeLessThan(seed.indexOf('M("gravityfour"'));
+    expect(seed.indexOf('M("gravityfour"')).toBeLessThan(seed.indexOf('M("episodes"'));
+  });
+});
+
+describe("the bar at the top of the portal pages", () => {
+  it("says who is signed in, with no Sign out button", () => {
+    const bar = body("portalMemberBar");
+    expect(bar).toContain("Signed in");
+    expect(bar).not.toContain("Sign out");
+    expect(bar).not.toContain("portal-signout");
+    expect(bar).not.toContain("<button");
+  });
+});
