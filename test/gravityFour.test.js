@@ -133,6 +133,27 @@ describe("the game page", () => {
     expect(html).toContain("#mAi span{color:#fff}");
   });
 
+  it("draws a green line through the four winning chips and shows the result above the board", () => {
+    /* the line: green, outlined in ink, drawn over the board, cleared with the board, and only on a win */
+    expect(html).toContain("--green:#2FB551");
+    const line = html.slice(html.indexOf("function drawWinLine("), html.indexOf("function glow("));
+    expect(line).toContain("color: 0x2FB551");
+    expect(line).toContain("side: THREE.BackSide");
+    expect(line).toContain("depthTest: false");
+    expect(line).toContain("if (REDUCED) return;");                                    /* no draw-in animation for people who ask for less motion */
+    expect(html.slice(html.indexOf("function glow("), html.indexOf("function clearBoardMeshes("))).toContain("drawWinLine(cells);");
+    expect(html.slice(html.indexOf("function clearBoardMeshes("), html.indexOf("let clock;"))).toContain("scene.remove(winLine)");
+    expect(html).toContain("if (win) glow(win.cells, win.p);");                         /* a tie has no line */
+    /* the result: in the top bar, not a full-screen sheet over the board */
+    const bar = html.slice(html.indexOf('<header class="hud"'), html.indexOf("</header>"));
+    expect(bar).toContain('id="mWin"');
+    for (const id of ['id="tWin"', 'id="winSub"', 'id="wAgain"', 'id="wMenu"']) expect(bar).toContain(id);
+    expect(html).not.toMatch(/<div class="scrim" id="mWin"/);
+    expect(html).not.toContain('showModal("mWin"');
+    expect(html).toContain('"You win!"');
+    expect(html).toContain('"Chike wins!"');
+  });
+
   it("does not use another company's game name, in the game or in the portal entry that goes with it", () => {
     const seed = readFileSync(new URL("../supabase/portal-gravity-four.sql", import.meta.url), "utf8");
     const name = /connect[ -]?(four|4)\b/i;

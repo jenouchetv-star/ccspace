@@ -26,7 +26,7 @@ values ('gravity-four', jsonb_build_object('html', $g4code$<!DOCTYPE html>
 /* Chike's Creative Space brand tokens (same values as the site and the other games) */
 :root{
   --ink:#1E2226; --paper:#FAF4E6; --card:#FFFBF3; --slate:#1B2A32;
-  --sun:#F5B921; --cyan:#17B3CE; --blue:#1273B0; --plum:#7A4A86; --mut:#5B6670; --bad:#BC3229;
+  --sun:#F5B921; --cyan:#17B3CE; --blue:#1273B0; --plum:#7A4A86; --green:#2FB551; --mut:#5B6670; --bad:#BC3229;
   --hard:4px 4px 0 #1E2226;
 }
 *{box-sizing:border-box}
@@ -76,6 +76,14 @@ button.sq{width:46px;padding:0;border-radius:14px}
 .msg{flex-basis:100%;display:flex;justify-content:center;pointer-events:none}
 .msg p{pointer-events:auto;background:var(--ink);color:#fff;border-radius:999px;padding:5px 16px;font-weight:700;font-size:.9rem;max-width:min(560px,92vw);text-align:center}
 .msg p.bad{background:var(--bad)}
+/* the end-of-round result sits in the top bar, above the board, so the board and its green line stay in view */
+.msg .result{pointer-events:auto;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px 16px;padding:10px 16px 10px 12px;max-width:min(640px,100%)}
+.result .big{width:48px;height:48px;margin:0;font-size:1.4rem}
+.result .txt{text-align:left}
+.result h2{font-size:clamp(1.3rem,4.4vw,1.75rem)}
+.result .sub{color:var(--mut);font-weight:600;font-size:.85rem;margin-top:2px}
+.result .acts{display:flex;gap:10px}
+.result .acts button{min-height:42px;padding:6px 18px}
 .score{display:flex;align-items:center;gap:14px;padding:8px 18px}
 .score .side{display:flex;align-items:center;gap:9px}
 .score .who{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);line-height:1.1}
@@ -141,6 +149,13 @@ button.sq{width:46px;padding:0;border-radius:14px}
   </div>
   <div class="card turn" id="turn" aria-hidden="true"><span class="dot p1" id="turnDot">O</span><span id="turnText">Your turn</span></div>
   <div class="msg"><p id="note" hidden></p></div>
+  <div class="msg" id="mWin" hidden>
+    <section class="card result" aria-labelledby="tWin">
+      <div class="big" id="winDot">O</div>
+      <div class="txt"><h2 id="tWin">Cyan wins!</h2><div class="sub" id="winSub">Four in a row.</div></div>
+      <div class="acts"><button type="button" class="sun" id="wAgain">Play again</button><button type="button" id="wMenu">Main menu</button></div>
+    </section>
+  </div>
 </header>
 
 <footer class="hud bot" id="hudBot" hidden>
@@ -203,16 +218,6 @@ button.sq{width:46px;padding:0;border-radius:14px}
     <div class="code" id="codeShow" aria-label="Match code">------</div>
     <p class="lede" id="waitText">Give this code to your friend. They choose Play online with a friend, then Join.</p>
     <div class="row"><button type="button" class="blue" id="bCopy" style="flex:1"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy code</button><button type="button" id="bCancel" style="flex:1">Cancel</button></div>
-  </div>
-</div>
-
-<!-- round over -->
-<div class="scrim" id="mWin" role="dialog" aria-modal="true" aria-labelledby="tWin" hidden>
-  <div class="card sheet">
-    <div class="big" id="winDot">O</div>
-    <h2 id="tWin">Cyan wins!</h2>
-    <p class="lede" id="winSub">Four in a row.</p>
-    <div class="stack"><button type="button" class="sun" id="wAgain">Play again</button><button type="button" id="wMenu">Main menu</button></div>
   </div>
 </div>
 
@@ -504,7 +509,34 @@ function dropChip(c, r, p, done){
 }
 
 const winners = [];
+/* a green line drawn through the four winning chips, on top of the board */
+let winLine = null;
+function drawWinLine(cells){
+  const a = slotPos(cells[0][0], cells[0][1]), b = slotPos(cells[cells.length - 1][0], cells[cells.length - 1][1]);
+  const dir = b.clone().sub(a), len = dir.length() + 0.9, angle = Math.atan2(dir.y, dir.x);
+  /* the ink outline is the same shape a little bigger, seen from behind; neither is depth-tested, so the line always shows */
+  const tube = (radius, mat, order) => {
+    const g = new THREE.Group(), body = new THREE.CylinderGeometry(radius, radius, len, 24), cap = new THREE.SphereGeometry(radius, 20, 14);
+    body.rotateZ(Math.PI / 2);
+    const m = new THREE.Mesh(body, mat); m.renderOrder = order; g.add(m);
+    [-len / 2, len / 2].forEach((x) => { const s = new THREE.Mesh(cap, mat); s.position.x = x; s.renderOrder = order; g.add(s); });
+    return g;
+  };
+  const line = new THREE.Group(), inner = new THREE.Group();
+  inner.add(tube(0.17, new THREE.MeshBasicMaterial({ color: 0x1E2226, side: THREE.BackSide, depthTest: false }), 20));
+  inner.add(tube(0.115, new THREE.MeshBasicMaterial({ color: 0x2FB551, depthTest: false }), 21));
+  inner.position.x = len / 2;                                   /* so it grows from the first chip to the last */
+  line.add(inner);
+  const unit = dir.clone().normalize();
+  line.position.set(a.x - unit.x * 0.45, a.y - unit.y * 0.45, 0.1);   /* level with the chips, so it lines up from any side */
+  line.rotation.z = angle;
+  scene.add(line); winLine = line;
+  if (REDUCED) return;
+  let k = 0; line.scale.x = 0.001;
+  falling.push((dt) => { k = Math.min(1, k + dt / 0.35); line.scale.x = Math.max(0.001, 1 - Math.pow(1 - k, 3)); return k >= 1; });
+}
 function glow(cells, p){
+  drawWinLine(cells);
   cells.forEach(([r, c]) => {
     const chip = chips[r][c];
     if (!chip) return;
@@ -518,6 +550,11 @@ function clearBoardMeshes(){
     if (chips[r][c]){ scene.remove(chips[r][c]); chips[r][c] = null; }
   }
   falling.length = 0; winners.length = 0;
+  if (winLine){
+    scene.remove(winLine);
+    winLine.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    winLine = null;
+  }
 }
 
 let clock;
@@ -618,7 +655,7 @@ function play(col, p){
     if (!G.over) { if (G.mode === "ai" && G.turn === P2 && idx === G.moves.length - 1) chikeTurn(); return; }
     if (idx !== G.moves.length - 1) return;
     if (win) glow(win.cells, win.p);
-    later(() => endRound(win ? win.p : 0), REDUCED ? 200 : 1100);
+    later(() => endRound(win ? win.p : 0), REDUCED ? 100 : 450);
   });
   paintGhost();
   return true;
@@ -667,7 +704,10 @@ function endRound(winner){
     $("winSub").textContent = "Four in a row.";
   }
   say($("tWin").textContent);
-  showModal("mWin", "wAgain");
+  /* shown in the top bar, not over the board, so everyone can see the finished board and the green line */
+  MODALS.forEach((m) => { $(m).hidden = m !== "mWin"; });
+  paintGhost();
+  setTimeout(() => { const f = $("wAgain"); if (f) f.focus(); }, 30);
 }
 
 function startRound(){
@@ -917,7 +957,7 @@ window.__g4 = { G, NET, play, startMatch, select, tryDrop };
 </script>
 </body>
 </html>
-$g4code$, 'bytes', 53757))
+$g4code$, 'bytes', 56510))
 on conflict (id) do update set data = excluded.data, updated_at = now();
 
 insert into portal_entries (id, data)
