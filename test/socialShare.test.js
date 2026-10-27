@@ -50,7 +50,8 @@ describe("sharing from inside the player", () => {
   it("shows Share in the player bar and opens it as a sheet on top, so the game keeps running", () => {
     expect(body("gameStage")).toContain('data-act="share-over"');
     expect(html).toContain('"share-over": (el) => {');
-    expect(html).toContain("openSheet(shareModalHTML(url, title).replace(");
+    expect(html).toContain("shareModalHTML(url, title).replace(/data-act=\"close-modal\"/g, 'data-act=\"sheet-close\"')");
+    expect(html).toContain("openSheet('<div class=\"sheet__body\">' + shareModalHTML(url, title)");   /* padded, and scrolls on a short screen */
   });
 
   it("sends a game to /play/<id> and a book to /stories/<id>", () => {

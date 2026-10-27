@@ -51,18 +51,18 @@ describe("the rules", () => {
   });
 });
 
-describe("the robot", () => {
+describe("Chike, the computer player", () => {
   it("takes a win when it has one, on either level", () => {
     const b = play([[0, 2], [1, 2], [2, 2], [0, 1], [1, 1], [2, 1]]);   /* 2 can win at column 3 */
     for (const level of ["easy", "smart"]) expect(L.aiMove(b, 2, level, seeded(7))).toBe(3);
   });
 
-  it("the smart robot always blocks a win", () => {
+  it("smart Chike always blocks a win", () => {
     const b = play([[0, 1], [1, 1], [2, 1], [0, 2], [1, 2]]);           /* 1 threatens column 3 */
     for (let s = 1; s < 30; s++) expect(L.aiMove(b, 2, "smart", seeded(s))).toBe(3);
   });
 
-  it("the easy robot blocks most of the time but not always", () => {
+  it("easy Chike blocks most of the time but not always", () => {
     const b = play([[0, 1], [1, 1], [2, 1], [0, 2], [1, 2]]);
     const picks = Array.from({ length: 200 }, (_, s) => L.aiMove(b, 2, "easy", seeded(s + 1)));
     const blocked = picks.filter((c) => c === 3).length;
@@ -81,7 +81,7 @@ describe("the robot", () => {
     expect(L.aiMove(play(Array.from({ length: 7 }, (_, c) => Array.from({ length: 6 }, (_, r) => [c, ((c + r) % 4 < 2) ? 1 : 2])).flat()), 2, "smart", Math.random)).toBe(-1);
   });
 
-  it("the smart robot beats the easy robot over a set of games", () => {
+  it("smart Chike beats easy Chike over a set of games", () => {
     let smart = 0, easy = 0;
     for (let g = 0; g < 10; g++){
       const b = L.newBoard(), rnd = seeded(g + 11);
@@ -112,6 +112,25 @@ describe("the game page", () => {
     expect(html).toContain('"/assets/vendor/three.min.js"');
     expect(html).toContain("@supabase/supabase-js@2.112.4");
     for (const f of ["../assets/vendor/three.min.js", "../assets/vendor/three-orbit-controls.js"]) expect(existsSync(new URL(f, import.meta.url))).toBe(true);
+  });
+
+  it("calls the computer player Chike, with his waving picture on the button, and never \"the robot\"", () => {
+    const seed = readFileSync(new URL("../supabase/portal-gravity-four.sql", import.meta.url), "utf8");
+    for (const text of [html, seed]) expect(text).not.toMatch(/robot(?!s)/i);          /* the meta robots tag is the only use of the word */
+    const button = html.slice(html.indexOf('id="mAi"'), html.indexOf("</button>", html.indexOf('id="mAi"')));
+    expect(button).toContain("<b>Play against Chike</b>");
+    expect(button).toContain('src="/assets/characters/chike-wave.webp"');              /* the animated wave... */
+    expect(button).toContain('<source media="(prefers-reduced-motion: reduce)" srcset="data:image/webp;base64,');   /* ...holds still for people who ask for less motion */
+    expect(button).toContain('alt=""');                                                /* decorative: the words beside it say it all */
+    for (const name of ["Chike is thinking.", "Chike wins!", "Chike · Sunny", 'id="n2">Chike<']) expect(html).toContain(name);
+    expect(existsSync(new URL("../assets/characters/chike-wave.webp", import.meta.url))).toBe(true);
+    /* the pill above the title: purple with white words, and says who it is for */
+    expect(html).toContain('<span class="chip">Subscribers only content</span>');
+    expect(html).toMatch(/\.chip\{[^}]*background:var\(--plum\);color:#fff;/);
+    expect(html).not.toContain("Members only");
+    /* the Chike button is the site's blue with white words */
+    expect(html).toContain("#mAi{background:var(--blue);color:#fff}");
+    expect(html).toContain("#mAi span{color:#fff}");
   });
 
   it("does not use another company's game name, in the game or in the portal entry that goes with it", () => {

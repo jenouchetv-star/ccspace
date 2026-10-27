@@ -1,7 +1,7 @@
 // The site's side of the Newsletter Portal: the rules in assets/lib/portal.js, and how
 // index.html wires the portal in (routes, the gate, the admin screens, sharing).
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import {
   PORTAL_LAYOUTS, portalEntryUrl, portalReadQuery, portalVideoEmbed, portalSafeUrl, portalParseGallery, portalFormatGallery,
   portalSlug, portalLinkUrl, portalBookPath, portalValidate, portalGateMessage, portalErrorState, portalEmailOk, PORTAL_CATEGORIES,
@@ -53,6 +53,19 @@ describe("a members-only game in the page", () => {
   it("accepts pasted game code as a game, before it is saved", () => {
     const base = { title: "T", description: "d", category: "New games", publishedAt: "2026-10-01", layout: "game" };
     expect(portalValidate({ ...base, privateGameCode: "<html>...</html>" }, []).filter((v) => v.level === "error")).toEqual([]);
+  });
+
+  it("shows an animated cover, with a still picture for people who have reduced motion switched on", () => {
+    const cover = body("portalCoverImg");
+    expect(cover).toContain("<picture>");
+    expect(cover).toContain('media="(prefers-reduced-motion: reduce)"');
+    expect(cover).toContain("portalSafeUrl(e.coverStill)");                  /* the still is a site file or https address only */
+    expect(cover).toContain("E(e.cover.src)");
+    expect(body("portalGameHTML")).toContain("portalCoverImg(e)");
+    expect(body("portalEntryHTML")).toContain("portalCoverImg(e)");
+    for (const f of ["gravity-four-loop.gif", "gravity-four-loop-thumb.gif", "gravity-four.webp"]) expect(existsSync(new URL("../assets/games/" + f, import.meta.url))).toBe(true);
+    /* the archive card looks for "<name>-thumb.<ext>" next to the cover: that file is the light, still version */
+    expect(readFileSync(new URL("../assets/games/gravity-four-loop-thumb.gif", import.meta.url)).length).toBeLessThan(120000);
   });
 
   it("shows a game entry's cover picture above its Play button, but not when the game is on the page", () => {
@@ -338,6 +351,11 @@ describe("how the site wires the portal in", () => {
     expect(box).toContain('data-act="portal-copy-prompt"');
     expect(box.split('data-act="portal-copy-prompt"').length - 1).toBe(1);   /* one Copy button... */
     expect(box.indexOf("pprompt__copy")).toBeLessThan(box.indexOf('id="pprompt-text"'));   /* ...in the corner of the box it copies from */
+    /* ...with Open Gemini right beside it, in the same corner group, and nowhere else */
+    const actions = box.slice(box.indexOf('class="pprompt__actions'), box.indexOf('id="pprompt-text"'));
+    expect(actions).toContain('href="https://gemini.google.com/app"');
+    expect(actions.indexOf("Copy prompt")).toBeLessThan(actions.indexOf("Open Gemini"));
+    expect(box.split('Open Gemini</a>').length - 1).toBe(1);
     expect(box).toContain('href="https://gemini.google.com/app"');
     expect(box).toContain('rel="noopener noreferrer"');
     /* the grown-up message comes first, on every prompt box, before the steps */

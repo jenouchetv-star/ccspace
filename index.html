@@ -3059,6 +3059,10 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 }
 .sheet__title{ font-size:1.1rem; font-weight:800; margin:0; }
 .sheet__list{ overflow-y:auto; padding:8px; }
+/* The Share dialog shown as a sheet (from inside the game player): padded like the modal it borrows its contents from,
+   and it scrolls on a short screen so the Close button is always reachable. */
+.sheet__body{ overflow-y:auto; flex:1 1 auto; min-height:0; padding:22px clamp(18px,4vw,28px) 24px; }
+.sheet__body .modal__foot{ margin-top:20px; }
 .sheet__item{
   display:flex; align-items:center; justify-content:space-between; gap:12px;
   min-height:56px; padding:15px 16px; border-radius:12px;
@@ -3231,8 +3235,11 @@ body.portal-locked{ overflow:hidden; }
   .pprompt__steps{ grid-template-columns:1fr; }
 }
 .pprompt__box{ position:relative; }
-.pprompt__copy{ position:absolute; top:10px; right:10px; z-index:1; }
-@media (max-width:620px){ .pprompt__box .pprompt__text{ padding-top:62px; } }
+.pprompt__actions{ position:absolute; top:10px; right:10px; z-index:1; display:flex; gap:10px; justify-content:flex-end; }
+@media (max-width:620px){
+  /* no room to overlay two buttons on a phone: they sit in a row above the box instead */
+  .pprompt__actions{ position:static; flex-wrap:wrap; justify-content:flex-start; margin:0 0 10px; }
+}
 .pprompt__text{ background:#fff; border:3px dashed var(--ink); border-radius:var(--r); padding:16px 18px; font-size:1.08rem; line-height:1.65; white-space:pre-wrap; user-select:text; -webkit-user-select:text; }
 .pprompt__legal{ margin:14px 0 0; padding-top:12px; border-top:2px solid rgba(30,34,38,.2); font-size:.85rem; line-height:1.5; color:var(--ink-soft); }
 .pprompt__note{ margin:14px 0 0; font-size:.95rem; font-weight:800; color:var(--ink); }
@@ -11496,11 +11503,19 @@ function portalVideoHTML(e){
     + ' referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>';
 }
 
+/** The cover picture. An entry can name a still picture (coverStill) for people whose device is set to reduce
+    motion, so an animated cover (a looping GIF) never plays for them. */
+function portalCoverImg(e){
+  const img = '<img src="' + E(e.cover.src) + '" alt="' + E(e.cover.alt || "") + '">';
+  const still = portalSafeUrl(e.coverStill);
+  return still ? '<picture><source media="(prefers-reduced-motion: reduce)" srcset="' + E(still) + '">' + img + '</picture>' : img;
+}
+
 function portalGameHTML(e){
   const path = portalSafeUrl(e.gamePath);
   const label = e.gameLabel || "Come and play";
   /* the cover picture sits above the Play button (a game shown on the page is its own picture) */
-  const cover = (e.cover && e.cover.src) ? '<figure class="pmedia pmedia--cover pmedia--wide"><img src="' + E(e.cover.src) + '" alt="' + E(e.cover.alt || "") + '"></figure>' : "";
+  const cover = (e.cover && e.cover.src) ? '<figure class="pmedia pmedia--cover pmedia--wide">' + portalCoverImg(e) + '</figure>' : "";
   /* with a cover, the Play button sits on the picture like a poster; without one it is a row of its own */
   const share = '<button class="btn btn--paper btn--sm" type="button" data-act="share" data-url="' + E(portalEntryUrl(location.origin, e)) + '" data-title="' + E(e.title) + '">' + ic("share-2") + ' Share with your friends</button>';
   const hero = (btn) => cover
@@ -11602,13 +11617,14 @@ function portalPromptHTML(e){
     + '<li class="pstep pstep--paste"><span class="pstep__n" aria-hidden="true">2</span><span class="pstep__ico">' + ic("clipboard-paste", "i-lg") + '</span><span class="pstep__t">Open <b>Gemini</b> and paste the words in the box.</span></li>'
     + '<li class="pstep pstep--build"><span class="pstep__n" aria-hidden="true">3</span><span class="pstep__ico">' + ic("sparkles", "i-lg") + '</span><span class="pstep__t">Press send and watch it build!</span></li>'
     + '</ol>'
-    /* the Copy button sits in the top-right corner of the box it copies from */
+    /* Copy prompt and Open Gemini sit together in the top-right corner of the box they belong to */
     + '<div class="pprompt__box">'
-    + '<button type="button" class="btn btn--cyan btn--sm pprompt__copy no-print" data-act="portal-copy-prompt">' + ic("copy") + ' Copy prompt</button>'
+    + '<div class="pprompt__actions no-print">'
+    + '<button type="button" class="btn btn--cyan btn--sm pprompt__copy" data-act="portal-copy-prompt">' + ic("copy") + ' Copy prompt</button>'
+    + '<a class="btn btn--paper btn--sm" href="https://gemini.google.com/app" target="_blank" rel="noopener noreferrer">' + ic("external-link") + ' Open Gemini</a>'
+    + '</div>'
     + '<div class="pprompt__text" id="pprompt-text" tabindex="0" role="group" aria-label="The prompt to copy">' + E(text) + '</div>'
     + '</div>'
-    + '<div class="prow no-print" style="margin:16px 0 0">'
-    + '<a class="btn btn--paper" href="https://gemini.google.com/app" target="_blank" rel="noopener noreferrer">' + ic("external-link") + ' Open Gemini</a></div>'
     + '<p class="pprompt__note">If Gemini gives you a file, a grown-up can help you save it as <b>game.html</b> and open it to play.</p>'
     + '<p class="pprompt__legal">Chike\u2019s Creative Space is not affiliated with, endorsed by, or sponsored by Google Gemini or any other AI platform.</p>'
     + '</section>';
@@ -11619,7 +11635,7 @@ function portalEntryHTML(e, others, bar){
     : e.layout === "game" ? portalGameHTML(e)
     : e.layout === "ebook" ? portalEbookHTML(e)
     : e.layout === "gallery" ? portalGalleryHTML(e)
-    : (e.cover && e.cover.src ? '<figure class="pmedia pmedia--cover"><img src="' + E(e.cover.src) + '" alt="' + E(e.cover.alt || "") + '"></figure>' : "");
+    : (e.cover && e.cover.src ? '<figure class="pmedia pmedia--cover">' + portalCoverImg(e) + '</figure>' : "");
   const url = portalEntryUrl(location.origin, e);
   const text = e.body ? '<div class="pbody">' + sanitizeHTML(e.body) + '</div>' : "";
   return bar
@@ -13792,7 +13808,7 @@ const BLANKS = {
   amazonProducts: () => ({ title:"", category:"materials", why:"", forActivities:[], priceBand:"$", url:"https://www.amazon.com/s?k=", linkType:"search-placeholder", cover:"", status:"draft", featured:false, ours:false }),
   collections:() => ({ title:"", slug:"", blurb:"", icon:"layers", items:[], status:"draft", featured:false }),
   mediaAssets:() => ({ path:"", folder:"", alt:"", usage:"", kind:"illustration", status:"draft", sizeBytes:0 }),
-  portalEntries: () => ({ vocabWord:"", vocabSay:"", vocabMeaning:"", vocabExample:"", howToPlay:[], aiPrompt:"", aiPromptTitle:"", aiPromptTip:"", gameId:"", privateGameId:"", privateGameKb:0, bookId:"", bookMode:"launch", bookPath:"", email:{ on:true, subject:"", preview:"", message:"", button:"" }, buttonLabel:"", buttonUrl:"", textFirst:"after", title:"", slug:"", description:"", category:"Updates", layout:"article", publishedAt:nowISO().slice(0, 10), cover:{src:"",alt:""}, body:"", videoUrl:"", gameMode:"embed", gameLabel:"", gamePath:"", gallery:[], adminNote:"", status:"draft" }),
+  portalEntries: () => ({ coverStill:"", vocabWord:"", vocabSay:"", vocabMeaning:"", vocabExample:"", howToPlay:[], aiPrompt:"", aiPromptTitle:"", aiPromptTip:"", gameId:"", privateGameId:"", privateGameKb:0, bookId:"", bookMode:"launch", bookPath:"", email:{ on:true, subject:"", preview:"", message:"", button:"" }, buttonLabel:"", buttonUrl:"", textFirst:"after", title:"", slug:"", description:"", category:"Updates", layout:"article", publishedAt:nowISO().slice(0, 10), cover:{src:"",alt:""}, body:"", videoUrl:"", gameMode:"embed", gameLabel:"", gamePath:"", gallery:[], adminNote:"", status:"draft" }),
   issues:     () => ({ title:"", area:"platform", severity:"normal", state:"open", detail:"", status:"published" })
 };
 
@@ -22500,7 +22516,7 @@ const ACTIONS = {
   "share-over": (el) => {
     const url = el.getAttribute("data-url") || location.href;
     const title = el.getAttribute("data-title") || document.title;
-    openSheet(shareModalHTML(url, title).replace(/data-act="close-modal"/g, 'data-act="sheet-close"'), "Share", el);
+    openSheet('<div class="sheet__body">' + shareModalHTML(url, title).replace(/data-act="close-modal"/g, 'data-act="sheet-close"') + '</div>', "Share", el);
   },
   /* The device's own share sheet (phones and tablets): lists the person's real contacts and apps. */
   "share-native": async (el) => {
