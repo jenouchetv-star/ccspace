@@ -346,6 +346,9 @@ describe("how the site wires the portal in", () => {
     expect(box.indexOf("pprompt__ask")).toBeLessThan(box.indexOf("pprompt__steps"));
     expect(box.indexOf("pprompt__ask")).toBeLessThan(box.indexOf("aiPromptTip"));
     expect(box).toContain("E(text)");                                       /* shown as text, never as markup */
+    for (const icon of ["copy", "clipboard-paste", "sparkles"]) expect(box).toContain('ic("' + icon + '"');   /* the three picture steps */
+    expect(box.split('class="pstep ').length - 1).toBe(3);
+    expect(box).toContain("<ol class=\"pprompt__steps\">");                  /* still a real numbered list for screen readers */
     expect(box).toContain("E(String(e.aiPromptTip).trim())");               /* the creator tip too */
     expect(body("portalEntryHTML")).toContain("portalPromptHTML(e)");
     const copy = html.split('"portal-copy-prompt": async (el) => {')[1].split("\n  },")[0];
