@@ -101,11 +101,21 @@ async function subscriberFooter(subscriberId: string): Promise<string> {
   const site = String(brand.site || "www.chikescreativespace.com");
   const contact = String(brand.email || "info@chikescreativespace.com");
   const address = String(brand.postalAddress || "").trim();
+  // "For the latest updates, follow us on ..." - the same fixed row as the newsletter footer (emailFollowBlock() in index.html).
+  const follow = ([["YouTube", brand.youtube, "social-youtube.png"], ["Facebook", brand.facebook, "social-facebook.png"], ["Instagram", brand.instagram, "social-instagram.png"]] as [string, unknown, string][])
+    .filter((l) => String(l[1] ?? "").startsWith("https://"));
+  const followHtml = follow.length
+    ? `<p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#1E2226;">For the latest updates, follow us on</p>` +
+      `<p style="margin:0 0 22px;">` + follow.map((l) =>
+        `<a href="${escapeHtml(String(l[1]))}" style="display:inline-block;margin:4px 9px;color:#1E2226;font-size:14px;font-weight:700;text-decoration:none;">` +
+        `<img src="${escapeHtml(siteOrigin)}/assets/brand/${l[2]}" width="32" height="32" alt="" style="vertical-align:middle;border:0;margin-right:8px;">${l[0]}</a>`).join("") + `</p>`
+    : "";
   const unsubscribe = subscriberId
     ? `${siteOrigin}/#/unsubscribe/${encodeURIComponent(subscriberId)}`
     : siteOrigin;
   const line = "margin:0 0 6px;";
   return `<div style="margin-top:28px;padding-top:18px;border-top:1px solid #dddddd;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#5B6673;text-align:center;">` +
+    followHtml +
     `<p style="${line}"><a href="${escapeHtml(siteOrigin)}" style="color:#1E2226;font-weight:700;text-decoration:none;">${escapeHtml(site)}</a></p>` +
     `<p style="${line}">Questions? <a href="mailto:${escapeHtml(contact)}" style="color:#1E2226;">${escapeHtml(contact)}</a></p>` +
     (address ? `<p style="${line}font-weight:700;">${escapeHtml(address)}</p>` : "") +

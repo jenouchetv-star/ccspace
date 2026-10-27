@@ -2,7 +2,7 @@
 // database and a stubbed Resend, to check what the welcome email contains. Every address is a
 // made-up one on example.test; nothing is sent anywhere (fetch is replaced and only records it).
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resetTables } from "./helpers/fakeSupabase.js";
 
 const ENV = {
@@ -13,7 +13,8 @@ const ENV = {
   SUPABASE_URL: "https://example.test",
   SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
 };
-const BRAND = { postalAddress: "1 Test Street, Testville, TS 00000", email: "info@example.test", site: "www.example.test" };
+const BRAND = { postalAddress: "1 Test Street, Testville, TS 00000", email: "info@example.test", site: "www.example.test",
+  youtube: "https://youtube.example.test/@x", facebook: "https://facebook.example.test/x", instagram: "https://instagram.example.test/x" };
 
 let handler;
 let sent;
@@ -60,6 +61,28 @@ describe("the welcome email", () => {
     expect(mail.html).toContain('href="https://site.example.test/#/unsubscribe/sub-1"');
   });
 
+  it("starts the footer with the follow-us row: YouTube, Facebook and Instagram, with their pictures", async () => {
+    await call(joined);
+    const html = sent[0].html;
+    expect(html).toContain("For the latest updates, follow us on");
+    for (const [url, file, name] of [["https://youtube.example.test/@x", "social-youtube.png", "YouTube"], ["https://facebook.example.test/x", "social-facebook.png", "Facebook"], ["https://instagram.example.test/x", "social-instagram.png", "Instagram"]]) {
+      expect(html).toContain('href="' + url + '"');
+      expect(html).toContain("https://site.example.test/assets/brand/" + file);
+      expect(html).toContain(">" + name + "</a>");
+    }
+    expect(html.indexOf("For the latest updates")).toBeLessThan(html.indexOf("Questions?"));
+  });
+
+  it("leaves out a social link that is not set, or is not an https address", async () => {
+    resetTables({ meta: [{ id: "global", data: { brand: { ...BRAND, facebook: "", instagram: "javascript:alert(1)" } } }] });
+    await call(joined);
+    const html = sent[0].html;
+    expect(html).toContain(">YouTube</a>");
+    expect(html).not.toContain(">Facebook</a>");
+    expect(html).not.toContain(">Instagram</a>");
+    expect(html).not.toContain("javascript:");
+  });
+
   it("has no Email preferences link", async () => {
     await call(joined);
     expect(sent[0].html).not.toMatch(/email preferences/i);
@@ -102,6 +125,16 @@ describe("the welcome email", () => {
 describe("the newsletter footer in index.html", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const shell = html.split("function emailShell(")[1].split("\n}\n")[0];
+
+  it("starts with the follow-us row, built from the Brand settings links, at the top of the footer", () => {
+    const follow = html.split("function emailFollowBlock(")[1].split("\n}\n")[0];
+    expect(follow).toContain("For the latest updates, follow us on");
+    for (const f of ["BRAND.youtube", "BRAND.facebook", "BRAND.instagram", "social-youtube.png", "social-facebook.png", "social-instagram.png"]) expect(follow).toContain(f);
+    expect(follow).toContain('.filter(l => l[1])');                         /* a link that is not set is left out */
+    expect(shell).toContain("+ emailFollowBlock()");
+    expect(shell.indexOf("emailFollowBlock()")).toBeLessThan(shell.indexOf("BRAND.site"));
+    for (const f of ["youtube", "facebook", "instagram"]) expect(existsSync(new URL("../assets/brand/social-" + f + ".png", import.meta.url))).toBe(true);
+  });
 
   it("has the unsubscribe link and no Email preferences link", () => {
     expect(shell).toContain("__UNSUB_URL__");
