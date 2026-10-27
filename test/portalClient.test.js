@@ -509,7 +509,7 @@ describe("the Gravity Four invitation on the home page", () => {
     expect(promo).toContain("Subscribe and play");
     expect(promo).toContain('data-act="open-mailing-list"');                    /* the same sign-up as the nav and footer */
     expect(promo).toContain("Subscribers only content");
-    expect(promo).toContain("<h2 id=\"g4-title\">Play Gravity Four with Chike!</h2>");
+    expect(promo).toContain("<h2 id=\"g4-title\">Play Gravity <em>4</em> with Chike!</h2>");   /* the 4 is in italics */
     expect(promo).toContain("A 3D chip-dropping game made just for newsletter subscribers. Play against Chike, or challenge a friend online. Then make your own game with AI!");
     for (const perk of ["Exclusive content", "Free AI lessons for kids", "Downloadables", "Stories, videos and more"]) expect(promo).toContain(perk);
     expect(promo).toContain('href="#/newsletter"');                              /* people who already have a place in the archive */
