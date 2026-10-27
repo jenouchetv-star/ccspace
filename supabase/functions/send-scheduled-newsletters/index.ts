@@ -16,6 +16,7 @@
 //   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are auto-injected.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { ACCESS_LINK_DAYS, personalizePortalLinks, signAccessKey } from "../_shared/portal.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -118,12 +119,20 @@ Deno.serve(async (req) => {
           throw new Error("No postal mailing address on file - required by law for commercial email. Set one in Admin -> Settings -> Brand settings, then re-save this newsletter so it re-renders with the address.");
         }
 
-        const emails = recipients.map((r) => ({
+        // Links into the members-only portal carry a private key made for
+        // this one recipient (see _shared/portal.ts); with no
+        // PORTAL_LINK_SECRET they go out plain and open the portal's gate.
+        const portalSecret = Deno.env.get("PORTAL_LINK_SECRET") ?? "";
+        const keyExpires = Date.now() + ACCESS_LINK_DAYS * 86_400_000;
+        const emails = await Promise.all(recipients.map(async (r) => ({
           from: RESEND_FROM,
           to: r.email,
           subject: String(n.subject ?? ""),
-          html: emailHtml.split("__UNSUB_URL__").join(`${siteOrigin}/#/unsubscribe/${encodeURIComponent(r.id)}`),
-        }));
+          html: personalizePortalLinks(
+            emailHtml.split("__UNSUB_URL__").join(`${siteOrigin}/#/unsubscribe/${encodeURIComponent(r.id)}`),
+            portalSecret.length >= 24 ? await signAccessKey(portalSecret, r.id, keyExpires) : null,
+          ),
+        })));
 
         for (const batch of chunk(emails, BATCH_SIZE)) {
           const res = await fetch("https://api.resend.com/emails/batch", {

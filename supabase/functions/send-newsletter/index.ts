@@ -42,6 +42,7 @@
 // committing to a real send. Never touches the subscribers table.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { ACCESS_LINK_DAYS, personalizePortalLinks, signAccessKey } from "../_shared/portal.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -132,7 +133,7 @@ Deno.serve(async (req) => {
       return json({ error: "That doesn't look like a valid email address" }, 400);
     }
     const siteOrigin = Deno.env.get("SITE_URL") || req.headers.get("origin") || "https://www.chikescreativespace.com";
-    const testHtml = html.split("__UNSUB_URL__").join(siteOrigin);
+    const testHtml = personalizePortalLinks(html.split("__UNSUB_URL__").join(siteOrigin), null);
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -173,12 +174,21 @@ Deno.serve(async (req) => {
   // recipient, keeps that link inside the designed footer instead of
   // bolting an extra plain paragraph on after it.
   const siteOrigin = Deno.env.get("SITE_URL") || origin || "https://www.chikescreativespace.com";
-  const emails = recipients.map((r) => ({
+  // Links into the members-only portal carry a private key made for this
+  // one recipient (see supabase/functions/_shared/portal.ts). Without a
+  // PORTAL_LINK_SECRET the links go out plain and simply open the portal's
+  // "Join our mailing list" gate.
+  const portalSecret = Deno.env.get("PORTAL_LINK_SECRET") ?? "";
+  const keyExpires = Date.now() + ACCESS_LINK_DAYS * 86_400_000;
+  const emails = await Promise.all(recipients.map(async (r) => ({
     from: RESEND_FROM,
     to: r.email,
     subject,
-    html: html.split("__UNSUB_URL__").join(`${siteOrigin}/#/unsubscribe/${encodeURIComponent(r.id)}`),
-  }));
+    html: personalizePortalLinks(
+      html.split("__UNSUB_URL__").join(`${siteOrigin}/#/unsubscribe/${encodeURIComponent(r.id)}`),
+      portalSecret.length >= 24 ? await signAccessKey(portalSecret, r.id, keyExpires) : null,
+    ),
+  })));
 
   let sent = 0;
   const errors: string[] = [];

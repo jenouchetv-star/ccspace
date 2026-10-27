@@ -1,0 +1,326 @@
+// The site's side of the Newsletter Portal: the rules in assets/lib/portal.js, and how
+// index.html wires the portal in (routes, the gate, the admin screens, sharing).
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import {
+  PORTAL_LAYOUTS, portalEntryUrl, portalReadQuery, portalVideoEmbed, portalSafeUrl, portalParseGallery, portalFormatGallery,
+  portalSlug, portalLinkUrl, portalBookPath, portalValidate, portalGateMessage, portalErrorState, portalEmailOk,
+} from "../assets/lib/portal.js";
+
+const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const body = (name) => html.split("function " + name + "(")[1].split("\nfunction ")[0];
+
+describe("links an entry can embed or offer", () => {
+  it("turns YouTube and Vimeo links into embeds, and refuses every other site", () => {
+    expect(portalVideoEmbed("https://www.youtube.com/watch?v=dQw4w9WgXcQ")).toBe("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0");
+    expect(portalVideoEmbed("https://youtu.be/dQw4w9WgXcQ?t=4")).toBe("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0");
+    expect(portalVideoEmbed("https://www.youtube.com/shorts/dQw4w9WgXcQ")).toBe("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0");
+    expect(portalVideoEmbed("dQw4w9WgXcQ")).toBe("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0");
+    expect(portalVideoEmbed("https://vimeo.com/123456789")).toBe("https://player.vimeo.com/video/123456789");
+    for (const bad of ["", "https://evil.example/watch?v=dQw4w9WgXcQ", "http://youtu.be/dQw4w9WgXcQ", "https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ", "javascript:alert(1)", "https://vimeo.com/abc", null]) {
+      expect(portalVideoEmbed(bad)).toBeNull();
+    }
+  });
+
+  it("only accepts https links or files on this site for downloads and games", () => {
+    expect(portalSafeUrl("https://example.com/book.pdf")).toBe("https://example.com/book.pdf");
+    expect(portalSafeUrl("games/new-game.html")).toBe("games/new-game.html");
+    expect(portalSafeUrl("assets/ebooks/a-b_c.pdf")).toBe("assets/ebooks/a-b_c.pdf");
+    expect(portalSafeUrl("books/reader.html?story=my-book")).toBe("books/reader.html?story=my-book");
+    expect(portalBookPath({ bookId: "story-question-mark" })).toBe("books/reader.html?story=story-question-mark");
+    expect(portalBookPath({ bookId: "x", bookPath: "books/reader.html?story=y" })).toBe("books/reader.html?story=y");
+    expect(portalBookPath({ bookId: "../etc" })).toBe("");
+    expect(portalBookPath({})).toBe("");
+    for (const bad of ["", "javascript:alert(1)", "data:text/html,hi", "http://example.com/x", "//evil.example/x", "../secret", "games/../../x", "https://a b.test", "ftp://x.test/y", "https://x.test/\"onload=\""]) {
+      expect(portalSafeUrl(bad)).toBe("");
+    }
+  });
+
+  it("reads and writes the one-photo-per-line gallery format", () => {
+    const lines = ["a.jpg | Chike painting | Day one", "b.jpg | A rocket", "c.jpg", "  ", " | no picture"];
+    expect(portalParseGallery(lines)).toEqual([
+      { src: "a.jpg", alt: "Chike painting", caption: "Day one" },
+      { src: "b.jpg", alt: "A rocket", caption: "" },
+      { src: "c.jpg", alt: "", caption: "" },
+    ]);
+    expect(portalParseGallery("x.jpg | y\nz.jpg")).toHaveLength(2);
+    expect(portalFormatGallery(portalParseGallery(lines))).toEqual(["a.jpg | Chike painting | Day one", "b.jpg | A rocket", "c.jpg"]);
+    expect(portalParseGallery(undefined)).toEqual([]);
+  });
+
+  it("makes tidy page addresses", () => {
+    expect(portalSlug("Spring Update: Big News & Games!")).toBe("spring-update-big-news-and-games");
+    expect(portalSlug("   ")).toBe("");
+    expect(portalSlug("x".repeat(90)).length).toBe(60);
+  });
+});
+
+describe("sharing and one-time links", () => {
+  it("shares the plain page address, never a private key", () => {
+    expect(portalEntryUrl("https://www.example.test/", { slug: "spring-update" })).toBe("https://www.example.test/newsletter/spring-update");
+    expect(portalEntryUrl("https://www.example.test", { id: "abc" })).toBe("https://www.example.test/newsletter/abc");
+    expect(portalEntryUrl("https://www.example.test", { slug: "a" })).not.toMatch(/[?&](k|v)=/);
+  });
+
+  it("notices the verification link and the newsletter key in the address", () => {
+    expect(portalReadQuery({ v: "tok" })).toEqual({ verify: "tok", key: "", hasSecret: true });
+    expect(portalReadQuery({ k: "key.sig" })).toEqual({ verify: "", key: "key.sig", hasSecret: true });
+    expect(portalReadQuery({})).toEqual({ verify: "", key: "", hasSecret: false });
+    expect(portalReadQuery(undefined).hasSecret).toBe(false);
+  });
+});
+
+describe("what an entry needs before it can be published", () => {
+  const base = { title: "T", description: "D", category: "Stories", publishedAt: "2026-10-01", cover: { src: "a.jpg", alt: "alt" }, layout: "article", body: "<p>Hi</p>" };
+  const errors = (e, others) => portalValidate(e, others).filter((v) => v.level === "error").map((v) => v.field);
+
+  it("accepts a complete entry in each of the five layouts", () => {
+    expect(PORTAL_LAYOUTS.map((l) => l.id)).toEqual(["article", "video", "game", "ebook", "gallery"]);
+    expect(errors(base)).toEqual([]);
+    expect(errors({ ...base, layout: "video", body: "", videoUrl: "https://youtu.be/dQw4w9WgXcQ" })).toEqual([]);
+    expect(errors({ ...base, layout: "game", body: "", gamePath: "games/new.html" })).toEqual([]);
+    expect(errors({ ...base, layout: "ebook", body: "", bookId: "story-question-mark" })).toEqual([]);
+    expect(errors({ ...base, layout: "ebook", body: "", bookPath: "books/reader.html?story=my-new-book" })).toEqual([]);
+    expect(errors({ ...base, layout: "gallery", body: "", gallery: ["a.jpg | alt"] })).toEqual([]);
+  });
+
+  it("asks for the basics: title, description, category, a real date", () => {
+    expect(errors({ layout: "article", body: "x" })).toEqual(["title", "description", "category", "publishedAt"]);
+    expect(errors({ ...base, publishedAt: "soon" })).toEqual(["publishedAt"]);
+  });
+
+  it("asks for alt text with a cover, and warns when there is no cover", () => {
+    expect(errors({ ...base, cover: { src: "a.jpg", alt: "" } })).toEqual(["cover.alt"]);
+    expect(portalValidate({ ...base, cover: { src: "", alt: "" } }).filter((v) => v.level === "warn").map((v) => v.field)).toContain("cover.src");
+  });
+
+  it("asks for what each layout shows", () => {
+    expect(errors({ ...base, layout: "article", body: " " })).toEqual(["body"]);
+    expect(errors({ ...base, layout: "video", videoUrl: "" })).toEqual(["videoUrl"]);
+    expect(errors({ ...base, layout: "video", videoUrl: "https://example.com/v.mp4" })).toEqual(["videoUrl"]);
+    expect(errors({ ...base, layout: "game", gamePath: "" })).toEqual(["gamePath"]);
+    expect(errors({ ...base, layout: "game", gamePath: "javascript:alert(1)" })).toEqual(["gamePath"]);
+    expect(errors({ ...base, layout: "ebook" })).toEqual(["bookId"]);
+    expect(errors({ ...base, layout: "ebook", bookPath: "javascript:alert(1)" })).toEqual(["bookId"]);
+    expect(errors({ ...base, layout: "gallery", gallery: [] })).toEqual(["gallery"]);
+  });
+
+  it("accepts an extra button only with a label, a link, and a safe link", () => {
+    expect(portalLinkUrl("https://example.com/x")).toBe("https://example.com/x");
+    expect(portalLinkUrl("/play")).toBe("/play");
+    expect(portalLinkUrl("mailto:hi@example.com")).toBe("mailto:hi@example.com");
+    for (const bad of ["", "//evil.example", "javascript:alert(1)", "http://example.com", "play", "data:text/html,x", "https://a b.test"]) expect(portalLinkUrl(bad)).toBe("");
+    expect(errors({ ...base, buttonLabel: "More games" })).toEqual(["buttonUrl"]);
+    expect(errors({ ...base, buttonLabel: "More", buttonUrl: "javascript:alert(1)" })).toEqual(["buttonUrl"]);
+    expect(errors({ ...base, buttonLabel: "More games", buttonUrl: "/play" })).toEqual([]);
+  });
+
+  it("keeps page addresses unique and well formed", () => {
+    expect(errors({ ...base, id: "1", slug: "taken" }, [{ id: "2", slug: "taken" }])).toEqual(["slug"]);
+    expect(errors({ ...base, id: "1", slug: "mine" }, [{ id: "1", slug: "mine" }, { id: "2", slug: "other" }])).toEqual([]);
+    expect(errors({ ...base, slug: "Bad Slug!" })).toEqual(["slug"]);
+  });
+});
+
+describe("what the gate says", () => {
+  const states = ["loading", "verifying", "sent", "consent_sent", "needs_consent", "invalid_email", "consent_required", "expired", "used", "invalid", "not_subscribed", "rate_limited", "send_failed", "ended", "error"];
+
+  it("has plain words for every situation: loading, success, bad email, expired link and errors", () => {
+    for (const s of states) {
+      const m = portalGateMessage(s, "me@example.test");
+      expect(m.title.length).toBeGreaterThan(3);
+      expect(m.text.length).toBeGreaterThan(10);
+    }
+    expect(portalGateMessage("sent", "me@example.test").text).toContain("me@example.test");
+    expect(portalGateMessage("expired").text).toMatch(/30 minutes/);
+  });
+
+  it("announces problems assertively and progress politely", () => {
+    for (const s of ["invalid_email", "expired", "used", "invalid", "not_subscribed", "rate_limited", "send_failed", "error", "consent_required"]) expect(portalGateMessage(s).tone).toBe("assertive");
+    for (const s of ["loading", "verifying", "sent", "consent_sent", "needs_consent", "ended"]) expect(portalGateMessage(s).tone).toBe("polite");
+  });
+
+  it("maps server answers to those states, and anything unexpected to a general error", () => {
+    for (const code of ["invalid_email", "expired", "used", "invalid", "not_subscribed", "rate_limited", "send_failed"]) expect(portalErrorState(code)).toBe(code);
+    for (const code of ["server_error", "no_session", "", undefined, "<script>"]) expect(portalErrorState(code)).toBe("error");
+  });
+
+  it("checks an email before sending it", () => {
+    expect(portalEmailOk(" me@example.test ")).toBe(true);
+    for (const bad of ["", "me", "me@", "me@example", "me @example.test", "a@b@c.test"]) expect(portalEmailOk(bad)).toBe(false);
+  });
+});
+
+describe("how the site wires the portal in", () => {
+  it("has the archive at /newsletter and each entry at /newsletter/<address>", () => {
+    expect(html).toContain('newsletter:"newsletter" };');
+    expect(html).toContain('case "newsletter":        return viewNewsletter();');
+    expect(html).toContain('case "newsletter-detail": return viewNewsletterEntry(p.id);');
+  });
+
+  it("checks the visitor before anything else, and shows only placeholder shapes until they are verified", () => {
+    const index = body("viewNewsletter");
+    expect(index.indexOf("portalKick()")).toBeGreaterThan(-1);
+    expect(index).toContain("return portalDecoy();");
+    // the real entries are only reachable inside the admin or ready branches
+    expect(index.indexOf("return portalDecoy();")).toBeLessThan(index.indexOf("portalCard"));
+    const decoy = body("portalDecoy");
+    expect(decoy).not.toMatch(/E\(|PortalState|db\.list/);
+    expect(decoy).toContain('aria-hidden="true"');
+    const entry = body("viewNewsletterEntry");
+    expect(entry.indexOf("return portalDecoy();")).toBeLessThan(entry.indexOf("PortalState.detail[slug]"));
+  });
+
+  it("never puts entries in the page for an unverified visitor: the list and entries come only from the portal function", () => {
+    expect(html).toContain('portalCall("list", { session: P.session })');
+    expect(html).toContain('portalCall("entry", { session: P.session, slug: slug })');
+    expect(html).not.toMatch(/sb\.from\("portal_entries"\)/);
+    expect(html).toContain('portalEntries: "portal_entries"');
+  });
+
+  it("builds the gate as a dialog that cannot be dismissed, with a way back to the public site", () => {
+    const gate = body("portalGateHTML");
+    expect(gate).toContain('role="dialog" aria-modal="true"');
+    expect(gate).toContain("Join our mailing list");
+    expect(gate).toContain("Back to the public website");
+    expect(gate).toContain('type="email"');
+    expect(gate).toContain('for="pg-email"');
+    expect(gate).toContain('autocomplete="email"');
+    expect(gate).not.toMatch(/close-modal|sheet-close|data-act="portal-close"/);
+    const keys = body("portalGateKeys");
+    expect(keys).toContain('ev.key === "Escape"');
+    expect(keys).toContain("preventDefault()");
+    const sync = body("portalSync");
+    expect(sync).toContain("app.inert = true");
+    expect(sync).toContain("preventScroll");
+    expect(html).toContain("backdrop-filter:blur(26px)");
+  });
+
+  it("offers Try again when the members' corner cannot be reached, without losing a saved session", () => {
+    expect(body("portalGateHTML")).toContain('data-act="portal-retry"');
+    expect(html).toContain('"portal-retry": () => { PortalState.phase = "idle"; PortalState.gate.state = "idle"; rerender(); },');
+    expect(body("portalBoot")).toContain('return portalSetGate({ state: "error", step: "email" });');
+  });
+
+  it("asks a newcomer for explicit consent before subscribing them", () => {
+    const gate = body("portalGateHTML");
+    expect(gate).toContain('name="consent"');
+    expect(gate).toContain("I agree to get occasional emails");
+    expect(body("portalSubmit")).toContain('g.step === "consent" && !consent');
+    expect(body("portalSubmit")).toContain("consent_required");
+  });
+
+  it("keeps a verified session in the browser and tidies the address after using a one-time link", () => {
+    expect(html).toContain('const PORTAL_SESSION_KEY = "ccs_portal_session";');
+    expect(body("portalScrub")).toContain('history.replaceState({}, "", location.pathname)');
+    const boot = body("portalBoot");
+    expect(boot.indexOf('portalCall("verify"')).toBeLessThan(boot.indexOf('portalCall("exchange"'));
+    expect(boot.indexOf('portalCall("exchange"')).toBeLessThan(boot.indexOf('portalCall("session"'));
+  });
+
+  it("lets signed-in admins straight in, with a bar to manage entries", () => {
+    expect(body("portalIsAdmin")).toContain("isAuthed() && isActiveAdmin()");
+    expect(body("viewNewsletter")).toContain("const admin = portalIsAdmin();");
+    expect(body("portalAdminBar")).toContain("#/admin/portalEntries");
+    expect(body("portalSync")).toContain("!portalIsAdmin()");
+  });
+
+  it("shares every entry by its plain address, in a button on the page", () => {
+    const page = body("portalEntryHTML");
+    expect(page).toContain('data-act="share"');
+    expect(page).toContain("portalEntryUrl(location.origin, e)");
+    expect(page).not.toMatch(/[?&]k=|\?v=/);
+    expect((page.match(/data-act="share"/g) || []).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("has a layout for each content type", () => {
+    const page = body("portalEntryHTML");
+    for (const fn of ["portalVideoHTML", "portalGameHTML", "portalEbookHTML", "portalGalleryHTML"]) expect(page).toContain(fn + "(e)");
+    expect(body("portalGameHTML")).toContain('data-act="portal-play"');
+    expect(body("portalGameHTML")).toContain('sandbox="allow-scripts allow-same-origin allow-popups"');
+    // ebooks here are interactive picture books, free to read in the site's own reader - not downloads
+    expect(body("portalEbookHTML")).toContain("Open the book");
+    expect(body("portalEbookHTML")).toContain('data-act="portal-play"');
+    expect(body("portalEbookHTML")).not.toMatch(/download|Buy it|price/i);
+    expect(html).not.toContain('accept:".pdf,.epub"');
+    expect(body("portalGalleryHTML")).toContain('data-act="portal-photo"');
+  });
+
+  it("is in the admin portal: a manager, an Open the portal door, Publish / Unpublish and a layout switch", () => {
+    expect(html).toContain('{ hash:"#/admin/portalEntries",  label:"Portal content"');
+    expect(html).toContain('{ hash:"#/newsletter",           label:"Open the portal"');
+    expect(html).toContain('"collections","mediaAssets","portalEntries"];');
+    expect(html).toContain('data-act="portal-toggle"');
+    expect(html).toContain('" Unpublish" : " Publish"');
+    expect(html).toContain('type:"layoutpick"');
+    expect(html).toContain('portalEntries: r => "#/newsletter/" + (r.slug || r.id)');
+    expect(html).toContain('"portalEntries"];\nconst BACKED_COLLECTIONS');
+  });
+
+  it("has a simple editor: pick what you are sharing, fill in only what that needs, then Save draft or Publish", () => {
+    const editor = body("openPortalEditor");
+    expect(body("openEditor")).toContain('if (col === "portalEntries") return openPortalEditor(id);');
+    expect(editor).toContain("More options");
+    expect(editor).toContain('data-act="portal-save" data-status="draft"');
+    expect(editor).toContain('data-act="portal-save" data-status="published"');
+    expect(editor).toContain("Unpublish");
+    expect(editor).not.toContain("Workflow status");
+    const fields = html.split("  portalEntries: [")[1].split("  ],")[0];
+    expect(fields.indexOf('key:"layout"')).toBeLessThan(fields.indexOf('key:"title"'));
+    // the address, date and category are tucked away, not in the way
+    for (const k of ["category", "publishedAt", "slug"]) {
+      const line = fields.split("\n").find((l) => l.includes('key:"' + k + '"'));
+      expect(line).toContain("more:true");
+    }
+    expect(html).toContain('"portal-pick-layout": (el) => {');
+  });
+
+  it("lists photos as rows with a picture and a description, not a pipe-separated box", () => {
+    expect(body("portalPhotoRow")).toContain("Say what is in this photo");
+    expect(html).toContain('type:"photos"');
+    expect(html).toContain('data-act="portal-photos-add"');
+  });
+
+  it("keeps the portal's content, its emails and its subscribers together in one Newsletter section", () => {
+    const nav = html.split("const ADMIN_NAV = [")[1].split("\n];")[0];
+    const group = nav.split('{ heading:"Newsletter"')[1].split("{ heading:")[0];
+    for (const label of ["Portal content", "Emails", "Subscribers", "Open the portal"]) expect(group).toContain('label:"' + label + '"');
+    expect(nav.split('{ heading:"Operations"')[1].split("{ heading:")[0]).not.toMatch(/Newsletters|Subscribers|portalEntries/);
+    // the three screens share one bar of links
+    const tabs = body("newsletterTabs");
+    for (const hash of ["#/admin/portalEntries", "#/admin/send-newsletter", "#/admin/subscribers", "#/newsletter"]) expect(tabs).toContain(hash);
+    expect(html).toContain('body = newsletterTabs(section) + body;');
+  });
+
+  it("writes the portal content and its email in one form, and prepares the email when the entry is published", () => {
+    const editor = body("openPortalEditor");
+    expect(editor).toContain("The email that goes with it");
+    expect(editor).toContain('fields.find(f => f.key === "email.on")');
+    expect(editor).toContain("Nothing is sent until you say so.");
+    const prep = body("portalPrepareEmail");
+    expect(prep).toContain('?k=__ACCESS_KEY__');
+    expect(prep).toContain('status: "draft"');           // a draft to review, never a send
+    expect(prep).not.toContain('invoke("send-newsletter"');
+    expect(prep).toContain('prior.status !== "draft"');  // a sent email is never rewritten
+    expect(html).toContain('saved.status === "published" && await portalPrepareEmail(saved)');
+    expect(html).toContain('{ id:"portal", label:"New in the Newsletter Archive"');
+    // blank email boxes fall back to the entry itself
+    expect(prep).toContain("entry.title");
+    expect(prep).toContain("entry.description");
+  });
+
+  it("lets an entry carry an extra button and choose whether its text comes first", () => {
+    expect(body("portalExtraButton")).toContain("portalLinkUrl(e.buttonUrl)");
+    expect(body("portalEntryHTML")).toContain('e.textFirst === "before" ? text + media : media + text');
+  });
+
+  it("puts each subscriber's private key in newsletters", () => {
+    expect(body("emailShell")).toContain("/newsletter?k=__ACCESS_KEY__");
+    expect(html).toContain('data-act="nl-portal-link"');
+    expect(html).toContain('"?k=__ACCESS_KEY__"');
+  });
+
+  it("is kept out of search engines", () => {
+    expect(html).toContain('<meta name="robots" content="noindex, nofollow">');
+  });
+});

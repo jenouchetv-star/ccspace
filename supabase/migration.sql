@@ -1126,3 +1126,110 @@ alter table moderation_settings enable row level security;
 grant select, insert, update, delete on moderation_settings to authenticated;
 drop policy if exists "admin only" on moderation_settings;
 create policy "admin only" on moderation_settings for all to authenticated using (is_active_admin()) with check (is_active_admin());
+
+-- =====================================================================
+-- NEWSLETTER PORTAL - identical to supabase/newsletter-portal.sql, which is
+-- what to run on the live project (do NOT re-run this whole file there).
+-- =====================================================================
+-- Chike's Creative Space - Newsletter Portal (the members-only archive)
+--
+-- Run this once in the Supabase SQL Editor (it is safe to run again). Nothing
+-- here changes an existing table.
+--
+-- What it adds:
+--
+--   portal_entries   the archive itself. Written and read by active admins only.
+--                    A subscriber never reads this table: the `portal` Edge
+--                    Function reads it with the service role, and only after
+--                    it has checked the visitor's verified session. That is
+--                    what keeps the exclusive content from ever being sent to
+--                    a browser that has not been verified - nothing about it
+--                    is hidden with CSS.
+--
+--   portal_tokens    one-time verification links (emailed) - only a SHA-256
+--                    of each token is stored. Expire after 30 minutes.
+--   portal_sessions  verified sessions (30 days) - again only a SHA-256 of the
+--                    token the browser holds.
+--
+-- portal_tokens and portal_sessions have row level security switched on and
+-- NO policy, and all privileges are taken away from the public roles, so
+-- neither the anon key nor a signed-in admin's browser can read or write
+-- them. Only the Edge Function (service role) can.
+
+create table if not exists portal_entries (
+  id text primary key,
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table portal_entries enable row level security;
+grant select, insert, update, delete on portal_entries to authenticated;
+revoke all on portal_entries from anon;
+drop policy if exists "admin only" on portal_entries;
+create policy "admin only" on portal_entries for all to authenticated
+  using (is_active_admin()) with check (is_active_admin());
+
+create table if not exists portal_tokens (
+  token_hash text primary key,
+  purpose text not null check (purpose in ('login', 'subscribe')),
+  subscriber_id text not null,
+  email_hash text not null,
+  ip_hash text not null default '',
+  next_path text not null default '/newsletter',
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  used_at timestamptz
+);
+create index if not exists portal_tokens_email_idx on portal_tokens (email_hash, created_at);
+create index if not exists portal_tokens_ip_idx on portal_tokens (ip_hash, created_at);
+alter table portal_tokens enable row level security;
+revoke all on portal_tokens from anon, authenticated;
+
+create table if not exists portal_sessions (
+  token_hash text primary key,
+  subscriber_id text not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+create index if not exists portal_sessions_sub_idx on portal_sessions (subscriber_id);
+alter table portal_sessions enable row level security;
+revoke all on portal_sessions from anon, authenticated;
+
+-- Housekeeping, called by the Edge Function now and then: forgets links and
+-- sessions that ran out more than a week ago.
+create or replace function portal_cleanup() returns void
+language sql security definer set search_path = public as $$
+  delete from portal_tokens where expires_at < now() - interval '7 days';
+  delete from portal_sessions where expires_at < now() - interval '7 days';
+$$;
+revoke all on function portal_cleanup() from public, anon, authenticated;
+
+-- =====================================================================
+-- GAME FILES - identical to supabase/game-files.sql (run that one on the live project).
+-- =====================================================================
+-- Chike's Creative Space - game_files (games added from pasted code in the admin Copilot)
+--
+-- Run once in the Supabase SQL Editor (safe to run again). Changes no existing table.
+--
+-- Why a separate table: the `games` table is read by every visitor on every page load, so a
+-- game's code (often hundreds of kilobytes) must not live in it. A game added from pasted code
+-- keeps only its listing in `games` (title, summary, rules...) with hasFile = true, and its code
+-- here, fetched only when someone presses Play.
+--
+--   Anyone can read a game's code (it is the game; the site serves it to every player).
+--   Only an active admin can add, change or remove one.
+
+create table if not exists game_files (
+  id text primary key,
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table game_files enable row level security;
+grant select on game_files to anon, authenticated;
+grant insert, update, delete on game_files to authenticated;
+drop policy if exists "anyone can read" on game_files;
+create policy "anyone can read" on game_files for select to anon, authenticated using (true);
+drop policy if exists "admin writes" on game_files;
+create policy "admin writes" on game_files for all to authenticated
+  using (is_active_admin()) with check (is_active_admin());
