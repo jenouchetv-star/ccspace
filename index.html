@@ -3520,7 +3520,8 @@ if (typeof window.supabase === "undefined") {
   import * as Portal from "./assets/lib/portal.js";
   import * as WriterLib from "./assets/lib/writer.js";
   import * as CopilotLib from "./assets/lib/copilot.js";
-  Object.assign(window, ActivityFinder, AcceptInvite, Mfa, PlayAll, Portal);
+  import * as Shares from "./assets/lib/shares.js";
+  Object.assign(window, ActivityFinder, AcceptInvite, Mfa, PlayAll, Portal, Shares);
   window.WriterLib = WriterLib;
   window.CopilotLib = CopilotLib;
 </script>
@@ -6286,18 +6287,29 @@ function newsletterGate(form){
   return "";
 }
 
+/** Counts one share, anonymously (see supabase/share-events.sql and assets/lib/shares.js): the page's path,
+    its title and how it was shared - nothing about who. Never slows or breaks sharing: it is fired and forgotten,
+    and skipped while an admin is signed in or on a local or file preview, so testing never inflates the numbers. */
+function recordShare(url, title, method){
+  try {
+    if (isActiveAdmin() || location.protocol === "file:" || /^(localhost|127\.|\[::1\])/.test(location.hostname)) return;
+    const row = shareEvent(url, title, method, location.origin);
+    if (row) sb.from("share_events").insert(row).then(() => {}, () => {});
+  } catch(_e){ /* counting is a nice-to-have; sharing must always work */ }
+}
+
 /** The in-app share sheet, opened for any "data-act=share" control - a
     copyable link plus a few social send-to links, so sharing never depends
     on the visitor's browser having navigator.share(). */
 function shareModalHTML(url, title){
   const enc = encodeURIComponent;
   const links = [
-    { label:"Facebook", icon:"facebook", href:"https://www.facebook.com/sharer/sharer.php?u=" + enc(url) },
-    { label:"Messenger", icon:"zap", href:"fb-messenger://share/?link=" + enc(url) },
-    { label:"X", icon:"twitter", href:"https://twitter.com/intent/tweet?url=" + enc(url) + "&text=" + enc(title) },
-    { label:"Pinterest", icon:"pin", href:"https://www.pinterest.com/pin/create/button/?url=" + enc(url) + "&description=" + enc(title) },
-    { label:"WhatsApp", icon:"phone", href:"https://wa.me/?text=" + enc(title + " " + url) },
-    { label:"Email", icon:"mail", href:"mailto:?subject=" + enc(title) + "&body=" + enc(url) }
+    { key:"facebook", label:"Facebook", icon:"facebook", href:"https://www.facebook.com/sharer/sharer.php?u=" + enc(url) },
+    { key:"messenger", label:"Messenger", icon:"zap", href:"fb-messenger://share/?link=" + enc(url) },
+    { key:"x", label:"X", icon:"twitter", href:"https://twitter.com/intent/tweet?url=" + enc(url) + "&text=" + enc(title) },
+    { key:"pinterest", label:"Pinterest", icon:"pin", href:"https://www.pinterest.com/pin/create/button/?url=" + enc(url) + "&description=" + enc(title) },
+    { key:"whatsapp", label:"WhatsApp", icon:"phone", href:"https://wa.me/?text=" + enc(title + " " + url) },
+    { key:"email", label:"Email", icon:"mail", href:"mailto:?subject=" + enc(title) + "&body=" + enc(url) }
   ];
   /* On a phone or tablet the device's own share sheet is the best way to send something to the people in
      your contacts (Messages, WhatsApp, Mail and whatever else is installed), so it comes first. It only
@@ -6308,17 +6320,17 @@ function shareModalHTML(url, title){
     ? '<button type="button" class="btn btn--cyan btn--lg" style="width:100%;margin-bottom:16px" data-act="share-native" data-url="' + E(url) + '" data-title="' + E(title) + '">'
       + ic("send") + ' Share with my contacts</button>'
     : "";
-  if (touch) links.unshift({ label:"Text message", icon:"message-square", href:"sms:?&body=" + enc(title + " " + url) });
+  if (touch) links.unshift({ key:"text", label:"Text message", icon:"message-square", href:"sms:?&body=" + enc(title + " " + url) });
   return '<h3 style="margin:0 0 4px;font-size:1.4rem">Share</h3>'
     + '<p class="tiny mute" style="margin:0 0 16px">' + E(title) + '</p>'
     + nativeBtn
     + '<div class="row" style="gap:10px;flex-wrap:nowrap;margin-bottom:18px">'
     + '<input class="inp" id="share-url" readonly value="' + E(url) + '" style="flex:1">'
-    + '<button type="button" class="btn btn--cyan" data-act="share-copy" data-url="' + E(url) + '">' + ic("copy") + ' Copy</button>'
+    + '<button type="button" class="btn btn--cyan" data-act="share-copy" data-url="' + E(url) + '" data-title="' + E(title) + '">' + ic("copy") + ' Copy</button>'
     + '</div>'
     + '<div class="row" style="gap:10px;flex-wrap:wrap">'
-    + links.map(l => '<a class="btn btn--paper btn--sm" href="' + E(l.href) + '" target="_blank" rel="noopener noreferrer">' + ic(l.icon) + " " + E(l.label) + '</a>').join("")
-    + '<button type="button" class="btn btn--paper btn--sm" data-act="share-instagram" data-url="' + E(url) + '">' + ic("instagram") + ' Instagram</button>'
+    + links.map(l => '<a class="btn btn--paper btn--sm" href="' + E(l.href) + '" target="_blank" rel="noopener noreferrer" data-share="' + l.key + '" data-url="' + E(url) + '" data-title="' + E(title) + '">' + ic(l.icon) + " " + E(l.label) + '</a>').join("")
+    + '<button type="button" class="btn btn--paper btn--sm" data-act="share-instagram" data-url="' + E(url) + '" data-title="' + E(title) + '">' + ic("instagram") + ' Instagram</button>'
     + '</div>'
     + '<p class="tiny mute" style="margin-top:14px">Instagram does not support pre-filled links - "Instagram" copies the link so you can paste it into a DM or story.</p>'
     + '<div class="modal__foot"><button type="button" class="btn btn--ghost" data-act="close-modal">Close</button></div>';
@@ -7056,6 +7068,7 @@ const AppState = {
     moderationTermsShown:25,
     storageUsage:{ status:"idle", totalBytes:0, fileCount:0, largest:[] }, quickUpdate:{ log:[], panelOpen:false, selectedRegion:null },
     analytics:{ status:"idle", days:7, data:null, error:"" },
+    shares:{ status:"idle", days:7, rows:[], error:"" },
     worldMap:{ status:"idle", svg:"" },
     newsletterCompose:{ editingId:null, templateId:null, mode:"now", scheduledAt:"",
       subject:"", previewText:"", heroLabel:"", headline:"", heroImage:{src:"",alt:""}, intro:"",
@@ -9623,7 +9636,7 @@ function gravityFourPromoHTML(){
     + '<button type="button" class="btn btn--sun btn--sm" data-act="open-mailing-list">' + ic("mail") + ' Subscribe and play</button>'
     + '<a class="btn btn--paper btn--sm" href="#/newsletter">' + ic("log-in") + ' Already subscribed? Play</a>'
     + '</div>'
-    + '<p class="tiny mute g4promo__fine">Free mailing list: one email a month, unsubscribe any time. Kids, ask a grown-up before using AI.</p>'
+    + '<p class="tiny mute g4promo__fine">It’s free to subscribe! Unsubscribe at any time. Kids, please ask a grown-up before you use AI.</p>'
     + '</div>'
     + '<div class="taped g4promo__pic"><picture>'
     + '<source media="(prefers-reduced-motion: reduce)" srcset="assets/games/gravity-four.webp">'
@@ -15141,9 +15154,64 @@ function storageLargestFilesCardHTML(){
    Function so every admin can see it inside this portal - not just
    whoever has a login to the Cloudflare account itself. Same idle ->
    loading -> loaded/error lifecycle as loadStorageUsage() above. */
+/** The anonymous share counts for the last `days` days (see supabase/share-events.sql). Loaded on its own, so
+    the Analytics page still works when Cloudflare's numbers fail, and the other way round. */
+async function loadShares(days){
+  AppState.admin.shares = { status:"loading", days:days, rows:[], error:"" };
+  try {
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+    const res = await sb.from("share_events").select("path, title, method, created_at")
+      .gte("created_at", since).order("created_at", { ascending:false }).limit(10000);
+    if (res.error) throw new Error(res.error.message);
+    AppState.admin.shares = { status:"loaded", days:days, rows:res.data || [], error:"" };
+  } catch(err){
+    AppState.admin.shares = { status:"error", days:days, rows:[], error: err.message || String(err) };
+  }
+  rerender();
+}
+/** The "Shared content" card: what visitors pass on the most, how many times, and by which route. */
+function adminSharesCard(){
+  const s = AppState.admin.shares;
+  const head = '<div class="row-between" style="flex-wrap:wrap;gap:10px"><div>'
+    + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("share-2") + 'Shared content</h3>'
+    + '<p class="admin-meta" style="margin:2px 0 0">What visitors pass on the most. Counted each time someone uses a Share option: only the page and how, never who.</p></div>';
+  if (s.status === "idle" || s.status === "loading") return '<div class="admin-card" style="margin-bottom:20px">' + head + '</div><p class="admin-meta">Loading shares...</p></div>';
+  if (s.status === "error"){
+    const missing = /share_events|relation|schema cache/i.test(s.error);
+    return '<div class="admin-card" style="margin-bottom:20px">' + head + '</div>'
+      + '<p class="admin-meta" style="margin-top:10px">' + (missing ? "The share counter is not set up yet. Run supabase/share-events.sql once in the Supabase SQL editor." : "Could not load shares: " + E(s.error)) + '</p></div>';
+  }
+  const sum = summarizeShares(s.rows);
+  if (!sum.total) return '<div class="admin-card" style="margin-bottom:20px">' + head + '</div>'
+    + '<p class="admin-meta" style="margin-top:10px">No shares recorded in the last ' + plural(s.days, "day") + '. Counting started once the share counter went live, so earlier shares are not included.</p></div>';
+  const max = sum.byContent[0].count;
+  const top = sum.byContent.slice(0, 10);
+  const stat = (label, value, note) => '<div><div class="admin-meta" style="text-transform:uppercase;letter-spacing:.07em;font-size:.66rem;font-weight:800;margin:0">' + E(label) + '</div>'
+    + '<div style="font-size:1.5rem;font-weight:800;font-family:var(--admin-font-mono);line-height:1.2;margin-top:4px">' + E(value) + '</div>'
+    + '<div class="admin-meta" style="margin:2px 0 0">' + E(note) + '</div></div>';
+  return '<div class="admin-card" style="margin-bottom:20px">' + head
+    + '<span class="admin-chip admin-chip--info">' + ic("share-2") + ' ' + plural(sum.total, "share") + '</span></div>'
+    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px;margin:16px 0">'
+    + stat("Total shares", sum.total.toLocaleString(), "in the last " + plural(s.days, "day"))
+    + stat("Most shared", top[0].title, plural(top[0].count, "share") + " (" + sharePct(top[0].count, sum.total) + ")")
+    + stat("Favourite way", sum.byMethod[0].label, plural(sum.byMethod[0].count, "share") + " (" + sharePct(sum.byMethod[0].count, sum.total) + ")")
+    + '</div>'
+    + '<div class="grid" style="grid-template-columns:1.6fr 1fr;gap:24px;align-items:start;padding-top:14px;border-top:1px solid var(--admin-border)">'
+    + '<div><div class="admin-meta" style="font-weight:700;margin:0 0 8px">Most shared pages</div>'
+    + top.map((p, i) => '<div style="margin-bottom:12px"><div class="row-between" style="gap:10px">'
+        + '<span style="font-size:.84rem;font-weight:700;min-width:0;overflow-wrap:anywhere">' + (i + 1) + '. ' + E(p.title) + '</span>'
+        + '<span class="t-mono" style="font-size:.8rem;font-weight:700;flex:none">' + p.count.toLocaleString() + '</span></div>'
+        + '<div style="height:8px;margin:5px 0 3px;background:var(--admin-surface-2)"><div style="height:100%;width:' + Math.max(3, p.count / max * 100).toFixed(1) + '%;background:var(--admin-info)"></div></div>'
+        + '<div class="admin-meta" style="margin:0;font-size:.72rem">' + E(p.path) + ' · ' + p.methods.map(m => E(m.label) + " " + m.count).join(" · ") + '</div></div>').join("")
+    + '</div>'
+    + '<div><div class="admin-meta" style="font-weight:700;margin:0 0 8px">How it was shared</div>'
+    + sum.byMethod.map(m => '<div class="row-between" style="padding:6px 0;border-bottom:1px solid var(--admin-border);font-size:.84rem"><span>' + E(m.label) + '</span><span class="t-mono" style="font-weight:700">' + m.count.toLocaleString() + '</span></div>').join("")
+    + '</div></div></div>';
+}
 async function loadAnalytics(days){
   AppState.admin.analytics.status = "loading";
   AppState.admin.analytics.days = days;
+  loadShares(days);
   rerender();
   try {
     const res = await sb.functions.invoke("get-site-analytics", { body: { days: days } });
@@ -15564,6 +15632,7 @@ function adminAnalytics(){
     + ranges.map(r => '<button class="admin-btn admin-btn--sm' + (a.days === r[0] ? " admin-btn--primary" : " admin-btn--ghost") + '" data-act="set-analytics-range" data-days="' + r[0] + '">' + E(r[1]) + '</button>').join("")
     + '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--icon" data-act="refresh-analytics" aria-label="Refresh" title="Refresh">' + ic("refresh-cw") + '</button>'
     + '</div></div>'
+    + adminSharesCard()
     + (a.status === "loading" || a.status === "idle"
         ? '<div class="admin-card"><p class="admin-meta">Loading traffic data...</p></div>'
       : a.status === "error"
@@ -22592,11 +22661,12 @@ const ACTIONS = {
   "share-native": async (el) => {
     const url = el.getAttribute("data-url") || location.href;
     const title = el.getAttribute("data-title") || document.title;
-    try { await navigator.share({ title: title, text: title, url: url }); }
-    catch (_e) { /* they closed the sheet without sending - nothing to do */ }
+    try { await navigator.share({ title: title, text: title, url: url }); recordShare(url, title, "native"); }
+    catch (_e) { /* they closed the sheet without sending - nothing to do, and nothing to count */ }
   },
   "share-copy": (el) => {
     const url = el.getAttribute("data-url") || "";
+    recordShare(url, el.getAttribute("data-title") || "", "copy");
     const done = () => toast("Link copied");
     if (navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(url).then(done, () => fallbackCopy(url, done));
@@ -22604,6 +22674,7 @@ const ACTIONS = {
   },
   "share-instagram": (el) => {
     const url = el.getAttribute("data-url") || "";
+    recordShare(url, el.getAttribute("data-title") || "", "instagram");
     const done = () => toast("Link copied - paste it into an Instagram DM or story");
     if (navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(url).then(done, () => fallbackCopy(url, done));
@@ -23418,7 +23489,7 @@ const ACTIONS = {
   },
   "refresh-storage-usage": () => { loadStorageUsage(); },
   "set-analytics-range": (el) => { loadAnalytics(Number(el.getAttribute("data-days")) || 7); },
-  "refresh-analytics": () => { loadAnalytics(AppState.admin.analytics.days); },
+  "refresh-analytics": () => { loadAnalytics(AppState.admin.analytics.days); },  /* also reloads the share counts */
   "media-upload": () => {
     const input = document.createElement("input");
     input.type = "file";
@@ -24645,6 +24716,13 @@ document.addEventListener("mousedown", (ev) => {
   });
   document.addEventListener("scroll", hide, true);
 })();
+
+/* The send-to links in the share dialog (Facebook, X, WhatsApp, Email, ...) are plain links that open in a new tab,
+   so they never reach ACTIONS; this only counts the click and lets the link do its normal thing. */
+document.addEventListener("click", (ev) => {
+  const link = ev.target.closest && ev.target.closest("a[data-share]");
+  if (link) recordShare(link.getAttribute("data-url") || "", link.getAttribute("data-title") || "", link.getAttribute("data-share"));
+});
 
 document.addEventListener("click", (ev) => {
   /* A drawer link closes the drawer first, then lands on the page it

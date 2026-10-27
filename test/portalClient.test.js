@@ -513,8 +513,7 @@ describe("the Gravity Four invitation on the home page", () => {
     expect(promo).toContain("A 3D chip-dropping game made just for newsletter subscribers. Play against Chike, or challenge a friend online. Then make your own game with AI!");
     for (const perk of ["Exclusive content", "Free AI lessons for kids", "Downloadables", "Stories, videos and more"]) expect(promo).toContain(perk);
     expect(promo).toContain('href="#/newsletter"');                              /* people who already have a place in the archive */
-    expect(promo).toContain("Free mailing list");                                /* so "subscribe" is clear about what it means */
-    expect(promo).toContain("ask a grown-up before using AI");
+    expect(promo).toContain("It’s free to subscribe! Unsubscribe at any time. Kids, please ask a grown-up before you use AI.");
   });
 
   it("keeps its buttons small and its icon boxes centred", () => {
