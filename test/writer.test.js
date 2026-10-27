@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import {
   ollamaUrl, chatModels, pickModel, listModels, chat, siteItems, siteDigest, relevantItems, systemPrompt,
   taskMessages, suggestMessages, parseJson, parseDraft, parseTitles, parseEmail, cleanText, paragraphsToHtml,
-  cleanSuggestion, subjectIdeas, buttonIdeas, DEFAULT_OLLAMA, NUM_CTX, warm, leanSystem, visionModels, pickVision, pullModel,
+  cleanSuggestion, recordFacts, subjectIdeas, buttonIdeas, DEFAULT_OLLAMA, NUM_CTX, warm, leanSystem, visionModels, pickVision, pullModel,
 } from "../assets/lib/writer.js";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -339,6 +339,35 @@ describe("staying quick", () => {
     expect(m[0].content.length).toBeLessThan(900);
     expect(m[0].content).not.toContain("WHAT IS ON THE SITE");
     expect(leanSystem({}, items, "doodle dash")).toContain("Doodle Dash");
+  });
+
+  it("drops the leading ellipsis a model puts on a continuation", () => {
+    expect(cleanSuggestion("...and see where it lands!", "Drop chips")).toBe(" and see where it lands!");
+    expect(cleanSuggestion("…chips in a row", "Line up four")).toBe(" chips in a row");
+  });
+
+  it("keeps a suggestion true to what the form already says, so it cannot invent features", () => {
+    const rec = {
+      id: "portal-gravity-four", layout: "game", title: "Gravity Four", slug: "chikes-gravity-four", status: "published",
+      description: "Drop chips", cover: { src: "assets/games/x.gif", alt: "x" }, coverStill: "assets/games/x.webp", publishedAt: "2026-10-26",
+      howToPlay: ["Pick who to play against: Chike, a friend, or a friend online.", "Pick a column, then press Drop."],
+      vocabWord: "gravity", vocabMeaning: "The invisible pull that brings things down.", aiPromptTip: "a tip", privateGameId: "gravity-four",
+      gameLabel: "Play Gravity Four", buttonUrl: "https://example.com/x", email: { on: true, subject: "s" },
+    };
+    const facts = recordFacts(rec, ["description"]);
+    expect(facts).toContain("how to play: Pick who to play against: Chike, a friend, or a friend online.; Pick a column, then press Drop.");
+    expect(facts).toContain("vocab word: gravity");
+    expect(facts).toContain("game label: Play Gravity Four");
+    for (const hidden of ["portal-gravity-four", "published", "assets/games", "2026-10-26", "example.com", "a tip", "gravity-four", "Drop chips"]) expect(facts).not.toContain(hidden);
+    expect(recordFacts({ summary: "x".repeat(2000), more: "y".repeat(2000) }).length).toBeLessThan(950);
+    expect(recordFacts(null)).toBe("");
+
+    const m = suggestMessages({ brand: {}, items: [], entry: { layout: "game", title: "Gravity Four", facts }, field: "short description", fieldText: "Drop chips" });
+    expect(m[1].content).toContain("never add features, rules, levels, characters or details that are not here");
+    expect(m[1].content).toContain("Pick a column, then press Drop.");
+    expect(m[1].content).toContain("rather than guessing");
+    const bare = suggestMessages({ brand: {}, items: [], entry: { layout: "game", title: "Gravity Four" }, field: "title", fieldText: "x" });
+    expect(bare[1].content).not.toContain("What the form already says");
   });
 });
 

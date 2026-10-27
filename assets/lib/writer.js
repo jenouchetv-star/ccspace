@@ -301,13 +301,35 @@ export function leanSystem(brand, items, query) {
   ].filter(Boolean).join("\n");
 }
 
+/** What the form already says about the thing being written (how a game is played, its word, its steps...),
+    as short "label: text" lines, so a suggestion can stay true to it instead of guessing. Skips ids, links,
+    pictures, dates, switches and anything that is not words; `skip` leaves out the box being typed in. */
+export function recordFacts(rec, skip) {
+  const hide = /^(id|slug|status|layout|title|name|body)$|url|path|src|cover|email|date|gallery|embed|button|private|tip$/i;
+  const lines = [];
+  let used = 0;
+  for (const key of Object.keys(rec || {})) {
+    if (hide.test(key) || /(At|Id)$/.test(key) || (skip || []).indexOf(key) >= 0) continue;
+    const v = rec[key];
+    const text = (Array.isArray(v) ? v.filter((x) => typeof x === "string").join("; ") : typeof v === "string" ? v : "").replace(/\s+/g, " ").trim();
+    if (text.length < 3 || /^https?:/i.test(text)) continue;
+    const line = key.replace(/([A-Z])/g, " $1").toLowerCase() + ": " + clip(text, 280);
+    if (used + line.length > 900) break;
+    lines.push(line);
+    used += line.length;
+  }
+  return lines.join("\n");
+}
+
 export function suggestMessages(ctx) {
   const sys = ctx.system || leanSystem(ctx.brand, ctx.items, [ctx.entry && ctx.entry.title, ctx.fieldText].join(" "));
+  const facts = ctx.entry && ctx.entry.facts;
   return [
     { role: "system", content: sys },
     { role: "user", content: "The writer is typing the " + ctx.field + " for " + (ctx.kind ? "a " + String(ctx.kind).toLowerCase() : (LAYOUT_WORDS[(ctx.entry || {}).layout] || "an update")) + ".\n"
       + (ctx.entry && ctx.entry.title ? "Title: " + ctx.entry.title + "\n" : "")
-      + "Here is what they have typed so far:\n" + ctx.fieldText + "\n\nWrite only the next few words (at most 14) that continue it naturally. Do not repeat what they typed. No quotation marks." },
+      + (facts ? "What the form already says about it (these are the facts; never add features, rules, levels, characters or details that are not here):\n" + facts + "\n" : "")
+      + "Here is what they have typed so far:\n" + ctx.fieldText + "\n\nWrite only the next few words (at most 14) that continue it naturally and truthfully. Do not repeat what they typed. No quotation marks. If you are not sure of a detail, finish the sentence in a general way rather than guessing." },
   ];
 }
 
@@ -365,6 +387,7 @@ export function paragraphsToHtml(text) {
 export function cleanSuggestion(raw, typed) {
   let s = String(raw || "").replace(/\s+/g, " ").trim();
   s = s.replace(/^["“'`]+|["”'`]+$/g, "").trim();
+  s = s.replace(/^(?:\.{2,}|…)\s*/, "");   // a model that thinks it is finishing a sentence starts with "..."
   const t = String(typed || "").trim();
   if (t && s.toLowerCase().startsWith(t.toLowerCase())) s = s.slice(t.length).trim();
   if (s.length < 3) return "";
