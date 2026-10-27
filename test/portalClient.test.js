@@ -336,6 +336,8 @@ describe("how the site wires the portal in", () => {
     const box = body("portalPromptHTML");
     expect(box).toContain('if (!text) return ""');
     expect(box).toContain('data-act="portal-copy-prompt"');
+    expect(box.split('data-act="portal-copy-prompt"').length - 1).toBe(1);   /* one Copy button... */
+    expect(box.indexOf("pprompt__copy")).toBeLessThan(box.indexOf('id="pprompt-text"'));   /* ...in the corner of the box it copies from */
     expect(box).toContain('href="https://gemini.google.com/app"');
     expect(box).toContain('rel="noopener noreferrer"');
     /* the grown-up message comes first, on every prompt box, before the steps */
