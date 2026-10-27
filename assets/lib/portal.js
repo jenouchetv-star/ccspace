@@ -137,7 +137,7 @@ export function portalValidate(e, others) {
     else if (!portalVideoEmbed(e.videoUrl)) err("videoUrl", "Only YouTube and Vimeo links can be embedded.");
   }
   if (layout === "game") {
-    if (blank(e.gamePath) && blank(e.gameId)) err("gamePath", "A game entry needs a game from the site, or a game file or link.");
+    if (blank(e.gamePath) && blank(e.gameId) && blank(e.privateGameId)) err("gamePath", "A game entry needs a game from the site, or a game file or link.");
     else if (!blank(e.gamePath) && !portalSafeUrl(e.gamePath)) err("gamePath", "Use a file on this site (games/example.html) or a full https:// address.");
   }
   if (layout === "ebook" && !portalBookPath(e)) err("bookId", "Choose which book this is, or add a link to it under More options.");

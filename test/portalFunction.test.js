@@ -38,6 +38,9 @@ const seed = () => ({
   ],
   portal_tokens: [],
   portal_sessions: [],
+  portal_game_files: [
+    { id: "g1", data: { html: "<!doctype html><title>Secret game</title>" } },
+  ],
 });
 
 async function call(body, headers) {
@@ -280,6 +283,46 @@ describe("the function itself", () => {
     await call({ action: "request", email: MEMBER });
     await call({ action: "request", email: NEWBIE, consent: true });
     expect(mail.every((m) => m.url === "https://api.resend.com/emails")).toBe(true);
+  });
+});
+
+describe("a members-only game", () => {
+  const withGame = () => tables.portal_entries.push(
+    { id: "e5", data: { id: "e5", slug: "the-game", title: "The game", description: "d", category: "New games", layout: "game", publishedAt: "2026-10-03", status: "published", privateGameId: "g1", gameMode: "launch" } },
+    { id: "e6", data: { id: "e6", slug: "unpublished-game", title: "Hidden game", description: "d", category: "New games", layout: "game", publishedAt: "2026-10-04", status: "draft", privateGameId: "g1" } });
+
+  it("hands its code only to a verified subscriber, with the entry that uses it", async () => {
+    withGame();
+    const session = await signIn();
+    const r = await call({ action: "entry", session, slug: "the-game" });
+    expect(r.entry.gameHtml).toContain("Secret game");
+    expect(r.entry.title).toBe("The game");
+  });
+
+  it("never sends the code to anyone without a session, in the list, or for an unpublished entry", async () => {
+    withGame();
+    for (const session of [undefined, "", "garbage"]) {
+      expect(JSON.stringify(await call({ action: "entry", session, slug: "the-game" }))).not.toContain("Secret game");
+    }
+    const session = await signIn();
+    expect(JSON.stringify(await call({ action: "list", session }))).not.toContain("Secret game");
+    expect(JSON.stringify(await call({ action: "entry", session, slug: "unpublished-game" }))).not.toContain("Secret game");
+    expect(await call({ action: "entry", session, slug: "unpublished-game" })).toMatchObject({ ok: false, error: "not_found" });
+  });
+
+  it("still serves the entry, without a game, when its code has gone missing", async () => {
+    withGame();
+    tables.portal_game_files.length = 0;
+    const session = await signIn();
+    const r = await call({ action: "entry", session, slug: "the-game" });
+    expect(r.ok).toBe(true);
+    expect(r.entry.gameHtml).toBeUndefined();
+  });
+
+  it("reads the code only after the session has been checked", () => {
+    const src = readFileSync(new URL("../supabase/functions/portal/index.ts", import.meta.url), "utf8");
+    expect(src.match(/from\("portal_game_files"\)/g)).toHaveLength(1);
+    expect(src.indexOf('from("portal_game_files")')).toBeGreaterThan(src.indexOf("sessionSubscriber(body.session)"));
   });
 });
 

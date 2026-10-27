@@ -1204,6 +1204,25 @@ language sql security definer set search_path = public as $$
 $$;
 revoke all on function portal_cleanup() from public, anon, authenticated;
 
+-- portal_game_files  the code of a game that lives ONLY inside the portal. Unlike game_files (which
+--                    anyone can read, because those games are public), nobody but an active admin can
+--                    read this table from a browser. The `portal` Edge Function reads it with the
+--                    service role and hands the code over only to a verified subscriber, together with
+--                    the entry that uses it. There is no file for the game on the site, so there is no
+--                    address anyone could open without being verified.
+create table if not exists portal_game_files (
+  id text primary key,
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table portal_game_files enable row level security;
+grant select, insert, update, delete on portal_game_files to authenticated;
+revoke all on portal_game_files from anon;
+drop policy if exists "admin only" on portal_game_files;
+create policy "admin only" on portal_game_files for all to authenticated
+  using (is_active_admin()) with check (is_active_admin());
+
 -- =====================================================================
 -- GAME FILES - identical to supabase/game-files.sql (run that one on the live project).
 -- =====================================================================

@@ -16,7 +16,7 @@ export function resetTables(seed) {
 }
 
 const copy = (v) => JSON.parse(JSON.stringify(v));
-const PRIMARY = { subscribers: "id", portal_entries: "id", portal_tokens: "token_hash", portal_sessions: "token_hash" };
+const PRIMARY = { subscribers: "id", portal_entries: "id", portal_tokens: "token_hash", portal_sessions: "token_hash", portal_game_files: "id" };
 
 class Query {
   constructor(table) {

@@ -312,7 +312,18 @@ Deno.serve(async (req) => {
       if (action === "list") return json({ ok: true, entries: sortNewestFirst(live).map(toIndexItem) });
       const want = String(body.slug ?? "");
       const hit = live.find((e) => e.slug === want || e.id === want);
-      return hit ? json({ ok: true, entry: toMemberEntry(hit) }) : fail("not_found");
+      if (!hit) return fail("not_found");
+      const entry = toMemberEntry(hit);
+      /* A members-only game's code is kept in its own admin-only table and is only ever sent here, to a
+         verified subscriber, with the entry that uses it. */
+      const gameId = typeof hit.privateGameId === "string" ? hit.privateGameId : "";
+      if (gameId) {
+        const { data: file, error: fileErr } = await db.from("portal_game_files").select("data").eq("id", gameId).maybeSingle();
+        if (fileErr) throw new Error(fileErr.message);
+        const html = file ? (file.data as Record<string, unknown>).html : "";
+        if (typeof html === "string" && html) entry.gameHtml = html;
+      }
+      return json({ ok: true, entry });
     }
 
     return json({ error: "Unknown action" }, 400);

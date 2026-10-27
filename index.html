@@ -11457,6 +11457,17 @@ function portalVideoHTML(e){
 function portalGameHTML(e){
   const path = portalSafeUrl(e.gamePath);
   const label = e.gameLabel || "Come and play";
+  if (e.privateGameId){
+    /* a game that exists only in the portal: its code came with the entry (members) or is read on click (admins),
+       and it runs in a sealed frame, so there is no page address for it anywhere */
+    const play = (text) => '<button type="button" class="btn btn--cyan btn--lg" data-act="portal-play-private" data-title="' + E(e.title) + '">' + ic("play") + ' ' + text + '</button>';
+    if (e.gameMode === "embed" && e.gameHtml){
+      return '<div class="pmedia pmedia--game"><iframe srcdoc="' + E(e.gameHtml) + '" title="' + E(e.title) + '" loading="lazy"'
+        + ' sandbox="allow-scripts allow-popups" allow="fullscreen; clipboard-write"></iframe></div>'
+        + '<div class="prow">' + play("Open full screen") + '</div>';
+    }
+    return '<div class="prow prow--hero">' + play(E(label)) + '</div>';
+  }
   if (!path){
     /* a game that is already on the site: it opens in the site's own game stage */
     const g = e.gameId && db.find("games", e.gameId);
@@ -11940,6 +11951,14 @@ function portalStartFill(form, picked){
    ============================================================ */
 const CopilotState = { skipSetup: false, open: false, msgs: [], busy: false, ctl: null, draft: "", expect: "", seq: 0 };
 const GAME_HTML_CACHE = {};
+
+/** A members-only game's code: admins read it straight from the locked table; members get it with the entry. */
+async function loadPortalGameHtml(id){
+  try {
+    const { data, error } = await sb.from("portal_game_files").select("data").eq("id", id).maybeSingle();
+    return (error || !data || !data.data) ? null : String(data.data.html || "") || null;
+  } catch(_e){ return null; }
+}
 
 /** A game added from pasted code keeps its code in game_files, fetched only when someone plays it. */
 async function loadGameHtml(id){
@@ -21878,6 +21897,15 @@ const ACTIONS = {
     openGameStage({ id: "portal", title: el.getAttribute("data-title") || "Game", path: el.getAttribute("data-path"), icon: el.getAttribute("data-icon") || "dices",
       sharePath: e ? "/newsletter/" + encodeURIComponent(e.slug || e.id) : "/newsletter" });
   },
+  "portal-play-private": async (el) => {
+    const e = portalCurrentEntry();
+    if (!e || !e.privateGameId) return;
+    let html = e.gameHtml || "";
+    if (!html && portalIsAdmin()) html = await loadPortalGameHtml(e.privateGameId) || "";
+    if (!html){ toast("This game couldn\u2019t be loaded. Try again in a moment.", "bad"); return; }
+    openGameStage({ id: "portal", title: el.getAttribute("data-title") || e.title || "Game", icon: "dices", hasFile: true, srcdoc: html,
+      sharePath: "/newsletter/" + encodeURIComponent(e.slug || e.id) });
+  },
   "portal-toggle": (el) => { portalToggle(el.getAttribute("data-id")); },
   "copilot-toggle": () => {
     CopilotState.open = !CopilotState.open;
@@ -22478,6 +22506,9 @@ const ACTIONS = {
        the balance just cleared above) would otherwise survive "Start
        over" unchanged. Force a real reload via the frame's own window;
        if the sandbox ever blocks that, fall back to a cache-busted src. */
+    /* a game from pasted code or the portal is a sealed srcdoc frame: set its code again to start it over
+       (its src is empty, so the fallback below would load this whole site into the frame) */
+    if (frame.hasAttribute("srcdoc")){ frame.setAttribute("srcdoc", frame.getAttribute("srcdoc")); return; }
     try { frame.contentWindow.location.reload(); }
     catch (_e) {
       const url = new URL(frame.src, location.href);

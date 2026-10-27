@@ -4,7 +4,7 @@
 // row-level security is read from the catalog and grants are checked with has_table_privilege.)
 import { describe, it, expect, beforeAll } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 
 const sql = readFileSync(new URL("../supabase/newsletter-portal.sql", import.meta.url), "utf8");
 let db;
@@ -72,6 +72,41 @@ describe("newsletter-portal.sql", () => {
     expect(await can("anon", "portal_entries", "select")).toBe(false);
     const fn = await q("select has_function_privilege('anon', 'portal_cleanup()', 'execute') as a, has_function_privilege('authenticated', 'portal_cleanup()', 'execute') as b");
     expect(fn[0]).toEqual({ a: false, b: false });
+  });
+});
+
+describe("portal_game_files and the Gravity Four seed", () => {
+  const seedSql = readFileSync(new URL("../supabase/portal-gravity-four.sql", import.meta.url), "utf8");
+
+  it("is closed to the public key and open to admins only", async () => {
+    expect((await q("select relrowsecurity r from pg_class where relname = 'portal_game_files'"))[0].r).toBe(true);
+    for (const p of ["select", "insert", "update", "delete"]) expect(await can("anon", "portal_game_files", p)).toBe(false);
+    const pol = await q("select qual, with_check from pg_policies where tablename = 'portal_game_files'");
+    expect(pol).toHaveLength(1);
+    expect(pol[0].qual).toContain("is_active_admin()");
+    expect(pol[0].with_check).toContain("is_active_admin()");
+  });
+
+  it("loads the game and a draft entry, and can be run again without overwriting an edited entry", async () => {
+    await db.exec(seedSql);
+    const file = (await q("select data from portal_game_files where id = 'gravity-four'"))[0].data;
+    const src = readFileSync(new URL("../supabase/private-games/chikes-gravity-four.html", import.meta.url), "utf8").split("\r\n").join("\n");
+    expect(file.html).toBe(src);
+    const entry = (await q("select data from portal_entries where id = 'portal-gravity-four'"))[0].data;
+    expect(entry).toMatchObject({ layout: "game", status: "draft", privateGameId: "gravity-four", gamePath: "", gameId: "" });
+    await db.exec("update portal_entries set data = jsonb_set(data, '{title}', '\"Edited\"') where id = 'portal-gravity-four'");
+    await db.exec(seedSql);
+    expect((await q("select data->>'title' t from portal_entries where id = 'portal-gravity-four'"))[0].t).toBe("Edited");
+  });
+
+  it("has no copy on the public site: not in games/, and supabase/ is kept out of the deploy", () => {
+    expect(existsSync(new URL("../games/chikes-gravity-four.html", import.meta.url))).toBe(false);
+    expect(existsSync(new URL("../assets/games/chikes-gravity-four.html", import.meta.url))).toBe(false);
+    const ignore = readFileSync(new URL("../.assetsignore", import.meta.url), "utf8").split("\n").map((l) => l.trim());
+    expect(ignore).toContain("supabase/");
+    for (const f of ["../sitemap.xml", "../llms.txt", "../sw.js", "../robots.txt"]) {
+      expect(readFileSync(new URL(f, import.meta.url), "utf8")).not.toMatch(/gravity[-_ ]?four/i);
+    }
   });
 });
 

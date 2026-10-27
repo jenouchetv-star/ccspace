@@ -10,6 +10,38 @@ import {
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const body = (name) => html.split("function " + name + "(")[1].split("\nfunction ")[0];
 
+describe("a members-only game in the page", () => {
+  it("plays from the code that came with the entry, in a sealed frame, never from a file address", () => {
+    const game = body("portalGameHTML");
+    const priv = game.slice(game.indexOf("if (e.privateGameId)"), game.indexOf("if (!path)"));
+    expect(priv).toContain('data-act="portal-play-private"');
+    expect(priv).toContain('srcdoc="');
+    expect(priv).toContain('sandbox="allow-scripts allow-popups"');
+    expect(priv).not.toContain("allow-same-origin");
+    expect(priv).not.toMatch(/ src="/);
+  });
+
+  it("opens in the player with the entry's page as its share address, and admins read the code from the locked table", () => {
+    const act = html.split('"portal-play-private": async (el) => {')[1].split("\n  },")[0];
+    expect(act).toContain("srcdoc: html");
+    expect(act).toContain('sharePath: "/newsletter/"');
+    expect(act).toContain("loadPortalGameHtml(e.privateGameId)");
+    expect(html).toContain('from("portal_game_files")');
+  });
+
+  it("starts a sealed game over without loading the whole site into its frame", () => {
+    const reload = html.split('"game-reload": () => {')[1].split("\n  },")[0];
+    expect(reload).toContain('frame.hasAttribute("srcdoc")');
+    expect(reload.indexOf('hasAttribute("srcdoc")')).toBeLessThan(reload.indexOf("location.reload()"));
+  });
+
+  it("counts a private game as a valid game entry", () => {
+    const base = { title: "T", description: "d", category: "New games", publishedAt: "2026-10-01", layout: "game" };
+    expect(portalValidate({ ...base }, []).some((v) => v.field === "gamePath")).toBe(true);
+    expect(portalValidate({ ...base, privateGameId: "g1" }, []).filter((v) => v.level === "error")).toEqual([]);
+  });
+});
+
 describe("links an entry can embed or offer", () => {
   it("turns YouTube and Vimeo links into embeds, and refuses every other site", () => {
     expect(portalVideoEmbed("https://www.youtube.com/watch?v=dQw4w9WgXcQ")).toBe("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0");
