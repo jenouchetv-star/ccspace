@@ -122,6 +122,29 @@ describe("the welcome email", () => {
   });
 });
 
+describe("the newsletter button in index.html", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const button = html.split("function emailButton(")[1].split("\n}\n")[0];
+
+  it("is the site's blue with white text, not yellow", () => {
+    expect(button).toContain("background:#1273B0");
+    expect(button).toContain("color:#FFFFFF");
+    expect(button).not.toContain("#F2C230");
+  });
+});
+
+describe("the newsletter background in index.html", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const shell = html.split("function emailShell(")[1].split("\n}\n")[0];
+
+  it("fades from cool blue to cream, with a plain cream colour first for apps that ignore gradients", () => {
+    expect(shell).toContain("linear-gradient(180deg,#E2EDEF 0%,#EEF4F3 26%,#FAF4E6 66%,#FDF8EC 100%)");
+    const style = shell.split("background-image:linear-gradient")[0];
+    expect(style.endsWith("background:#FAF4E6;")).toBe(true);                /* the solid colour comes first */
+    expect(shell).toContain('bgcolor="#FAF4E6"');
+  });
+});
+
 describe("the newsletter footer in index.html", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const shell = html.split("function emailShell(")[1].split("\n}\n")[0];
