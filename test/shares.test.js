@@ -154,7 +154,13 @@ describe("share counting in index.html", () => {
   });
 
   it("shows the counts at the top of the admin Analytics page, loaded alongside the traffic", () => {
-    expect(body("adminAnalytics")).toContain("+ adminSharesCard()");
+    /* under the range summary and the stat tiles, above the charts; still shown while traffic loads or fails */
+    const loaded = body("renderAnalyticsLoaded");
+    const at = loaded.lastIndexOf("+ adminSharesCard()");                            /* the earlier one is the "no traffic yet" case */
+    expect(loaded.indexOf("Range summary")).toBeLessThan(at);
+    expect(at).toBeLessThan(loaded.indexOf("Visitor countries"));
+    expect(body("adminAnalytics").split("adminSharesCard()").length - 1).toBe(2);   /* loading and error branches */
+    expect(body("adminAnalytics")).not.toContain("+ adminSharesCard()\n    + (a.status");
     expect(body("loadAnalytics")).toContain("loadShares(days);");
     const l = body("loadShares");
     expect(l).toContain('sb.from("share_events").select("path, title, method, created_at")');
