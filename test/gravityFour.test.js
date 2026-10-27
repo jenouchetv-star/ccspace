@@ -164,6 +164,20 @@ describe("the game page", () => {
     expect(seed).toContain('"title":"Gravity 4"');
   });
 
+  it("italicises the 4 wherever the name is shown as a title or button label on the site", () => {
+    const site = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+    const grab = (name) => { const i = site.indexOf("function " + name + "("); return site.slice(i, site.indexOf("\n}\n", i) + 3); };
+    const nameHTML = new Function(grab("E") + grab("nameHTML") + "; return nameHTML;")();
+    expect(nameHTML("Gravity 4")).toBe("Gravity <em>4</em>");
+    expect(nameHTML("Play Gravity 4")).toBe("Play Gravity <em>4</em>");
+    expect(nameHTML("Chike's Gravity 4 <b>")).toBe("Chike&#39;s Gravity <em>4</em> &lt;b&gt;");   /* still escaped */
+    expect(nameHTML("Doodle Dash")).toBe("Doodle Dash");
+    expect(nameHTML(undefined)).toBe("");
+    /* used for the entry heading and card, the Play button, the player's title bar and the share dialog */
+    for (const line of ["nameHTML(e.title) + '</h1>'", "nameHTML(e.title) + '</h3>'", "play(nameHTML(label))", "nameHTML(label) + '</button>'",
+      "'<span>' + nameHTML(g.title) + '</span></span>'", "nameHTML(title) + '</p>'"]) expect(site).toContain(line);
+  });
+
   it("does not use another company's game name, in the game or in the portal entry that goes with it", () => {
     const seed = readFileSync(new URL("../supabase/portal-gravity-four.sql", import.meta.url), "utf8");
     const name = /connect[ -]?(four|4)\b/i;
