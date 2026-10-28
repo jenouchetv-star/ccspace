@@ -209,6 +209,13 @@ describe("the page", () => {
     expect(page).toContain("fitView(); syncTip();");                 // the tip follows every change to the hand
   });
 
+  it("shows a new player the real cards in the intro, drawn the same way as the hand", () => {
+    const intro = page.split('<div class="overlay" id="intro">')[1].split('id="room"')[0];
+    for (const k of ["STRAIGHT", "CORNER", "BRIDGE", "TUNNEL", "RAMP", "TEE", "CROSSROADS", "UTURN"]) expect(intro).toContain('data-card="' + k + ':');
+    expect(intro).not.toContain('class="mk"');                       // cards, not icons
+    expect(page).toContain('document.querySelectorAll("#intro canvas[data-card]")');
+  });
+
   it("grows palm trees by the sea and pine trees toward the middle", () => {
     expect(page).toContain("function nearSea(r, c)");
     expect(page).toContain("makeTree(c, r, R, nearSea(r, c))");
