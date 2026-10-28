@@ -440,10 +440,24 @@ export function parseGame(text) {
   return out.title || out.summary ? out : null;
 }
 
+const KIND_MEANS = { Game: "a game kids play on the site (not a video)", Episode: "a video episode kids watch", "Book or story": "a picture book kids read on the site", Activity: "a hands-on activity to do away from the screen", "Archive entry": "an entry in the Newsletter Archive" };
+
+/** What the email may say: the site's own words about each thing the request names (by title or by its page link), nothing else. */
+export function newsletterFacts(items, request) {
+  const text = String(request || "");
+  const paths = (text.match(/\/(?:play|watch|stories|activity|characters|newsletter|article|collection)\/[A-Za-z0-9_-]+/g) || []);
+  const byLink = (items || []).filter((it) => it.path && paths.indexOf(it.path) >= 0);
+  const picked = byLink.length ? byLink : relevantItems(items, text.replace(/https?:\/\/\S+/g, " "), 3);
+  return picked.map((it) => "- " + it.kind + " (" + (KIND_MEANS[it.kind] || it.kind) + "): " + it.title + (it.path ? " [" + it.path + "]" : "") + (it.text ? ". " + clipText(it.text, 400) : "") + (it.facts ? " How it works: " + clipText(it.facts, 500) : "")).join("\n");
+}
+
 export function newsletterMessages(ctx) {
+  const facts = newsletterFacts(ctx.items, ctx.request);
   return [
     { role: "system", content: copilotSystem(ctx.brand, ctx.items, ctx.where, ctx.request, ctx.who) },
     { role: "user", content: "Write a newsletter email for our mailing list.\nThe owner asks: " + ctx.request
+      + "\nFACTS YOU MAY USE (from the site itself):\n" + (facts || "(none found; use only what the owner wrote and leave a [placeholder] for anything else)")
+      + "\nSay only what those facts and the owner's words support. Do not say who guides it, how it was made, whether it is new or back, how long it takes or that there is a timer or a prize unless a fact says so. A game is played, never watched; an episode is watched, never played. You cannot open links, so rely on the facts above."
       + "\nWhen you mention something from the site, use its page address from the site list for the button. If nothing fits, use /."
       + "\nReturn JSON with keys: subject (under 8 words), preview (one line), label (2 to 4 words in capitals, like NEW EPISODE), headline (under 9 words), paragraphs (an array of 2 to 4 short paragraphs), buttonLabel (2 to 3 words, a gentle invitation), buttonPath (a page address from the site list)." + JSON_ONLY },
   ];

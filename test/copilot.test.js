@@ -415,6 +415,32 @@ describe("the prompts", () => {
   });
 });
 
+describe("keeping newsletter text true to the site", () => {
+  const site = siteItems({
+    games: [{ id: "game-doodle-dash", title: "Doodle Dash", summary: "Draw a level, then run and collect coins.", kind: "embed", status: "published", rules: ["Draw a level with markers.", "Press Share code to play with a friend."] }],
+    portalEntries: [{ id: "p1", slug: "chike-s-creative-space-is-here-explore-our-new-website", title: "Explore Our New Website", description: "Check out the latest adventure with Chike and Zech in space!", status: "published" }],
+  });
+
+  it("gives the model the game's own summary and rules, and says a game is played, not watched", () => {
+    const m = newsletterMessages({ brand, items: site, request: "tell everyone about Doodle Dash" })[1].content;
+    expect(m).toContain("Game (a game kids play on the site (not a video)): Doodle Dash [/play/game-doodle-dash]");
+    expect(m).toContain("How it works: Draw a level with markers. Press Share code to play with a friend.");
+    expect(m).toMatch(/A game is played, never watched/);
+    expect(m).toMatch(/Do not say who guides it/);
+  });
+
+  it("finds the page a pasted link points to, even when the link's words match nothing else", () => {
+    const m = newsletterMessages({ brand, items: site, request: "on this page http://localhost:4321/newsletter/chike-s-creative-space-is-here-explore-our-new-website" })[1].content;
+    expect(m).toContain("Archive entry");
+    expect(m).toContain("Check out the latest adventure with Chike and Zech in space!");
+    expect(m).not.toContain("Doodle Dash [");
+  });
+
+  it("admits when nothing matched instead of inventing", () => {
+    expect(newsletterMessages({ brand, items: site, request: "something unrelated" })[1].content).toContain("leave a [placeholder]");
+  });
+});
+
 describe("reading what the model wrote", () => {
   const cast = [{ slug: "chike", name: "Chike" }, { slug: "zech", name: "Zech" }];
 
@@ -486,6 +512,14 @@ describe("how the admin screen uses it", () => {
     const phone = html.split("@media (max-width:899px){\n  .cp-panel{ width:100vw; }")[1].split("}\n")[0];
     expect(phone).toContain("body.cp-panel-open #app{ margin-right:0;");
     expect(html).not.toMatch(/@media \(max-width:1599px\)\{\s*\.cp-panel/);   // no overlay on ordinary laptop widths
+  });
+
+  it("empties the message box when a message is sent (the re-draw reads the box back into the draft)", () => {
+    const send = body("copilotSend");
+    expect(body("copilotRender")).toContain("CopilotState.draft = old.value");
+    expect(send).toContain('document.getElementById("cp-input")');
+    expect(send).toContain('.value = ""');
+    expect(send.indexOf('.value = ""')).toBeLessThan(send.indexOf("CopilotState.busy = true; copilotRender()"));
   });
 
   it("saves nothing until a button on a proposal is pressed", () => {

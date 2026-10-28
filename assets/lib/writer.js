@@ -183,7 +183,7 @@ export function siteItems(data, opts) {
   const live = (opts && opts.drafts) ? ((r) => r && r.status !== "archived") : liveOnly;   // drafts too, when finding a page to edit
   const out = [];
   const add = (kind, col, rows, map) => (rows || []).filter(live).forEach((r) => { const it = map(r); if (it && it.title) out.push(Object.assign({ kind, col, id: r.id, draft: r.status === "draft" }, it)); });
-  add("Game", "games", d.games, (r) => ({ title: r.title, text: [r.summary, r.kind === "embed" ? "playable in the browser" : "", r.players ? "players: " + r.players : ""].filter(Boolean).join("; "), path: "/play/" + r.id }));
+  add("Game", "games", d.games, (r) => ({ title: r.title, text: [r.summary, r.kind === "embed" ? "playable in the browser" : "", r.players ? "players: " + r.players : ""].filter(Boolean).join("; "), facts: (r.rules || []).join(" "), path: "/play/" + r.id }));
   add("Episode", "videos", d.videos, (r) => ({ title: r.title, text: "Episode " + (r.episode || "") + ". " + (r.description || ""), path: "/watch/" + r.id }));
   add("Book or story", "stories", d.stories, (r) => ({ title: r.title, text: [r.blurb, (r.pages || []).length ? (r.pages.length + "-page picture book read on the site") : "", r.learning].filter(Boolean).join(" "), path: "/stories/" + r.id }));
   add("Activity", "activities", d.activities, (r) => ({ title: r.title, text: [r.summary, r.ageMin ? "ages " + r.ageMin + "-" + r.ageMax : "", r.timeMinutes ? r.timeMinutes + " minutes" : ""].filter(Boolean).join("; "), path: "/activity/" + r.id }));
