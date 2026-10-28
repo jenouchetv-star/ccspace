@@ -204,9 +204,9 @@ describe("playing together", () => {
 });
 
 describe("its place on the Play page", () => {
-  it("is registered as an embedded game with a cover and a link to the cardboard city activity", () => {
+  it("is registered as an embedded game with a cover and a link to the Bottle-Cap Marble Run activity", () => {
     const entry = index.split('G({ id:"game-roadcraft"')[1].split('leadsTo:')[1].split("}),")[0];
-    expect(entry).toContain('act-cardboard-city');
+    expect(entry).toContain('act-marble-run');
     const g = index.split('G({ id:"game-roadcraft"')[1].split("}),")[0];
     expect(g).toContain('path:"games/roadcraft.html"');
     expect(g).toContain('kind:"embed"');
@@ -218,7 +218,7 @@ describe("its place on the Play page", () => {
   it("has its cover and thumbnail", () => {
     expect(existsSync(new URL("../assets/games/roadcraft.jpg", import.meta.url))).toBe(true);
     expect(existsSync(new URL("../assets/games/roadcraft-thumb.jpg", import.meta.url))).toBe(true);
-    expect(index).toContain('id:"act-cardboard-city"');
+    expect(index).toContain('id:"act-marble-run"');
   });
   it("is part of the site's check that every game fits the window", () => {
     expect(index).toContain('["games/roadcraft.html",           "#hand"],');
