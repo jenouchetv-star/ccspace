@@ -160,8 +160,8 @@ describe("the page", () => {
 
   it("starts a Set stage or a Random map, at three sizes", () => {
     expect(page).toContain('<option value="set">Set stage</option>');
-    expect(page).toContain('<option value="random">Random map</option>');
-    for (const d of ["easy", "medium", "hard"]) expect(page).toContain('data-diff="' + d + '"');
+    expect(page).toContain('<option value="random" selected>Random map</option>');
+    for (const d of ["easy", "medium", "hard"]) expect(page).toContain('<option value="' + d + '"');   // a drop-down menu
   });
 
   it("makes the chosen card unmistakable", () => {
@@ -223,10 +223,27 @@ describe("its place on the Play page", () => {
   });
 });
 
+describe("the starting settings", () => {
+  it("are 1 player, Medium and a Random map", () => {
+    expect(page).toContain('let difficulty = "medium", mapRandom = true, mode = "solo";');
+    expect(page).toContain('<option value="solo">1 player</option>');
+    expect(page).toContain('<option value="medium" selected>Medium</option>');
+    expect(page).toContain('<option value="random" selected>Random map</option>');
+    expect(page).not.toContain(">Solo<");
+  });
+});
+
+describe("the picture", () => {
+  it("has no clouds drifting between the camera and the board, which washed it out", () => {
+    expect(page).not.toContain("buildClouds");
+    expect(page).not.toContain("clouds.forEach");
+  });
+});
+
 describe("the water", () => {
   it("has a green-teal river and a darker blue sea, so they cannot be mistaken for each other", () => {
     expect(page).toContain('const riverMat = waterMaterial({ deep:"#2A9D8F", shallow:"#7CDDB8"');
     expect(page).toContain('const seaMat = waterMaterial({ deep:"#072B63", shallow:"#16569B"');
-    expect(page).toContain("spec *= 0.18; fres *= 0.4;");           // and the sea hardly glints
+    expect(page).toContain("spec *= 0.025; fres *= 0.12;");           // and the sea hardly glints
   });
 });

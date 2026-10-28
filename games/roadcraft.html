@@ -25,7 +25,11 @@ body{position:fixed;inset:0;font-weight:600;-webkit-tap-highlight-color:transpar
 .pill{display:inline-flex;align-items:center;gap:7px;background:var(--card);border:3px solid var(--ink);border-radius:999px;padding:3px 13px;font-weight:800;font-size:.92rem;line-height:1.2;box-shadow:2px 2px 0 var(--ink);white-space:nowrap;min-height:38px}
 .pill b{font-weight:800}
 .pill .dim{color:var(--mut);font-weight:700}
-.brand{background:var(--sun)}
+/* the game's logo: a badge with a road winding home, and a wordmark outlined like the site's game titles. Not a button. */
+.logo{display:flex;align-items:center;gap:9px;pointer-events:none;user-select:none;-webkit-user-select:none}
+.logo .mark{width:42px;height:42px;flex:none;filter:drop-shadow(2px 3px 0 rgba(30,34,38,.9))}
+.logo .word{font-size:1.7rem;font-weight:800;letter-spacing:-.035em;line-height:1;color:#fff;-webkit-text-stroke:5px var(--ink);paint-order:stroke fill;text-shadow:3px 3px 0 var(--ink)}
+.logo .word b{font-weight:800;color:var(--sun)}
 .stats{display:flex;flex-wrap:wrap;gap:8px}
 .ctl{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto;align-items:center;justify-content:flex-end}
 .seg{display:inline-flex;gap:6px}
@@ -113,7 +117,8 @@ button.danger{background:#fff;color:#a02020}
 
 @media (max-width:700px){
   .two{grid-template-columns:1fr}
-  .brand span.t{display:none}
+  .logo .word{font-size:1.3rem;-webkit-text-stroke:4px var(--ink)}
+  .logo .mark{width:36px;height:36px}
   #hud{gap:6px}
   .pill{font-size:.8rem;padding:2px 10px;min-height:34px}
   #hud button,#hud select{min-height:34px!important;font-size:.8rem;padding:2px 10px!important}
@@ -145,7 +150,10 @@ button.danger{background:#fff;color:#a02020}
 <canvas id="confetti" aria-hidden="true"></canvas>
 
 <header id="hud">
-  <div class="pill brand"><svg class="i" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-5.5h4V20"/></svg><span class="t">Roadcraft</span></div>
+  <div class="logo" role="img" aria-label="Roadcraft">
+    <svg class="mark" viewBox="0 0 48 48" aria-hidden="true"><rect x="2.5" y="2.5" width="43" height="43" rx="12" fill="#F5B921" stroke="#1E2226" stroke-width="3"/><path d="M11 38C11 26 35 31 35 20" fill="none" stroke="#1E2226" stroke-width="9" stroke-linecap="round"/><path d="M11 38C11 26 35 31 35 20" fill="none" stroke="#fff" stroke-width="1.7" stroke-dasharray="3 3.6"/><path d="M29.4 13.2 35 8.4l5.6 4.8v4.6h-11.2z" fill="#fff" stroke="#1E2226" stroke-width="2.2" stroke-linejoin="round"/></svg>
+    <span class="word"><b>Road</b>craft</span>
+  </div>
   <div class="stats">
     <span class="pill" id="sCards" title="Road cards you have placed">Cards <b>0</b> <span class="dim">· par 0</span></span>
     <span class="pill" id="sDeck" title="Cards left in your pile"><b>48</b> left</span>
@@ -153,13 +161,9 @@ button.danger{background:#fff;color:#a02020}
     <span class="pill room" id="roomBadge" hidden title="Your room code"><i></i><span>Room <b id="roomCode"></b> · <b id="roomN">1</b> playing</span></span>
   </div>
   <div class="ctl">
-    <div class="seg" role="group" aria-label="Map size">
-      <button type="button" data-diff="easy" class="on">Easy</button>
-      <button type="button" data-diff="medium">Medium</button>
-      <button type="button" data-diff="hard">Hard</button>
-    </div>
-    <select id="mode" aria-label="Players"><option value="solo">Solo</option><option value="online">2 players</option></select>
-    <select id="mapMode" aria-label="Map"><option value="set">Set stage</option><option value="random">Random map</option></select>
+    <select id="diff" aria-label="Map size"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select>
+    <select id="mode" aria-label="Players"><option value="solo">1 player</option><option value="online">2 players</option></select>
+    <select id="mapMode" aria-label="Map"><option value="set">Set stage</option><option value="random" selected>Random map</option></select>
     <div class="seg" role="group" aria-label="View">
       <button type="button" data-view="3d" class="on" title="3D view">3D</button>
       <button type="button" data-view="2d" title="Top-down view">2D</button>
@@ -424,13 +428,13 @@ const randomSeed = () => (crypto.getRandomValues(new Uint32Array(1))[0] % 90000)
 
 /* ---------- the game's state ---------- */
 let SIZE = 10, MID = 4.5, HOME_CELL = { r:9, c:9 };
-let difficulty = "easy", mapRandom = false, mode = "solo";          /* solo | online */
+let difficulty = "medium", mapRandom = true, mode = "solo";           /* the starting settings: 1 player, Medium, Random map. mode is solo | online */
 let terrain = [], grid = [], deck = [], hand = [], selected = -1, history = [];
 let current = 1, me = 1, placed = 0, placedOther = 0, bridgesUsed = 0, swaps = 0, phase = "intro";   /* intro | play | won | lost */
 let cursor = null, driving = 0, winner = 0, par = 0, seed = 0, gen = 0, turnNo = 0, lastAct = null, outFlag = { 1:false, 2:false };
 const players = {
-  1: { id:1, active:true,  start:{ r:0, c:0 }, color:"#F4F1EA", dash:"#FFFFFF", label:"Player 1 (white)",  car:null },
-  2: { id:2, active:false, start:{ r:0, c:3 }, color:"#FFC21A", dash:"#FFD23A", label:"Player 2 (yellow)", car:null }
+  1: { id:1, active:true,  start:{ r:0, c:0 }, color:"#D4231C", dash:"#FFFFFF", label:"Player 1 (red)",    car:null },
+  2: { id:2, active:false, start:{ r:0, c:3 }, color:"#17181C", dash:"#FFD23A", label:"Player 2 (black)",  car:null }
 };
 const online = () => mode === "online";
 const isMyTurn = () => !online() || current === me;
@@ -711,8 +715,8 @@ const M = {
   rim:    new THREE.MeshStandardMaterial({ color:C("#D5D9DD"), roughness:.25, metalness:.9 }),
   dark:   new THREE.MeshStandardMaterial({ color:C("#1A1D21"), roughness:.5, metalness:.2 }),
   window: new THREE.MeshStandardMaterial({ color:C("#10202C"), roughness:.06, metalness:.6, side:THREE.DoubleSide, envMapIntensity:1.6 }),
-  head:   new THREE.MeshStandardMaterial({ color:C("#FFFBE6"), emissive:C("#FFF1B0"), emissiveIntensity:1.2 }),
-  tail:   new THREE.MeshStandardMaterial({ color:C("#B3141B"), emissive:C("#FF2A33"), emissiveIntensity:1.0 })
+  head:   new THREE.MeshStandardMaterial({ color:C("#FFFBE6"), emissive:C("#FFF1B0"), emissiveIntensity:3.2 }),
+  tail:   new THREE.MeshStandardMaterial({ color:C("#B3141B"), emissive:C("#FF2A33"), emissiveIntensity:1.6 })
 };
 
 Object.keys(M).forEach(k => { if (!/^(rim|window|head|tail|glass)$/.test(k)) M[k].envMapIntensity = .4; });
@@ -754,7 +758,7 @@ function waterMaterial(opts){
       "  vec3 skyc = mix(uHor, uZen, pow(clamp(R.y, 0.0, 1.0), 0.5));",
       "  float spec = pow(max(dot(R, normalize(uSun)), 0.0), 380.0) * 5.0 + pow(max(dot(R, normalize(uSun)), 0.0), 36.0) * 0.12;",
       "#ifdef OCEAN",
-      "  spec *= 0.18; fres *= 0.4;                                   /* the sea is dark and calm: only a faint glint */",
+      "  spec *= 0.025; fres *= 0.12;                                   /* the sea is dark and calm: only a faint glint */",
       "#endif",
       "  vec3 body; float foam = 0.0; float alpha = uOpacity;",
       "#ifdef OCEAN",
@@ -796,7 +800,7 @@ const groups = { land:new THREE.Group(), deco:new THREE.Group(), roads:new THREE
 Object.keys(groups).forEach(k => worldRoot.add(groups[k]));
 scene.add(worldRoot);
 const swayers = [];                                  /* trees that move a little in the wind */
-let blades = null, flowers = null, smoke = [], clouds = [], windowMats = [], houseLight = 0;
+let blades = null, flowers = null, smoke = [], windowMats = [], houseLight = 0;
 const cellDeco = {};                                  /* grass and flowers that must disappear when a road is laid on their square */
 const gridKey = (r, c) => r + "," + c;
 const windU = { uTime:{ value:0 } };
@@ -1038,22 +1042,7 @@ function buildStartSigns(){
   });
 }
 
-/* clouds */
-(function buildClouds(){
-  const c = mk(128, 128), x = c.getContext("2d");
-  const gr = x.createRadialGradient(64, 58, 4, 64, 64, 60); gr.addColorStop(0, "rgba(255,255,255,.95)"); gr.addColorStop(.55, "rgba(255,255,255,.55)"); gr.addColorStop(1, "rgba(255,255,255,0)");
-  x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
-  const tex = texOf(c, 0, 0), R = rng(77);
-  for (let i = 0; i < 9; i++){
-    const g = new THREE.Group(), a = R() * TAU, d = 55 + R() * 120;
-    g.position.set(MID + Math.cos(a) * d, 26 + R() * 18, MID + Math.sin(a) * d);
-    for (let k = 0; k < 5; k++){
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false, fog:false, opacity:.92 }));
-      const s = 20 + R() * 20; sp.scale.set(s * 1.5, s * .7, 1); sp.position.set((k - 2) * 11 + R() * 5, R() * 3, R() * 6); g.add(sp);
-    }
-    g.userData.speed = .35 + R() * .5; scene.add(g); clouds.push(g);
-  }
-})();
+/* no clouds: the camera looks down on the island from above them, so they only ever drifted across the board and washed it out */
 
 /* =====================================================================
    ROADS: one description feeds both the 3D model and the little cards
@@ -1186,9 +1175,22 @@ function roadY(wx, wz, onZ){
 /* =====================================================================
    THE CARS
    ===================================================================== */
+let _glow = null, _beam = null;
+function glowTex(){ if (_glow) return _glow; const c = mk(64, 64), x = c.getContext("2d"), g = x.createRadialGradient(32, 32, 1, 32, 32, 31); g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(.25, "rgba(255,244,200,.6)"); g.addColorStop(1, "rgba(255,244,200,0)"); x.fillStyle = g; x.fillRect(0, 0, 64, 64); _glow = texOf(c, 0, 0); return _glow; }
+function beamTex(){                                                  /* a soft wedge of light: bright by the car, fading out ahead */
+  if (_beam) return _beam;
+  const c = mk(128, 96), x = c.getContext("2d");
+  const h = x.createLinearGradient(0, 0, 128, 0); h.addColorStop(0, "rgba(255,255,255,.95)"); h.addColorStop(.5, "rgba(255,255,255,.4)"); h.addColorStop(1, "rgba(255,255,255,0)");
+  x.fillStyle = h; x.fillRect(0, 0, 128, 96);
+  const v = x.createRadialGradient(0, 48, 0, 0, 48, 120); v.addColorStop(0, "rgba(0,0,0,1)"); v.addColorStop(1, "rgba(0,0,0,0)");
+  x.globalCompositeOperation = "destination-in";
+  const edge = x.createLinearGradient(0, 0, 0, 96); edge.addColorStop(0, "rgba(0,0,0,0)"); edge.addColorStop(.5, "rgba(0,0,0,1)"); edge.addColorStop(1, "rgba(0,0,0,0)");
+  x.fillStyle = edge; x.fillRect(0, 0, 128, 96);
+  _beam = texOf(c, 0, 0); _beam.wrapS = _beam.wrapT = THREE.ClampToEdgeWrapping; return _beam;
+}
 function buildCar(color, isP2){
   const root = new THREE.Group(), model = new THREE.Group(); model.rotation.y = -Math.PI / 2; root.add(model);
-  const paint = new THREE.MeshStandardMaterial({ color:C(color), metalness:.4, roughness:.24, envMapIntensity:1.5 });
+  const paint = new THREE.MeshStandardMaterial({ color:C(color), metalness:isP2 ? .55 : .4, roughness:isP2 ? .18 : .24, envMapIntensity:1.6 });
   const s = new THREE.Shape();
   s.moveTo(-.25, .05); s.lineTo(.25, .05); s.lineTo(.262, .088); s.quadraticCurveTo(.255, .114, .22, .118); s.lineTo(.1, .13);
   s.lineTo(.04, .19); s.lineTo(-.1, .19); s.lineTo(-.17, .13); s.lineTo(-.25, .125); s.quadraticCurveTo(-.268, .12, -.268, .09); s.closePath();
@@ -1205,6 +1207,15 @@ function buildCar(color, isP2){
     const tl = new THREE.Mesh(new THREE.BoxGeometry(.012, .022, .052), M.tail); tl.position.set(-.272, .1, sd * .07); model.add(tl);
     const mir = new THREE.Mesh(new THREE.BoxGeometry(.025, .02, .02), paint); mir.position.set(.07, .146, sd * .127); model.add(mir);
   });
+  /* headlights on: bright lamps with a glow, a pool of light on the road ahead, and a real spotlight */
+  [-1, 1].forEach(sd => {
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map:glowTex(), color:0xFFF1C0, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, fog:false }));
+    glow.scale.set(.3, .3, 1); glow.position.set(.285, .094, sd * .07); model.add(glow);
+  });
+  const pool = new THREE.Mesh(new THREE.PlaneGeometry(.78, .46).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map:beamTex(), color:0xFFEFB8, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false, polygonOffset:true, polygonOffsetFactor:-6, polygonOffsetUnits:-6 }));
+  pool.position.set(.62, .012, 0); pool.renderOrder = 3; model.add(pool);
+  const beam = new THREE.SpotLight(0xFFF0C4, 2.6, 2.4, .62, .8, 1.5);
+  beam.position.set(.27, .1, 0); beam.target.position.set(1.5, -.05, 0); model.add(beam, beam.target);
   const grille = new THREE.Mesh(new THREE.BoxGeometry(.012, .028, .09), M.dark); grille.position.set(.27, .074, 0); model.add(grille);
   const skirt = new THREE.Mesh(new THREE.BoxGeometry(.4, .018, .226), M.dark); skirt.position.set(0, .052, 0); model.add(skirt);
   if (isP2){
@@ -1542,10 +1553,10 @@ function updateHud(){
   if (online()){
     const mine = current === me;
     turn.classList.toggle("mine", mine && phase === "play");
-    turn.querySelector("i").style.background = players[current].dash;
+    turn.querySelector("i").style.background = players[current].color;
     turn.querySelector("span").textContent = phase !== "play" ? (winner === me ? "You got home first!" : winner ? "Your friend got home first" : "Game over") : mine ? "Your turn" : "Friend’s turn";
   }
-  document.querySelectorAll("[data-diff]").forEach(b => b.classList.toggle("on", b.dataset.diff === difficulty));
+  $("#diff").value = difficulty;
   document.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === viewMode));
   $("#mode").value = mode; $("#mapMode").value = mapRandom ? "random" : "set";
   roomUi(); updateTools();
@@ -1883,7 +1894,7 @@ function applyRemote(p){
 function roomUi(){
   const n = MP.ch ? others().length + 1 : 0;
   $("#roomBadge").hidden = !MP.ch;
-  if (MP.ch){ $("#roomCode").textContent = fmtCode(MP.code); $("#roomN").textContent = n; $("#roomBadge i").style.background = players[me] ? players[me].dash : "#fff"; }
+  if (MP.ch){ $("#roomCode").textContent = fmtCode(MP.code); $("#roomN").textContent = n; $("#roomBadge i").style.background = players[me] ? players[me].color : "#fff"; }
   const mineEl = $("#mine");
   if (MP.ch && MP.host){
     mineEl.hidden = false;
@@ -2026,7 +2037,7 @@ addEventListener("keydown", e => {
 });
 
 /* buttons */
-document.querySelectorAll("[data-diff]").forEach(b => b.addEventListener("click", () => { difficulty = b.dataset.diff; phase = phase === "intro" ? "intro" : "play"; startNew(); }));
+$("#diff").addEventListener("change", e => { difficulty = e.target.value; phase = phase === "intro" ? "intro" : "play"; startNew(); });
 document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
 $("#mapMode").addEventListener("change", e => { mapRandom = e.target.value === "random"; phase = phase === "intro" ? "intro" : "play"; startNew(); });
 $("#mode").addEventListener("change", e => {
@@ -2085,7 +2096,6 @@ function frame(){
   placeCamera(dt);
   Object.values(players).forEach(p => { if (p.anim) stepCar(p, dt); });
   if (!REDUCED) swayers.forEach(s => { s.obj.rotation.z = Math.sin(t * 1.3 + s.ph) * s.amp; s.obj.rotation.x = Math.cos(t * 1.1 + s.ph) * s.amp * .7; });
-  clouds.forEach(g => { if (!REDUCED){ g.position.x += g.userData.speed * dt; if (g.position.x > MID + 190) g.position.x -= 380; } });
   markers.forEach((m, i) => { const k = (Math.sin(t * 3.2 + i) + 1) / 2; m.scale.setScalar(.9 + k * .16); m.position.y = k * .015; m.children.forEach(ch => { ch.material.opacity = .55 + k * .4; }); });
   if (homeGroup){
     const sign = homeGroup.userData.sign; if (sign) sign.position.y = 1.05 + (REDUCED ? 0 : Math.sin(t * 1.8) * .03);
@@ -2105,7 +2115,7 @@ function frame(){
 /* go */
 resize();
 configureWorld();
-newGame({ diff:"easy", random:false, seed:SET_SEED.easy });
+newGame({ diff:difficulty, random:mapRandom, seed:mapRandom ? randomSeed() : SET_SEED[difficulty] });
 phase = "intro";
 refocus(true); refreshMarkers(); updateHud();
 frame();
