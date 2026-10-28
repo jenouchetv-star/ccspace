@@ -1,10 +1,10 @@
-// Road to Home is one self-contained page (games/road-to-home.html). Its rules (the islands, the room
+// Roadcraft is one self-contained page (games/roadcraft.html). Its rules (the islands, the room
 // codes, the card piles) live between BEGIN/END markers so they can be tested without a browser; the
 // page, its art and its place on the Play page are pinned here too.
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 
-const page = readFileSync(new URL("../games/road-to-home.html", import.meta.url), "utf8");
+const page = readFileSync(new URL("../games/roadcraft.html", import.meta.url), "utf8");
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const block = page.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
 const R = new Function(
@@ -110,7 +110,7 @@ describe("the page", () => {
   });
 
   it("is a home to drive to, not a flag", () => {
-    expect(page).toContain("Road to Home");
+    expect(page).toContain("Roadcraft");
     expect(page).not.toMatch(/flag/i);
     expect(page).toContain("HOME");
   });
@@ -156,7 +156,7 @@ describe("the page", () => {
 
 describe("playing together", () => {
   it("is a 6-character room code like Doodle Dash, over Supabase Realtime, with nothing saved", () => {
-    expect(page).toContain('sb.channel("r2h-room-" + code');
+    expect(page).toContain('sb.channel("roadcraft-room-" + code');
     expect(page).toContain("Rooms are live only");
     expect(page).toContain("persistSession:false");
     expect(page).toContain('Make a room code');
@@ -184,20 +184,20 @@ describe("playing together", () => {
 
 describe("its place on the Play page", () => {
   it("is registered as an embedded game with a cover and a link to the cardboard city activity", () => {
-    const entry = index.split('G({ id:"game-road-to-home"')[1].split('leadsTo:')[1].split("}),")[0];
+    const entry = index.split('G({ id:"game-roadcraft"')[1].split('leadsTo:')[1].split("}),")[0];
     expect(entry).toContain('act-cardboard-city');
-    const g = index.split('G({ id:"game-road-to-home"')[1].split("}),")[0];
-    expect(g).toContain('path:"games/road-to-home.html"');
+    const g = index.split('G({ id:"game-roadcraft"')[1].split("}),")[0];
+    expect(g).toContain('path:"games/roadcraft.html"');
     expect(g).toContain('kind:"embed"');
-    expect(g).toContain('cover:{ src:"assets/games/road-to-home.jpg"');
+    expect(g).toContain('cover:{ src:"assets/games/roadcraft.jpg"');
     expect(g).toContain("6-character code");
   });
   it("has its cover and thumbnail", () => {
-    expect(existsSync(new URL("../assets/games/road-to-home.jpg", import.meta.url))).toBe(true);
-    expect(existsSync(new URL("../assets/games/road-to-home-thumb.jpg", import.meta.url))).toBe(true);
+    expect(existsSync(new URL("../assets/games/roadcraft.jpg", import.meta.url))).toBe(true);
+    expect(existsSync(new URL("../assets/games/roadcraft-thumb.jpg", import.meta.url))).toBe(true);
     expect(index).toContain('id:"act-cardboard-city"');
   });
   it("is part of the site's check that every game fits the window", () => {
-    expect(index).toContain('["games/road-to-home.html",        "#hand"],');
+    expect(index).toContain('["games/roadcraft.html",           "#hand"],');
   });
 });
