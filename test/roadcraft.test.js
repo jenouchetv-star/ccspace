@@ -212,6 +212,8 @@ describe("its place on the Play page", () => {
     expect(g).toContain('kind:"embed"');
     expect(g).toContain('cover:{ src:"assets/games/roadcraft.jpg"');
     expect(g).toContain("6-character code");
+    expect(g).toContain('badge:"New"');
+    expect(g).toContain("order:1");                                  // first on the list of online games
   });
   it("has its cover and thumbnail", () => {
     expect(existsSync(new URL("../assets/games/roadcraft.jpg", import.meta.url))).toBe(true);
