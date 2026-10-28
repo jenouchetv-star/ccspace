@@ -18,52 +18,43 @@ note of what was searched and what was found. An intellectual-property attorney 
 5. **Write it down.** Date, what was searched, what turned up, and the decision.
 6. **Then decide whether to file** for the names you want to keep. Filing is what gives you something to defend.
 
-## Roadcraft
+## Pathbuilder
 
-- **Look closer.** I believe a commercial game called RoadCraft (from Saber Interactive, published by Focus Entertainment) was
-  released in 2025. Confirm this first. If it is right, the name is too close for another video game and should change before it
-  spreads (it is on the Play page, in the Newsletter Archive and on the cover).
-- A "-craft" ending is also used by a very large game, so expect close matches in the searches above.
-- Possible alternatives, each still needing the same search:
-  1. Roadmakers
-  2. Pathbuilder
-  3. Pave the Way
-  4. Route Home
-  5. Bridge and Byway
-  6. Homeward Roads
-  7. Lay the Road
-  8. Road Home Builders
+The road-building game was first called Road to Home, then Roadcraft. Roadcraft was dropped because I believe a commercial game
+called RoadCraft (from Saber Interactive, published by Focus Entertainment) came out in 2025. The owner chose **Pathbuilder**.
+
+- **Look closer.** I believe "Pathbuilder" (for example Pathbuilder 2e) is also the name of a well-known character-builder app
+  for a tabletop role-playing game. That is a different kind of product, but it is also software, so run the searches above
+  and look at how it is registered before the name spreads. Also expect generic "path builder" tools in routing and mapping.
+- If it turns out to be too close, other options: Roadmakers, Pave the Way, Route Home, Bridge and Byway, Homeward Roads,
+  Lay the Road, Road Home Builders.
 
 ## Gravity 4
 
-- **Fairly safe as long as it stays away from the Hasbro name.** The site already never writes "Connect 4" or "Connect Four" (a
+- **Kept.** Fairly safe as long as it stays away from the Hasbro name. The site never writes "Connect 4" or "Connect Four" (a
   test guards this). "Four in a row" is a generic idea. Keep "Gravity 4", the chip colours and the board art clearly its own.
 - Search "Gravity 4" and "Gravity Four" in classes 9, 28 and 41, because "Gravity" is a popular word for games.
-- Possible alternatives:
-  1. Drop 4
-  2. Four Fall
-  3. Chip Drop Four
-  4. Four Down
-  5. Stack and Line 4
-  6. Drop and Line
-  7. Chike's Drop Four
-  8. Slide 4 Chips
+- If it ever needs to change: Drop 4, Four Fall, Chip Drop Four, Four Down, Stack and Line 4, Drop and Line, Slide 4 Chips.
 
-## Ballinko (rename recommended)
+## Bounce & Bank
 
-"Plinko" is a trademark tied to a well-known TV game show, and the game's page used to be titled "Plinko Game". Ten options for a
-new name, each still needing the search above:
+This game used to carry a name too close to a famous TV game show's trademark, and its page was titled after that show. The owner
+chose **Bounce & Bank**, from these ten options:
 
-1. **Piggy Bounce** (a piggy bank, and the bounce)
-2. **Bounce Bank**
-3. **Coin Cascade**
-4. **Peg and Penny**
-5. **Savings Drop**
-6. **Nest Egg Drop** (a nest egg is savings)
-7. **Pegboard Bank**
-8. **Drop and Save**
-9. **Ricochet Bank**
-10. **Penny Peg Drop**
+1. Piggy Bounce
+2. **Bounce & Bank** (chosen)
+3. Coin Cascade
+4. Peg and Penny
+5. Savings Drop
+6. Nest Egg Drop
+7. Pegboard Bank
+8. Drop and Save
+9. Ricochet Bank
+10. Penny Peg Drop
+
+Run the same searches on "Bounce & Bank" and "Bounce and Bank" (banks and finance products use "bank" names heavily, so look at
+class 36 too). The in-game bank is now called Bounce & Bank, and its saved balance uses a new storage key, so players start
+from the opening balance once.
 
 ## DropBlox
 

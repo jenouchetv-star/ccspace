@@ -16,7 +16,7 @@ function fakeRewriter() {
 const element = () => { const set = {}; return { set, setAttribute: (k, v) => { set[k] = v; }, setInnerContent: (v) => { set.inner = v; } }; };
 const run = (calls, selector) => { const c = calls.find(x => x.selector === selector); if (!c) return null; const el = element(); c.handlers.element(el); return el.set; };
 
-const game = { id: "game-roadcraft", title: "Roadcraft", summary: "A 3D engineering puzzle.", status: "published", cover: { src: "assets/games/roadcraft.jpg" } };
+const game = { id: "game-pathbuilder", title: "Pathbuilder", summary: "A 3D engineering puzzle.", status: "published", cover: { src: "assets/games/pathbuilder.jpg" } };
 let rw;
 beforeEach(() => {
   rw = fakeRewriter();
@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 afterEach(() => { delete globalThis.HTMLRewriter; vi.restoreAllMocks(); });
 
-const ctx = (ua, id = "game-roadcraft", path = "/play/game-roadcraft") => ({
+const ctx = (ua, id = "game-pathbuilder", path = "/play/game-pathbuilder") => ({
   request: new Request("https://www.chikescreativespace.com" + path, { headers: { "user-agent": ua } }),
   params: { id },
   next: async () => new Response("<html></html>"),
@@ -35,17 +35,17 @@ const OPTS = { table: "games", titleKey: "title", descKey: "summary", imageKey: 
 describe("what a bot reads for a game page", () => {
   it("is the game's own title, description, picture and address, not the home page's", async () => {
     await renderWithOg(ctx("Googlebot/2.1"), OPTS);
-    expect(run(rw.calls, "title").inner).toBe("Roadcraft | Chike's Creative Space");
+    expect(run(rw.calls, "title").inner).toBe("Pathbuilder | Chike's Creative Space");
     expect(run(rw.calls, 'meta[name="description"]').content).toBe("A 3D engineering puzzle.");
     expect(run(rw.calls, 'meta[property="og:description"]').content).toBe("A 3D engineering puzzle.");
-    expect(run(rw.calls, 'meta[property="og:image"]').content).toBe("https://www.chikescreativespace.com/assets/games/roadcraft.jpg");
-    expect(run(rw.calls, 'meta[property="og:url"]').content).toBe("https://www.chikescreativespace.com/play/game-roadcraft");
-    expect(run(rw.calls, "link#canonical-link").href).toBe("https://www.chikescreativespace.com/play/game-roadcraft");
+    expect(run(rw.calls, 'meta[property="og:image"]').content).toBe("https://www.chikescreativespace.com/assets/games/pathbuilder.jpg");
+    expect(run(rw.calls, 'meta[property="og:url"]').content).toBe("https://www.chikescreativespace.com/play/game-pathbuilder");
+    expect(run(rw.calls, "link#canonical-link").href).toBe("https://www.chikescreativespace.com/play/game-pathbuilder");
   });
 
   it("ignores a trailing slash in the address", async () => {
-    await renderWithOg(ctx("Googlebot/2.1", "game-roadcraft", "/play/game-roadcraft/"), OPTS);
-    expect(run(rw.calls, "link#canonical-link").href).toBe("https://www.chikescreativespace.com/play/game-roadcraft");
+    await renderWithOg(ctx("Googlebot/2.1", "game-pathbuilder", "/play/game-pathbuilder/"), OPTS);
+    expect(run(rw.calls, "link#canonical-link").href).toBe("https://www.chikescreativespace.com/play/game-pathbuilder");
   });
 
   it("leaves a real visitor's page exactly as it is", async () => {

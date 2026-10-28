@@ -20,14 +20,14 @@ describe("Play page game order and notes", () => {
       { title: "Air Hockey Arcade" },
       { title: "UFO", order: 9 },
       { title: "Doodle Dash", order: 1, badge: "New" },
-      { title: "Ballinko", order: 2 },
+      { title: "Bounce & Bank", order: 2 },
       { title: "Zebra Zoom" },
     ];
     const sorted = games
       .slice()
       .sort((a, b) => key(a) - key(b) || (b.badge ? 1 : 0) - (a.badge ? 1 : 0) || a.title.localeCompare(b.title))
       .map((g) => g.title);
-    expect(sorted).toEqual(["Doodle Dash", "Ballinko", "UFO", "Air Hockey Arcade", "Zebra Zoom"]);
+    expect(sorted).toEqual(["Doodle Dash", "Bounce & Bank", "UFO", "Air Hockey Arcade", "Zebra Zoom"]);
   });
 
   it("shows a game's note on its card and on its page, and Solar System Sandbox carries one", () => {

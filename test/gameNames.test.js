@@ -46,10 +46,10 @@ describe("names and pages", () => {
     expect(index).toContain("and we will look into it promptly");
   });
 
-  it("keeps a written name-clearance checklist, with options for a new Ballinko name", () => {
+  it("keeps a written name-clearance checklist, with options for a new Bounce & Bank name", () => {
     const doc = readFileSync(new URL("../docs/name-clearance.md", import.meta.url), "utf8");
     expect(existsSync(new URL("../docs/name-clearance.md", import.meta.url))).toBe(true);
-    for (const t of ["Roadcraft", "Gravity 4", "Ballinko", "DropBlox", "not legal advice"]) expect(doc).toContain(t);
-    expect((doc.split("## Ballinko")[1].split("##")[0].match(/^\d+\. /gm) || []).length).toBe(10);
+    for (const t of ["Pathbuilder", "Gravity 4", "Bounce & Bank", "DropBlox", "not legal advice"]) expect(doc).toContain(t);
+    expect((doc.split("## Bounce & Bank")[1].split("##")[0].match(/^\d+\. /gm) || []).length).toBe(10);
   });
 });
