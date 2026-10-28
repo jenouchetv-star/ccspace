@@ -513,15 +513,16 @@ describe("the Gravity 4 invitation on the home page", () => {
     expect(promo).toContain("A 3D chip-dropping game made just for newsletter subscribers. Play against Chike, or challenge a friend online. Then make your own game with AI!");
     for (const perk of ["Exclusive content", "Free AI lessons for kids", "Downloadables", "Stories, videos and more"]) expect(promo).toContain(perk);
     expect(promo).toContain('href="#/newsletter"');                              /* people who already have a place in the archive */
-    expect(promo).toContain("It’s free to subscribe! Unsubscribe at any time. Kids, please ask a grown-up before you use AI.");
+    expect(promo).toContain("It’s free to subscribe! Unsubscribe at any time.</p>");
+    expect(promo.indexOf("Kids, please ask a grown-up before you use AI.")).toBeGreaterThan(promo.indexOf("</picture>"));   /* the AI note sits under the picture */
   });
 
-  it("keeps its buttons small and its icon boxes centred", () => {
+  it("keeps its two buttons big and equal, and its icon boxes centred", () => {
     const actions = promo.slice(promo.indexOf("g4promo__actions"), promo.indexOf("g4promo__fine"));
     expect(actions).not.toContain("btn--lg");
     expect(actions.split("btn--sm").length - 1).toBe(2);
     expect(html).toContain(".g4promo__actions{ display:flex; flex-wrap:nowrap;");   /* one row, even on a phone */
-    expect(html).toContain("height:42px; min-height:42px;");                          /* the same height */
+    expect(html).toContain("height:56px; min-height:56px;");                          /* the same height */
     /* the perk icon box out-ranks the plain text rule for the line under each perk, so it stays a centred grid */
     expect(html).toContain(".g4perks .g4perks__mark{");
     expect(html).toContain(".g4perks div span{");
