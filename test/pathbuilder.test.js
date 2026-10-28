@@ -8,7 +8,7 @@ const page = readFileSync(new URL("../games/pathbuilder.html", import.meta.url),
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const block = page.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
 const R = new Function(
-  block + "; return { makeTerrain, buildTerrain, route, playable, reachable, parOf, TWO_STARTS, RIVER_MAX, deckPlan, rotatedEdges, genCode, cleanCode, fmtCode, G, T, SIZES, SET_SEED, DENSITY, BRIDGE_MIN, BASE_EDGES };"
+  block + "; return { makeTerrain, buildTerrain, route, playable, reachable, parOf, TWO_STARTS, RIVER_MAX, deckPlan, rotatedEdges, genCode, cleanCode, fmtCode, G, T, SIZES, SET_SEED, DENSITY, BRIDGE_MIN, TUNNEL_MIN, RAMP_MIN, BASE_EDGES, rampSpan };"
 )();
 const { G } = R;
 const count = (t, v) => t.flat().filter(x => x === v).length;
@@ -109,7 +109,9 @@ describe("the cards", () => {
       expect(total).toBeGreaterThanOrEqual(44);
       expect(total).toBeGreaterThan(par * 2);
       expect(plan.BRIDGE).toBeGreaterThanOrEqual(R.BRIDGE_MIN[d]);
-      expect(Object.keys(plan).sort()).toEqual(["BRIDGE", "CORNER", "CROSSROADS", "STRAIGHT", "UTURN"]);
+      expect(plan.TUNNEL).toBeGreaterThanOrEqual(R.TUNNEL_MIN[d]);
+      expect(plan.RAMP).toBeGreaterThanOrEqual(R.RAMP_MIN[d]);
+      expect(Object.keys(plan).sort()).toEqual(["BRIDGE", "CORNER", "CROSSROADS", "RAMP", "STRAIGHT", "TEE", "TUNNEL", "UTURN"]);
       Object.values(plan).forEach(n => expect(n).toBeGreaterThan(0));
     }
   });
@@ -119,6 +121,51 @@ describe("the cards", () => {
     expect(R.rotatedEdges("CORNER", 2)).toEqual([0, 0, 1, 1]);   // south and west
     expect(R.rotatedEdges("STRAIGHT", 1)).toEqual([0, 1, 0, 1]);
     expect(R.rotatedEdges("UTURN", 1)).toEqual([0, 0, 0, 1]);    // open side was south, now west
+  });
+  it("has a T-intersection with three roads and a closed side", () => {
+    expect(R.rotatedEdges("TEE", 0)).toEqual([1, 1, 0, 1]);      // north, east and west; the south is closed
+    expect(R.rotatedEdges("TEE", 1)).toEqual([1, 1, 1, 0]);
+    expect(R.rotatedEdges("TEE", 2)).toEqual([0, 1, 1, 1]);
+    expect(R.rotatedEdges("TEE", 3)).toEqual([1, 0, 1, 1]);
+    for (let r = 0; r < 4; r++) expect(R.rotatedEdges("TEE", r).reduce((a, b) => a + b, 0)).toBe(3);
+  });
+  it("has a tunnel that runs straight, like a bridge", () => {
+    expect(R.rotatedEdges("TUNNEL", 0)).toEqual([1, 0, 1, 0]);
+    expect(R.rotatedEdges("TUNNEL", 1)).toEqual([0, 1, 0, 1]);
+  });
+  it("has a ramp with one open side: the way in, opposite the way it jumps", () => {
+    expect(R.rotatedEdges("RAMP", 0)).toEqual([0, 0, 1, 0]);     // road comes in from the south, the car jumps north
+    expect(R.rotatedEdges("RAMP", 1)).toEqual([0, 0, 0, 1]);     // in from the west, jumps east
+    expect(R.rotatedEdges("RAMP", 2)).toEqual([1, 0, 0, 0]);
+    expect(R.rotatedEdges("RAMP", 3)).toEqual([0, 1, 0, 0]);
+  });
+});
+
+describe("the ramp's jump", () => {
+  const { G } = R, n = 6, grass = () => Array.from({ length:n }, () => Array(n).fill(G.GRASS));
+  it("jumps one rock, or one gap in the sea, and lands on the next square", () => {
+    const t = grass(); t[2][3] = G.ROCK;
+    expect(R.rampSpan(t, n, 3, 3, 0)).toEqual({ gap:{ r:2, c:3 }, land:{ r:1, c:3 } });   // facing north
+    const t2 = grass(); t2[3][4] = G.VOID;
+    expect(R.rampSpan(t2, n, 3, 3, 1)).toEqual({ gap:{ r:3, c:4 }, land:{ r:3, c:5 } });  // facing east
+  });
+  it("cannot jump two squares: the gap is one square, and the square after it must be land", () => {
+    const t = grass(); t[2][3] = G.ROCK; t[1][3] = G.ROCK;
+    expect(R.rampSpan(t, n, 3, 3, 0)).toBeNull();                 // two rocks in a row
+    const t2 = grass(); t2[2][3] = G.VOID; t2[1][3] = G.VOID;
+    expect(R.rampSpan(t2, n, 3, 3, 0)).toBeNull();                // two squares of sea in a row
+  });
+  it("has nothing to jump over grass, a tree, or a river, and cannot jump off the edge of the island", () => {
+    expect(R.rampSpan(grass(), n, 3, 3, 0)).toBeNull();
+    const tree = grass(); tree[2][3] = G.TREE; expect(R.rampSpan(tree, n, 3, 3, 0)).toBeNull();
+    const river = grass(); river[2][3] = G.RIVER; expect(R.rampSpan(river, n, 3, 3, 0)).toBeNull();
+    const edge = grass(); edge[0][3] = G.VOID; expect(R.rampSpan(edge, n, 1, 3, 0)).toBeNull();   // the square after it is off the map
+  });
+  it("can land on the far side of a river square only by a bridge, so a river square counts as land to aim at", () => {
+    const t = grass(); t[2][3] = G.ROCK; t[1][3] = G.RIVER;
+    expect(R.rampSpan(t, n, 3, 3, 0)).not.toBeNull();
+    const sea = grass(); sea[2][3] = G.ROCK; sea[1][3] = G.VOID;
+    expect(R.rampSpan(sea, n, 3, 3, 0)).toBeNull();               // landing in the sea is no landing
   });
 });
 
@@ -140,6 +187,51 @@ describe("the page", () => {
     expect(page).toContain("only a bridge can go on top of a road, and only across it, never along it");
     expect(page).toContain("A bridge must cross the road, not run along it.");
     expect(page).toContain("OVER_H = .27");                          // high enough for a car to drive underneath
+  });
+
+  it("lets a tunnel go under a rock and only there, keeps trees protected, and lets a ramp jump a rock or a gap in the sea", () => {
+    expect(page).toContain("function buildTunnel()");
+    expect(page).toContain("a tunnel goes under a rock");
+    expect(page).toContain("trees are protected: no road, bridge, tunnel or jump goes through one");
+    expect(page).toContain("Trees are protected. Plan your road around the tree.");
+    expect(page).toContain("A tunnel needs a rock to go under.");
+    expect(page).toContain("function buildRamp()");
+    expect(page).toContain("const sp = rampSpan(terrain, SIZE, r, c, card.rotation);");
+    expect(page).toContain('acts.push({ k:"jump"');
+    expect(page).toContain("A ramp jumps one rock or one gap in the sea.");
+  });
+
+  it("tells the player what a card is for as soon as it is selected, for every kind of card", () => {
+    const tips = page.split("const CARD_TIPS = {")[1].split("};")[0];
+    for (const k of ["STRAIGHT", "CORNER", "CROSSROADS", "TEE", "UTURN", "BRIDGE", "TUNNEL", "RAMP"]) expect(tips).toContain(k + ":");
+    expect(page).toContain('<div id="tip" hidden>');
+    expect(page).toContain("function syncTip()");
+    expect(page).toContain("fitView(); syncTip();");                 // the tip follows every change to the hand
+  });
+
+  it("grows palm trees by the sea and pine trees toward the middle", () => {
+    expect(page).toContain("function nearSea(r, c)");
+    expect(page).toContain("makeTree(c, r, R, nearSea(r, c))");
+    expect(page).toContain("function makePalm(g, R)");
+    expect(page).toContain("pines grow toward the middle of the island");
+  });
+
+  it("lets a card be turned in place on the board before it is placed, and only places it on Place", () => {
+    for (const id of ["pL", "pR", "pOk", "pNo"]) expect(page).toContain('id="' + id + '"');
+    expect(page).toContain("function pickSquare(r, c)");
+    expect(page).toContain("function turnPending(dir)");
+    expect(page).toContain("function confirmPending()");
+    expect(page).toContain("if (pending && pending.r === r && pending.c === c){ confirmPending(); return; }");   // a second tap on the square places it
+    const tap = page.split("function tapAt(x, y, type){")[1].split("function ")[0];
+    expect(tap).toContain("pickSquare(c.r, c.c)");
+    expect(tap).not.toContain("tryPlace(");                          // a tap never places a card straight away
+    expect(page).toContain('$("#pOk").disabled = !canPlace(pending.r, pending.c, hand[selected]);');   // no placing a turn that does not fit
+  });
+
+  it("locks a road in once it is placed: nobody can move or turn another player's road", () => {
+    expect(page).toContain("That road is your friend’s. Roads are locked in once they are placed, so nobody can move another player’s road.");
+    expect(page).toContain("That road is locked in. Only a bridge card can go over a road.");
+    expect(page).not.toMatch(/grid\[[^\]]+\]\[[^\]]+\]\.rotation\s*=[^=]/);   // no code turns a tile that is already on the board
   });
 
   it("offers a 3D view and a top-down 2D view, and turns the board a quarter at a time", () => {
