@@ -181,6 +181,10 @@ Deno.serve(async (req) => {
     }
 
     if (table === "subscribers") {
+      // An address that has not been confirmed yet gets no welcome: the only email it should get is the
+      // confirm link from the portal function. The welcome goes out when it is confirmed (see
+      // supabase/double-opt-in.sql, which fires this function again at that moment).
+      if (String(record.status ?? "") === "pending") return json({ ok: true, sent: "none", reason: "not confirmed yet" });
       const to = String(record.email ?? "");
       if (!to) return json({ error: "No email on this record" }, 400);
       await sendEmail(

@@ -8,6 +8,12 @@
 //             one-time link. Someone who is not on the list is first asked
 //             for consent; once given they are added as "pending" and sent a
 //             confirm link - they only count as subscribed after using it.
+//             The mailing-list forms on the site (the popup, the footer and the
+//             Join boxes) send join:true. That is the double opt-in: the address
+//             is saved as "pending", a confirm link goes to it (valid 2 days),
+//             and only the person who owns the inbox can finish. An address that
+//             is already subscribed gets nothing extra, and the answer looks the
+//             same, so the form never reveals who is on the list.
 //   verify    the one-time link from that email. Single use, 30 minutes.
 //             Proves the person controls the inbox, and starts a session.
 //   exchange  the private key inside a newsletter's link (?k=...). Signed, so
@@ -38,10 +44,13 @@
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
+  cleanSource,
   inDays,
   inMinutes,
   isLive,
   isValidEmail,
+  JOIN_CONFIRM_MINUTES,
+  lastsFor,
   lookupSubscriber,
   normalizeEmail,
   overLimit,
@@ -163,6 +172,8 @@ Deno.serve(async (req) => {
       const email = normalizeEmail(body.email);
       if (!isValidEmail(email)) return fail("invalid_email");
       const consent = body.consent === true;
+      const join = body.join === true;                       // from a mailing-list form, not the archive's own gate
+      const source = cleanSource(body.source) || "mailing-list";
       const next = safeReturnPath(body.next);
 
       const ip = (req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0]).trim();
@@ -179,6 +190,10 @@ Deno.serve(async (req) => {
       const rows = await allSubscribers();
       const found = lookupSubscriber(rows, email);
 
+      // Someone already on the list asked to join again: say nothing different and send nothing,
+      // so a stranger cannot use the form to email a subscriber or to learn who is subscribed.
+      if (join && found.state === "active") return json({ ok: true, status: "consent_sent" });
+
       let subscriberId = found.state === "none" ? "" : found.id;
       let purpose: "login" | "subscribe" = "login";
 
@@ -191,7 +206,7 @@ Deno.serve(async (req) => {
           subscriberId = "sub-" + randomToken(9);
           const { error } = await db.from("subscribers").insert({
             id: subscriberId,
-            data: { id: subscriberId, email, source: "newsletter-portal", status: "pending", at: stamp, createdAt: stamp, updatedAt: stamp, consentAt: stamp },
+            data: { id: subscriberId, email, source: join ? source : "newsletter-portal", status: "pending", at: stamp, createdAt: stamp, updatedAt: stamp, consentAt: stamp },
           });
           if (error) throw new Error(error.message);
         } else {
@@ -203,6 +218,7 @@ Deno.serve(async (req) => {
         }
       }
 
+      const minutes = join && purpose === "subscribe" ? JOIN_CONFIRM_MINUTES : VERIFY_MINUTES;
       const token = randomToken();
       const { error: tokErr } = await db.from("portal_tokens").insert({
         token_hash: await sha256Hex(token),
@@ -211,7 +227,7 @@ Deno.serve(async (req) => {
         email_hash: emailHash,
         ip_hash: ipHash,
         next_path: next,
-        expires_at: inMinutes(now, VERIFY_MINUTES),
+        expires_at: inMinutes(now, minutes),
       });
       if (tokErr) throw new Error(tokErr.message);
 
@@ -226,10 +242,10 @@ Deno.serve(async (req) => {
           }))
         : await sendMail(email, "Please confirm you’d like to join our mailing list", mailHtml({
             heading: "One tap to join the list",
-            intro: "You asked to join the Chike’s Creative Space mailing list and unlock the Newsletter Archive. Confirm your email to finish – you’ll get our newsletters, and you can unsubscribe any time.",
+            intro: "You asked to join the Chike’s Creative Space mailing list and unlock the Newsletter Archive. Confirm your email to finish – you’ll get one or two emails a month, and you can unsubscribe any time.",
             button: "Yes, join the list",
             url,
-            note: `This link works once and expires in ${VERIFY_MINUTES} minutes. If you didn’t ask to join, ignore this email and you won’t be subscribed.`,
+            note: `This link works once and expires in ${lastsFor(minutes)}. If you didn’t ask to join, ignore this email and you won’t be subscribed – nobody gets added until the link is used.`,
           }));
       if (!sent) return fail("send_failed");
       return json({ ok: true, status: purpose === "login" ? "sent" : "consent_sent" });

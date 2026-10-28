@@ -6392,15 +6392,22 @@ function shareModalHTML(url, title){
     successful join - whether that form lived in a modal already (the nav
     "Join our mailing list" popup) or inline on a page (the footer, the
     articles page), so every entry point ends the same way. */
-function newsletterThankYouHTML(){
+function newsletterCheckEmailHTML(email){
   return '<div style="text-align:center;padding:6px 4px">'
-    + '<div style="margin:0 auto 16px;width:56px;height:56px;border-radius:50%;background:var(--teal);color:#F2FBF9;display:flex;align-items:center;justify-content:center">' + ic("check","i-lg") + '</div>'
-    + '<h3 style="margin:0 0 8px;font-size:1.5rem">Thank you for joining us</h3>'
-    + '<p class="tiny mute" style="margin:0">One email a month. New activities, no noise.</p>'
+    + '<div style="margin:0 auto 16px;width:56px;height:56px;border-radius:50%;background:var(--teal);color:#F2FBF9;display:flex;align-items:center;justify-content:center">' + ic("mail","i-lg") + '</div>'
+    + '<h3 style="margin:0 0 8px;font-size:1.5rem">Check your email</h3>'
+    + '<p style="margin:0 0 8px">We sent a link to <b style="overflow-wrap:anywhere">' + E(email) + '</b>. Tap it to finish joining.</p>'
+    + '<p class="tiny mute" style="margin:0">The link works for 2 days. Not there? Look in spam or junk. If you did not ask to join, ignore it and nothing happens: nobody is added until the link is used.</p>'
     + '<div class="modal__foot" style="justify-content:center;margin-top:20px">'
-    + '<button type="button" class="btn btn--cyan" data-act="close-modal">Close</button>'
+    + '<button type="button" class="btn btn--cyan" data-act="close-modal">Got it</button>'
     + '</div></div>';
 }
+/** What the mailing-list forms say when the sign-up could not be started. */
+const JOIN_ERRORS = {
+  invalid_email: "That does not look like an email address.",
+  rate_limited: "Too many tries for now. Please wait a little while and try again.",
+  send_failed: "We could not send the confirmation email. Please try again in a moment."
+};
 
 /** The newsletter signup, opened from the nav on any page. */
 function mailingListModal(){
@@ -24549,14 +24556,15 @@ async function handleSubmit(form, act){
     if (isFakeEmail(email)){ toast("Please use a real email address, not a placeholder or test one.", "bad"); return; }
     const stop = newsletterGate(form);
     if (stop){ toast(stop, "bad"); return; }
-    /* Duplicate/fake-email rejection happens server-side now
-       (enforce_subscriber_rate_limit(), see migration.sql) - subscribers
-       is admin-only under RLS, so a public visitor's own local cache
-       never actually holds the subscriber list to check against here.
-       db.add() already toasts the trigger's own message on rejection. */
-    try { await db.add("subscribers", { email: email, source: AppState.route.name, at: nowISO(), status:"published" }); } catch(_e){ return; }
+    /* Double opt-in: the address is NOT added here. The portal function saves it as "pending" and emails a confirm
+       link; the person only becomes a subscriber when they open it. So nobody can sign someone else up. */
+    const joinBtn = form.querySelector('[type="submit"]');
+    if (joinBtn) joinBtn.disabled = true;
+    const sent = await portalCall("request", { email: email, consent: true, join: true, source: (AppState.route && AppState.route.name) || "", next: "/newsletter" });
+    if (joinBtn) joinBtn.disabled = false;
+    if (!sent || !sent.ok){ toast(JOIN_ERRORS[sent && sent.error] || "We could not reach the sign-up just now. Check your connection and try again.", "bad"); return; }
     form.reset();
-    openModal(newsletterThankYouHTML(), null);
+    openModal(newsletterCheckEmailHTML(email), null);
     return;
   }
 

@@ -9,6 +9,7 @@
 // subscriber is allowed to see of an entry.
 
 export const VERIFY_MINUTES = 30;       // an emailed verification link works for this long, once
+export const JOIN_CONFIRM_MINUTES = 2880; // the link in a "please confirm you want to join" email works for 2 days, once
 export const SESSION_DAYS = 30;         // a verified session lasts this long
 export const ACCESS_LINK_DAYS = 60;     // the private link inside a newsletter works for this long
 export const MAX_REQUESTS_PER_EMAIL_HOUR = 5;
@@ -183,4 +184,23 @@ export function inMinutes(nowMs: number, minutes: number): string {
 }
 export function inDays(nowMs: number, days: number): string {
   return new Date(nowMs + days * 86_400_000).toISOString();
+}
+
+/** Where a mailing-list sign-up came from ("home", "game-detail", ...): a short, plain label, or "" if it does not look like one. */
+export function cleanSource(v: unknown): string {
+  const s = String(v ?? "").trim().toLowerCase().slice(0, 40);
+  return /^[a-z0-9][a-z0-9 _\/-]*$/.test(s) ? s : "";
+}
+
+/** How long an emailed link lasts, in words. */
+export function lastsFor(minutes: number): string {
+  if (minutes >= 1440) {
+    const d = Math.round(minutes / 1440);
+    return d + (d === 1 ? " day" : " days");
+  }
+  if (minutes >= 60) {
+    const h = Math.round(minutes / 60);
+    return h + (h === 1 ? " hour" : " hours");
+  }
+  return minutes + " minutes";
 }

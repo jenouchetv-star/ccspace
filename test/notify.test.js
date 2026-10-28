@@ -43,6 +43,13 @@ beforeEach(() => {
 });
 
 describe("the welcome email", () => {
+  it("is NOT sent to an address that has not confirmed yet (a pending sign-up)", async () => {
+    const res = await call({ table: "subscribers", record: { id: "sub-9", email: "stranger@example.test", status: "pending" } });
+    expect(res.status).toBe(200);
+    expect((await res.json()).sent).toBe("none");
+    expect(sent).toHaveLength(0);
+  });
+
   it("is sent to the new subscriber with the same footer as a newsletter", async () => {
     const res = await call(joined);
     expect(res.status).toBe(200);

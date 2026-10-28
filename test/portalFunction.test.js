@@ -80,6 +80,92 @@ beforeEach(() => {
   });
 });
 
+describe("joining the mailing list from a form on the site (double opt-in)", () => {
+  const join = (email, extra) => call({ action: "request", email, consent: true, join: true, source: "home", next: "/newsletter", ...(extra || {}) });
+
+  it("saves a newcomer as pending and emails them a confirm link; they are not subscribed yet", async () => {
+    const r = await join(NEWBIE);
+    expect(r).toMatchObject({ ok: true, status: "consent_sent" });
+    expect(mail).toHaveLength(1);
+    expect(mail[0].to).toBe(NEWBIE);
+    expect(mail[0].subject).toMatch(/confirm/i);
+    expect(mail[0].html).toContain("Yes, join the list");
+    expect(mail[0].html).toContain("nobody gets added until the link is used");
+    const added = tables.subscribers.find((x) => x.data.email === NEWBIE);
+    expect(added.data).toMatchObject({ status: "pending", source: "home" });
+    expect(added.data.verifiedAt).toBeUndefined();
+  });
+
+  it("makes them subscribers only when the emailed link is used, once", async () => {
+    await join(NEWBIE);
+    const id = tables.subscribers.find((x) => x.data.email === NEWBIE).id;
+    expect(subscriber(id).status).toBe("pending");
+    const v = await call({ action: "verify", token: lastToken() });
+    expect(v).toMatchObject({ ok: true, purpose: "subscribe", email: NEWBIE });
+    expect(subscriber(id)).toMatchObject({ status: "published" });
+    expect(subscriber(id).verifiedAt).toBeTruthy();
+    expect(await call({ action: "verify", token: lastToken() })).toMatchObject({ ok: false, error: "used" });
+  });
+
+  it("keeps the confirm link alive for two days, not the usual half hour", async () => {
+    await join(NEWBIE);
+    const row = tables.portal_tokens[0];
+    expect(Date.parse(row.expires_at) - NOW.getTime()).toBe(2880 * 60_000);
+    expect(mail[0].html).toContain("expires in 2 days");
+    vi.setSystemTime(new Date(NOW.getTime() + 47 * 3_600_000));
+    expect(await call({ action: "verify", token: lastToken() })).toMatchObject({ ok: true });
+  });
+
+  it("lets the link run out: a link used after two days does nothing, and the address stays pending", async () => {
+    await join(NEWBIE);
+    const id = tables.subscribers.find((x) => x.data.email === NEWBIE).id;
+    vi.setSystemTime(new Date(NOW.getTime() + 49 * 3_600_000));
+    expect(await call({ action: "verify", token: lastToken() })).toMatchObject({ ok: false, error: "expired" });
+    expect(subscriber(id).status).toBe("pending");
+  });
+
+  it("says the same thing, and sends nothing, when the address is already subscribed", async () => {
+    const r = await join(MEMBER);
+    expect(r).toMatchObject({ ok: true, status: "consent_sent" });
+    expect(mail).toHaveLength(0);                                      // no email to a subscriber from a stranger's sign-up
+    expect(tables.portal_tokens).toHaveLength(0);
+    expect(tables.subscribers).toHaveLength(2);
+  });
+
+  it("asks a returning, unsubscribed address to confirm again before it counts", async () => {
+    expect(await join(GONE)).toMatchObject({ status: "consent_sent" });
+    expect(subscriber("sub-b").status).toBe("pending");
+    await call({ action: "verify", token: lastToken() });
+    expect(subscriber("sub-b").status).toBe("published");
+  });
+
+  it("never subscribes someone who only typed an address into a form: no link used, no subscriber", async () => {
+    await join("stranger@example.test");
+    const row = tables.subscribers.find((x) => x.data.email === "stranger@example.test");
+    expect(row.data.status).toBe("pending");
+    expect(tables.subscribers.filter((x) => x.data.status === "published").map((x) => x.data.email)).toEqual([MEMBER]);
+  });
+
+  it("keeps a plain label of where the sign-up came from, and ignores anything odd", async () => {
+    await join(NEWBIE, { source: "game-detail" });
+    expect(tables.subscribers.find((x) => x.data.email === NEWBIE).data.source).toBe("game-detail");
+    resetTables(seed()); mail = [];
+    await join(NEWBIE, { source: "<script>alert(1)</script>" });
+    expect(tables.subscribers.find((x) => x.data.email === NEWBIE).data.source).toBe("mailing-list");
+  });
+
+  it("is limited: too many requests for one address in an hour are refused", async () => {
+    for (let i = 0; i < 5; i++) await join(NEWBIE);
+    expect(await join(NEWBIE)).toMatchObject({ ok: false, error: "rate_limited" });
+  });
+
+  it("rejects a bad email without saving or sending anything", async () => {
+    expect(await join("nope")).toMatchObject({ ok: false, error: "invalid_email" });
+    expect(mail).toHaveLength(0);
+    expect(tables.subscribers).toHaveLength(2);
+  });
+});
+
 describe("asking for a link", () => {
   it("rejects a bad email without sending anything", async () => {
     for (const bad of ["", "nope", "a@b", "a b@c.test", null]) {
