@@ -39,6 +39,14 @@ describe("photo covers for the offline games", () => {
   });
 });
 
+describe("the offline game page", () => {
+  it("shows the game's photo above How to play when the game has no board of its own", () => {
+    const view = index.split("function viewGame(id){")[1].split("/* ====")[0];
+    expect(view).toContain("!board && g.cover && g.cover.src ? '<figure class=\"gamephoto\">");
+    expect(view.indexOf("gamephoto")).toBeLessThan(view.indexOf("How to play"));
+  });
+});
+
 describe("the Business page photo", () => {
   it("shows a teacher helping a student under the intro text, with alt text", () => {
     expect(existsSync(root("assets/about/teacher-helping-student.jpg"))).toBe(true);
