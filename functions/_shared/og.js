@@ -63,13 +63,18 @@ export async function renderWithOg(context, { table, titleKey, descKey, imageKey
 
   if (!record || record.status !== "published") return response;
 
-  const origin = new URL(context.request.url).origin;
+  const here = new URL(context.request.url);
+  const origin = here.origin;
+  const pageUrl = origin + here.pathname.replace(/\/+$/, "");        /* this page's own address, not the home page's */
   const title = (getPath(record, titleKey) || fallbackTitle) + " | Chike's Creative Space";
   const desc = getPath(record, descKey) || "";
   const image = absoluteUrl(getPath(record, imageKey), origin) || (origin + "/assets/icons/icon-512.png");
 
   return new HTMLRewriter()
     .on('title', { element(el){ el.setInnerContent(title); } })
+    .on('meta[name="description"]', { element(el){ if (desc) el.setAttribute("content", desc); } })
+    .on('link#canonical-link', { element(el){ el.setAttribute("href", pageUrl); } })
+    .on('meta[property="og:url"]', { element(el){ el.setAttribute("content", pageUrl); } })
     .on('meta[property="og:title"]', { element(el){ el.setAttribute("content", title); } })
     .on('meta[property="og:description"]', { element(el){ if (desc) el.setAttribute("content", desc); } })
     .on('meta[property="og:image"]', { element(el){ el.setAttribute("content", image); } })
