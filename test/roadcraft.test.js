@@ -233,6 +233,18 @@ describe("the starting settings", () => {
   });
 });
 
+describe("the menu", () => {
+  it("folds into one Settings menu on narrow screens, so no control runs off the side", () => {
+    expect(page).toContain('aria-label="Game settings"');
+    expect(page).toContain('id="bMenu"');
+    expect(page).toContain('aria-controls="ctl"');
+    expect(page).toContain('@media (max-width:900px){');
+    expect(page).toContain("#hud.open .ctl{display:flex}");
+    expect(page).toContain("function setMenu(open)");
+    expect(page).not.toContain("overflow-x:auto;pointer-events:auto;scrollbar-width:none");   // no more scrolling top bar
+  });
+});
+
 describe("the picture", () => {
   it("has no clouds drifting between the camera and the board, which washed it out", () => {
     expect(page).not.toContain("buildClouds");
