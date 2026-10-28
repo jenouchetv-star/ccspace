@@ -127,7 +127,8 @@ The Business page already offers partnerships, licensing, press and wholesale.
 ### F. Donations and grants (supplementary, not a plan)
 
 - **Donate** is built. Turning it on is cheap once Stripe is connected.
-- **Grants:** arts-education, literacy and early-STEM funders are a real source for a free, kid-safe resource. They need a tax-exempt structure or a fiscal sponsor, so treat it as a year two exploration.
+- **Grants:** arts-education, literacy and early-STEM funders are a real source for a free, kid-safe resource. Most give only to tax-exempt organizations. The business is an LLC, which is not tax-exempt, so this needs a fiscal sponsor or a separate nonprofit. Treat it as a year two exploration.
+- **Donations to an LLC are not tax-deductible for the giver.** The Donate page should say "support" rather than imply a charitable gift, unless a fiscal sponsor is in place.
 - **Never the main income.** Donations are lumpy and depend on goodwill.
 
 ### G. Licensing the characters and stories (year three and beyond)
@@ -157,6 +158,7 @@ Move to the next stage when the gate is met, not on a date.
 ### Stage 0: Foundations (now)
 Make it possible to earn and to measure.
 - Deploy the double opt-in email functions and run `supabase/double-opt-in.sql`, so the list is clean and legal.
+- Open a business checking account in the LLC's exact legal name (needs the EIN and the articles of organization), then register Stripe as the LLC with that account. Stripe is the reason this comes first: it will not pay out to anything else.
 - Connect Stripe; turn on Donate; turn on printable checkout (start with 2 packs).
 - Add the tracking in section 7.
 - Decide D1 (search).
@@ -233,7 +235,7 @@ Review monthly. Change at most one thing at a time, so results can be traced.
 | D3 | Payments: Stripe Payment Links, or a full checkout? | Payment Links are fastest for the first products; a full checkout is needed for a cart and bundles. |
 | D4 | Stay "not affiliate" on supply links? | It is a trust positive today. Changing it adds some income and needs a visible disclosure. |
 | D5 | Do you want to teach workshops yourself, or license the material for others to run? | Decides whether income scales with your hours or not. |
-| D6 | Business structure: a for-profit only, or also a nonprofit or fiscal sponsor? | Opens (or closes) grants and shapes how donations are treated. |
+| D6 | The business is an LLC. Do we also want a fiscal sponsor or a separate nonprofit? | An LLC alone cannot take most grants, and donations to it are not tax-deductible for the giver. |
 
 ---
 
