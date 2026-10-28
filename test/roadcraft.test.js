@@ -8,7 +8,7 @@ const page = readFileSync(new URL("../games/roadcraft.html", import.meta.url), "
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const block = page.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
 const R = new Function(
-  block + "; return { makeTerrain, reachable, parOf, TWO_STARTS, deckPlan, rotatedEdges, genCode, cleanCode, fmtCode, G, T, SIZES, SET_SEED, DENSITY, BRIDGE_MIN, BASE_EDGES };"
+  block + "; return { makeTerrain, buildTerrain, route, playable, reachable, parOf, TWO_STARTS, RIVER_MAX, deckPlan, rotatedEdges, genCode, cleanCode, fmtCode, G, T, SIZES, SET_SEED, DENSITY, BRIDGE_MIN, BASE_EDGES };"
 )();
 const { G } = R;
 const count = (t, v) => t.flat().filter(x => x === v).length;
@@ -63,6 +63,27 @@ describe("the islands", () => {
       expect(b).toBe(a);                                      // with two players, the same distance to go: the par is fair to both
       expect(R.parOf(t, n)).toBeGreaterThanOrEqual(n);
     }
+  });
+
+  it("never hand a player an island that cannot be finished, however many random maps are made", () => {
+    for (const d of ["easy", "medium", "hard"]) for (let seed = 1; seed <= 150; seed++) {
+      const t = R.makeTerrain(d, seed * 13), n = t.length, home = { r:n - 1, c:n - 1 };
+      expect(R.playable(t, n, d)).toBe(true);
+      const a = R.route(t, n, { r:0, c:0 }, home);
+      expect(a).not.toBeNull();
+      expect(a.rivers).toBeLessThanOrEqual(R.RIVER_MAX[d]);
+    }
+  });
+
+  it("know that a bridge only goes straight, so a river that would need a turn on the water is not a way through", () => {
+    const G = R.G, o = G.GRASS, w = G.RIVER, v = G.VOID;
+    const turn = [[o, w, w], [v, v, w], [v, v, o]];             // the only way is along the water and round a corner
+    expect(R.route(turn, 3, { r:0, c:0 }, { r:2, c:2 })).toBeNull();
+    const straight = [[o, w, o], [o, w, o], [o, o, o]];         // straight across is fine
+    expect(R.route(straight, 3, { r:0, c:0 }, { r:2, c:2 })).not.toBeNull();
+    expect(R.route(straight, 3, { r:0, c:0 }, { r:2, c:2 }).steps).toBe(4);   // and as short as going round by land
+    const only = [[o, o, o], [w, w, w], [o, o, o]];
+    expect(R.route(only, 3, { r:0, c:0 }, { r:2, c:2 }).rivers).toBe(1);
   });
 
   it("put a river across the island and trees and rocks in the way, more of them on the harder levels", () => {
@@ -199,5 +220,13 @@ describe("its place on the Play page", () => {
   });
   it("is part of the site's check that every game fits the window", () => {
     expect(index).toContain('["games/roadcraft.html",           "#hand"],');
+  });
+});
+
+describe("the water", () => {
+  it("has a green-teal river and a darker blue sea, so they cannot be mistaken for each other", () => {
+    expect(page).toContain('const riverMat = waterMaterial({ deep:"#2A9D8F", shallow:"#7CDDB8"');
+    expect(page).toContain('const seaMat = waterMaterial({ deep:"#072B63", shallow:"#16569B"');
+    expect(page).toContain("spec *= 0.18; fres *= 0.4;");           // and the sea hardly glints
   });
 });

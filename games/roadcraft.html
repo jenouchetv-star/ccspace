@@ -273,6 +273,7 @@ const SIZES = { easy:10, medium:14, hard:18 };
 const SET_SEED = { easy:11, medium:25, hard:38 };                  /* the "set stage" for each size: the same map every time */
 const DENSITY = { easy:.07, medium:.14, hard:.22 };                /* how much of the grass has a tree or rock on it */
 const BRIDGE_MIN = { easy:8, medium:11, hard:15 };
+const RIVER_MAX = { easy:3, medium:5, hard:7 };                      /* the most river squares the shortest way home may need to cross */
 const TWO_STARTS = [{ r:0, c:2 }, { r:2, c:0 }];                    /* with two players the cars start a knight's move apart, the same number of squares from home */
 const CODE_L = "ABCDEFGHJKLMNPQRSTUVWXYZ", CODE_D = "23456789", CODE_A = CODE_L + CODE_D;
 
@@ -287,7 +288,7 @@ function cleanCode(s){ const d = String(s == null ? "" : s).toUpperCase().replac
 function fmtCode(c){ return c.slice(0, 3) + " " + c.slice(3); }
 
 /* the island: a rounded square with a ragged coast, a clear corner to start in, a clear corner for the house, rivers and obstacles */
-function makeTerrain(diff, seed){
+function buildTerrain(diff, seed){
   const n = SIZES[diff], R = rng(seed), mid = (n - 1) / 2;
   const t = Array.from({ length:n }, () => Array(n).fill(G.GRASS));
   const inGrid = (r, c) => r >= 0 && r < n && c >= 0 && c < n;
@@ -348,27 +349,64 @@ function makeTerrain(diff, seed){
   }
   /* there must be a way home, and with two players both cars must have exactly the same distance to go: clear obstacles until that is true */
   const home = { r:n - 1, c:n - 1 }, s1 = TWO_STARTS[0], s2 = TWO_STARTS[1];
-  const fair = () => { const a = reachable(t, n, s1, home); return a > 0 && a === reachable(t, n, s2, home); };
-  while ((reachable(t, n, { r:0, c:0 }, home) < 0 || !fair()) && spots.length){ const [r, c] = spots.splice(Math.floor(R() * spots.length), 1)[0]; t[r][c] = G.GRASS; }
+  const fair = () => { const a = route(t, n, s1, home), b = route(t, n, s2, home); return !!a && !!b && a.steps === b.steps; };
+  while ((!route(t, n, { r:0, c:0 }, home) || !fair()) && spots.length){ const [r, c] = spots.splice(Math.floor(R() * spots.length), 1)[0]; t[r][c] = G.GRASS; }
   return t;
 }
-/* how many steps from one square to another over grass and river (a bridge can cross a river); -1 if there is no way */
-function reachable(t, n, a, b){
-  const dist = Array.from({ length:n }, () => Array(n).fill(-1)), q = [[a.r, a.c]]; dist[a.r][a.c] = 0;
-  while (q.length){
-    const [r, c] = q.shift();
-    if (r === b.r && c === b.c) return dist[r][c];
+/* the shortest way from one square to another, as the real rules allow it: roads go over grass, and over a river only on a bridge,
+   and a bridge only goes straight, so a car must drive straight across every river square. Returns { steps, rivers } or null. */
+function route(t, n, a, b){
+  const id = (r, c, h) => (r * n + c) * 5 + h, dist = new Int32Array(n * n * 5).fill(-1), rv = new Int32Array(n * n * 5);
+  const q = [[a.r, a.c, 4]]; dist[id(a.r, a.c, 4)] = 0;                 /* heading 4: the start, free to go any way */
+  for (let qi = 0; qi < q.length; qi++){
+    const [r, c, h] = q[qi], me = id(r, c, h);
+    if (r === b.r && c === b.c) return { steps:dist[me], rivers:rv[me] };
     for (let d = 0; d < 4; d++){
+      if (t[r][c] === G.RIVER && d !== h) continue;                    /* a bridge only goes straight */
+      if (h < 4 && d === (h + 2) % 4) continue;
       const nr = r + DR[d], nc = c + DC[d];
-      if (nr < 0 || nr >= n || nc < 0 || nc >= n || dist[nr][nc] >= 0) continue;
-      if (t[nr][nc] !== G.GRASS && t[nr][nc] !== G.RIVER) continue;
-      dist[nr][nc] = dist[r][c] + 1; q.push([nr, nc]);
+      if (nr < 0 || nr >= n || nc < 0 || nc >= n) continue;
+      const tt = t[nr][nc];
+      if (tt !== G.GRASS && tt !== G.RIVER) continue;
+      if (nr === b.r && nc === b.c && d !== 1 && d !== 2) continue;    /* the house has its doors on its north and west sides */
+      const ns = id(nr, nc, d); if (dist[ns] >= 0) continue;
+      dist[ns] = dist[me] + 1; rv[ns] = rv[me] + (tt === G.RIVER ? 1 : 0); q.push([nr, nc, d]);
     }
   }
-  return -1;
+  return null;
 }
+function reachable(t, n, a, b){ const r = route(t, n, a, b); return r ? r.steps : -1; }
 /* the fewest road squares that could join the start to the house: the "par" */
 function parOf(t, n, from){ const d = reachable(t, n, from || { r:0, c:0 }, { r:n - 1, c:n - 1 }); return d < 0 ? -1 : Math.max(1, d - 1); }
+/* is this island fair to play? A way home from every start, the same distance for both players, not too much river, and the land mostly in one piece */
+function playable(t, n, diff){
+  const home = { r:n - 1, c:n - 1 };
+  const a = route(t, n, { r:0, c:0 }, home), b = route(t, n, TWO_STARTS[0], home), c = route(t, n, TWO_STARTS[1], home);
+  if (!a || !b || !c || b.steps !== c.steps) return false;
+  if (a.rivers > RIVER_MAX[diff] || b.rivers > RIVER_MAX[diff]) return false;
+  const seen = new Set(); let total = 0, largest = 0;
+  for (let r = 0; r < n; r++) for (let q = 0; q < n; q++){
+    if (t[r][q] === G.VOID) continue;
+    total++;
+    if (seen.has(r + "," + q)) continue;
+    let size = 0; const st = [[r, q]]; seen.add(r + "," + q);
+    while (st.length){ const [y, x] = st.pop(); size++; for (let d = 0; d < 4; d++){ const ny = y + DR[d], nx = x + DC[d]; if (ny >= 0 && ny < n && nx >= 0 && nx < n && t[ny][nx] !== G.VOID && !seen.has(ny + "," + nx)){ seen.add(ny + "," + nx); st.push([ny, nx]); } } }
+    largest = Math.max(largest, size);
+  }
+  return largest >= total * .9;
+}
+/* the safe island: open grass with one straight river */
+function plainTerrain(n){
+  const t = Array.from({ length:n }, () => Array(n).fill(G.GRASS)), row = Math.round(n / 2);
+  for (let c = 0; c < n; c++) t[row][c] = G.RIVER;
+  return t;
+}
+/* the same numbers always build the same island, and it is always possible to get home on it: an island that is not is thrown away and the next one tried */
+function makeTerrain(diff, seed){
+  const n = SIZES[diff];
+  for (let k = 0; k < 80; k++){ const t = buildTerrain(diff, seed + k * 7919); if (playable(t, n, diff)) return t; }
+  return plainTerrain(n);
+}
 /* what is in each player's pile of cards */
 function deckPlan(par, diff){
   const total = clamp(Math.round(par * 2.9), 44, 120);
@@ -715,6 +753,9 @@ function waterMaterial(opts){
       "  vec3 R = reflect(-V, N); R.y = abs(R.y);",
       "  vec3 skyc = mix(uHor, uZen, pow(clamp(R.y, 0.0, 1.0), 0.5));",
       "  float spec = pow(max(dot(R, normalize(uSun)), 0.0), 380.0) * 5.0 + pow(max(dot(R, normalize(uSun)), 0.0), 36.0) * 0.12;",
+      "#ifdef OCEAN",
+      "  spec *= 0.18; fres *= 0.4;                                   /* the sea is dark and calm: only a faint glint */",
+      "#endif",
       "  vec3 body; float foam = 0.0; float alpha = uOpacity;",
       "#ifdef OCEAN",
       "  vec2 muv = (vW.xz - uRect.xy) / uRect.zw;",
@@ -744,8 +785,8 @@ function waterMaterial(opts){
   });
   return m;
 }
-const riverMat = waterMaterial({ deep:"#1C7FA8", shallow:"#52C4C4", opacity:.8 });
-const seaMat = waterMaterial({ deep:"#14609F", shallow:"#37C0C9", opacity:1, ocean:true });
+const riverMat = waterMaterial({ deep:"#2A9D8F", shallow:"#7CDDB8", opacity:.9 });      /* a clear green-teal river... */
+const seaMat = waterMaterial({ deep:"#072B63", shallow:"#16569B", opacity:1, ocean:true });   /* ...and a deep blue sea */
 
 /* =====================================================================
    THE ISLAND
@@ -1430,7 +1471,7 @@ function drawCard(cv, type, rot, playerId){
   const isBridge = type === T.BRIDGE;
   x.fillStyle = "#5BA63A"; x.fillRect(0, 0, S, S);
   const gg = x.createLinearGradient(0, 0, S, S); gg.addColorStop(0, "rgba(255,255,255,.18)"); gg.addColorStop(1, "rgba(0,0,0,.12)"); x.fillStyle = gg; x.fillRect(0, 0, S, S);
-  if (isBridge){ x.fillStyle = "#4DB7D6"; x.fillRect(0, S * .34, S, S * .32); x.fillStyle = "rgba(255,255,255,.5)"; for (let i = 0; i < 4; i++) x.fillRect(S * (.08 + i * .24), S * (.42 + (i % 2) * .08), S * .14, 2); }
+  if (isBridge){ x.fillStyle = "#5FCFB2"; x.fillRect(0, S * .34, S, S * .32); x.fillStyle = "rgba(255,255,255,.5)"; for (let i = 0; i < 4; i++) x.fillRect(S * (.08 + i * .24), S * (.42 + (i % 2) * .08), S * .14, 2); }
   x.save(); x.translate(S / 2, S / 2); x.rotate(rot * Math.PI / 2);
   const P = pt => [pt[0] * S, pt[1] * S];
   const line = (pts, w, col) => { x.beginPath(); pts.forEach((q, i) => { const a = P(q); i ? x.lineTo(a[0], a[1]) : x.moveTo(a[0], a[1]); }); x.lineWidth = w; x.strokeStyle = col; x.lineCap = "butt"; x.lineJoin = "round"; x.stroke(); };
