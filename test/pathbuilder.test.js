@@ -150,9 +150,10 @@ describe("the page", () => {
     expect(page).toContain("const FOV = 24");                       // a narrow lens: a tight, near-isometric shot, never ultra wide
   });
 
-  it("lets a stuck player swap a card, randomize the whole deck, or undo", () => {
-    expect(page).toContain('id="bSwap"');
-    expect(page).toContain('Randomize my deck');
+  it("lets a stuck player swap their cards for a new random set, or undo", () => {
+    expect(page).not.toContain('id="bSwap"');                        // no separate one-card swap any more
+    expect(page).toContain('<span class="t">Swap my cards</span>');
+    expect(page).not.toContain('Randomize my deck');
     expect(page).toContain('id="bUndo"');
     expect(page).toContain("function hasMove(p)");
     expect(page).toContain("None of your cards fits here.");

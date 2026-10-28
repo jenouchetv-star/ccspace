@@ -37,6 +37,12 @@ describe("a word to know on every game page", () => {
     expect(v.indexOf("How to play")).toBeLessThan(v.indexOf("portalWordHTML(g)"));
   });
 
+  it("has a crumb that returns to the list the game belongs to: Play: Online Games or Play: Offline Games", () => {
+    const v = body("viewGame");
+    expect(v).toContain('(g.interactive ? "#/play/online" : "#/play/offline")');
+    expect(v).toContain("Play: ' + (g.interactive ? \"Online\" : \"Offline\") + ' Games");
+  });
+
   it("can be changed in the admin game editor", () => {
     const games = html.split("  games: [")[1].split("  videos: [")[0];
     for (const k of ["vocabWord", "vocabSay", "vocabMeaning", "vocabExample"]) expect(games).toContain('key:"' + k + '"');
