@@ -326,6 +326,48 @@ describe("the How to Play box asks 1 player or 2", () => {
   });
 });
 
+describe("a stuck car can turn around", () => {
+  it("has a Turn around button that is hidden until the car is stuck", () => {
+    expect(page).toContain('<button type="button" id="bRev" hidden');
+    expect(page).toContain(".tools button[hidden]{display:none!important}");
+    const tools = page.split("function updateTools(){")[1].split("\n}\n")[0];
+    expect(tools).toContain('$("#bRev").hidden = !rev;');
+    expect(tools).toContain("const rev = !!stuck && canReverse()");
+  });
+  it("drives back along its own road to the nearest square with a way on, never through the other car", () => {
+    const f = page.split("function reversePath(p){")[1].split("\nfunction ")[0];
+    expect(f).toContain("h:(p.heading + 2) % 4");
+    expect(f).toContain("stepOptions(s, s.h)");
+    expect(f).toContain("never drive through the other car");
+    expect(f.indexOf("wayOn(s, s.h, true)")).toBeLessThan(f.indexOf("wayOn(s, s.h, false)"));   // a spot where one of my cards fits beats a merely free square
+  });
+  it("shares one step rule with ordinary driving, and a ramp can be backed down but only jumped forwards", () => {
+    expect(page).toContain("const options = stepOptions(cur, heading);");
+    expect(page).toContain("tile.type === T.RAMP && heading === tile.rotation");
+    expect(page).toContain("tile.type === T.RAMP && d === tile.rotation");
+  });
+  it("uses up your turn with a friend, and your friend's screen turns the car round too", () => {
+    const f = page.split("function reverseCar(){")[1].split("\n}\n")[0];
+    expect(f).toContain('mpSend({ t:"rev"');
+    expect(f).toContain("turnNo++; current = current === 1 ? 2 : 1;");
+    expect(page).toContain('p.t === "rev"');
+    expect(page).toContain("if (!doReverse(p.who)) return;");
+  });
+  it("is explained in How to Play", () => {
+    expect(page).toContain("Turn around drives the car back to a spot where you can build again");
+  });
+});
+
+describe("the card tip", () => {
+  it("is one slim line at the top of the screen, under the bar, away from the board and the hand", () => {
+    expect(page).toMatch(/#tip\{[^}]*top:calc\(var\(--bar-h,56px\) \+ 8px\)/);
+    expect(page).not.toMatch(/#tip\{[^}]*bottom:/);
+    expect(page).toContain('setProperty("--bar-h"');
+    expect(page).not.toContain("tipHow");
+    expect(page).not.toContain("tipon");
+  });
+});
+
 describe("the camera stays where the player puts it", () => {
   const place = page.split("function doPlace(")[1].split("\n}\n")[0];
   it("does not swing back to the car when a road is placed", () => {
