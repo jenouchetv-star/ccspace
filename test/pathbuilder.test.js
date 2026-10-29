@@ -326,6 +326,18 @@ describe("the How to Play box asks 1 player or 2", () => {
   });
 });
 
+describe("the camera stays where the player puts it", () => {
+  const place = page.split("function doPlace(")[1].split("\n}\n")[0];
+  it("does not swing back to the car when a road is placed", () => {
+    expect(place).not.toContain("cam.follow");
+    expect(place).not.toContain("refocus(");
+  });
+  it("moves to the car once on request, and never chases it after that", () => {
+    const cam = page.split("function placeCamera(dt){")[1].split("\n}\n")[0];
+    expect(cam).toContain("cam.tfz = f.z; cam.follow = false; }");
+  });
+});
+
 describe("its place on the Play page", () => {
   it("is registered as an embedded game with a cover and a link to the Bottle-Cap Marble Run activity", () => {
     const entry = index.split('G({ id:"game-pathbuilder"')[1].split('leadsTo:')[1].split("}),")[0];
