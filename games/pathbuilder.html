@@ -486,6 +486,36 @@ function deckPlan(par, diff){
   const tee = Math.max(Math.round(total * .07), 4), tunnel = Math.max(Math.round(total * .06), TUNNEL_MIN[diff]), ramp = Math.max(Math.round(total * .05), RAMP_MIN[diff]);
   return { STRAIGHT:straight, CORNER:rest - straight, CROSSROADS:cross, TEE:tee, UTURN:uturn, BRIDGE:bridge, TUNNEL:tunnel, RAMP:ramp };
 }
+
+/* Two cars never share a square. When roads join up, both cars can end up wanting the same square, or one wants to
+   drive through a car that is parked there. The car that would arrive second stops one square short instead: the one
+   with the longer drive gives way (on a tie, the player who just placed keeps the square), and a moving car always
+   gives way to a parked one. Home is the one square they share.
+   plans: [{ id, heading0, path:{ tiles, dirs, heading } }] (the cars about to drive); parked: [{ id, r, c }] (the others). */
+function separateRoutes(plans, parked, placer, isHomeAt){
+  const same = (a, b) => a.r === b.r && a.c === b.c;
+  const cut = (pl, keep) => { pl.path.dirs.length = keep; pl.path.tiles.length = keep + 1; pl.path.heading = keep ? pl.path.dirs[keep - 1] : pl.heading0; };
+  const last = pl => pl.path.tiles[pl.path.tiles.length - 1];
+  for (let round = 0; round < 12; round++){
+    let changed = false;
+    const still = parked.concat(plans.filter(x => !x.path.dirs.length).map(x => ({ id:x.id, r:x.path.tiles[0].r, c:x.path.tiles[0].c })));
+    plans.forEach(pl => {
+      if (!pl.path.dirs.length) return;
+      const blockers = still.filter(s => s.id !== pl.id && !isHomeAt(s.r, s.c));
+      const at = pl.path.tiles.findIndex((t, i) => i > 0 && blockers.some(s => same(s, t)));
+      if (at > 0){ cut(pl, at - 1); changed = true; }
+    });
+    for (let i = 0; i < plans.length; i++) for (let j = i + 1; j < plans.length; j++){
+      const a = plans[i], b = plans[j];
+      if (!a.path.dirs.length || !b.path.dirs.length || !same(last(a), last(b)) || isHomeAt(last(a).r, last(a).c)) continue;
+      const la = a.path.dirs.length, lb = b.path.dirs.length;
+      const loser = la > lb ? a : lb > la ? b : (a.id === placer ? b : a);
+      cut(loser, loser.path.dirs.length - 1); changed = true;
+    }
+    if (!changed) break;
+  }
+  return plans;
+}
 /* END pure */
 
 const YAW = [Math.PI, Math.PI / 2, 0, -Math.PI / 2];               /* which way a car faces when it heads in each direction */
@@ -592,7 +622,9 @@ function findPath(p){
       if (nt && openEdge(nt, (d + 2) % 4)) options.push({ d, r:nr, c:nc });
     }
     if (!options.length) break;
-    const pick = options.find(o => o.d === heading) || options[0];
+    /* at a fork the car stays on the road its own player laid (straight on if it can), rather than wandering onto a friend's */
+    const mine = options.filter(o => { const nb = grid[o.r][o.c]; return nb && nb.player === p.id; }), pool = mine.length ? mine : options;
+    const pick = pool.find(o => o.d === heading) || pool[0];
     const key = pick.r + "," + pick.c + "," + pick.d;
     if (seen.has(key)) break;
     seen.add(key);
@@ -1500,7 +1532,7 @@ function buildActions(p, path){
       push([wp(lt.r, lt.c, EDGE_PT[heading])]);                       /* a car in the middle of a tunnel could not be seen: it waits at the far mouth */
     } else {
       faceYaw(YAW[heading]);
-      push([[lt.c, lt.r]]);
+      push([[lt.c + (ltile.type === T.HOME ? (p.id === 2 ? .17 : -.17) : 0), lt.r]]);      /* at home the two cars park side by side */
     }
   }
   flush();
@@ -1527,14 +1559,18 @@ function startDrive(p, path){
   driving++;
   return true;
 }
-/* work out every car's route after a card is placed; if two cars would get home, the one with the shorter drive wins */
+/* after a card is placed, only the car of the player who placed it drives; every other car stays where it is, and the mover never drives through one */
 function launchDrives(placer){
-  const plans = [];
+  const plans = [], parked = [];
   Object.values(players).forEach(p => {
-    if (!p.active || p.arrived) return;
+    if (!p.active) return;
+    if (p.arrived || p.id !== placer){ parked.push({ id:p.id, r:p.pos.r, c:p.pos.c }); return; }
     const path = findPath(p);
-    if (path.dirs.length){ const end = path.tiles[path.tiles.length - 1]; plans.push({ p, path, home:isHome(end.r, end.c) }); }
+    if (path.dirs.length) plans.push({ id:p.id, p, heading0:p.heading, path });
+    else parked.push({ id:p.id, r:p.pos.r, c:p.pos.c });
   });
+  separateRoutes(plans, parked, placer, isHome);                     /* cars never share a square, and never drive through a parked one */
+  plans.forEach(x => { const end = x.path.tiles[x.path.tiles.length - 1]; x.home = isHome(end.r, end.c); });
   const homers = plans.filter(x => x.home).sort((a, b) => a.path.dirs.length - b.path.dirs.length || (a.p.id === placer ? -1 : 1));
   const win = homers.length ? homers[0].p.id : 0;
   let any = false;

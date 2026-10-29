@@ -8,7 +8,7 @@ const page = readFileSync(new URL("../games/pathbuilder.html", import.meta.url),
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const block = page.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
 const R = new Function(
-  block + "; return { makeTerrain, buildTerrain, route, playable, reachable, parOf, TWO_STARTS, RIVER_MAX, deckPlan, rotatedEdges, genCode, cleanCode, fmtCode, G, T, SIZES, SET_SEED, DENSITY, BRIDGE_MIN, TUNNEL_MIN, RAMP_MIN, BASE_EDGES, rampSpan };"
+  block + "; return { makeTerrain, buildTerrain, route, playable, reachable, parOf, TWO_STARTS, RIVER_MAX, deckPlan, rotatedEdges, genCode, cleanCode, fmtCode, G, T, SIZES, SET_SEED, DENSITY, BRIDGE_MIN, TUNNEL_MIN, RAMP_MIN, BASE_EDGES, rampSpan, separateRoutes };"
 )();
 const { G } = R;
 const count = (t, v) => t.flat().filter(x => x === v).length;
@@ -359,5 +359,100 @@ describe("the water", () => {
     expect(page).toContain('const riverMat = waterMaterial({ deep:"#2A9D8F", shallow:"#7CDDB8"');
     expect(page).toContain('const seaMat = waterMaterial({ deep:"#072B63", shallow:"#16569B"');
     expect(page).toContain("spec *= 0.025; fres *= 0.12;");           // and the sea hardly glints
+  });
+});
+
+describe("two cars never share a square", () => {
+  const { separateRoutes } = R;
+  const home = (r, c) => r === 9 && c === 9;
+  /* a straight road along row 0, from column `from` to column `to` (heading east = direction 1) */
+  const run = (id, from, to, heading0 = 1) => {
+    const tiles = [], dirs = [];
+    for (let c = from; c <= to; c++) tiles.push({ r: 0, c });
+    for (let c = from; c < to; c++) dirs.push(1);
+    return { id, heading0, path: { tiles, dirs, heading: 1 } };
+  };
+  const end = pl => pl.path.tiles[pl.path.tiles.length - 1].c;
+
+  it("leaves routes alone when nothing is in the way", () => {
+    const a = run(1, 0, 3), b = run(2, 5, 8);
+    separateRoutes([a, b], [], 1, home);
+    expect([end(a), end(b)]).toEqual([3, 8]);
+  });
+
+  it("stops the car with the longer drive one square short when both want the same square", () => {
+    const a = run(1, 0, 6), b = run(2, 4, 6);                 // both end on column 6; a has the longer drive
+    separateRoutes([a, b], [], 2, home);
+    expect(end(b)).toBe(6);
+    expect(end(a)).toBe(5);
+    expect(a.path.dirs.length).toBe(5);
+    expect(a.path.tiles.length).toBe(6);
+  });
+
+  it("on a tie the player who just placed keeps the square", () => {
+    const a = run(1, 2, 6), b = run(2, 2, 6);
+    separateRoutes([a, b], [], 2, home);
+    expect(end(b)).toBe(6);
+    expect(end(a)).toBe(5);
+    const c = run(1, 2, 6), d = run(2, 2, 6);
+    separateRoutes([c, d], [], 1, home);
+    expect(end(c)).toBe(6);
+    expect(end(d)).toBe(5);
+  });
+
+  it("never drives through a parked car, and stops just before it", () => {
+    const a = run(1, 0, 6);
+    separateRoutes([a], [{ id: 2, r: 0, c: 4 }], 1, home);
+    expect(end(a)).toBe(3);
+  });
+
+  it("a car that is boxed in by a parked car right beside it stays where it is", () => {
+    const a = run(1, 0, 3);
+    separateRoutes([a], [{ id: 2, r: 0, c: 1 }], 1, home);
+    expect(a.path.dirs.length).toBe(0);
+    expect(a.path.heading).toBe(1);                               // facing the way it was facing
+  });
+
+  it("a car that gives way and stays put is then treated as parked for the others", () => {
+    const west = (id, from, to) => { const tiles = [], dirs = []; for (let c = from; c >= to; c--) tiles.push({ r: 0, c }); for (let c = from; c > to; c--) dirs.push(3); return { id, heading0: 3, path: { tiles, dirs, heading: 3 } }; };
+    const a = run(1, 3, 4), b = west(2, 5, 4), c = west(3, 7, 3);   // a and b both want column 4; b gives way and stays on 5; c would have driven through 5
+    separateRoutes([a, b, c], [], 1, home);
+    expect(end(a)).toBe(4);
+    expect(b.path.dirs.length).toBe(0);
+    expect(end(c)).toBe(6);
+  });
+
+  it("two cars may both finish on the home square", () => {
+    const mk = (id, from) => { const tiles = [], dirs = []; for (let c = from; c <= 9; c++) tiles.push({ r: 9, c }); for (let c = from; c < 9; c++) dirs.push(1); return { id, heading0: 1, path: { tiles, dirs, heading: 1 } }; };
+    const a = mk(1, 5), b = mk(2, 7);
+    separateRoutes([a, b], [], 1, home);
+    expect(a.path.tiles[a.path.tiles.length - 1]).toEqual({ r: 9, c: 9 });
+    expect(b.path.tiles[b.path.tiles.length - 1]).toEqual({ r: 9, c: 9 });
+  });
+
+  it("a car already at home does not block the other one getting there", () => {
+    const b = { id: 2, heading0: 1, path: { tiles: [{ r: 9, c: 7 }, { r: 9, c: 8 }, { r: 9, c: 9 }], dirs: [1, 1], heading: 1 } };
+    separateRoutes([b], [{ id: 1, r: 9, c: 9 }], 2, home);
+    expect(b.path.dirs.length).toBe(2);
+  });
+
+  it("only the car of the player who laid the road drives; the other car stays put and counts as parked", () => {
+    const launch = page.split("function launchDrives(placer){")[1].split("\n}\n")[0];
+    expect(launch).toContain("if (p.arrived || p.id !== placer){ parked.push(");
+    expect(launch).toContain("const path = findPath(p);");
+    expect(launch.indexOf("p.id !== placer")).toBeLessThan(launch.indexOf("findPath(p)"));   // the other car's route is never even worked out
+  });
+
+  it("at a fork a car stays on the road its own player laid", () => {
+    const f = page.split("function findPath(p){")[1].split("\nfunction ")[0];
+    expect(f).toContain("nb.player === p.id");
+    expect(f.indexOf("const mine")).toBeLessThan(f.indexOf("pool.find(o => o.d === heading)"));
+  });
+
+  it("is wired into launchDrives, before anyone is told they won, and parks cars side by side at home", () => {
+    const launch = page.split("function launchDrives(placer){")[1].split("\n}\n")[0];
+    expect(launch.indexOf("separateRoutes(plans, parked, placer, isHome)")).toBeGreaterThan(-1);
+    expect(launch.indexOf("separateRoutes(")).toBeLessThan(launch.indexOf("const homers"));
+    expect(page).toContain("ltile.type === T.HOME ? (p.id === 2 ? .17 : -.17) : 0");
   });
 });
