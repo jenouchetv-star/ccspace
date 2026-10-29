@@ -303,6 +303,29 @@ describe("playing together", () => {
   });
 });
 
+describe("the How to Play box asks 1 player or 2", () => {
+  const intro = page.split('<div class="overlay" id="intro">')[1].split('<div class="overlay" id="room"')[0];
+  it("starts on 1 player with a Play Now! button, and the room-code box and Join are hidden", () => {
+    expect(intro).toContain('<button type="button" id="wSolo" class="on" aria-pressed="true">1 player</button>');
+    expect(intro).toContain('<button type="button" id="wPair" aria-pressed="false">2 players</button>');
+    expect(intro).toContain('id="bPlay">Play Now!</button>');
+    expect(intro).toContain('<div class="go" id="goPair" hidden>');
+    expect(intro).not.toContain("Let’s go!");
+  });
+  it("shows a 6-character code field with a Join button for 2 players", () => {
+    const pair = intro.split('id="goPair"')[1];
+    expect(pair).toContain('id="introCode"');
+    expect(pair).toContain('maxlength="7"');
+    expect(pair).toContain('type="submit" class="cy" id="introJoinBtn">Join</button>');
+  });
+  it("swaps the two with the toggle and uses the same join as the room box", () => {
+    expect(page).toContain('$("#goSolo").hidden = pair; $("#goPair").hidden = !pair;');
+    expect(page).toContain('wireJoin($("#introJoin"), $("#introCode"), $("#introJoinBtn"), $("#introMsg"));');
+    expect(page).toContain('wireJoin($("#joinForm"), $("#joinCode"), $("#bJoin"), $("#joinMsg"));');
+    expect(page).toContain("flex-wrap:nowrap");                       // else the code box runs past the edge of a phone
+  });
+});
+
 describe("its place on the Play page", () => {
   it("is registered as an embedded game with a cover and a link to the Bottle-Cap Marble Run activity", () => {
     const entry = index.split('G({ id:"game-pathbuilder"')[1].split('leadsTo:')[1].split("}),")[0];

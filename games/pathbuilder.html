@@ -127,6 +127,23 @@ body.tipon #toast{bottom:calc(var(--hand-h) + 26px + var(--tip-h,64px))}
 .acts button{font-size:1.02rem}
 /* the intro scrolls on a short screen, but its button stays put at the bottom of the box */
 #intro .acts{position:sticky;bottom:calc(var(--dp) * -1);z-index:2;margin:6px calc(var(--dp) * -1) calc(var(--dp) * -1);padding:18px var(--dp) var(--dp);background:linear-gradient(to bottom,rgba(255,251,243,0),var(--card) 16px)}
+/* the intro's players toggle: 1 player gets Play Now!, 2 players gets the room-code box and Join */
+#intro .acts{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:12px}
+.seg.who{align-self:flex-start}
+.seg.who button{font-size:.98rem;padding:6px 18px;min-height:38px;background:transparent;border:0;border-radius:0;box-shadow:none;transform:none}
+.seg.who button+button{border-left:3px solid var(--ink)}
+.seg.who button.on{background:var(--sun)}
+.seg.who button:not(.on):hover{background:#EFE7D4}
+.seg.who button:focus-visible{outline:3px solid var(--ink);outline-offset:-6px}
+.go[hidden]{display:none}
+#bPlay{width:100%;font-size:1.15rem;padding:10px 30px}
+#introJoin{display:flex;gap:10px;align-items:stretch}
+#introCode{flex:1;min-width:0;font:inherit;font-weight:800;font-size:1.3rem;letter-spacing:.14em;text-transform:uppercase;text-align:center;color:var(--ink);background:#fff;border:3px solid var(--ink);border-radius:12px;padding:8px 10px;min-height:48px}
+#introJoin button{font-size:1.15rem;padding:10px 28px}
+#intro .joinmsg{margin:8px 0 0}
+/* an anchor, not a button: the page-wide button style is too forceful to turn into a plain text link */
+.linkish{display:inline-block;margin-top:4px;font-weight:700;font-size:.9rem;color:var(--mut);text-decoration:underline;cursor:pointer}
+.linkish:hover{color:var(--ink)}
 button.sun{background:var(--sun);color:var(--ink)}
 button.cy{background:var(--cyan);color:var(--ink)}
 button.danger{background:#fff;color:#a02020}
@@ -255,7 +272,21 @@ button.danger{background:#fff;color:#a02020}
       <li><span class="cds" aria-hidden="true"><span class="ct"><canvas data-card="TEE:0"></canvas></span><span class="ct"><canvas data-card="CROSSROADS:0"></canvas></span><span class="ct"><canvas data-card="UTURN:0"></canvas></span></span><div><b>Stuck? Change your cards</b>Swap my cards for a new set of random ones, or undo your last card.</div></li>
       <li><span class="cds" aria-hidden="true"><span class="ct"><canvas data-card="STRAIGHT:1"></canvas></span><span class="ct"><canvas data-card="CORNER:1"></canvas></span><span class="ct"><canvas data-card="STRAIGHT:0"></canvas></span></span><div><b>Fewer cards, more stars</b>The par shows the shortest way. Can you get home using about that many cards?</div></li>
     </ul>
-    <div class="acts"><button type="button" class="sun" id="bPlay" style="font-size:1.15rem;padding:10px 30px">Let’s go!</button></div>
+    <div class="acts" id="introActs">
+      <div class="seg who" role="group" aria-label="How many players">
+        <button type="button" id="wSolo" class="on" aria-pressed="true">1 player</button>
+        <button type="button" id="wPair" aria-pressed="false">2 players</button>
+      </div>
+      <div class="go" id="goSolo"><button type="button" class="sun" id="bPlay">Play Now!</button></div>
+      <div class="go" id="goPair" hidden>
+        <form id="introJoin" autocomplete="off">
+          <input id="introCode" type="text" inputmode="text" maxlength="7" placeholder="ABC 234" aria-label="Room code from your friend" autocapitalize="characters" spellcheck="false">
+          <button type="submit" class="cy" id="introJoinBtn">Join</button>
+        </form>
+        <p class="joinmsg" id="introMsg">Type the 6-character code your friend gave you.</p>
+        <a href="#" class="linkish" id="introMake" role="button">No code? Make a room for your friend</a>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2358,12 +2389,17 @@ $("#bMake").addEventListener("click", async () => {
   b.disabled = false;
 });
 $("#bCopy").addEventListener("click", async () => { try { await navigator.clipboard.writeText(MP.code); toast("Code " + fmtCode(MP.code) + " copied!", "good"); } catch(e){ toast("Tell your friend: " + fmtCode(MP.code), ""); } });
-$("#joinCode").addEventListener("input", e => { const d = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6); e.target.value = d.length > 3 ? d.slice(0, 3) + " " + d.slice(3) : d; });
-$("#joinForm").addEventListener("submit", async e => {
-  e.preventDefault();
-  const btn = $("#bJoin"), msg = $("#joinMsg"), code = cleanCode($("#joinCode").value);
+/* two places take a room code (the intro box and the Play with a friend box); both run the same join */
+function wireJoin(form, input, btn, msg){
+  input.addEventListener("input", e => { const d = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6); e.target.value = d.length > 3 ? d.slice(0, 3) + " " + d.slice(3) : d; });
+  form.addEventListener("submit", e => { e.preventDefault(); tryJoin(input, btn, msg); });
+}
+wireJoin($("#joinForm"), $("#joinCode"), $("#bJoin"), $("#joinMsg"));
+wireJoin($("#introJoin"), $("#introCode"), $("#introJoinBtn"), $("#introMsg"));
+async function tryJoin(input, btn, msg){
+  const code = cleanCode(input.value);
   msg.className = "joinmsg";
-  if (!code){ msg.className = "joinmsg bad"; msg.textContent = "Type the 6 letters and numbers your friend gave you."; $("#joinCode").focus(); return; }
+  if (!code){ msg.className = "joinmsg bad"; msg.textContent = "Type the 6 letters and numbers your friend gave you."; input.focus(); return; }
   btn.disabled = true; msg.textContent = "Looking for room " + fmtCode(code) + "…";
   MP.waitMsg = () => { msg.textContent = "Waiting for your friend to open room " + fmtCode(code) + "… keep this page open."; };
   try { await joinRoom(code); msg.textContent = ""; roomUi(); }
@@ -2375,7 +2411,18 @@ $("#joinForm").addEventListener("submit", async e => {
       : "Could not reach the room. Check your internet and try again.";
   }
   MP.waitMsg = null; btn.disabled = false;
-});
+}
+
+/* the How to Play box asks "1 player or 2?": 1 player shows Play Now!, 2 players shows the room-code box and Join */
+function setWho(pair){
+  $("#wSolo").classList.toggle("on", !pair); $("#wSolo").setAttribute("aria-pressed", pair ? "false" : "true");
+  $("#wPair").classList.toggle("on", pair); $("#wPair").setAttribute("aria-pressed", pair ? "true" : "false");
+  $("#goSolo").hidden = pair; $("#goPair").hidden = !pair;
+  if (pair) $("#introCode").focus();
+}
+$("#wSolo").addEventListener("click", () => setWho(false));
+$("#wPair").addEventListener("click", () => setWho(true));
+$("#introMake").addEventListener("click", e => { e.preventDefault(); openRoomDialog(); });
 
 /* =====================================================================
    FRAME LOOP
