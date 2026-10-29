@@ -137,13 +137,20 @@ body{position:fixed;inset:0;font-weight:600;-webkit-tap-highlight-color:transpar
 .seg.who button:focus-visible{outline:3px solid var(--ink);outline-offset:-6px}
 .go[hidden]{display:none}
 #bPlay{width:100%;font-size:1.15rem;padding:10px 30px}
-#introJoin{display:flex;gap:10px;align-items:stretch}
-#introCode{flex:1;min-width:0;font:inherit;font-weight:800;font-size:1.3rem;letter-spacing:.14em;text-transform:uppercase;text-align:center;color:var(--ink);background:#fff;border:3px solid var(--ink);border-radius:12px;padding:8px 10px;min-height:48px}
-#introJoin button{font-size:1.15rem;padding:10px 28px}
+.seg.who[hidden]{display:none}
+#introJoin{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+#introCode{flex:0 1 170px;min-width:0;font:inherit;font-weight:800;font-size:1.05rem;letter-spacing:.12em;text-transform:uppercase;text-align:center;color:var(--ink);background:#fff;border:3px solid var(--ink);border-radius:12px;padding:4px 8px;min-height:42px}
+#introJoin button{font-size:1rem;padding:6px 22px;min-height:42px}
 #intro .joinmsg{margin:8px 0 0}
-/* an anchor, not a button: the page-wide button style is too forceful to turn into a plain text link */
-.linkish{display:inline-block;margin-top:4px;font-weight:700;font-size:.9rem;color:var(--mut);text-decoration:underline;cursor:pointer}
-.linkish:hover{color:var(--ink)}
+.or{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--mut)}
+.or button{font-size:1rem;padding:6px 20px;min-height:42px}
+/* the room code, in place of the buttons, once a room is made from the How to Play box */
+#intro .digits{margin:2px 0;justify-content:flex-start}
+#intro .digits span{width:32px;height:40px;font-size:1.3rem}
+#intro .digits span:nth-child(3){margin-right:8px}
+.hostbtns{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+.hostbtns button{font-size:1rem;padding:6px 18px;min-height:42px}
+.hostbtns .sun{flex:1 1 auto}
 button.sun{background:var(--sun);color:var(--ink)}
 button.cy{background:var(--cyan);color:var(--ink)}
 button.danger{background:#fff;color:#a02020}
@@ -274,7 +281,7 @@ button.danger{background:#fff;color:#a02020}
       <li><span class="cds" aria-hidden="true"><span class="ct"><canvas data-card="STRAIGHT:1"></canvas></span><span class="ct"><canvas data-card="CORNER:1"></canvas></span><span class="ct"><canvas data-card="STRAIGHT:0"></canvas></span></span><div><b>Fewer cards, more stars</b>The par shows the shortest way. Can you get home using about that many cards?</div></li>
     </ul>
     <div class="acts" id="introActs">
-      <div class="seg who" role="group" aria-label="How many players">
+      <div class="seg who" id="introWho" role="group" aria-label="How many players">
         <button type="button" id="wSolo" class="on" aria-pressed="true">1 player</button>
         <button type="button" id="wPair" aria-pressed="false">2 players</button>
       </div>
@@ -283,9 +290,18 @@ button.danger{background:#fff;color:#a02020}
         <form id="introJoin" autocomplete="off">
           <input id="introCode" type="text" inputmode="text" maxlength="7" placeholder="ABC 234" aria-label="Room code from your friend" autocapitalize="characters" spellcheck="false">
           <button type="submit" class="cy" id="introJoinBtn">Join</button>
+          <div class="or"><span>or</span><button type="button" id="introMake">Make a room</button></div>
         </form>
         <p class="joinmsg" id="introMsg">Type the 6-character code your friend gave you.</p>
-        <a href="#" class="linkish" id="introMake" role="button">No code? Make a room for your friend</a>
+      </div>
+      <div class="go" id="goHost" hidden>
+        <div class="digits" id="iDigits" aria-live="polite"></div>
+        <p class="joinmsg" id="iHostMsg">Waiting for your friend… keep this page open.</p>
+        <div class="hostbtns">
+          <button type="button" id="iBack">Back to 1 player</button>
+          <button type="button" id="iCopy">Copy code</button>
+          <button type="button" class="sun" id="iEnter">Join Room</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2280,6 +2296,7 @@ function roomUi(){
     $("#mineMsg").textContent = n > 1 ? "Your friend is here. Have fun!" : "Waiting for your friend… keep this page open.";
   } else mineEl.hidden = true;
   $("#bRoomLeave").hidden = !MP.ch;
+  introUi();
 }
 function openRoomDialog(){ roomUi(); $("#room").hidden = false; $("#bMake").hidden = !!MP.ch; (MP.ch ? $("#bRoomClose") : $("#bMake")).focus(); }
 function closeRoomDialog(){ $("#room").hidden = true; if (!MP.ch && mode !== "online") $("#mode").value = "solo"; }
@@ -2457,7 +2474,8 @@ $("#bMake").addEventListener("click", async () => {
   catch(e){ await leaveRoom(); toast(e.message === "busy" ? "All the codes we tried were busy. Try again in a moment." : "Could not open a room. Check your internet and try again.", "bad"); }
   b.disabled = false;
 });
-$("#bCopy").addEventListener("click", async () => { try { await navigator.clipboard.writeText(MP.code); toast("Code " + fmtCode(MP.code) + " copied!", "good"); } catch(e){ toast("Tell your friend: " + fmtCode(MP.code), ""); } });
+async function copyCode(){ try { await navigator.clipboard.writeText(MP.code); toast("Code " + fmtCode(MP.code) + " copied!", "good"); } catch(e){ toast("Tell your friend: " + fmtCode(MP.code), ""); } }
+$("#bCopy").addEventListener("click", copyCode);
 /* two places take a room code (the intro box and the Play with a friend box); both run the same join */
 function wireJoin(form, input, btn, msg){
   input.addEventListener("input", e => { const d = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6); e.target.value = d.length > 3 ? d.slice(0, 3) + " " + d.slice(3) : d; });
@@ -2486,12 +2504,34 @@ async function tryJoin(input, btn, msg){
 function setWho(pair){
   $("#wSolo").classList.toggle("on", !pair); $("#wSolo").setAttribute("aria-pressed", pair ? "false" : "true");
   $("#wPair").classList.toggle("on", pair); $("#wPair").setAttribute("aria-pressed", pair ? "true" : "false");
-  $("#goSolo").hidden = pair; $("#goPair").hidden = !pair;
-  if (pair) $("#introCode").focus();
+  introUi();
+  if (pair && !(MP.ch && MP.host)) $("#introCode").focus();
+}
+/* once a room is made from this box, its code takes the place of the buttons: Back to 1 player, Copy code and Join Room */
+function introUi(){
+  const host = !!(MP.ch && MP.host), pair = $("#wPair").classList.contains("on");
+  $("#introWho").hidden = host;
+  $("#goSolo").hidden = host || pair; $("#goPair").hidden = host || !pair; $("#goHost").hidden = !host;
+  if (!host) return;
+  const d = $("#iDigits");
+  if (d.dataset.code !== MP.code){ d.dataset.code = MP.code; d.innerHTML = ""; MP.code.split("").forEach(ch => { const s = document.createElement("span"); s.textContent = ch; d.appendChild(s); }); d.setAttribute("aria-label", "Room code " + MP.code.split("").join(" ")); }
+  $("#iHostMsg").textContent = others().length ? "Your friend is here. Have fun!" : "Waiting for your friend… keep this page open.";
 }
 $("#wSolo").addEventListener("click", () => setWho(false));
 $("#wPair").addEventListener("click", () => setWho(true));
-$("#introMake").addEventListener("click", e => { e.preventDefault(); openRoomDialog(); });
+$("#introMake").addEventListener("click", async () => {
+  const b = $("#introMake"), msg = $("#introMsg"); b.disabled = true; msg.className = "joinmsg"; msg.textContent = "Making your room…";
+  try { await makeRoom(); msg.textContent = "Type the 6-character code your friend gave you."; roomUi(); $("#iEnter").focus(); }
+  catch(e){ await leaveRoom(); msg.className = "joinmsg bad"; msg.textContent = e.message === "busy" ? "All the codes we tried were busy. Try again in a moment." : "Could not open a room. Check your internet and try again."; }
+  b.disabled = false;
+});
+$("#iBack").addEventListener("click", async () => { await leaveRoom(); setWho(false); });
+$("#iCopy").addEventListener("click", copyCode);
+$("#iEnter").addEventListener("click", () => {
+  $("#intro").hidden = true; if (phase === "intro") phase = "play";
+  refocus(false); refreshMarkers(); updateHud();
+  toast("You are in room " + fmtCode(MP.code) + ". The game starts fresh for you both when your friend joins.", "good");
+});
 
 /* =====================================================================
    FRAME LOOP

@@ -319,10 +319,38 @@ describe("the How to Play box asks 1 player or 2", () => {
     expect(pair).toContain('type="submit" class="cy" id="introJoinBtn">Join</button>');
   });
   it("swaps the two with the toggle and uses the same join as the room box", () => {
-    expect(page).toContain('$("#goSolo").hidden = pair; $("#goPair").hidden = !pair;');
+    expect(page).toContain('$("#goSolo").hidden = host || pair; $("#goPair").hidden = host || !pair;');
     expect(page).toContain('wireJoin($("#introJoin"), $("#introCode"), $("#introJoinBtn"), $("#introMsg"));');
     expect(page).toContain('wireJoin($("#joinForm"), $("#joinCode"), $("#bJoin"), $("#joinMsg"));');
     expect(page).toContain("flex-wrap:nowrap");                       // else the code box runs past the edge of a phone
+  });
+});
+
+describe("making a room from the How to Play box", () => {
+  const intro = page.split('<div class="overlay" id="intro">')[1].split('<div class="overlay" id="room"')[0];
+  it("offers a small code field and an \"or Make a room\" button, not a link to another popup", () => {
+    expect(intro).toContain('<div class="or"><span>or</span><button type="button" id="introMake">Make a room</button></div>');
+    expect(page).toMatch(/#introCode\{flex:0 1 170px/);
+    expect(page).not.toContain("linkish");
+    const make = page.split('$("#introMake").addEventListener("click", async () => {')[1].split("\n});")[0];
+    expect(make).toContain("await makeRoom()");
+    expect(make).not.toContain("openRoomDialog");
+  });
+  it("swaps the footer for the room code with Back to 1 player, Copy code and Join Room", () => {
+    const host = intro.split('id="goHost"')[1];
+    expect(host).toContain('id="iDigits"');
+    expect(host.indexOf('id="iBack">Back to 1 player')).toBeLessThan(host.indexOf('id="iCopy">Copy code'));
+    expect(host.indexOf('id="iCopy">Copy code')).toBeLessThan(host.indexOf('id="iEnter">Join Room'));
+    const ui = page.split("function introUi(){")[1].split("\n}\n")[0];
+    expect(ui).toContain('$("#introWho").hidden = host;');
+    expect(ui).toContain('$("#goHost").hidden = !host;');
+    expect(page.split("function roomUi(){")[1].split("\n}\n")[0]).toContain("introUi();");   // it follows the room, so it never gets out of step
+  });
+  it("lets the host walk into the room, or go back to playing alone, instead of being stuck on the box", () => {
+    const enter = page.split('$("#iEnter").addEventListener("click", () => {')[1].split("\n});")[0];
+    expect(enter).toContain('$("#intro").hidden = true;');
+    expect(enter).not.toContain("leaveRoom");
+    expect(page).toContain('$("#iBack").addEventListener("click", async () => { await leaveRoom(); setWho(false); });');
   });
 });
 
