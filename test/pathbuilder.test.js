@@ -143,11 +143,19 @@ describe("the cards", () => {
 
 describe("the ramp's jump", () => {
   const { G } = R, n = 6, grass = () => Array.from({ length:n }, () => Array(n).fill(G.GRASS));
-  it("jumps one rock, or one gap in the sea, and lands on the next square", () => {
+  it("jumps one rock, one river, or one gap in the sea, and lands on the next square", () => {
     const t = grass(); t[2][3] = G.ROCK;
     expect(R.rampSpan(t, n, 3, 3, 0)).toEqual({ gap:{ r:2, c:3 }, land:{ r:1, c:3 } });   // facing north
     const t2 = grass(); t2[3][4] = G.VOID;
     expect(R.rampSpan(t2, n, 3, 3, 1)).toEqual({ gap:{ r:3, c:4 }, land:{ r:3, c:5 } });  // facing east
+    const t3 = grass(); t3[4][3] = G.RIVER;
+    expect(R.rampSpan(t3, n, 3, 3, 2)).toEqual({ gap:{ r:4, c:3 }, land:{ r:5, c:3 } });  // facing south, over a river
+  });
+  it("cannot jump a river that is two squares wide", () => {
+    const t = grass(); t[2][3] = G.RIVER; t[1][3] = G.RIVER;
+    expect(R.rampSpan(t, n, 3, 3, 0)).not.toBeNull();             // the far square is river, which counts as the bank to aim at
+    const wide = grass(); wide[2][3] = G.RIVER; wide[1][3] = G.VOID;
+    expect(R.rampSpan(wide, n, 3, 3, 0)).toBeNull();
   });
   it("cannot jump two squares: the gap is one square, and the square after it must be land", () => {
     const t = grass(); t[2][3] = G.ROCK; t[1][3] = G.ROCK;
@@ -155,10 +163,9 @@ describe("the ramp's jump", () => {
     const t2 = grass(); t2[2][3] = G.VOID; t2[1][3] = G.VOID;
     expect(R.rampSpan(t2, n, 3, 3, 0)).toBeNull();                // two squares of sea in a row
   });
-  it("has nothing to jump over grass, a tree, or a river, and cannot jump off the edge of the island", () => {
+  it("has nothing to jump over grass or a tree, and cannot jump off the edge of the island", () => {
     expect(R.rampSpan(grass(), n, 3, 3, 0)).toBeNull();
     const tree = grass(); tree[2][3] = G.TREE; expect(R.rampSpan(tree, n, 3, 3, 0)).toBeNull();
-    const river = grass(); river[2][3] = G.RIVER; expect(R.rampSpan(river, n, 3, 3, 0)).toBeNull();
     const edge = grass(); edge[0][3] = G.VOID; expect(R.rampSpan(edge, n, 1, 3, 0)).toBeNull();   // the square after it is off the map
   });
   it("can land on the far side of a river square only by a bridge, so a river square counts as land to aim at", () => {
@@ -198,7 +205,7 @@ describe("the page", () => {
     expect(page).toContain("function buildRamp()");
     expect(page).toContain("const sp = rampSpan(terrain, SIZE, r, c, card.rotation);");
     expect(page).toContain('acts.push({ k:"jump"');
-    expect(page).toContain("A ramp jumps one rock or one gap in the sea.");
+    expect(page).toContain("A ramp jumps one rock, one river or one gap in the sea.");
   });
 
   it("tells the player what a card is for as soon as it is selected, for every kind of card", () => {
@@ -290,16 +297,73 @@ describe("playing together", () => {
     expect(page).toContain('s.src = "../assets/vendor/supabase.js"');
     expect(existsSync(new URL("../assets/vendor/supabase.js", import.meta.url))).toBe(true);
   });
-  it("keeps each player's cards private and shares only the placed roads, in turn", () => {
+  it("keeps each player's cards private and shares only the placed roads", () => {
     expect(page).toContain('mpSend({ t:"mv"');
-    expect(page).toContain('mpSend({ t:"pass"');
     expect(page).toContain('mpSend({ t:"undo"');
     expect(page).not.toMatch(/t:"hand"|t:"cards"/);
-    expect(page).toContain("p.tn !== turnNo || p.who !== current");
+    expect(page).toContain("if (p.tn !== turnNo) return;");
   });
   it("starts both cars close together on one island", () => {
     expect(page).toContain("players[1].start = online() ?");
     expect(page).toContain("players[2].start = { r:TWO_STARTS[1].r, c:TWO_STARTS[1].c };");
+  });
+});
+
+describe("playing together has no turns", () => {
+  it("has no turn order at all: no current player, no pass, no waiting for a friend's turn", () => {
+    expect(page).not.toMatch(/\bcurrent\b\s*(=|===|!==)\s*(me|1|2)/);
+    expect(page).not.toContain("isMyTurn");
+    expect(page).not.toContain("passTurn");
+    expect(page).not.toContain('t:"pass"');
+    expect(page).not.toMatch(/It is your friend’s turn/);
+    expect(page).not.toMatch(/Your turn|Friend’s turn|taking turns/);
+    expect(page).toContain("Racing your friend");
+    expect(page).toContain("you both build at the same time");
+  });
+  it("only your own car holds you up: you can build while your friend's car is still driving", () => {
+    expect(page).toContain("const moving = () =>");
+    for (const fn of ["function tryPlace(", "function pickSquare(", "function dealHand(", "function chooseCard("]) {
+      expect(page.split(fn)[1].split("\n}\n")[0]).toContain("moving()");
+    }
+    expect(page.split("function tryPlace(")[1].split("\n}\n")[0]).not.toMatch(/\bdriving\b/);
+  });
+  it("swapping your cards is private and costs no turn", () => {
+    const f = page.split("function dealHand(){")[1].split("\n}\n")[0];
+    expect(f).not.toContain("mpSend");
+    expect(f).not.toContain("turnNo");
+  });
+  it("lets the host put every move in one order, so both islands match", () => {
+    expect(page).toContain("function hostHandle(p){");
+    expect(page).toContain("function ask(kind, body, hold){");
+    expect(page).toContain("if (online() && !MP.host){ ask(\"mv\"");        // a guest asks; the host decides
+    expect(page).toContain("if (MP.host) hostHandle(p); else applyRemote(p);");
+    const host = page.split("function hostHandle(p){")[1].split("\n}\n")[0];
+    expect(host).toContain('mpSend({ t:"no"');                           // a square taken a moment before is turned down, kindly
+    expect(host).toContain("Your friend built there first. Pick another square.");
+    expect(host.indexOf('mpSend({ t:"mv"')).toBeLessThan(host.indexOf("doPlace(2,"));   // sent first, so moves leave in order
+  });
+  it("answers a guest's request, or gives up after a few seconds instead of freezing", () => {
+    const ask = page.split("function ask(kind, body, hold){")[1].split("\n}\n")[0];
+    expect(ask).toContain("}, 8000);");
+    expect(ask).toContain("did not answer");
+    expect(page).toContain('p.t === "no"');
+  });
+  it("lets a friend's road land without dropping the card you are aiming", () => {
+    const f = page.split("function doPlace(")[1].split("\n}\n")[0];
+    expect(f).toContain("if (who === me) selected = -1;");
+  });
+  it("ends the race when a car has a road home, and nothing more can be built", () => {
+    const f = page.split("function doPlace(")[1].split("\n}\n")[0];
+    expect(f).toContain("if (players[who].willWin && !decided) decided = who;");
+    expect(page).toContain("const canBuild = () => !waiting && !decided;");
+  });
+  it("tells your friend when you run out of cards, and the game is lost only when you are both out", () => {
+    expect(page).toContain('mpSend({ t:"out"');
+    expect(page.split("function bothOut(){")[1].split("\n}\n")[0]).toContain("!outFlag[1] || !outFlag[2]");
+  });
+  it("only takes the undone car back, so a car that is still driving is not snapped away", () => {
+    const f = page.split("function revert(e, mine){")[1].split("\n}\n")[0];
+    expect(f).toContain("if (q.id !== e.who) return;");
   });
 });
 
@@ -374,10 +438,10 @@ describe("a stuck car can turn around", () => {
     expect(page).toContain("tile.type === T.RAMP && heading === tile.rotation");
     expect(page).toContain("tile.type === T.RAMP && d === tile.rotation");
   });
-  it("uses up your turn with a friend, and your friend's screen turns the car round too", () => {
+  it("shows on your friend's screen too: the car turns round there as well", () => {
     const f = page.split("function reverseCar(){")[1].split("\n}\n")[0];
     expect(f).toContain('mpSend({ t:"rev"');
-    expect(f).toContain("turnNo++; current = current === 1 ? 2 : 1;");
+    expect(f).toContain("turnNo++;");
     expect(page).toContain('p.t === "rev"');
     expect(page).toContain("if (!doReverse(p.who)) return;");
   });

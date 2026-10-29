@@ -276,7 +276,7 @@ button.danger{background:#fff;color:#a02020}
     <ul class="how">
       <li><span class="cds" aria-hidden="true"><span class="ct"><canvas data-card="STRAIGHT:0"></canvas><i>Straight</i></span><span class="ct"><canvas data-card="CORNER:0"></canvas><i>Corner</i></span></span><div><b>Pick a card, then pick a spot</b>Click a road card, then click a square next to the end of your road.</div></li>
       <li><span class="cds" aria-hidden="true"><span class="ct"><canvas data-card="CORNER:0"></canvas></span><span class="ct"><canvas data-card="CORNER:1"></canvas></span><span class="ct"><canvas data-card="CORNER:2"></canvas></span></span><div><b>Try it, turn it, place it</b>Click a square to try the card there, turn it with the arrows (or <b style="display:inline">R</b>), then tap Place. A road is locked in once it is placed.</div></li>
-      <li><span class="cds" aria-hidden="true"><span class="ct"><canvas data-card="BRIDGE:0"></canvas><i>Bridge</i></span><span class="ct"><canvas data-card="TUNNEL:0"></canvas><i>Tunnel</i></span><span class="ct"><canvas data-card="RAMP:0"></canvas><i>Ramp</i></span></span><div><b>Bridges, tunnels and ramps</b>A bridge crosses a river or goes over a road. A tunnel goes under a rock. A ramp jumps one rock or one gap in the sea. Trees are protected: go around them.</div></li>
+      <li><span class="cds" aria-hidden="true"><span class="ct"><canvas data-card="BRIDGE:0"></canvas><i>Bridge</i></span><span class="ct"><canvas data-card="TUNNEL:0"></canvas><i>Tunnel</i></span><span class="ct"><canvas data-card="RAMP:0"></canvas><i>Ramp</i></span></span><div><b>Bridges, tunnels and ramps</b>A bridge crosses a river or goes over a road. A tunnel goes under a rock. A ramp jumps one rock, one river or one gap in the sea. Trees are protected: go around them.</div></li>
       <li><span class="cds" aria-hidden="true"><span class="ct"><canvas data-card="TEE:0"></canvas></span><span class="ct"><canvas data-card="CROSSROADS:0"></canvas></span><span class="ct"><canvas data-card="UTURN:0"></canvas></span></span><div><b>Stuck? Change your cards</b>Swap my cards for a new set of random ones, or undo your last card. If the road ends, Turn around drives the car back to a spot where you can build again.</div></li>
       <li><span class="cds" aria-hidden="true"><span class="ct"><canvas data-card="STRAIGHT:1"></canvas></span><span class="ct"><canvas data-card="CORNER:1"></canvas></span><span class="ct"><canvas data-card="STRAIGHT:0"></canvas></span></span><div><b>Fewer cards, more stars</b>The par shows the shortest way. Can you get home using about that many cards?</div></li>
     </ul>
@@ -311,7 +311,7 @@ button.danger{background:#fff;color:#a02020}
   <div class="dlg wide" role="dialog" aria-labelledby="roomT">
     <span class="tag">2 players · online</span>
     <h2 id="roomT">Play with a friend</h2>
-    <p>You each play on your own screen, on the same island, taking turns. Make a room and give your friend the code, or type the code they gave you.</p>
+    <p>You each play on your own screen, on the same island, and you both build at the same time. The first car home wins. Make a room and give your friend the code, or type the code they gave you.</p>
     <div class="two">
       <section>
         <h3>Make a room</h3>
@@ -387,11 +387,11 @@ const TWO_STARTS = [{ r:0, c:2 }, { r:2, c:0 }];                    /* with two 
 const CODE_L = "ABCDEFGHJKLMNPQRSTUVWXYZ", CODE_D = "23456789", CODE_A = CODE_L + CODE_D;
 
 function rng(seed){ let a = seed >>> 0; return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-/* a ramp faces the way it was turned (0 north, 1 east, 2 south, 3 west). It can jump only if the square in front is one rock or one gap in the sea, and the square after that is land. */
+/* a ramp faces the way it was turned (0 north, 1 east, 2 south, 3 west). It can jump only if the square in front is one rock, one stretch of river or one gap in the sea, and the square after that is land. */
 function rampSpan(t, n, r, c, rot){
   const gr = r + DR[rot], gc = c + DC[rot], lr = r + 2 * DR[rot], lc = c + 2 * DC[rot], ing = (a, b) => a >= 0 && a < n && b >= 0 && b < n;
   if (!ing(gr, gc) || !ing(lr, lc)) return null;
-  if (t[gr][gc] !== G.ROCK && t[gr][gc] !== G.VOID) return null;
+  if (t[gr][gc] !== G.ROCK && t[gr][gc] !== G.VOID && t[gr][gc] !== G.RIVER) return null;
   if (t[lr][lc] !== G.GRASS && t[lr][lc] !== G.RIVER) return null;
   return { gap:{ r:gr, c:gc }, land:{ r:lr, c:lc } };
 }
@@ -576,7 +576,7 @@ const CARD_TIPS = {
   UTURN:      ["U-turn", "Turns the car right around. Use it when the road ahead is blocked, or to head back the way you came."],
   BRIDGE:     ["Bridge", "Crosses a river (only a bridge can), goes over another road, or sits on the grass. It always goes straight."],
   TUNNEL:     ["Tunnel", "Goes under a rock that is in your way. It only fits on a rock, and goes straight. Trees are protected: go around them."],
-  RAMP:       ["Ramp", "Jumps the car over one rock or one gap in the sea. Face it at the rock or gap, with land right after it."]
+  RAMP:       ["Ramp", "Jumps the car over one rock, one river or one gap in the sea. Face it at the rock, river or gap, with land right after it."]
 };
 const SEA = -.45, BED = -.3, WATER = -.14, OVER_H = .27, RAMP_H = .22, RAMP_Y = .02;
 const randomSeed = () => (crypto.getRandomValues(new Uint32Array(1))[0] % 90000) + 100;
@@ -585,15 +585,19 @@ const randomSeed = () => (crypto.getRandomValues(new Uint32Array(1))[0] % 90000)
 let SIZE = 10, MID = 4.5, HOME_CELL = { r:9, c:9 };
 let difficulty = "medium", mapRandom = true, mode = "solo";           /* the starting settings: 1 player, Medium, Random map. mode is solo | online */
 let terrain = [], grid = [], deck = [], hand = [], selected = -1, history = [];
-let current = 1, me = 1, placed = 0, placedOther = 0, bridgesUsed = 0, swaps = 0, phase = "intro";   /* intro | play | won | lost */
+let me = 1, placed = 0, placedOther = 0, bridgesUsed = 0, swaps = 0, phase = "intro";   /* intro | play | won | lost */
 let pending = null;                                                    /* the square where a card is waiting to be turned and placed: { r, c } */
 let cursor = null, driving = 0, winner = 0, par = 0, seed = 0, gen = 0, turnNo = 0, lastAct = null, outFlag = { 1:false, 2:false };
+/* With a friend there are no turns: you both build at the same time and the first car home wins. The host's screen puts every move in one order so both islands always match;
+   a guest's card is a request that waits a moment for the host's screen to answer. turnNo counts the moves in that order. */
+let waiting = null, decided = 0;                                       /* waiting: the guest's unanswered request { rid, kind, idx, card, timer }. decided: whose car has a road home (nothing more can be built). */
 const players = {
   1: { id:1, active:true,  start:{ r:0, c:0 }, color:"#D4231C", dash:"#FFFFFF", label:"Player 1 (red)",    car:null },
   2: { id:2, active:false, start:{ r:0, c:3 }, color:"#17181C", dash:"#FFD23A", label:"Player 2 (black)",  car:null }
 };
 const online = () => mode === "online";
-const isMyTurn = () => !online() || current === me;
+const canBuild = () => !waiting && !decided;
+const moving = () => { const p = players[me]; return !!(p && p.anim); };       /* only my own car holds me up: a friend's car can be driving while I build */
 const inGrid = (r, c) => r >= 0 && r < SIZE && c >= 0 && c < SIZE;
 const buildable = (r, c) => inGrid(r, c) && (terrain[r][c] === G.GRASS || terrain[r][c] === G.RIVER);
 const isHill = (r, c) => inGrid(r, c) && terrain[r][c] === G.ROCK;                                   /* a rock: only a tunnel can go under it. Trees are protected: nothing goes through a tree. */
@@ -619,7 +623,7 @@ function canPlace(r, c, card){
     return true;
   }
   if (t === G.RIVER && card.type !== T.BRIDGE) return false;
-  if (card.type === T.RAMP){                                                     /* a ramp needs one rock or one gap in the sea in front of it, and land after that */
+  if (card.type === T.RAMP){                                                     /* a ramp needs one rock, one river or one gap in the sea in front of it, and land after that */
     const sp = rampSpan(terrain, SIZE, r, c, card.rotation);
     return !!sp && !grid[sp.gap.r][sp.gap.c];
   }
@@ -640,7 +644,7 @@ function whyNot(r, c, card){
     return "A bridge must cross the road, not run along it. Turn the card a quarter turn.";
   }
   if (t === G.RIVER && card.type !== T.BRIDGE) return "Water! Only a bridge card can cross the river.";
-  if (card.type === T.RAMP) return "A ramp jumps one rock or one gap in the sea. Turn it to face one, with land right after it.";
+  if (card.type === T.RAMP) return "A ramp jumps one rock, one river or one gap in the sea. Turn it to face one, with land right after it.";
   return "";
 }
 
@@ -1667,7 +1671,7 @@ function stepCar(p, dt){
 function onStopped(p){
   const t = grid[p.pos.r][p.pos.c];
   if (t && t.type === T.HOME && !p.arrived){ p.arrived = true; if (p.willWin) arrive(p); }
-  if (driving === 0) afterDrive();
+  afterDrive();
 }
 
 /* =====================================================================
@@ -1692,9 +1696,9 @@ function reachOf(p){
 }
 function refreshMarkers(){
   disposeGroup(groups.marks); markers.length = 0;
-  if (phase !== "play" || driving) return;
+  if (phase !== "play" || moving()) return;
   const p = players[me];
-  if (!p || !p.active || p.arrived || !isMyTurn()) return;
+  if (!p || !p.active || p.arrived || !canBuild()) return;
   reachOf(p).forEach(({ d, r, c }) => {
     if (!inGrid(r, c) || !(buildable(r, c) || isHome(r, c) || (isHill(r, c) && hand.some(k => k.type === T.TUNNEL)))) return;
     const nt = grid[r][c];
@@ -1754,7 +1758,7 @@ function reversePath(p){
 }
 function canReverse(){
   const p = players[me];
-  if (phase !== "play" || driving || !isMyTurn() || !p || !p.active || p.arrived || !hand.length) return false;
+  if (phase !== "play" || moving() || !canBuild() || !p || !p.active || p.arrived || !hand.length) return false;
   return !hasMove(p) && !!reversePath(p);
 }
 function doReverse(who){
@@ -1766,10 +1770,11 @@ function doReverse(who){
 }
 function reverseCar(){
   if (!canReverse()){ toast("Your car can still go on. Place a road card, or swap your cards.", ""); return; }
+  if (online() && !MP.host){ ask("rev", {}); return; }                  /* a guest asks the host's screen, which puts it in order */
   const tn = turnNo;
   if (!doReverse(me)) return;
   selected = -1; pending = null;
-  if (online()){ mpSend({ t:"rev", g:gen, tn, who:me }); turnNo++; current = current === 1 ? 2 : 1; lastAct = { t:"rev", who:me }; }
+  if (online()){ mpSend({ t:"rev", g:gen, tn, who:me }); turnNo++; lastAct = { t:"rev", who:me }; }
   toast("Turning around. The car heads back to a spot where you can build again.", "good");
   refreshGhost(); renderHand(); updateHud(); refreshMarkers();
 }
@@ -1803,8 +1808,7 @@ function confirmPending(){
 }
 /* a click or tap on a square: try the selected card there. Click the same square again (or press Place) to put it down. */
 function pickSquare(r, c){
-  if (phase !== "play" || driving) return;
-  if (!isMyTurn()){ toast("It is your friend’s turn. Watch the cars!", ""); return; }
+  if (phase !== "play" || moving() || !canBuild()) return;
   if (selected < 0){ toast("Pick a road card first, then click a square.", ""); return; }
   const card = hand[selected];
   if (pending && pending.r === r && pending.c === c){ confirmPending(); return; }
@@ -1822,10 +1826,10 @@ let ghostMesh = null;
 function refreshGhost(){
   if (ghostMesh){ groups.ghost.remove(ghostMesh); ghostMesh.traverse(o => { if (o.geometry) o.geometry.dispose(); }); ghostMesh = null; }
   hoverPlane.visible = false;
-  if (pending && (phase !== "play" || selected < 0 || !hand[selected] || driving || !isMyTurn())) pending = null;       /* the card moved on, or it is not your turn: nothing is waiting */
+  if (pending && (phase !== "play" || selected < 0 || !hand[selected] || moving() || !canBuild())) pending = null;       /* the card moved on, or you cannot build right now: nothing is waiting */
   if (pending) cursor = { r:pending.r, c:pending.c };
   updatePend(); syncTip();
-  if (phase !== "play" || selected < 0 || !cursor || !hand[selected] || driving || !isMyTurn()) return;
+  if (phase !== "play" || selected < 0 || !cursor || !hand[selected] || moving() || !canBuild()) return;
   const card = hand[selected], { r, c } = cursor;
   if (!inGrid(r, c) || terrain[r][c] === G.VOID) return;
   const ok = canPlace(r, c, card);
@@ -1889,7 +1893,7 @@ function drawCard(cv, type, rot, playerId){
 const ROT_SVG = '<svg class="i" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>';
 function renderHand(){
   const box = $("#cards"); box.innerHTML = "";
-  const mine = isMyTurn();
+  const mine = canBuild();
   hand.forEach((card, i) => {
     const b = document.createElement("button"); b.type = "button";
     b.className = "rc" + (i === selected ? " sel" : "") + (card.type === T.BRIDGE ? " bridge" : "") + (card.type === T.TUNNEL ? " tunnel" : "") + (card.type === T.RAMP ? " ramp" : "") + (mine ? "" : " off");
@@ -1921,8 +1925,7 @@ function syncTip(){
   $("#tipName").textContent = t[0]; $("#tipText").textContent = t[1];
 }
 function chooseCard(i){
-  if (phase !== "play" || driving) return;
-  if (!isMyTurn()){ toast("It is your friend’s turn. You can plan your next card while you wait.", ""); }
+  if (phase !== "play" || moving()) return;
   selected = selected === i ? -1 : i; pending = null;
   renderHand(); refreshGhost();
   if (selected >= 0){
@@ -1947,10 +1950,8 @@ function updateHud(){
   $("#sDeck").innerHTML = "<b>" + deck.length + '</b><span class="t"> in pile</span>';
   const turn = $("#turn"); turn.hidden = !online();
   if (online()){
-    const mine = current === me;
-    turn.classList.toggle("mine", mine && phase === "play");
-    turn.querySelector("i").style.background = players[current].color;
-    turn.querySelector("span").textContent = phase !== "play" ? (winner === me ? "You got home first!" : winner ? "Your friend got home first" : "Game over") : mine ? "Your turn" : "Friend’s turn";
+    turn.querySelector("i").style.background = players[me].color;
+    turn.querySelector("span").textContent = phase !== "play" ? (winner === me ? "You got home first!" : winner ? "Your friend got home first" : "Game over") : "Racing your friend";
   }
   $("#diff").value = difficulty;
   document.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === viewMode));
@@ -1959,10 +1960,10 @@ function updateHud(){
 }
 let stuckShown = false;
 function updateTools(){
-  const play = phase === "play" && !driving;
+  const play = phase === "play" && !moving();
   $("#bUndo").disabled = !canUndo();
-  $("#bDeal").disabled = !(play && isMyTurn() && (hand.length || deck.length));
-  const stuck = play && isMyTurn() && hand.length && !hasMove(players[me]);
+  $("#bDeal").disabled = !(play && canBuild() && (hand.length || deck.length));
+  const stuck = play && canBuild() && hand.length && !hasMove(players[me]);
   /* a stuck car can turn around: the button shows only then, and bounces when the road itself is blocked (a new hand would not help) */
   const rev = !!stuck && canReverse(), blocked = rev && !wayOn(players[me].pos, players[me].heading, false);
   $("#bRev").hidden = !rev;
@@ -1991,7 +1992,7 @@ function newGame(cfg){
   if (cfg){ difficulty = cfg.diff; mapRandom = cfg.random; seed = cfg.seed; }
   SIZE = SIZES[difficulty]; configureWorld();
   terrain = makeTerrain(difficulty, seed);
-  winner = 0; driving = 0; placed = 0; placedOther = 0; bridgesUsed = 0; swaps = 0; selected = -1; cursor = null; current = 1; turnNo = 0; lastAct = null; history = []; outFlag = { 1:false, 2:false }; inbox = []; stuckShown = false;
+  winner = 0; driving = 0; placed = 0; placedOther = 0; bridgesUsed = 0; swaps = 0; selected = -1; cursor = null; turnNo = 0; lastAct = null; history = []; outFlag = { 1:false, 2:false }; inbox = []; stuckShown = false; decided = 0; settle();
   players[2].active = online();
   players[1].start = online() ? { r:TWO_STARTS[0].r, c:TWO_STARTS[0].c } : { r:0, c:0 }; players[2].start = { r:TWO_STARTS[1].r, c:TWO_STARTS[1].c };
   seedGrid(); par = parOf(terrain, SIZE, players[1].start);
@@ -2017,17 +2018,21 @@ function afterDrive(){
   refreshMarkers(); refreshGhost(); updateHud();
   if (phase !== "play") return;
   drainInbox();
-  if (driving) return;
+  if (moving()) return;
   maybeOut();
 }
 /* running out of cards: alone you lose; with a friend you wait and they carry on, until you are both out */
 function maybeOut(){
-  if (phase !== "play" || driving) return;
+  if (phase !== "play" || moving()) return;
   if (hand.length || deck.length) return;
   if (!online()){ phase = "lost"; setTimeout(() => { if (phase === "lost") $("#lose").hidden = false; }, 700); return; }
-  outFlag[me] = true;
-  if (outFlag[1] && outFlag[2]){ phase = "lost"; updateHud(); setTimeout(() => { if (phase === "lost") $("#lose").hidden = false; }, 700); return; }
-  if (current === me) passTurn(true);
+  if (decided) return;                                               /* a car already has its road home */
+  if (!outFlag[me]){ outFlag[me] = true; mpSend({ t:"out", g:gen, who:me }); }
+  bothOut();
+}
+function bothOut(){
+  if (phase !== "play" || !outFlag[1] || !outFlag[2]) return;
+  phase = "lost"; updateHud(); setTimeout(() => { if (phase === "lost") $("#lose").hidden = false; }, 700);
 }
 
 function snapshot(){
@@ -2043,27 +2048,32 @@ function doPlace(who, r, c, type, rotation, extra){
   else { if (type === T.BRIDGE) tile.h = .13; grid[r][c] = tile; layRoad(r, c, tile); }
   history.push(entry);
   if (who === me){ placed++; if (type === T.BRIDGE) bridgesUsed++; } else placedOther++;
-  turnNo++; if (online()) current = who === 1 ? 2 : 1;
+  turnNo++;
   lastAct = { t:"place", who };
-  selected = -1;                                                     /* the view stays where the player left it: only the top controls, the mouse or a new game move it */
+  if (who === me) selected = -1;                                     /* a friend's road never lets go of the card I am aiming. The view stays where the player left it: only the top controls, the mouse or a new game move it */
   refreshGhost();
   const any = launchDrives(who);
+  if (players[who].willWin && !decided) decided = who;               /* this road reaches home: nothing more can be built */
   renderHand(); updateHud();
-  disposeGroup(groups.marks); markers.length = 0;
+  if (who === me){ disposeGroup(groups.marks); markers.length = 0; } else refreshMarkers();
   if (!any) afterDrive();
   return { entry, any };
 }
+/* take the card out of my hand and put it on the island (alone, or as the host; a guest's card comes through here when the host's screen says yes) */
+function commitPlace(r, c, idx){
+  const card = hand[idx], deckBefore = deck.length;
+  hand.splice(idx, 1); refill();
+  const drawn = deck.length < deckBefore ? hand[hand.length - 1] : null;
+  return doPlace(me, r, c, card.type, card.rotation, { card, idx, drawn });
+}
 function tryPlace(r, c){
-  if (phase !== "play" || driving) return;
-  if (!isMyTurn()){ toast("It is your friend’s turn. Watch the cars!", ""); return; }
+  if (phase !== "play" || moving() || !canBuild()) return;
   if (selected < 0){ toast("Pick a road card first, then click a square.", ""); return; }
   const card = hand[selected];
   if (!canPlace(r, c, card)){ const why = whyNot(r, c, card); if (why) toast(why, "bad"); return; }
-  const idx = selected, deckBefore = deck.length;
-  hand.splice(idx, 1); refill();
-  const drawn = deck.length < deckBefore ? hand[hand.length - 1] : null;
-  const res = doPlace(me, r, c, card.type, card.rotation, { card, idx, drawn });
-  if (online()) mpSend({ t:"mv", g:gen, tn:turnNo - 1, who:me, r, c, type:card.type, rot:card.rotation });
+  if (online() && !MP.host){ ask("mv", { r, c, type:card.type, rot:card.rotation }, { idx:selected, card }); return; }
+  if (online()) mpSend({ t:"mv", g:gen, tn:turnNo, who:me, r, c, type:card.type, rot:card.rotation });       /* sent first, so moves leave in the order they happen */
+  const res = commitPlace(r, c, selected);
   if (!res.any) toast(connectHint(r, c), "");
 }
 function connectHint(r, c){
@@ -2073,15 +2083,16 @@ function connectHint(r, c){
 
 /* undo: take back the last card (and send the car back where it was) */
 function canUndo(){
-  if (phase !== "play" || driving || !history.length) return false;
+  if (phase !== "play" || moving() || !history.length) return false;
   const e = history[history.length - 1];
   if (!online()) return true;
-  return e.who === me && current !== me && lastAct && lastAct.t === "place" && lastAct.who === me;
+  return !waiting && !decided && !outFlag[me] && e.who === me && !!lastAct && lastAct.t === "place" && lastAct.who === me;      /* my card was the last thing built: my friend has not built since */
 }
 function revert(e, mine){
   if (e.over){ grid[e.r][e.c].over = null; removeRoad(e.r, e.c, true); }
   else { grid[e.r][e.c] = null; removeRoad(e.r, e.c, false); }
   Object.values(players).forEach(q => {
+    if (q.id !== e.who) return;                                      /* only the car that drove on this card goes back: the other car may be mid-drive */
     const s = e.snap[q.id]; if (!s) return;
     q.pos = { r:s.pos.r, c:s.pos.c }; q.heading = s.heading; q.x = s.x; q.z = s.z; q.yaw = s.yaw; q.arrived = s.arrived; q.willWin = s.willWin; q.anim = null;
     q.car.position.set(q.x, roadY(q.x, q.z, Math.abs(Math.cos(q.yaw)) > .7), q.z); q.car.rotation.set(0, q.yaw, 0);
@@ -2091,28 +2102,24 @@ function revert(e, mine){
     hand.splice(Math.min(e.idx, hand.length), 0, e.card);
     placed--; if (e.type === T.BRIDGE) bridgesUsed--;
   } else placedOther--;
-  turnNo--; if (online()) current = e.who; lastAct = null; selected = -1; cursor = null;
+  turnNo--; lastAct = null; if (mine){ selected = -1; cursor = null; }
 }
 function undoLast(){
-  if (!canUndo()){ toast(online() ? "You can only undo your card before your friend plays." : "Nothing to undo yet.", ""); return; }
+  if (!canUndo()){ toast(online() ? "You can only take your card back before your friend builds." : "Nothing to undo yet.", ""); return; }
+  if (online() && !MP.host){ ask("undo", { tn:turnNo }); return; }
   const e = history.pop(); revert(e, true);
-  if (online()) mpSend({ t:"undo", g:gen, tn:turnNo });
+  if (online()) mpSend({ t:"undo", g:gen, tn:turnNo, who:me });
   renderHand(); updateHud(); refreshGhost(); refreshMarkers();
   toast("Card taken back. Try a different way.", "");
 }
 
-/* swap my cards: a whole new hand; with a friend it uses up your turn */
-function passTurn(out){
-  turnNo++; current = current === 1 ? 2 : 1; lastAct = { t:"pass", who:me };
-  mpSend({ t:"pass", g:gen, tn:turnNo - 1, who:me, out:!!out });
-  renderHand(); updateHud(); refreshMarkers();
-}
+/* swap my cards: a whole new hand. It is private to me, so a friend never sees it */
 function dealHand(){
-  if (phase !== "play" || driving || !isMyTurn()) return;
+  if (phase !== "play" || moving() || !canBuild()) return;
   hand.forEach(c => deck.splice(Math.floor(Math.random() * (deck.length + 1)), 0, { type:c.type, rotation:0 }));
   hand = []; selected = -1; pending = null; refill(); swaps++;
   toast("A whole new hand!", "good");
-  if (online()) passTurn(false); else { renderHand(); updateHud(); refreshGhost(); refreshMarkers(); }
+  renderHand(); updateHud(); refreshGhost(); refreshMarkers();
 }
 
 /* arriving home */
@@ -2223,7 +2230,7 @@ async function joinRoom(code){
 }
 async function leaveRoom(){
   const ch = MP.ch; if (ch) mpSend({ t:"bye" });
-  clearInterval(MP.hb); MP.pres = {}; MP.meta = null; MP.ch = null; MP.code = ""; MP.host = false; MP.cfgWait = null;
+  settle(); clearInterval(MP.hb); MP.pres = {}; MP.meta = null; MP.ch = null; MP.code = ""; MP.host = false; MP.cfgWait = null;
   await dropChannel(ch);
   if (online()){ mode = "solo"; me = 1; phase = "play"; newGame({ diff:difficulty, random:mapRandom, seed:mapRandom ? randomSeed() : SET_SEED[difficulty] }); }
   roomUi();
@@ -2234,7 +2241,7 @@ function startOnlineAsHost(){
   const cfg = { diff:difficulty, random:mapRandom, seed:mapRandom ? randomSeed() : SET_SEED[difficulty] };
   mpSend({ t:"cfg", g:gen, diff:cfg.diff, random:cfg.random, seed:cfg.seed });
   phase = "play"; $("#intro").hidden = true; $("#room").hidden = true;
-  newGame(cfg); toast("Your friend joined! You go first.", "good");
+  newGame(cfg); toast("Your friend joined! Build at the same time. The first car home wins.", "good");
 }
 function onCfg(p){
   const newer = p.g > gen || (p.g === gen && p.i < MP.id && p.seed !== seed);   /* if both start a game at once, the same one wins on both screens */
@@ -2242,7 +2249,7 @@ function onCfg(p){
   gen = p.g; mode = "online"; me = MP.host ? 1 : 2;
   phase = "play"; $("#intro").hidden = true; $("#room").hidden = true;
   newGame({ diff:p.diff, random:p.random, seed:p.seed });
-  if (MP.cfgWait){ MP.cfgWait(); MP.cfgWait = null; toast("You joined the game! Your friend goes first.", "good"); }
+  if (MP.cfgWait){ MP.cfgWait(); MP.cfgWait = null; toast("You joined the game! Build at the same time. The first car home wins.", "good"); }
 }
 function onMsg(p){
   if (!p || p.i === MP.id) return;
@@ -2251,38 +2258,91 @@ function onMsg(p){
   if (p.t === "bye"){ delete MP.pres[p.i]; if (online()) toast("Your friend left the room.", "bad"); roomUi(); return; }
   if (p.t === "need"){ if (MP.host) startOnlineAsHost(); return; }
   if (p.t === "cfg"){ onCfg(p); return; }
-  if (p.t === "mv" || p.t === "pass" || p.t === "undo" || p.t === "rev"){
-    if (phase !== "play" || driving){ inbox.push(p); return; }
-    applyRemote(p);
+  if (p.t === "out"){ if (p.g === gen && online()){ outFlag[p.who] = true; bothOut(); } return; }
+  if (p.t === "no"){ if (waiting && waiting.rid === p.rid){ settle(); toast(p.why || "That did not work. Try again.", "bad"); renderHand(); updateTools(); refreshGhost(); refreshMarkers(); } return; }
+  if (p.t === "mv" || p.t === "undo" || p.t === "rev"){ inbox.push(p); drainInbox(); }
+}
+/* a guest's move is only a request: the host's screen decides, puts it in order and sends it back to both of us */
+function ask(kind, body, hold){
+  const rid = Math.random().toString(36).slice(2, 8);
+  settle();
+  waiting = Object.assign({ rid, kind }, hold || {});
+  waiting.timer = setTimeout(() => {
+    if (!waiting || waiting.rid !== rid) return;
+    waiting = null; toast("Your friend’s screen did not answer. Try again.", "bad");
+    renderHand(); updateTools(); refreshGhost(); refreshMarkers();
+  }, 8000);
+  mpSend(Object.assign({ t:kind, g:gen, who:me, rid }, body));
+  renderHand(); updateTools(); refreshGhost();
+}
+function settle(){ if (waiting){ clearTimeout(waiting.timer); waiting = null; } }
+/* moves are handled one at a time, in the order they arrived, each once its car has stopped driving here */
+function drainInbox(){
+  while (inbox.length && phase === "play"){
+    const q = players[inbox[0].who];
+    if (q && q.anim) break;
+    const p = inbox.shift();
+    if (MP.host) hostHandle(p); else applyRemote(p);
   }
 }
-function drainInbox(){ while (inbox.length && !driving && phase === "play"){ applyRemote(inbox.shift()); } }
-function applyRemote(p){
-  if (!online() || p.g !== gen) return;
+/* the host's screen: a request from the guest is checked, built, and sent back as a move that both screens apply */
+function hostHandle(p){
+  if (!online() || p.g !== gen || p.who !== 2) return;
+  const no = why => mpSend({ t:"no", g:gen, rid:p.rid, why });
+  const pl = players[2];
+  if (decided || pl.arrived) return no("Someone is already on the road home.");
   if (p.t === "mv"){
-    if (p.tn !== turnNo || p.who !== current || p.who === me) return;
-    const card = { type:p.type, rotation:p.rot };
-    if (!canPlace(p.r, p.c, card)) return;
-    doPlace(p.who, p.r, p.c, p.type, p.rot);
+    if (!canPlace(p.r, p.c, { type:p.type, rotation:p.rot })) return no("Your friend built there first. Pick another square.");
+    mpSend({ t:"mv", g:gen, tn:turnNo, who:2, rid:p.rid, r:p.r, c:p.c, type:p.type, rot:p.rot });
+    doPlace(2, p.r, p.c, p.type, p.rot);
     toast("Your friend placed a road.", "");
-  } else if (p.t === "pass"){
-    if (p.tn !== turnNo || p.who !== current || p.who === me) return;
-    turnNo++; current = current === 1 ? 2 : 1; lastAct = { t:"pass", who:p.who };
-    if (p.out) outFlag[p.who] = true;
-    renderHand(); updateHud(); refreshMarkers();
-    maybeOut();
   } else if (p.t === "rev"){
-    if (p.tn !== turnNo || p.who !== current || p.who === me) return;
-    if (!doReverse(p.who)) return;
-    turnNo++; current = current === 1 ? 2 : 1; lastAct = { t:"rev", who:p.who };
+    if (!doReverse(2)) return no("The car cannot turn around there.");
+    mpSend({ t:"rev", g:gen, tn:turnNo, who:2, rid:p.rid });
+    turnNo++; lastAct = { t:"rev", who:2 };
     renderHand(); updateHud(); refreshMarkers();
     toast("Your friend turned their car around.", "");
   } else if (p.t === "undo"){
     const e = history[history.length - 1];
-    if (!e || p.tn + 1 !== turnNo || e.who !== p.who || p.who === me) return;
+    if (!e || e.who !== 2 || p.tn !== turnNo || !lastAct || lastAct.t !== "place" || lastAct.who !== 2) return no("It is too late to take that card back.");
     history.pop(); revert(e, false);
+    mpSend({ t:"undo", g:gen, tn:turnNo, who:2, rid:p.rid });
     renderHand(); updateHud(); refreshGhost(); refreshMarkers();
     toast("Your friend took back their card.", "");
+  }
+}
+/* a move the host has put in order, on every screen but the host's own (that is where it happened). Mine come back too, as the host's yes. */
+function applyRemote(p){
+  if (!online() || p.g !== gen) return;
+  const mine = p.who === me;
+  if (p.t === "mv"){
+    if (p.tn !== turnNo) return;
+    if (!canPlace(p.r, p.c, { type:p.type, rotation:p.rot })){ if (mine) settle(); return; }
+    if (mine){
+      const idx = waiting && waiting.rid === p.rid ? hand.indexOf(waiting.card) : hand.findIndex(k => k.type === p.type);
+      settle();
+      if (idx < 0) return;
+      hand[idx].rotation = p.rot;
+      commitPlace(p.r, p.c, idx);
+    } else {
+      doPlace(p.who, p.r, p.c, p.type, p.rot);
+      toast("Your friend placed a road.", "");
+    }
+  } else if (p.t === "rev"){
+    if (p.tn !== turnNo) return;
+    if (mine) settle();
+    if (!doReverse(p.who)) return;
+    turnNo++; lastAct = { t:"rev", who:p.who };
+    if (mine){ selected = -1; pending = null; toast("Turning around. The car heads back to a spot where you can build again.", "good"); refreshGhost(); }
+    else toast("Your friend turned their car around.", "");
+    renderHand(); updateHud(); refreshMarkers();
+  } else if (p.t === "undo"){
+    const e = history[history.length - 1];
+    if (mine) settle();
+    if (!e || p.tn + 1 !== turnNo || e.who !== p.who) return;
+    history.pop(); revert(e, mine);
+    renderHand(); updateHud(); refreshGhost(); refreshMarkers();
+    toast(mine ? "Card taken back. Try a different way." : "Your friend took back their card.", "");
   }
 }
 function roomUi(){
@@ -2397,7 +2457,7 @@ dom.addEventListener("pointercancel", e => endPtr(e, false));
 dom.addEventListener("wheel", e => { e.preventDefault(); cam.tTiles = clamp(cam.tTiles * Math.exp(e.deltaY * .0012), 7, maxTiles()); }, { passive:false });
 function hover(x, y){
   if (pending) return;                                               /* a card is waiting on the board: the hover ghost stays out of its way */
-  if (phase !== "play" || selected < 0 || driving){ if (cursor){ cursor = null; refreshGhost(); } return; }
+  if (phase !== "play" || selected < 0 || moving()){ if (cursor){ cursor = null; refreshGhost(); } return; }
   const c = cellFromPointer(x, y);
   if (!c){ if (cursor){ cursor = null; refreshGhost(); } return; }
   if (!cursor || cursor.r !== c.r || cursor.c !== c.c){ cursor = c; refreshGhost(); }
@@ -2421,7 +2481,7 @@ addEventListener("keydown", e => {
   if (k === "v" || k === "V"){ setView(viewMode === "3d" ? "2d" : "3d"); return; }
   if (k === "f" || k === "F"){ cam.follow = true; return; }
   if (/^[1-6]$/.test(k)){ if (hand[+k - 1]){ chooseCard(+k - 1); e.preventDefault(); } return; }
-  if (phase !== "play" || driving) return;
+  if (phase !== "play" || moving()) return;
   if (k.indexOf("Arrow") === 0){
     const d = { ArrowUp:[-1, 0], ArrowRight:[0, 1], ArrowDown:[1, 0], ArrowLeft:[0, -1] }[k];
     const from = cursor || firstMarker() || { r:players[me].pos.r, c:players[me].pos.c };
