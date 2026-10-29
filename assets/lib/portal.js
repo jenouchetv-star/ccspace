@@ -1,4 +1,4 @@
-// Chike's Creative Space - Newsletter Portal: the parts of the page that decide things.
+// Chike's Creative Space - Subscriber’s Portal: the parts of the page that decide things.
 //
 // index.html draws the portal (the gate, the archive, each entry layout and the
 // admin editor); this file holds the rules those screens depend on, with no
@@ -159,10 +159,10 @@ export function portalGateMessage(state, email) {
   const who = email ? " " + email : "";
   switch (state) {
     case "loading": return { tone: "polite", title: "Checking…", text: "One moment while we look that up." };
-    case "verifying": return { tone: "polite", title: "Opening the Newsletter Archive…", text: "Checking your link." };
+    case "verifying": return { tone: "polite", title: "Opening the Subscriber’s Portal…", text: "Checking your link." };
     case "sent": return { tone: "polite", title: "Check your inbox", text: "We sent a sign-in link to" + who + ". Open it on this device or any other. It works once and expires in 30 minutes." };
-    case "consent_sent": return { tone: "polite", title: "One more tap to join", text: "We sent a confirmation link to" + who + ". Tap it to join the mailing list and unlock the Newsletter Archive. It expires in 30 minutes." };
-    case "needs_consent": return { tone: "polite", title: "You’re not on the list yet", text: "Join our mailing list to unlock the Newsletter Archive. We’ll email a link to confirm it’s really you." };
+    case "consent_sent": return { tone: "polite", title: "One more tap to join", text: "We sent a confirmation link to" + who + ". Tap it to join the mailing list and unlock the Subscriber’s Portal. It expires in 30 minutes." };
+    case "needs_consent": return { tone: "polite", title: "You’re not on the list yet", text: "Join our mailing list to unlock the Subscriber’s Portal. We’ll email a link to confirm it’s really you." };
     case "invalid_email": return { tone: "assertive", title: "That email doesn’t look right", text: "Check it for typos – it should look like name@example.com." };
     case "expired": return { tone: "assertive", title: "That link has expired", text: "Links last 30 minutes and work once. Enter your email and we’ll send a fresh one." };
     case "used": return { tone: "assertive", title: "That link was already used", text: "Each link works once. Enter your email and we’ll send a new one." };
@@ -172,7 +172,7 @@ export function portalGateMessage(state, email) {
     case "consent_required": return { tone: "assertive", title: "Please tick the box to join", text: "We need your OK before we add you to the mailing list." };
     case "rate_limited": return { tone: "assertive", title: "Too many tries", text: "Please wait a little while before asking for another link." };
     case "send_failed": return { tone: "assertive", title: "We couldn’t send the email", text: "Please try again in a moment." };
-    case "error": return { tone: "assertive", title: "Something went wrong", text: "We couldn’t reach the Newsletter Archive. Check your connection and try again." };
+    case "error": return { tone: "assertive", title: "Something went wrong", text: "We couldn’t reach the Subscriber’s Portal. Check your connection and try again." };
     default: return { tone: "polite", title: "", text: "" };
   }
 }

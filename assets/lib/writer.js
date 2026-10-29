@@ -1,4 +1,4 @@
-// Chike's Creative Space - the writing helper for Newsletter Archive entries and their emails.
+// Chike's Creative Space - the writing helper for Subscriber’s Portal entries and their emails.
 //
 // It talks to an Ollama server the person running the admin already has on their own computer
 // (default http://localhost:11434), so what they write and what the site contains never leaves
@@ -276,7 +276,7 @@ export function taskMessages(task, ctx) {
   const sys = ctx.system || systemPrompt(ctx.brand, siteDigest(ctx.items), relevantItems(ctx.items, query, 6), ctx.who);
   const notes = entryNotes(ctx);
   const user = {
-    draft: "Write a new Newsletter Archive entry and the email that announces it.\n" + notes
+    draft: "Write a new Subscriber’s Portal entry and the email that announces it.\n" + notes
       + "\nReturn JSON with these keys: title (under 8 words), description (one or two sentences for a card), body (three or four short paragraphs separated by a blank line), emailSubject (under 8 words), emailPreview (one line), emailMessage (two short paragraphs for the email, ending with an invitation to take a look), emailButton (2 to 3 words)." + JSON_NOTE,
     titles: "Give me six different title ideas for this entry.\n" + notes + "\nReturn JSON like {\"titles\": [\"...\"]}. Each under 8 words." + JSON_NOTE,
     description: "Write the short description for this entry: one or two sentences that make someone want to open it.\n" + notes + "\nReply with only the sentences.",

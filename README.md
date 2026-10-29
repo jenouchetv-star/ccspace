@@ -45,9 +45,9 @@ Every admin signs in with their password **and** a 6-digit code from a free auth
 
 Supabase issues no recovery codes, so use an authenticator app that backs up or syncs its codes.
 
-## Newsletter portal (members-only archive)
+## Subscriber’s Portal (members-only archive)
 
-A blog-style archive at `/newsletter` (and `/newsletter/<address>` for each entry) that only verified mailing-list subscribers can read. Signed-in admins go straight in from **Admin, Operations, Newsletter portal** (manage entries) or **Open the portal**.
+A blog-style archive at `/newsletter` (and `/newsletter/<address>` for each entry) that only verified mailing-list subscribers can read. Signed-in admins go straight in from **Admin, Operations, Subscriber’s Portal** (manage entries) or **Open the portal**.
 
 **How access works.** Nothing exclusive is ever sent to a browser until the `portal` Edge Function has checked a verified session. The blurred screen behind the "Join our mailing list" box is drawn from empty placeholder shapes, so there is nothing to read by removing it. The box cannot be closed (Escape does nothing, the page behind it is made inert and Tab stays inside), and has a "Back to the public website" link. A visitor gets in one of three ways:
 
@@ -59,7 +59,7 @@ A verified session lasts 30 days on that device. It is checked against the subsc
 
 **Sharing** always uses the plain `/newsletter/<address>` page, never a private key; anyone who follows it goes through the gate.
 
-**Entries** have a title, cover image, description, date, category and one of five layouts (article, embedded video, game launch, ebook launch, photo gallery). Publish and Unpublish are buttons in the list. A newsletter's button can be pointed at an entry in the newsletter composer ("Or link the button to a members-only entry"); every newsletter also gets a "Newsletter archive" link in its footer.
+**Entries** have a title, cover image, description, date, category and one of five layouts (article, embedded video, game launch, ebook launch, photo gallery). Publish and Unpublish are buttons in the list. A newsletter's button can be pointed at an entry in the newsletter composer ("Or link the button to a members-only entry"); every newsletter also gets a "Subscriber’s Portal" link in its footer.
 
 **One thing to know.** Asking "is this address on the list?" necessarily tells the visitor whether it is (existing subscribers get a sign-in link, others are invited to join). Requests are limited to 5 per address and 20 per visitor per hour. Files linked for download are ordinary storage files, so anyone who is given the exact file address can open it; the page only shows it to members.
 
@@ -77,7 +77,7 @@ Tests (`npx vitest run test/portal*.test.js`) run the real `portal` function aga
 A **Copilot** tab sits on the right edge of every admin page. It is a chat panel that knows what is on the site and which admin screen you are on, and it runs on the **Ollama on your own computer** (nothing you write or paste leaves it; the page only talks to `localhost:11434`). It can:
 
 - **Add a YouTube video**: paste one or more links. It reads the title and thumbnail from YouTube and drafts the episode text (description, what a child discovers, theme, cast).
-- **Add to the Newsletter Archive**: describe it, paste a YouTube link, or name a game, book or episode already on the site. It writes the archive entry and the email that goes with it (using the real title and cover of what you named) and saves a **draft** entry; publishing it in the editor then prepares the email for you to review.
+- **Add to the Subscriber’s Portal**: describe it, paste a YouTube link, or name a game, book or episode already on the site. It writes the archive entry and the email that goes with it (using the real title and cover of what you named) and saves a **draft** entry; publishing it in the editor then prepares the email for you to review.
 - **Add a game**: paste the game's HTML code. It checks it (size, files that won't be there, saving to the browser, phone sizing), writes the listing and rules, and adds it as a draft.
 - **Write a newsletter** or **a story**: describe it in a sentence. Newsletters become an email draft that opens for review; stories become a draft with simple text pages, ready for pictures in the story builder.
 - **Revise what is already there.** Say "make the Doodle Dash summary friendlier" (or shorten, simplify, proofread...) and it shows the current text beside a rewrite you can edit, with an "Update the live page" button (or "Save the change" for a draft). An edit that would leave a page unable to be published is refused. It only rewrites descriptive text, never titles or addresses.

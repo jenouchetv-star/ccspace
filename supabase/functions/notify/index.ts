@@ -120,7 +120,7 @@ async function subscriberFooter(subscriberId: string): Promise<string> {
     `<p style="${line}">Questions? <a href="mailto:${escapeHtml(contact)}" style="color:#1E2226;">${escapeHtml(contact)}</a></p>` +
     (address ? `<p style="${line}font-weight:700;">${escapeHtml(address)}</p>` : "") +
     `<p style="${line}">You\u2019re receiving this because you signed up for Chike\u2019s Creative Space updates.</p>` +
-    `<p style="${line}"><a href="${escapeHtml(siteOrigin)}/newsletter" style="color:#1E2226;font-weight:700;">Newsletter archive</a> &ndash; stories, videos and launches just for subscribers</p>` +
+    `<p style="${line}"><a href="${escapeHtml(siteOrigin)}/newsletter" style="color:#1E2226;font-weight:700;">Subscriber’s Portal</a> &ndash; stories, videos and launches just for subscribers</p>` +
     `<p style="margin:0;"><a href="${escapeHtml(unsubscribe)}" style="color:#5B6673;text-decoration:underline;">Unsubscribe</a></p>` +
     `</div>`;
 }

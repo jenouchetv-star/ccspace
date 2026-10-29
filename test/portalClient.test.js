@@ -1,4 +1,4 @@
-// The site's side of the Newsletter Portal: the rules in assets/lib/portal.js, and how
+// The site's side of the Subscriber’s Portal: the rules in assets/lib/portal.js, and how
 // index.html wires the portal in (routes, the gate, the admin screens, sharing).
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
@@ -281,7 +281,7 @@ describe("how the site wires the portal in", () => {
   it("asks a newcomer for explicit consent before subscribing them", () => {
     const gate = body("portalGateHTML");
     expect(gate).toContain('name="consent"');
-    expect(gate).toContain("I agree to get occasional emails");
+    expect(gate).toContain("I agree to receive occasional emails");
     expect(body("portalSubmit")).toContain('g.step === "consent" && !consent');
     expect(body("portalSubmit")).toContain("consent_required");
   });
@@ -471,7 +471,7 @@ describe("how the site wires the portal in", () => {
     expect(prep).not.toContain('invoke("send-newsletter"');
     expect(prep).toContain('prior.status !== "draft"');  // a sent email is never rewritten
     expect(html).toContain('saved.status === "published" && await portalPrepareEmail(saved)');
-    expect(html).toContain('{ id:"portal", label:"New in the Newsletter Archive"');
+    expect(html).toContain('{ id:"portal", label:"New in the Subscriber’s Portal"');
     // blank email boxes fall back to the entry itself
     expect(prep).toContain("entry.title");
     expect(prep).toContain("entry.description");

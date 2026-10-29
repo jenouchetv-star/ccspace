@@ -99,8 +99,8 @@ describe("the welcome email", () => {
     await call(joined);
     const html = sent[0].html;
     expect(html.indexOf("If this wasn't you")).toBeLessThan(html.indexOf("Questions?"));
-    expect(html.indexOf("Newsletter archive")).toBeLessThan(html.indexOf("Unsubscribe"));
-    expect(html.lastIndexOf("Unsubscribe")).toBeGreaterThan(html.lastIndexOf("Newsletter archive"));
+    expect(html.indexOf("Subscriber’s Portal")).toBeLessThan(html.indexOf("Unsubscribe"));
+    expect(html.lastIndexOf("Unsubscribe")).toBeGreaterThan(html.lastIndexOf("Subscriber’s Portal"));
   });
 
   it("escapes anything it takes from the brand settings or the subscriber's record", async () => {

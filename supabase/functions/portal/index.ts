@@ -1,6 +1,6 @@
 // Chike's Creative Space - portal Edge Function
 //
-// The gatekeeper for the Newsletter Portal (the members-only archive).
+// The gatekeeper for the Subscriber’s Portal (the members-only archive).
 // Everything a visitor can do to get in, and the only way to read an entry,
 // goes through here:
 //
@@ -233,16 +233,16 @@ Deno.serve(async (req) => {
 
       const url = `${siteOrigin}${next}?v=${encodeURIComponent(token)}`;
       const sent = purpose === "login"
-        ? await sendMail(email, "Your link to the Newsletter Archive", mailHtml({
+        ? await sendMail(email, "Your link to the Subscriber’s Portal", mailHtml({
             heading: "Here’s your way in",
-            intro: "Tap the button to open the Chike’s Creative Space Newsletter Archive. You’ll stay signed in on this device, so you won’t need to do this for every story.",
-            button: "Open the Newsletter Archive",
+            intro: "Tap the button to open the Chike’s Creative Space Subscriber’s Portal. You’ll stay signed in on this device, so you won’t need to do this for every story.",
+            button: "Open the Subscriber’s Portal",
             url,
             note: `This link works once and expires in ${VERIFY_MINUTES} minutes. If you didn’t ask for it, you can ignore this email – nothing will happen.`,
           }))
         : await sendMail(email, "Please confirm you’d like to join our mailing list", mailHtml({
             heading: "One tap to join the list",
-            intro: "You asked to join the Chike’s Creative Space mailing list and unlock the Newsletter Archive. Confirm your email to finish – you’ll get one or two emails a month, and you can unsubscribe any time.",
+            intro: "You asked to join the Chike’s Creative Space mailing list and unlock the Subscriber’s Portal. Confirm your email to finish – you’ll get one or two emails a month, and you can unsubscribe any time.",
             button: "Yes, join the list",
             url,
             note: `This link works once and expires in ${lastsFor(minutes)}. If you didn’t ask to join, ignore this email and you won’t be subscribed – nobody gets added until the link is used.`,

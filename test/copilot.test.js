@@ -240,11 +240,11 @@ describe("helping fix what blocks publishing", () => {
   });
 });
 
-describe("adding to the Newsletter Archive from the Copilot", () => {
+describe("adding to the Subscriber’s Portal from the Copilot", () => {
   const items = siteItems({ games: [{ id: "g1", title: "Doodle Dash", summary: "Draw a level.", status: "published", path: "games/Doodle-Dash.html" }], stories: [{ id: "story-city", title: "Mateo and the Floating Train", blurb: "Magnets.", status: "published" }] }, { drafts: true });
 
   it("recognizes a request for archive content in many wordings", () => {
-    for (const m of ["Add Doodle Dash to the Newsletter Archive", "put this in the members-only archive", "write something for the members corner", "make a subscriber-only post about our new game", "new portal entry about the book", "exclusive content for subscribers: a sneak peek"]) {
+    for (const m of ["Add Doodle Dash to the Subscriber’s Portal", "put this in the members-only archive", "write something for the members corner", "make a subscriber-only post about our new game", "new portal entry about the book", "exclusive content for subscribers: a sneak peek"]) {
       expect(chooseIntent(m, "", items).kind).toBe("portal");
     }
     expect(chooseIntent("anything", "portal", items).kind).toBe("portal");           // answering the starter's question
@@ -254,7 +254,7 @@ describe("adding to the Newsletter Archive from the Copilot", () => {
     const r = chooseIntent("Put https://youtu.be/dQw4w9WgXcQ in the newsletter archive", "", items);
     expect(r).toMatchObject({ kind: "portal", youtubeIds: ["dQw4w9WgXcQ"] });
     expect(chooseIntent("add https://youtu.be/dQw4w9WgXcQ", "", items).kind).toBe("youtube");     // no archive mentioned: a new episode
-    expect(chooseIntent("Add Doodle Dash to the Newsletter Archive", "", items).item).toMatchObject({ id: "g1", col: "games" });
+    expect(chooseIntent("Add Doodle Dash to the Subscriber’s Portal", "", items).item).toMatchObject({ id: "g1", col: "games" });
     expect(chooseIntent("write a newsletter about Doodle Dash", "", items).kind).toBe("newsletter");   // an email is not an archive entry
   });
 
@@ -625,7 +625,7 @@ describe("how the admin screen uses it", () => {
     const save = body("copilotSave");
     expect(save).toContain('db.add("portalEntries"');
     expect(save.split('db.add("portalEntries"')[1].split("c.savedId = rec.id")[0]).toContain('status: "draft"');
-    expect(html).toContain('{ id: "portal", label: "Add to the Newsletter Archive", icon: "mail-open" }');
+    expect(html).toContain('{ id: "portal", label: "Add to the Subscriber’s Portal", icon: "mail-open" }');
   });
 
   it("shows a game on the site in the archive with a play button, whether it has a file or stored code", () => {

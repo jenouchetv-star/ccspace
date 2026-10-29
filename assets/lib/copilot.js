@@ -36,7 +36,7 @@ export function extractHtml(text) {
   return "";
 }
 
-const PORTAL_RE = /\b(?:newsletter|members?(?:['\u2019]s?)?) (?:archive|portal|corner|area)\b|\b(?:archive|portal) (?:entry|content|post)\b|\bsubscriber[- ]only\b|\bmembers[- ]only\b|\bexclusive (?:content|story|post)\b/i;
+const PORTAL_RE = /\b(?:newsletter|members?(?:['\u2019]s?)?|subscribers?(?:['\u2019]s?)?) (?:archive|portal|corner|area)\b|\b(?:archive|portal) (?:entry|content|post)\b|\bsubscriber[- ]only\b|\bmembers[- ]only\b|\bexclusive (?:content|story|post)\b/i;
 const UPDATE_VERBS = "update|change|rewrite|revise|improve|shorten|lengthen|expand|simplify|proofread|fix|edit|polish|reword|rephrase|tweak|refresh|tighten|soften|brighten";
 const UPDATE_RE = new RegExp("\\b(?:" + UPDATE_VERBS + ")\\b", "i");
 const REVISE_START = new RegExp("^\\s*(?:please\\s+)?(?:" + UPDATE_VERBS + "|make (?:this|it|these)|can you (?:" + UPDATE_VERBS + "))\\b", "i");
@@ -59,7 +59,7 @@ export function chooseIntent(text, expecting, items) {
   const html = extractHtml(t);
   if (html) return { kind: "game", html };
   const ids = findYoutubeIds(t);
-  /* content for the members-only Newsletter Archive: it may name a video link or something already on the site */
+  /* content for the members-only Subscriber’s Portal: it may name a video link or something already on the site */
   if (expecting === "portal" || PORTAL_RE.test(t)) return { kind: "portal", request: t, youtubeIds: ids.slice(0, 1), item: items ? findItemInText(items, t) : null };
   if (ids.length) return { kind: "youtube", ids: ids.slice(0, 5), extra: ids.length - Math.min(ids.length, 5) };
   if (/\b(?:alt text|alt tags?|image tags?|image descriptions?|picture descriptions?|describe (?:(?:all|the|my|our) )*(?:images|pictures|photos))\b/i.test(t)) return { kind: "alt" };
@@ -440,7 +440,7 @@ export function parseGame(text) {
   return out.title || out.summary ? out : null;
 }
 
-const KIND_MEANS = { Game: "a game kids play on the site (not a video)", Episode: "a video episode kids watch", "Book or story": "a picture book kids read on the site", Activity: "a hands-on activity to do away from the screen", "Archive entry": "an entry in the Newsletter Archive" };
+const KIND_MEANS = { Game: "a game kids play on the site (not a video)", Episode: "a video episode kids watch", "Book or story": "a picture book kids read on the site", Activity: "a hands-on activity to do away from the screen", "Archive entry": "an entry in the Subscriber’s Portal" };
 
 /** What the email may say: the site's own words about each thing the request names (by title or by its page link), nothing else. */
 export function newsletterFacts(items, request) {
@@ -518,6 +518,6 @@ export function whereLabel(route) {
   if (r.name !== "admin") return "the public site";
   const sec = r.params && r.params.section;
   const names = { dashboard: "the Dashboard", videos: "the Episodes list", games: "the Games list", stories: "the Stories list", articles: "the Articles list", activities: "the Activities list",
-    "send-newsletter": "the Emails list", portalEntries: "the Newsletter portal content list", subscribers: "the Subscribers list", homepage: "the Homepage editor", media: "the Media library" };
+    "send-newsletter": "the Emails list", portalEntries: "the Subscriber’s Portal content list", subscribers: "the Subscribers list", homepage: "the Homepage editor", media: "the Media library" };
   return names[sec] || (sec ? "the " + sec + " section" : "the Dashboard");
 }

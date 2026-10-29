@@ -2839,6 +2839,10 @@ h1.admin-page-title{ font-size:1.7rem; }
 }
 .foot__news .inp{ background:rgba(255,255,255,.1); color:var(--paper); border-color:rgba(255,255,255,.34); }
 .foot__news .inp::placeholder{ color:rgba(251,242,224,.6); }
+/* The tick box every mailing-list form asks for: a grown-up is the one signing up. */
+.adultcheck{ display:flex; gap:10px; align-items:flex-start; margin:12px 0 0; font-size:.85rem; line-height:1.4; text-align:left; cursor:pointer; }
+.adultcheck input{ width:20px; height:20px; margin-top:0; accent-color:var(--cyan); flex:none; cursor:pointer; }
+.foot__news .adultcheck{ display:flex; margin:12px 0 0; font-size:.85rem; opacity:.9; }
 
 /* Newsletter form on the left, plain white social text and icons on the
    far right - a single row under the navigation columns rather than pill
@@ -4113,7 +4117,7 @@ const COLLECTION_PLURALS = {
   activities:"Activities", games:"Games", videos:"Episodes", stories:"Stories", characters:"Characters",
   products:"Digital products", amazonProducts:"Recommendations", collections:"Collections",
   homepageModules:"Homepage modules", mediaAssets:"Media references", supportTickets:"Support tickets",
-  issues:"Issues", meta:"Database", users:"Users", portalEntries:"Newsletter portal"
+  issues:"Issues", meta:"Database", users:"Users", portalEntries:"Subscriber’s Portal"
 };
 const COLLECTION_LABELS = {
   announcements:"Announcement", pages:"Page", articles:"Article", subscribers:"Subscriber",
@@ -6419,6 +6423,13 @@ const JOIN_ERRORS = {
   send_failed: "We could not send the confirmation email. Please try again in a moment."
 };
 
+/** The tick box under every mailing-list address field: the person signing up says they are a grown-up. The
+    confirmation email is what proves they own the inbox; this is the plain, on-the-record statement. */
+function adultCheckHTML(id){
+  return '<label class="adultcheck" for="' + id + '"><input type="checkbox" id="' + id + '" name="adult" required>'
+    + '<span>I confirm that I am a parent, guardian or educator aged 18 or over.</span></label>';
+}
+
 /** The newsletter signup, opened from the nav on any page. */
 function mailingListModal(){
   const bleed = "calc(-1 * clamp(20px,3vw,32px))";
@@ -6435,6 +6446,7 @@ function mailingListModal(){
     + '<input id="ml-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>'
     + '<div class="field"><label for="ml-email">Email address</label>'
     + '<input class="inp" id="ml-email" name="email" type="email" required placeholder="A grown-up’s email address"></div>'
+    + adultCheckHTML("ml-adult")
     + '<div class="modal__foot">'
     + '<button type="button" class="btn btn--ghost" data-act="close-modal">Cancel</button>'
     + '<button type="submit" class="btn btn--cyan">' + ic("mail") + ' Join</button>'
@@ -6472,7 +6484,7 @@ function seedHomepage(){
   const mods = [
     M("hero","hero","Treehouse hero","Parallax background with the studio illustration.",[]),
     M("promise","strip","Promise strip","Scrolling band of brand promises.",[]),
-    M("gravityfour","gravityfour","Gravity 4 invitation","Invites visitors to join the mailing list and play Gravity 4, and lists what else the Newsletter Archive holds: exclusive content, free AI lessons for kids and downloadables.",[]),
+    M("gravityfour","gravityfour","Gravity 4 invitation","Invites visitors to join the mailing list and play Gravity 4, and lists what else the Subscriber’s Portal holds: exclusive content, free AI lessons for kids and downloadables.",[]),
     M("episodes","videos","Newest episode","The most recent published episode, on its own.",[]),
     M("newgame","newgame","Newest game","The newest online game, with a Play button. Pinned to Doodle Dash for now; if that game is ever unpublished, the most recently added online game shows instead.",["game-doodle-dash"]),
     M("finder","finder","Hmmm, what should we create today?","The rule-based activity finder.",[]),
@@ -8405,6 +8417,7 @@ function navBar(isAdmin){
     + (cartCount() ? '<button class="btn btn--sm btn--paper" type="button" data-act="cart-open">' + ic("shopping-cart") + ' Cart (' + cartCount() + ')</button>' : '')
     + (DONATE_LINKS_ENABLED ? '<a class="btn btn--sm btn--teal" href="#/donate">' + ic("heart-handshake") + ' Support</a>' : '')
     + '<button class="btn btn--sm btn--paper" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join our mailing list</button>'
+    + (portalIsSubscriber() ? '<a class="btn btn--sm btn--cyan" href="#/newsletter">' + ic("mail-open") + ' Subscriber’s Portal</a>' : "")
     + '</div>'
     + '</nav>'
     + '<div class="nav__actions">'
@@ -8417,6 +8430,8 @@ function navBar(isAdmin){
     + '<button class="btn btn--icon btn--paper nav__only-xs" type="button" data-act="open-mailing-list" aria-label="Join our mailing list">' + ic("mail") + '</button>'
     + (DONATE_LINKS_ENABLED ? '<a class="btn btn--icon btn--teal nav__only-xs" href="#/donate" aria-label="Support">' + ic("heart-handshake") + '</a>' : '')
     + '<button class="btn btn--sm btn--paper nav__hide-sm" type="button" data-act="open-mailing-list" aria-label="Join our mailing list">' + ic("mail") + ' Join</button>'
+    /* A subscriber (signed in to the portal on this device) gets the way back in, right beside Join. */
+    + (portalIsSubscriber() ? '<a class="btn btn--sm btn--cyan" href="#/newsletter" aria-label="Subscriber’s Portal">' + ic("mail-open") + '<span class="nav__hide-sm"> Subscriber’s Portal</span></a>' : "")
     + (DONATE_LINKS_ENABLED ? '<a class="btn btn--sm btn--teal nav__hide-sm" href="#/donate">' + ic("heart-handshake") + ' Support</a>' : '')
     /* A signed-in admin browsing the public site gets a way back to the portal (the nav is only
        drawn on public pages, so this checks the session itself, not the current route). */
@@ -8486,6 +8501,7 @@ function footer(){
     + '<div class="row" style="gap:9px;flex-wrap:nowrap">'
     + '<input class="inp" id="news-email" name="email" type="email" required placeholder="A grown-up\u2019s email address">'
     + '<button class="btn btn--sm btn--cyan" type="submit">' + ic("mail") + ' Join</button></div>'
+    + adultCheckHTML("news-adult")
     + '</form>'
     + '<div><h4>Follow us</h4><div class="foot__social__links">'
     + '<a href="' + E(BRAND.youtube) + '" target="_blank" rel="noopener noreferrer">' + ic("youtube") + ' YouTube</a>'
@@ -9688,7 +9704,7 @@ function pwaInstallCard(){
 }
 
 /** The invitation to join the mailing list and play Gravity 4. The game itself opens only inside the
-    Newsletter Archive for people who have signed in with their email, so the button here is the sign-up,
+    Subscriber’s Portal for people who have signed in with their email, so the button here is the sign-up,
     and the small link is for people who already have a place in the archive. */
 function gravityFourPromoHTML(){
   const perks = [
@@ -11086,7 +11102,8 @@ function viewGrownUps(sub){
       + '<form data-act="newsletter-submit" style="max-width:440px;margin:18px auto 0">'
       + '<div class="row" style="gap:10px;flex-wrap:nowrap">'
       + '<input class="inp" name="email" type="email" required placeholder="A grown-up&#39;s email address" aria-label="Email address">'
-      + '<button class="btn btn--cyan" type="submit">' + ic("mail") + ' Join</button></div></form>'
+      + '<button class="btn btn--cyan" type="submit">' + ic("mail") + ' Join</button></div>'
+      + adultCheckHTML("art-adult") + '</form>'
       + '<p class="tiny mute" style="margin-top:12px">' + quEditable("newsletter-note", siteId, E(newsletterNote)) + '</p></div>';
   }
   else if (sub === "contact"){
@@ -11308,6 +11325,8 @@ const PortalState = {
 function portalSavedSession(){ try { return localStorage.getItem(PORTAL_SESSION_KEY) || ""; } catch(_e){ return ""; } }
 function portalSaveSession(tok){ try { if (tok) localStorage.setItem(PORTAL_SESSION_KEY, tok); else localStorage.removeItem(PORTAL_SESSION_KEY); } catch(_e){ /* private window: the session lasts until the tab closes */ } }
 function portalIsAdmin(){ return isAuthed() && isActiveAdmin(); }
+/** Signed in to the Subscriber’s Portal on this device: the top bar then shows a link to it beside Join. */
+function portalIsSubscriber(){ return PortalState.phase === "ready" || !!portalSavedSession(); }
 function portalOnRoute(){ const n = AppState.route && AppState.route.name; return n === "newsletter" || n === "newsletter-detail"; }
 function portalNextPath(){
   const r = AppState.route;
@@ -11478,7 +11497,7 @@ function portalGateHTML(){
     + '<input class="pgate__input" id="pg-email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"'
     + ' placeholder="you@example.com" required value="' + E(g.email) + '" data-autofocus' + (isProblem && g.state === "invalid_email" ? ' aria-invalid="true" aria-describedby="pg-msg"' : "") + '>'
     + (consent
-        ? '<label class="pgate__check"><input type="checkbox" name="consent"' + (g.consent ? " checked" : "") + '> <span>Yes, add me to the Chike’s Creative Space mailing list. I agree to get occasional emails and understand I can unsubscribe at any time.</span></label>'
+        ? '<label class="pgate__check"><input type="checkbox" name="consent"' + (g.consent ? " checked" : "") + '> <span>Yes, add me to the Chike’s Creative Space mailing list. I confirm that I am a parent, guardian or educator aged 18 or over, I agree to receive occasional emails, and I understand that I may unsubscribe at any time.</span></label>'
         : "")
     + '<button class="btn btn--cyan btn--lg pgate__go" type="submit"' + (g.busy ? " disabled" : "") + '>'
     + (g.busy ? '<span class="pgate__dots" aria-hidden="true"></span> Working…' : (consent ? ic("mail-plus") + " Join and send my link" : ic("arrow-right") + " Continue"))
@@ -11645,7 +11664,7 @@ function viewNewsletter(){
   return (admin ? portalAdminBar() : portalMemberBar())
     + '<section class="section"><div class="shell">'
     + '<span class="eyebrow">Subscribers only</span>'
-    + '<h1 style="font-size:clamp(2.2rem,5vw,3.6rem);margin:6px 0 10px">Newsletter Archive</h1>'
+    + '<h1 style="font-size:clamp(2.2rem,5vw,3.6rem);margin:6px 0 10px">Subscriber’s Portal</h1>'
     + '<p class="lede">Stories, videos, new games, ebooks, photos, creative tips and kid-friendly AI lessons for our mailing list.</p>'
     + (cats.length > 1
         ? '<div class="tagrow pfilters" role="group" aria-label="Filter by category" style="margin:22px 0 4px">'
@@ -11816,7 +11835,7 @@ function portalEntryHTML(e, others, bar){
   const text = e.body ? '<div class="pbody">' + sanitizeHTML(e.body) + '</div>' : "";
   return bar
     + '<section class="section"><div class="shell" style="max-width:860px">'
-    + '<div class="crumb"><a href="#/newsletter">Newsletter Archive</a>' + ic("chevron-right") + '<span>' + E(e.category || "") + '</span></div>'
+    + '<div class="crumb"><a href="#/newsletter">Subscriber’s Portal</a>' + ic("chevron-right") + '<span>' + E(e.category || "") + '</span></div>'
     + '<div class="tagrow" style="margin-bottom:14px"><span class="chip chip--ink">' + ic(PORTAL_LAYOUT_ICON[e.layout] || "newspaper") + ' ' + E(e.category || "") + '</span>'
     + '<time class="chip chip--ghost" datetime="' + E(e.publishedAt || "") + '">' + E(portalDate(e.publishedAt)) + '</time></div>'
     + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem)">' + nameHTML(e.title) + '</h1>'
@@ -12281,7 +12300,7 @@ function cpCtx(extra){ return Object.assign({ brand: BRAND, items: WriterLib.sit
 function cpPaths(){ return Array.from(new Set(WriterLib.siteItems(db.get()).map(i => i.path).filter(Boolean))); }
 
 const CP_CHIPS = [
-  { id: "portal", label: "Add to the Newsletter Archive", icon: "mail-open" },
+  { id: "portal", label: "Add to the Subscriber’s Portal", icon: "mail-open" },
   { id: "youtube", label: "Add a YouTube video", icon: "clapperboard" },
   { id: "game", label: "Add a game", icon: "gamepad-2" },
   { id: "newsletter", label: "Write a newsletter", icon: "mail" },
@@ -12299,7 +12318,7 @@ function cpCardHTML(m){
     + (kind === "area" ? '<textarea data-cpm="' + id + '" data-cpf="' + name + '" rows="' + (name === "pages" || name === "paragraphs" || name === "after" || name === "body" ? 6 : 3) + '" spellcheck="true">' + E(val) + '</textarea>'
                        : '<input data-cpm="' + id + '" data-cpf="' + name + '" value="' + E(val) + '" spellcheck="true">') + '</label></div>';
   const saved = c.state === "saved";
-  const head = '<div class="cp-card__head">' + ic({ episode: "clapperboard", game: "gamepad-2", newsletter: "mail", story: "book-open", update: "pencil", batch: "image", attention: "circle-alert", fix: "wrench", portal: "mail-open" }[c.type]) + ' <b>' + E({ episode: "Episode draft", game: "Game draft", newsletter: "Email draft", story: "Story draft", update: "Suggested change", batch: d.kind === "tags" ? "Suggested tags" : "Suggested picture descriptions", attention: "Needs attention", fix: "Suggested fixes", portal: "Newsletter Archive entry" }[c.type]) + '</b></div>';
+  const head = '<div class="cp-card__head">' + ic({ episode: "clapperboard", game: "gamepad-2", newsletter: "mail", story: "book-open", update: "pencil", batch: "image", attention: "circle-alert", fix: "wrench", portal: "mail-open" }[c.type]) + ' <b>' + E({ episode: "Episode draft", game: "Game draft", newsletter: "Email draft", story: "Story draft", update: "Suggested change", batch: d.kind === "tags" ? "Suggested tags" : "Suggested picture descriptions", attention: "Needs attention", fix: "Suggested fixes", portal: "Subscriber’s Portal entry" }[c.type]) + '</b></div>';
   let body = "", acts = "";
   if (c.type === "episode"){
     body = (d.thumb ? '<img class="cp-thumb" src="' + E(d.thumb) + '" alt="">' : "")
@@ -12397,7 +12416,7 @@ function copilotPanelHTML(){
     ? '<div class="cp-setup"><p class="cp-setup__intro"><b>One quick setup.</b> The Admin Assistant runs on a free app called Ollama on this computer, so nothing you write leaves it. Each step ticks off by itself.</p><div id="ollama-wizard" aria-live="polite">' + ollamaWizardHTML() + '</div></div>'
     : CopilotState.msgs.length
     ? CopilotState.msgs.map(cpMsgHTML).join("")
-    : '<div class="cp-msg cp-msg--ai">' + (cpWho().first ? "Hi " + E(cpWho().first) + "! " : "Hi! ") + 'I can add content (a YouTube link, a game\u2019s code, a newsletter, a story, or something for the Newsletter Archive) and improve what is already here: revise any page\u2019s text, write missing picture descriptions, suggest tags, and show what needs attention. I know what is on the site, and I never save anything until you say so.</div>'
+    : '<div class="cp-msg cp-msg--ai">' + (cpWho().first ? "Hi " + E(cpWho().first) + "! " : "Hi! ") + 'I can add content (a YouTube link, a game\u2019s code, a newsletter, a story, or something for the Subscriber’s Portal) and improve what is already here: revise any page\u2019s text, write missing picture descriptions, suggest tags, and show what needs attention. I know what is on the site, and I never save anything until you say so.</div>'
       + '<div class="cp-chips">' + CP_CHIPS.map(c => '<button type="button" class="cp-chip" data-act="copilot-chip" data-chip="' + c.id + '">' + ic(c.icon) + ' ' + E(c.label) + '</button>').join("") + '</div>';
   return '<div class="qu-panel cp-panel admin-scope" role="dialog" aria-label="Copilot">'
     + '<div class="cp-resize" data-cp-resize role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the Copilot panel. Arrow keys change the width, Enter resets it." aria-valuemin="320" aria-valuenow="420" title="Drag to resize. Double-click to reset."></div>'
@@ -12501,7 +12520,7 @@ async function cpChat(){
   if (last && text) last.text = WriterLib.cleanText(text);
 }
 
-/** Turns a description, a video link, or something already on the site into a Newsletter Archive entry and its email. */
+/** Turns a description, a video link, or something already on the site into a Subscriber’s Portal entry and its email. */
 async function cpPortal(intent, userText){
   const found = intent.item;
   let layout = "article", source = {}, cover = { src: "", alt: "" }, label = "", seed = "", realTitle = "";
@@ -14117,7 +14136,7 @@ function readForm(form, col){
 
 let EDITING = { col:"", id:"" };
 
-/* ---- Newsletter portal entries: the simple editor ---- */
+/* ---- Subscriber’s Portal entries: the simple editor ---- */
 function portalPhotoRow(src, text){
   return '<div class="pphoto" data-src="' + E(src) + '"><img src="' + E(thumbSrc(src)) + '" alt="">'
     + '<input class="admin-input" data-act="portal-photo-text" value="' + E(text) + '" placeholder="Say what is in this photo" aria-label="Describe this photo" spellcheck="true">'
@@ -16109,8 +16128,8 @@ const NEWSLETTER_TEMPLATES = [
     ctaLabel:"Add to Calendar", ctaUrl:"/#/grown-ups",
     secondaryLabel:"", secondaryText:"More details are coming soon. For now, save the date and get ready to create.",
     footerNote:"" },
-  { id:"portal", label:"New in the Newsletter Archive", description:"Points readers to a new Newsletter Archive entry",
-    subject:"New in the Newsletter Archive", previewText:"Something new is waiting for you.",
+  { id:"portal", label:"New in the Subscriber’s Portal", description:"Points readers to a new Subscriber’s Portal entry",
+    subject:"New in the Subscriber’s Portal", previewText:"Something new is waiting for you.",
     heroLabel:"NEW IN THE ARCHIVE", headline:"Something new for subscribers.",
     intro:"<p>[A line or two about the new entry.]</p>",
     detailFields:[],
@@ -16218,7 +16237,7 @@ function emailShell(o){
     + '<p style="margin:0 0 6px;">Questions? <a href="mailto:' + E(BRAND.email) + '" style="color:#1E2226;">' + E(BRAND.email) + '</a></p>'
     + '<p style="margin:0 0 6px;font-weight:700;">' + (BRAND.postalAddress ? E(BRAND.postalAddress) : NO_POSTAL_ADDRESS_MARKER) + '</p>'
     + '<p style="margin:0 0 6px;">You’re receiving this because you signed up for Chike’s Creative Space updates.</p>'
-    + '<p style="margin:0 0 6px;"><a href="' + E(SITE_ORIGIN + "/newsletter?k=__ACCESS_KEY__") + '" style="color:#1E2226;font-weight:700;">Newsletter archive</a> &ndash; stories, videos and launches just for subscribers</p>'
+    + '<p style="margin:0 0 6px;"><a href="' + E(SITE_ORIGIN + "/newsletter?k=__ACCESS_KEY__") + '" style="color:#1E2226;font-weight:700;">Subscriber’s Portal</a> &ndash; stories, videos and launches just for subscribers</p>'
     + '<p style="margin:0;"><a href="__UNSUB_URL__" style="color:#5B6673;text-decoration:underline;">Unsubscribe</a></p>'
     + '</td></tr>'
     + '</table></td></tr></table>'
@@ -16439,7 +16458,7 @@ function adminNewsletterCompose(id){
     + '<div class="admin-field"><label for="nl-cta-url">Button link</label>'
     + '<input class="admin-input" id="nl-cta-url" name="ctaUrl" value="' + E(nc.ctaUrl) + '" placeholder="/ or https://..."></div>'
     + '</div>'
-    + '<div class="admin-field" style="margin-top:12px"><label for="nl-portal-link">Or send readers to a Newsletter Archive entry</label>'
+    + '<div class="admin-field" style="margin-top:12px"><label for="nl-portal-link">Or send readers to a Subscriber’s Portal entry</label>'
     + '<select class="admin-select" id="nl-portal-link" data-act="nl-portal-link"><option value="">Choose an entry...</option>'
     + db.list("portalEntries").filter(e => e.status === "published").map(e => '<option value="' + E(e.id) + '">' + E(e.title) + '</option>').join("")
     + '</select><span class="admin-hint">Each subscriber gets their own private link, so it opens straight away.</span></div>'
@@ -22269,10 +22288,10 @@ function routeTitle(){
   const map = { home:"Make it real", create:"Create", play:"Play", watch:"Watch", stories:"Read",
     characters:"Meet Chike", "grown-ups":"For grown-ups", shop:"Shop",
     test:"Test panel", donate:"Support",
-    privacy:"Privacy Policy", terms:"Terms and Conditions", newsletter:"Newsletter Archive" };
+    privacy:"Privacy Policy", terms:"Terms and Conditions", newsletter:"Subscriber’s Portal" };
   if (r.name === "newsletter-detail"){
     const pe = portalCurrentEntry();
-    return pe ? pe.title : "Newsletter Archive";
+    return pe ? pe.title : "Subscriber’s Portal";
   }
   if (r.name === "play") return "Games - " + (r.params.sub === "offline" ? "Offline" : "Online");
   if (r.name === "about"){
@@ -24574,6 +24593,8 @@ async function handleSubmit(form, act){
     const email = String(form.elements["email"].value || "").trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast("That does not look like an email address.", "bad"); return; }
     if (isFakeEmail(email)){ toast("Please use a real email address, not a placeholder or test one.", "bad"); return; }
+    const adult = form.elements["adult"];
+    if (!adult || !adult.checked){ toast("Please confirm that you are an adult aged 18 or over to continue.", "bad"); return; }
     const stop = newsletterGate(form);
     if (stop){ toast(stop, "bad"); return; }
     /* Double opt-in: the address is NOT added here. The portal function saves it as "pending" and emails a confirm
