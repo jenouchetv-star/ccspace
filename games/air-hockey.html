@@ -138,7 +138,7 @@
         /* ---------- game over ---------- */
         #over { position: fixed; inset: 0; z-index: 12; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8,6,14,.6); }
         .over-card {
-            width: min(440px, 100%); padding: clamp(18px, 4vh, 30px) 22px; border-radius: 22px; text-align: center;
+            width: min(620px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; padding: clamp(18px, 4vh, 30px) 22px; border-radius: 22px; text-align: center;
             background: linear-gradient(#1C1428, #100C18); border: 3px solid var(--neon-sun);
             box-shadow: 0 0 40px rgba(255,201,60,.35), inset 0 0 24px rgba(255,201,60,.12), 0 10px 0 #000;
         }
@@ -146,12 +146,33 @@
         #over-title { margin: 0 0 6px; font-size: clamp(2.2rem, 8vh, 3.4rem); color: var(--neon-sun); text-shadow: 0 3px 0 #A8650A, 0 6px 0 #000, 0 0 24px rgba(255,201,60,.6); }
         .over-card.lost #over-title { color: var(--neon-cyan); text-shadow: 0 3px 0 #0A5280, 0 6px 0 #000, 0 0 24px rgba(63,224,255,.6); }
         #over-msg { margin: 0 0 14px; font-weight: 700; font-size: 1.02rem; color: rgba(255,255,255,.92); }
-        .over-scores { display: flex; justify-content: center; gap: 14px; margin: 0 0 18px; }
-        .over-score { min-width: 7.5rem; padding: 10px 12px; border-radius: 14px; background: #07050B; border: 2px solid rgba(255,255,255,.14); }
-        .over-score b { display: block; font-size: .7rem; margin-bottom: 8px; }
-        .over-score span { font-size: 1.6rem; }
-        .over-score--you b, .over-score--you span { color: var(--neon-cyan); text-shadow: 0 0 10px rgba(63,224,255,.7); }
-        .over-score--chike b, .over-score--chike span { color: var(--neon-red); text-shadow: 0 0 10px rgba(255,90,76,.7); }
+        /* the match recap: one row a side, its pucks in the order they went in, then the total */
+        .over-scores { display: flex; flex-direction: column; gap: 10px; margin: 0 0 18px; text-align: left; }
+        .over-score { display: grid; grid-template-columns: 4.6rem 1fr auto; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: #07050B; border: 2px solid rgba(255,255,255,.14); }
+        .over-score b { font-size: .7rem; }
+        .over-score--you b, .over-score--you .recap-total { color: var(--neon-cyan); text-shadow: 0 0 10px rgba(63,224,255,.7); }
+        .over-score--chike b, .over-score--chike .recap-total { color: var(--neon-red); text-shadow: 0 0 10px rgba(255,90,76,.7); }
+        .recap { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 3px; min-height: 34px; }
+        .recap-plus { font-weight: 800; color: rgba(255,255,255,.55); }
+        .recap-none { font-size: .85rem; font-weight: 700; color: rgba(255,255,255,.55); }
+        .recap-total { font-size: 1.15rem; white-space: nowrap; }
+        /* a puck as it looks on the table: a white face with its number, in a rim of its colour */
+        .chip {
+            --c: var(--neon-sun);
+            display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+            background: radial-gradient(circle at 50% 40%, #fff 0 52%, #E8E4F0 53% 60%, var(--c) 61%);
+            box-shadow: 0 0 10px color-mix(in srgb, var(--c) 70%, transparent), 0 2px 0 #000;
+            color: #1E2226; font-weight: 800; font-size: .9rem; line-height: 1;
+            animation: chip-in .32s cubic-bezier(.2,.9,.3,1.5) both; animation-delay: calc(var(--i) * 70ms);
+        }
+        .recap.many .chip { width: 24px; height: 24px; font-size: .74rem; }
+        .chip--mid { --c: var(--neon-green); }
+        .chip--high { --c: var(--neon-pink); }
+        @keyframes chip-in { from { transform: scale(0); opacity: 0; } to { transform: none; opacity: 1; } }
+        @media (max-width: 480px) {
+            .over-score { grid-template-columns: 1fr auto; }
+            .over-score b { grid-column: 1 / -1; }
+        }
         .over-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
         .big-btn {
             min-height: 48px; padding: 10px 22px; border-radius: 999px; cursor: pointer;
@@ -185,6 +206,7 @@
             #count.show { animation: toast-fade .8s linear forwards; }
             @keyframes toast-fade { 0% { opacity: 0; } 10% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
             .lv-btn, .big-btn, .hud-btn { transition: none; }
+            .chip { animation: none; }
         }
     </style>
     <link rel="stylesheet" href="game-skin.css">
@@ -198,7 +220,7 @@
         }
         .ccs-hockey3d .kicker, .ccs-hockey3d .mq-sub, .ccs-hockey3d .press, .ccs-hockey3d .freeplay,
         .ccs-hockey3d .player-one, .ccs-hockey3d .t-label, .ccs-hockey3d .t-sum, .ccs-hockey3d .over-score b,
-        .ccs-hockey3d .over-score span {
+        .ccs-hockey3d .recap-total {
             font-family: 'Press Start 2P', 'Courier New', monospace !important;
             font-weight: 400 !important; text-transform: uppercase;
         }
@@ -253,9 +275,10 @@
         <div class="over-card" id="over-card">
             <h2 id="over-title">You win!</h2>
             <p id="over-msg"></p>
-            <div class="over-scores">
-                <div class="over-score over-score--you"><b>You</b><span id="over-you">0</span></div>
-                <div class="over-score over-score--chike"><b>Chike</b><span id="over-chike">0</span></div>
+            <!-- the whole match, goal by goal: every puck each side knocked in, added up to the final score -->
+            <div class="over-scores" role="group" aria-label="How the match was scored">
+                <div class="over-score over-score--you"><b>You</b><div class="recap" id="over-you-pucks"></div><span class="recap-total">= <span id="over-you">0</span></span></div>
+                <div class="over-score over-score--chike"><b>Chike</b><div class="recap" id="over-chike-pucks"></div><span class="recap-total">= <span id="over-chike">0</span></span></div>
             </div>
             <div class="over-actions">
                 <button type="button" id="again-btn" class="big-btn" style="background:var(--neon-sun)">Play again</button>
@@ -1013,7 +1036,24 @@ function showOver(){
   $("over-title").textContent = won ? "You win!" : "Chike wins";
   $("over-msg").textContent = won ? "You reached " + world.score.player + " first. Super shooting!" : "So close! Want a rematch?";
   $("over-you").textContent = world.score.player; $("over-chike").textContent = world.score.ai;
+  recap($("over-you-pucks"), world.tally.player); recap($("over-chike-pucks"), world.tally.ai);
   overEl.hidden = false; $("again-btn").focus();
+}
+/* a side's goals as puck chips joined by plus signs, in the order they went in */
+function recap(el, list){
+  el.innerHTML = "";
+  el.classList.toggle("many", list.length > 10);
+  el.setAttribute("role", "img"); el.setAttribute("aria-label", list.length ? list.join(" plus ") : "No goals");
+  if (!list.length){ var none = document.createElement("span"); none.className = "recap-none"; none.textContent = "No goals"; el.appendChild(none); return; }
+  list.forEach(function(v, i){
+    if (i){ var plus = document.createElement("span"); plus.className = "recap-plus"; plus.setAttribute("aria-hidden", "true"); plus.textContent = "+"; el.appendChild(plus); }
+    var chip = document.createElement("span");
+    chip.className = "chip" + (v >= 7 ? " chip--high" : v >= 4 ? " chip--mid" : "");
+    chip.setAttribute("aria-hidden", "true");
+    chip.style.setProperty("--i", i);
+    chip.textContent = v;
+    el.appendChild(chip);
+  });
 }
 document.querySelectorAll(".lv-btn").forEach(function(b){
   b.addEventListener("click", function(){ sfx("click"); startMatch(b.dataset.difficulty); });
