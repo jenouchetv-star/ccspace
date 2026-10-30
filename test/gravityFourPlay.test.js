@@ -46,7 +46,8 @@ describe("Gravity 4 on the Play page", () => {
     const modal = fn("mailingListModal");
     expect(modal).toContain("const play = back && game ? String(game) : \"\";");
     expect(modal).toContain("const back2 = !!member;");
-    expect(modal).toContain("'<h3 style=\"margin:.2em 0 .3em;font-size:1.6rem\">Play ' + nameHTML(play) + '</h3>'");
+    expect(modal).toContain("? '<h3 style=\"margin:.2em 0 .3em;font-size:1.6rem\">Join our mailing list</h3>'");
+    expect(modal).not.toContain(">Play ' + nameHTML(play)");
     expect(modal).toContain("Join our free mailing list to play. We’ll email you a 6-digit code to confirm.");
     expect(modal).toContain(">Welcome back!</h3>");
     expect(modal).toContain("Enter the email you subscribed with and we’ll send you a 6-digit code to ");
