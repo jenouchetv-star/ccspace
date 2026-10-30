@@ -2,963 +2,1200 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Air Hockey Arcade</title>
-    <!-- Load Poppins font -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;800&display=swap" rel="stylesheet">
-    <!-- Load Tailwind CSS via CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Bungee for the marquee and big arcade lettering, Press Start 2P for the
+         lit LED lettering; Plus Jakarta Sans (the site's face) for anything to read. -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Bungee&family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
-        /* Custom styles for the game board and overrides */
+        /* The site's palette (ink, sun, cyan, plum, berry, paper), turned up to
+           neon for a dark arcade room - the same family as Bounce & Bank. */
+        :root {
+            --ink: #1E2226;
+            --paper: #FAF4E6;
+            --neon-sun: #FFC93C;
+            --neon-cyan: #3FE0FF;
+            --neon-red: #FF5A4C;
+            --neon-pink: #FF5FD2;
+            --neon-green: #7BE866;
+            --room: #0A0812;
+            --panel: #140F1E;
+        }
+        html, body { margin: 0; height: 100%; overflow: hidden; background: var(--room); }
         body {
-            font-family: 'Poppins', sans-serif; /* Changed font to Poppins */
-            transition: background 0.5s ease-in-out;
-            height: 100vh; /* Set height to 100% of viewport */
-            overflow-y: auto; /* Allow scrolling only if content truly exceeds */
+            color: #fff;
+            font-family: 'Plus Jakarta Sans', 'Segoe UI', Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none; -webkit-user-select: none;
         }
-        /* Gradient Background */
-        .game-bg {
-            background: linear-gradient(145deg, #1B2A32, #131F26);
-        }
-        /* Canvas Styling (The table) */
-        #gameCanvas {
-            background-color: #22343D; /* Dark Teal Table Top */
-            border: 8px solid #17B3CE; /* Vibrant Green Border */
-            box-shadow:
-                0 0 30px rgba(23, 179, 206, 0.5), /* Outer Glow */
-                inset 0 0 20px rgba(0, 0, 0, 0.8); /* Inner shadow for depth */
-            /* Ensure the canvas maintains aspect ratio via JS, but scales visually */
-            width: 100%;
-            height: auto;
-        }
-        /* Hide the default cursor over the canvas */
-        #gameCanvas {
-            cursor: none;
-        }
+        #scene { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; outline: none; }
+        body.is-playing #scene { cursor: none; }
+        .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
-        /* #game-container is transform-scaled by fitToViewport() in JS;
-           #game-fit is given the resulting scaled width/height in JS too,
-           so its layout box matches what's actually visible and the
-           body's flex centering has no phantom oversized space to center
-           around. transform-origin stays top-left to match that math. */
-        #game-fit { display: inline-block; }
-        #game-container { transform-origin: top left; }
-
-        /* A little glow on the panel itself, echoing the table's own
-           neon border instead of a flat drop shadow. */
-        .game-glow {
-            box-shadow:
-                0 0 0 1px rgba(59, 130, 246, 0.25),
-                0 25px 50px -12px rgba(0, 0, 0, 0.6),
-                0 0 40px rgba(23, 179, 206, 0.15);
+        /* ---------- the bar along the top: level, reset, sound ---------- */
+        #hud {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+            pointer-events: none;
         }
-
-        .game-title {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            background: linear-gradient(90deg, #60a5fa, #f87171);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
+        #hud .hud-group { display: flex; gap: 8px; align-items: center; }
+        #hud button { pointer-events: auto; }
+        .hud-btn, #hud .ccs-sound-btn {
+            display: inline-flex; align-items: center; gap: 7px;
+            min-height: 40px; padding: 6px 14px;
+            border: 2px solid var(--neon-cyan); border-radius: 999px;
+            color: #fff; font-weight: 800; font-size: .85rem; letter-spacing: .02em;
+            box-shadow: 0 0 12px rgba(63,224,255,.35), inset 0 0 10px rgba(63,224,255,.15);
+            cursor: pointer; transition: transform .12s, box-shadow .12s, border-color .12s;
         }
-        .game-title__puck {
-            display: inline-block;
-            width: 0.8em;
-            height: 0.8em;
-            border-radius: 50%;
-            background: radial-gradient(circle at 35% 30%, #ffffff, #cbd5e1 45%, #64748b 100%);
-            box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
-        }
+        .hud-btn svg { width: 18px; height: 18px; flex: none; }
+        .hud-btn:hover, #hud .ccs-sound-btn:hover { transform: translateY(-1px); box-shadow: 0 0 18px rgba(63,224,255,.6), inset 0 0 12px rgba(63,224,255,.25); }
+        .hud-btn--sun { border-color: var(--neon-sun); box-shadow: 0 0 12px rgba(255,201,60,.35), inset 0 0 10px rgba(255,201,60,.15); }
+        .hud-btn--sun:hover { box-shadow: 0 0 18px rgba(255,201,60,.6), inset 0 0 12px rgba(255,201,60,.25); }
+        #hud .ccs-sound-btn[aria-pressed=false] { border-color: rgba(255,255,255,.4); box-shadow: none; opacity: .85; }
+        body.on-title .in-game { display: none !important; }
 
-        /* Difficulty buttons carry a one-line note now, not just a label -
-           the flex column stacks them without needing extra markup per
-           button beyond the two spans already in the HTML. */
-        .difficulty-button {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 0.15rem;
-            min-width: 11rem;
+        /* ---------- goal toast, countdown and hint ---------- */
+        #toast, #count {
+            position: fixed; left: 50%; top: 47%; z-index: 15; pointer-events: none;
+            transform: translate(-50%, -50%); text-align: center; white-space: nowrap;
+            display: flex; flex-direction: column; align-items: center; gap: .3em;
+            opacity: 0;
         }
-        .difficulty-button__title { font-size: 1.15rem; letter-spacing: 0.02em; }
-        .difficulty-button__note { font-size: 0.72rem; font-weight: 600; opacity: 0.85; text-transform: none; }
-
-        /* Tally row: a static label plus a horizontally-scrollable strip of
-           puck chips, so a long match's worth of scores never breaks the
-           board's fixed height (which fitToViewport()'s math depends on). */
-        .tally-row { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
-        .tally-row__label { flex: none; }
-        .tally-row__chips {
-            display: flex;
-            align-items: center;
-            gap: 0.3rem;
-            overflow-x: auto;
-            white-space: nowrap;
-            padding-bottom: 2px;
+        #toast.show { animation: toast-pop 1.6s cubic-bezier(.2,.9,.3,1.2) forwards; }
+        #count.show { animation: count-pop .8s ease-out forwards; }
+        @keyframes toast-pop {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(.5); }
+            12% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+            22% { transform: translate(-50%, -50%) scale(1); }
+            80% { opacity: 1; }
+            100% { opacity: 0; transform: translate(-50%, -62%) scale(1); }
         }
-        .tally-dash { opacity: 0.6; }
-        .puck-chip {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            flex: none;
-            width: 1.6em;
-            height: 1.6em;
-            border-radius: 50%;
-            background: radial-gradient(circle at 35% 30%, #ffffff, #dbeafe 55%, #93c5fd 100%);
-            color: #1B2A32;
-            font-size: 0.85em;
-            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4), 0 2px 4px rgba(0, 0, 0, 0.35);
+        @keyframes count-pop {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(1.8); }
+            25% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            85% { opacity: 1; }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(.9); }
         }
-        .tally-op { opacity: 0.7; flex: none; }
-        .tally-total { flex: none; color: #fde68a; }
+        .t-label { font-size: clamp(.8rem, 2.6vmin, 1.3rem); color: #fff; letter-spacing: .1em; text-shadow: 0 0 10px rgba(255,255,255,.6), 0 3px 0 #000; }
+        .t-big { font-size: clamp(4rem, 17vmin, 10rem); line-height: 1; text-shadow: 0 0 24px currentColor, 0 6px 0 rgba(0,0,0,.65); }
+        .t-sum {
+            font-size: clamp(.85rem, 3vmin, 1.5rem); color: #fff; padding: .55em .9em; border-radius: 12px;
+            background: rgba(10,8,18,.72); border: 2px solid rgba(255,255,255,.25);
+        }
+        #count .t-big { font-size: clamp(5rem, 24vmin, 14rem); color: var(--neon-sun); }
+        #hint {
+            position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 14;
+            transform: translateX(-50%); margin: 0; max-width: calc(100vw - 32px);
+            padding: 7px 16px; border-radius: 999px; text-align: center;
+            background: rgba(10,8,18,.7); border: 1px solid rgba(255,255,255,.18);
+            font-size: clamp(.75rem, 1.9vmin, .95rem); font-weight: 700; color: rgba(255,255,255,.92);
+            transition: opacity .6s; pointer-events: none;
+        }
+        #hint.gone { opacity: 0; }
 
-        /* Reset Match and the shared Sound on/off button sit side by side;
-           the row carries the gap the Reset button used to carry alone. */
-        #hockey-controls #reserve-button { margin-bottom: 0 !important; }
-        #hockey-controls .ccs-sound-btn { min-height: 38px; padding: 6px 14px; font-size: 0.85rem; }
+        /* ---------- the title screen (an arcade attract mode) ---------- */
+        #title-screen {
+            position: fixed; inset: 0; z-index: 10;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: clamp(8px, 2.2vh, 22px); padding: 64px 16px 40px; overflow-y: auto;
+            background:
+                radial-gradient(ellipse 70% 55% at 50% 45%, rgba(10,8,18,.25), rgba(10,8,18,.82) 100%),
+                linear-gradient(rgba(10,8,18,.35), rgba(10,8,18,.15) 40%, rgba(10,8,18,.6));
+            text-align: center;
+        }
+        #title-screen[hidden], #over[hidden] { display: none; }
+        .kicker { margin: 0; font-size: clamp(.55rem, 1.6vh, .8rem); line-height: 1.6; color: var(--neon-sun); letter-spacing: .2em; }
+        .marquee { margin: 0; line-height: .92; font-size: min(clamp(2.6rem, 13vh, 7.5rem), 15vw); letter-spacing: .02em; }
+        .mq-air { color: var(--neon-sun); text-shadow: 0 3px 0 #A8650A, 0 6px 0 #000, 0 0 28px rgba(255,201,60,.7); }
+        .mq-hockey { color: var(--neon-cyan); text-shadow: 0 3px 0 #0A5280, 0 6px 0 #000, 0 0 28px rgba(63,224,255,.7); }
+        .mq-sub { margin: 0; font-size: clamp(.7rem, 2.2vh, 1.15rem); color: var(--neon-pink); letter-spacing: .55em; padding-left: .55em; text-shadow: 0 0 12px rgba(255,95,210,.8); }
+        .press { margin: 0; font-size: clamp(.7rem, 2vh, 1rem); color: #fff; letter-spacing: .12em; text-shadow: 0 0 10px rgba(255,255,255,.8); animation: blink 1.1s steps(2, jump-none) infinite; }
+        @keyframes blink { 50% { opacity: .15; } }
+        .how { margin: 0; max-width: 36ch; font-size: clamp(.82rem, 2vh, 1rem); font-weight: 700; color: rgba(255,255,255,.9); line-height: 1.4; }
+        #difficulty-selection { display: flex; gap: clamp(10px, 1.6vw, 18px); justify-content: center; flex-wrap: wrap; }
+        .lv-btn {
+            --c: var(--neon-green);
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            min-width: 12.5rem; padding: clamp(10px, 1.8vh, 16px) 22px;
+            border: 3px solid var(--c); border-radius: 18px; color: #fff; cursor: pointer;
+            box-shadow: 0 0 22px color-mix(in srgb, var(--c) 45%, transparent), inset 0 0 18px color-mix(in srgb, var(--c) 22%, transparent), 0 6px 0 #000;
+            transition: transform .13s cubic-bezier(.2,.9,.3,1.4), box-shadow .13s;
+        }
+        .lv-btn:hover { transform: translateY(-3px); box-shadow: 0 0 34px color-mix(in srgb, var(--c) 70%, transparent), inset 0 0 22px color-mix(in srgb, var(--c) 35%, transparent), 0 9px 0 #000; }
+        .lv-btn:active { transform: translateY(3px); box-shadow: 0 0 18px color-mix(in srgb, var(--c) 45%, transparent), 0 2px 0 #000; }
+        .lv-btn--medium { --c: var(--neon-sun); }
+        .lv-btn--hard { --c: var(--neon-red); }
+        .lv-title { font-size: clamp(1.2rem, 3.4vh, 1.7rem); color: var(--c); text-shadow: 0 0 12px var(--c); }
+        .lv-note { font-size: .82rem; font-weight: 700; color: rgba(255,255,255,.88); }
+        .wins { margin: 0; font-size: .8rem; font-weight: 700; color: rgba(255,255,255,.75); }
+        .freeplay { position: fixed; right: 16px; bottom: 12px; margin: 0; z-index: 11; font-size: clamp(.55rem, 1.4vh, .72rem); color: var(--neon-sun); text-shadow: 0 0 8px rgba(255,201,60,.8); }
+        .player-one { position: fixed; left: 16px; bottom: 12px; margin: 0; z-index: 11; font-size: clamp(.55rem, 1.4vh, .72rem); color: var(--neon-cyan); text-shadow: 0 0 8px rgba(63,224,255,.8); }
 
+        /* ---------- game over ---------- */
+        #over { position: fixed; inset: 0; z-index: 12; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8,6,14,.6); }
+        .over-card {
+            width: min(440px, 100%); padding: clamp(18px, 4vh, 30px) 22px; border-radius: 22px; text-align: center;
+            background: linear-gradient(#1C1428, #100C18); border: 3px solid var(--neon-sun);
+            box-shadow: 0 0 40px rgba(255,201,60,.35), inset 0 0 24px rgba(255,201,60,.12), 0 10px 0 #000;
+        }
+        .over-card.lost { border-color: var(--neon-cyan); box-shadow: 0 0 40px rgba(63,224,255,.3), inset 0 0 24px rgba(63,224,255,.1), 0 10px 0 #000; }
+        #over-title { margin: 0 0 6px; font-size: clamp(2.2rem, 8vh, 3.4rem); color: var(--neon-sun); text-shadow: 0 3px 0 #A8650A, 0 6px 0 #000, 0 0 24px rgba(255,201,60,.6); }
+        .over-card.lost #over-title { color: var(--neon-cyan); text-shadow: 0 3px 0 #0A5280, 0 6px 0 #000, 0 0 24px rgba(63,224,255,.6); }
+        #over-msg { margin: 0 0 14px; font-weight: 700; font-size: 1.02rem; color: rgba(255,255,255,.92); }
+        .over-scores { display: flex; justify-content: center; gap: 14px; margin: 0 0 18px; }
+        .over-score { min-width: 7.5rem; padding: 10px 12px; border-radius: 14px; background: #07050B; border: 2px solid rgba(255,255,255,.14); }
+        .over-score b { display: block; font-size: .7rem; margin-bottom: 8px; }
+        .over-score span { font-size: 1.6rem; }
+        .over-score--you b, .over-score--you span { color: var(--neon-cyan); text-shadow: 0 0 10px rgba(63,224,255,.7); }
+        .over-score--chike b, .over-score--chike span { color: var(--neon-red); text-shadow: 0 0 10px rgba(255,90,76,.7); }
+        .over-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .big-btn {
+            min-height: 48px; padding: 10px 22px; border-radius: 999px; cursor: pointer;
+            border: 3px solid var(--neon-sun); color: #1E2226; font-size: 1.05rem;
+            box-shadow: 0 0 18px rgba(255,201,60,.5), 0 5px 0 #000;
+            transition: transform .13s cubic-bezier(.2,.9,.3,1.4), box-shadow .13s;
+        }
+        .big-btn:hover { transform: translateY(-2px); box-shadow: 0 0 26px rgba(255,201,60,.75), 0 7px 0 #000; }
+        .big-btn:active { transform: translateY(3px); box-shadow: 0 0 12px rgba(255,201,60,.5), 0 1px 0 #000; }
+        .big-btn--ghost { color: #fff; border-color: var(--neon-cyan); box-shadow: 0 0 18px rgba(63,224,255,.4), 0 5px 0 #000; }
+        .big-btn--ghost:hover { box-shadow: 0 0 26px rgba(63,224,255,.65), 0 7px 0 #000; }
+
+        #nogl { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; background: var(--room); }
+        #nogl[hidden] { display: none; }
+        #nogl p { max-width: 30ch; font-size: 1.1rem; font-weight: 700; line-height: 1.5; }
+
+        @media (max-width: 560px) {
+            #difficulty-selection { flex-direction: column; align-items: stretch; width: min(320px, 100%); }
+            .lv-btn { min-width: 0; padding: 9px 16px; }
+            .kicker { letter-spacing: .08em; }
+            .hud-btn, #hud .ccs-sound-btn { padding: 6px 11px; font-size: .78rem; }
+            #hud .ccs-sound-btn span { display: none; }
+        }
+        @media (max-height: 520px) {
+            #title-screen { padding-top: 56px; gap: 6px; }
+            .how, .wins { display: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .press { animation: none; }
+            #toast.show { animation: toast-fade 1.6s linear forwards; }
+            #count.show { animation: toast-fade .8s linear forwards; }
+            @keyframes toast-fade { 0% { opacity: 0; } 10% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+            .lv-btn, .big-btn, .hud-btn { transition: none; }
+        }
     </style>
     <link rel="stylesheet" href="game-skin.css">
+    <style>
+        /* After the shared skin (game-skin.css), which sets one face for every
+           game with !important: the arcade lettering needs its own faces back. */
+        .ccs-hockey3d .marquee, .ccs-hockey3d .lv-title, .ccs-hockey3d .t-big,
+        .ccs-hockey3d #over-title, .ccs-hockey3d .big-btn {
+            font-family: 'Bungee', 'Plus Jakarta Sans', sans-serif !important;
+            font-weight: 400 !important; letter-spacing: .01em;
+        }
+        .ccs-hockey3d .kicker, .ccs-hockey3d .mq-sub, .ccs-hockey3d .press, .ccs-hockey3d .freeplay,
+        .ccs-hockey3d .player-one, .ccs-hockey3d .t-label, .ccs-hockey3d .t-sum, .ccs-hockey3d .over-score b,
+        .ccs-hockey3d .over-score span {
+            font-family: 'Press Start 2P', 'Courier New', monospace !important;
+            font-weight: 400 !important; text-transform: uppercase;
+        }
+        .ccs-hockey3d .marquee span { font-family: inherit !important; }
+    </style>
 </head>
-<!-- h-screen ensures the body takes full viewport height. my-auto centers the container vertically. -->
-<body class="ccs-game ccs-hockey game-bg flex flex-col justify-start items-center h-screen overflow-y-auto p-4">
+<body class="ccs-game ccs-hockey3d on-title">
+    <canvas id="scene" role="img" aria-label="An air hockey table seen from your end. Your blue paddle is close to you, and Chike's red paddle guards the far goal. Numbered pucks glide between you."></canvas>
 
-    <!-- #game-fit is sized in JS to match #game-container's scaled footprint,
-         so the transform-scale below (fitToViewport()) shrinks the whole
-         game uniformly to whichever of width/height is tighter, without
-         throwing off the body's flex centering or leaving a phantom
-         scrollbar behind. -->
-    <div id="game-fit" class="my-auto">
-    <!-- Container is set to 100% viewport width, capped at max-w-6xl for aesthetics on huge screens -->
-    <div id="game-container" class="w-full max-w-6xl p-6 bg-gray-800 rounded-xl shadow-2xl border-t-4 border-blue-500 game-glow">
-        <h1 class="game-title text-4xl font-extrabold text-center mb-6 tracking-wide">
-            <span class="game-title__puck" aria-hidden="true"></span> Air Hockey Arcade
-        </h1>
-
-        <!-- Difficulty Selection Screen -->
-        <div id="difficulty-selection" class="flex flex-col items-center justify-center p-8 bg-gray-700 rounded-lg shadow-xl">
-            <h2 class="text-2xl font-bold text-yellow-400 mb-6">Select Difficulty</h2>
-            <p class="text-sm text-gray-300 mb-4">Playing with a keyboard? Press Tab to move between difficulties, then Enter to select one.</p>
-            <div class="flex flex-col sm:flex-row gap-6">
-                <button data-difficulty="easy" class="difficulty-button difficulty-button--easy px-8 py-3 rounded-full text-white font-semibold transition transform hover:scale-105 shadow-lg bg-green-500 hover:bg-green-600">
-                    <span class="difficulty-button__title">Easy</span>
-                    <span class="difficulty-button__note">Chill pace, gentle AI</span>
-                </button>
-                <button data-difficulty="medium" class="difficulty-button difficulty-button--medium px-8 py-3 rounded-full text-white font-semibold transition transform hover:scale-105 shadow-lg bg-yellow-500 hover:bg-yellow-600">
-                    <span class="difficulty-button__title">Medium</span>
-                    <span class="difficulty-button__note">Balanced, a real match</span>
-                </button>
-                <button data-difficulty="hard" class="difficulty-button difficulty-button--hard px-8 py-3 rounded-full text-white font-semibold transition transform hover:scale-105 shadow-lg bg-red-500 hover:bg-red-600">
-                    <span class="difficulty-button__title">Hard</span>
-                    <span class="difficulty-button__note">Fast, sharp, unforgiving</span>
-                </button>
-            </div>
-        </div>
-
-        <!-- Game Screen -->
-        <div id="game-screen" class="hidden flex flex-col items-center">
-
-            <!-- Reset Match Button, and the Sound on/off button (added by game-sound.js below) -->
-            <div id="hockey-controls" class="flex items-center justify-center gap-3 mb-2">
-            <button id="reserve-button" class="px-6 py-2 mb-4 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-full shadow-lg transition duration-200 uppercase tracking-wider">
-                Reset Match
+    <div id="hud">
+        <div class="hud-group">
+            <button type="button" id="level-btn" class="hud-btn in-game" style="background:rgba(16,12,24,.82)" aria-label="Pick a level">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+                <span>Levels</span>
             </button>
-            </div>
-
-            <!-- Scoreboard -->
-            <div id="scoreboard" class="flex justify-between w-full mb-2 font-mono text-3xl font-bold text-white bg-gray-900/50 p-3 rounded-lg shadow-inner border border-gray-700">
-                <div class="text-blue-400">PLAYER: <span id="player-score">0</span></div>
-                <div class="text-red-400">AI: <span id="ai-score">0</span></div>
-            </div>
-
-            <!-- Running addition tally - every scored puck keeps its own
-                 chip (styled like the puck it came from) instead of
-                 collapsing into plain "2+4=6" text, so the running math is
-                 something a kid can actually read at a glance. -->
-            <div id="tally-board" class="flex justify-between w-full mb-4 font-mono text-sm sm:text-base font-bold bg-gray-900/30 p-2 rounded-lg border border-gray-700">
-                <div class="tally-row text-blue-300" id="player-tally">
-                    <span class="tally-row__label">PLAYER</span>
-                    <span class="tally-row__chips"><span class="tally-dash">&mdash;</span></span>
-                </div>
-                <div class="tally-row text-red-300" id="ai-tally">
-                    <span class="tally-row__label">AI</span>
-                    <span class="tally-row__chips"><span class="tally-dash">&mdash;</span></span>
-                </div>
-            </div>
-
-            <!-- Canvas Container -->
-            <!-- Fixed internal resolution: 1000x500 for consistent physics -
-                 wider than square gives both paddles more lateral room to
-                 maneuver than a tighter court would. -->
-            <canvas id="gameCanvas" width="1000" height="500" class="rounded-xl"></canvas>
-
-            <!-- Message Box (Used for 'Click to serve' prompt) -->
-            <div id="message-box" class="mt-4 text-center">
-                <p id="game-message" class="text-xl font-semibold text-gray-200"></p>
-            </div>
-            <p class="mt-2 text-xs text-gray-400 text-center">Move your paddle with the mouse, or with the Arrow keys.</p>
-        </div>
-    </div>
-    </div>
-
-    <!-- Game Over Modal -->
-    <div id="game-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex justify-center items-center z-50">
-        <div class="bg-gray-700 p-10 rounded-xl shadow-2xl text-center max-w-sm w-11/12 transform transition-all duration-300 scale-100 border-t-8 border-yellow-400">
-            <h2 id="modal-title" class="text-5xl font-extrabold mb-4 uppercase text-yellow-400 leading-tight"></h2>
-            <p id="modal-message" class="text-xl text-gray-100 mb-8">Play another round?</p>
-            <button id="modal-restart-button" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full shadow-lg transition transform hover:scale-105 duration-200 uppercase tracking-wider">
-                New Game
+            <button type="button" id="reserve-button" class="hud-btn hud-btn--sun in-game" style="background:rgba(16,12,24,.82)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+                <span>Reset match</span>
             </button>
         </div>
+        <div class="hud-group" id="hud-right"></div>
     </div>
 
+    <div id="toast" aria-hidden="true"></div>
+    <div id="count" aria-hidden="true"></div>
+    <p id="hint" class="gone in-game">Move your paddle with the mouse, or with the Arrow keys.</p>
+    <div id="live" class="sr-only" role="status" aria-live="polite"></div>
+
+    <section id="title-screen" aria-labelledby="t-title">
+        <p class="kicker">Chike's Creative Space</p>
+        <h1 id="t-title" class="marquee"><span class="mq-air">Air</span> <span class="mq-hockey">Hockey</span></h1>
+        <p class="mq-sub">Arcade</p>
+        <p class="press" aria-hidden="true">Press start</p>
+        <p class="how">Knock the numbered pucks into Chike's goal. Add up your numbers. First to 25 wins!</p>
+        <div id="difficulty-selection" role="group" aria-label="Pick a level to start">
+            <button type="button" data-difficulty="easy" class="lv-btn lv-btn--easy" style="background:rgba(14,22,14,.82)">
+                <span class="lv-title">Easy</span><span class="lv-note">Chike takes it slow</span>
+            </button>
+            <button type="button" data-difficulty="medium" class="lv-btn lv-btn--medium" style="background:rgba(24,18,8,.82)">
+                <span class="lv-title">Medium</span><span class="lv-note">A fair match</span>
+            </button>
+            <button type="button" data-difficulty="hard" class="lv-btn lv-btn--hard" style="background:rgba(26,10,10,.82)">
+                <span class="lv-title">Hard</span><span class="lv-note">Chike plays fast</span>
+            </button>
+        </div>
+        <p class="wins" id="wins" hidden></p>
+    </section>
+    <p class="player-one title-only" aria-hidden="true">1 Player</p>
+    <p class="freeplay title-only" aria-hidden="true">Free play</p>
+
+    <section id="over" hidden role="dialog" aria-modal="true" aria-labelledby="over-title">
+        <div class="over-card" id="over-card">
+            <h2 id="over-title">You win!</h2>
+            <p id="over-msg"></p>
+            <div class="over-scores">
+                <div class="over-score over-score--you"><b>You</b><span id="over-you">0</span></div>
+                <div class="over-score over-score--chike"><b>Chike</b><span id="over-chike">0</span></div>
+            </div>
+            <div class="over-actions">
+                <button type="button" id="again-btn" class="big-btn" style="background:var(--neon-sun)">Play again</button>
+                <button type="button" id="pick-btn" class="big-btn big-btn--ghost" style="background:rgba(16,12,24,.9)">Pick a level</button>
+            </div>
+        </div>
+    </section>
+
+    <div id="nogl" hidden><p>This game needs 3D graphics, and this browser has them turned off. Try another browser, or turn on hardware acceleration.</p></div>
 
     <script src="game-sound.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
     <script>
-        // --- Game Setup and Constants ---
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-
-        // UI elements
-        const difficultySelectionScreen = document.getElementById('difficulty-selection');
-        const gameScreen = document.getElementById('game-screen');
-        const difficultyButtons = document.querySelectorAll('.difficulty-button');
-        const reserveButton = document.getElementById('reserve-button');
-        const playerScoreDisplay = document.getElementById('player-score');
-        const aiScoreDisplay = document.getElementById('ai-score');
-        const gameMessage = document.getElementById('game-message');
-        const scoreboard = document.getElementById('scoreboard');
-
-        // Modal Elements
-        const gameModal = document.getElementById('game-modal');
-        const modalTitle = document.getElementById('modal-title');
-        const modalRestartButton = document.getElementById('modal-restart-button');
-        const modalMessage = document.getElementById('modal-message');
-
-
-        // Fixed internal game coordinates for physics
-        const GAME_WIDTH = canvas.width;
-        const GAME_HEIGHT = canvas.height;
-        const GOAL_WIDTH = 10;
-        const GOAL_HEIGHT = 150;
-        const HALF_COURT = GAME_WIDTH / 2;
-        const PUCK_RADIUS = 18;
-        const PADDLE_RADIUS = 30;
-        const PADDLE_SPEED_MULTIPLIER = 1.1;
-        const PUCK_FRICTION = 0.995;
-        const MAX_PUCK_SPEED = 18;
-        const WINNING_SCORE = 25;
-        const PUCK_COUNT = 5;
-        // How often (in frames) each puck's net travel is sampled to catch
-        // one pinned between a wall and a paddle - it keeps bouncing at
-        // real speed, so instantaneous speed alone can't tell that apart
-        // from a genuine attack.
-        const STUCK_CHECK_FRAMES = 40;
-
-        /** Lightens (positive percent) or darkens (negative) a "#rrggbb"
-            color - used to build the embossed gradient/rim on the paddles
-            without hand-authoring a second color per paddle. */
-        function shadeColor(hex, percent) {
-            hex = hex.replace('#', '');
-            if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
-            const num = parseInt(hex, 16);
-            const amount = Math.round(255 * (percent / 100));
-            const r = Math.max(0, Math.min(255, (num >> 16) + amount));
-            const g = Math.max(0, Math.min(255, ((num >> 8) & 0xFF) + amount));
-            const b = Math.max(0, Math.min(255, (num & 0xFF) + amount));
-            return 'rgb(' + r + ', ' + g + ', ' + b + ')';
-        }
-
-        // AI Difficulty Mapping
-        const aiSpeedMap = {
-            easy: { maxSpeed: 4, accuracy: 0.2 },
-            medium: { maxSpeed: 7, accuracy: 0.5 },
-            hard: { maxSpeed: 10, accuracy: 0.8 }
-        };
-
-        let currentDifficulty = 'medium';
-        let aiConfig = aiSpeedMap[currentDifficulty];
-        let playerPaddle, aiPaddle, pucks = [];
-        let playerScore = 0, aiScore = 0;
-        let gameLoopRunning = false;
-        let gameActive = false;
-        let lastTime = 0;
-
-        // Running addition-chain tallies, one per side, each scored value
-        // kept as its own puck-styled chip - "2 + 4 = 6" as pucks a kid can
-        // actually read, not a run-on string of plain digits.
-        const playerTallyDisplay = document.getElementById('player-tally').querySelector('.tally-row__chips');
-        const aiTallyDisplay = document.getElementById('ai-tally').querySelector('.tally-row__chips');
-        let playerTally = { values: [], total: 0 };
-        let aiTally = { values: [], total: 0 };
-        function appendTally(tally, value) {
-            tally.values.push(value);
-            tally.total += value;
-        }
-        function renderTallyChips(tally) {
-            if (!tally.values.length) return '<span class="tally-dash">&mdash;</span>';
-            return tally.values.map((v, i) =>
-                (i > 0 ? '<span class="tally-op">+</span>' : '') + '<span class="puck-chip">' + v + '</span>'
-            ).join('') + '<span class="tally-op">=</span><span class="tally-total">' + tally.total + '</span>';
-        }
-
-        // Input tracking
-        let mouseX = HALF_COURT / 2;
-        let mouseY = GAME_HEIGHT / 2;
-
-        // Arrow-key movement nudges the same mouseX/mouseY the mouse
-        // drives (see gameLoop below), so paddleUpdate() never needs to
-        // know whether the target came from a pointer or the keyboard.
-        const KEY_PADDLE_SPEED = 14; // px per ~16.7ms frame
-        const keysPressed = { up: false, down: false, left: false, right: false };
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp') { keysPressed.up = true; e.preventDefault(); }
-            else if (e.key === 'ArrowDown') { keysPressed.down = true; e.preventDefault(); }
-            else if (e.key === 'ArrowLeft') { keysPressed.left = true; e.preventDefault(); }
-            else if (e.key === 'ArrowRight') { keysPressed.right = true; e.preventDefault(); }
-        });
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'ArrowUp') keysPressed.up = false;
-            else if (e.key === 'ArrowDown') keysPressed.down = false;
-            else if (e.key === 'ArrowLeft') keysPressed.left = false;
-            else if (e.key === 'ArrowRight') keysPressed.right = false;
-        });
-
-        // --- Sound (the shared kit in game-sound.js; one on/off switch for every game) ---
-        // The kit spaces out repeats of the same sound, so five pucks
-        // rattling around never turn into a buzz.
-        function sfx(name, opts) { if (window.CCSSound) CCSSound.play(name, opts); }
-        function puckSpeed(p) { return Math.sqrt(p.velocityX * p.velocityX + p.velocityY * p.velocityY); }
-        document.getElementById('hockey-controls').appendChild(
-            window.CCSSound ? CCSSound.button() : document.createComment('no sound kit')
-        );
-
-        // --- Game Objects ---
-        class HockeyObject {
-            constructor(x, y, radius, color) {
-                this.x = x;
-                this.y = y;
-                this.radius = radius;
-                this.color = color;
-                this.velocityX = 0;
-                this.velocityY = 0;
-                this.mass = radius;
-            }
-
-            draw() {
-                ctx.save();
-                // Paddles (no .value) get an embossed, raised-disc look;
-                // numbered pucks keep the flat glossy fill so the number
-                // stays easy to read against it.
-                if (this.value === undefined) {
-                    const lightX = this.x - this.radius * 0.35;
-                    const lightY = this.y - this.radius * 0.35;
-                    const gradient = ctx.createRadialGradient(
-                        lightX, lightY, this.radius * 0.05,
-                        this.x, this.y, this.radius
-                    );
-                    gradient.addColorStop(0, shadeColor(this.color, 45));
-                    gradient.addColorStop(0.55, this.color);
-                    gradient.addColorStop(1, shadeColor(this.color, -35));
-
-                    ctx.beginPath();
-                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                    ctx.fillStyle = gradient;
-                    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-                    ctx.shadowBlur = 12;
-                    ctx.shadowOffsetY = 3;
-                    ctx.fill();
-
-                    // A defined darker rim reads as a raised edge instead of
-                    // the disc fading straight into the felt.
-                    ctx.shadowColor = 'transparent';
-                    ctx.lineWidth = Math.max(2, this.radius * 0.06);
-                    ctx.strokeStyle = shadeColor(this.color, -45);
-                    ctx.stroke();
-
-                    // The actual "shine" that sells the embossed look.
-                    ctx.beginPath();
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-                    ctx.ellipse(lightX, lightY, this.radius * 0.32, this.radius * 0.2, -Math.PI / 4, 0, Math.PI * 2);
-                    ctx.fill();
-                } else {
-                    ctx.beginPath();
-                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                    ctx.fillStyle = this.color;
-                    ctx.shadowColor = this.color;
-                    ctx.shadowBlur = 10;
-                    ctx.fill();
-
-                    // Add highlight/reflection
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                    ctx.arc(this.x - this.radius / 3, this.y - this.radius / 3, this.radius / 5, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                ctx.restore();
-
-                // A numbered puck shows its value - that's what turns a
-                // goal into a math fact instead of a plain point.
-                if (this.value !== undefined) {
-                    ctx.save();
-                    ctx.fillStyle = '#1B2A32';
-                    ctx.font = 'bold ' + Math.round(this.radius * 1.1) + 'px Poppins, sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(String(this.value), this.x, this.y + 1);
-                    ctx.restore();
-                }
-            }
-        }
-
-        // --- Core Functions ---
-
-        function initGame() {
-            // Hide modal if visible
-            gameModal.classList.add('hidden');
-
-            playerPaddle = new HockeyObject(
-                (HALF_COURT - PADDLE_RADIUS) / 2,
-                GAME_HEIGHT / 2,
-                PADDLE_RADIUS,
-                '#3b82f6'
-            );
-            aiPaddle = new HockeyObject(
-                GAME_WIDTH - (HALF_COURT - PADDLE_RADIUS) / 2,
-                GAME_HEIGHT / 2,
-                PADDLE_RADIUS,
-                '#ef4444'
-            );
-
-            pucks = [];
-            for (let i = 0; i < PUCK_COUNT; i++) pucks.push(spawnPuck());
-
-            playerScore = 0;
-            aiScore = 0;
-            playerTally = { values: [], total: 0 };
-            aiTally = { values: [], total: 0 };
-            playerScoreDisplay.textContent = playerScore;
-            aiScoreDisplay.textContent = aiScore;
-            playerTallyDisplay.innerHTML = renderTallyChips(playerTally);
-            aiTallyDisplay.innerHTML = renderTallyChips(aiTally);
-            gameMessage.textContent = "First to " + WINNING_SCORE + " points!";
-            gameActive = true;
-        }
-
-        /** A fresh numbered puck, already moving in a random direction from
-            just off centre - five of these stay in play at once instead of
-            one puck served back and forth. */
-        function spawnPuck() {
-            const p = new HockeyObject(
-                GAME_WIDTH / 2 + (Math.random() - 0.5) * 120,
-                GAME_HEIGHT / 2 + (Math.random() - 0.5) * 200,
-                PUCK_RADIUS,
-                '#ffffff'
-            );
-            p.mass = 5;
-            p.value = 1 + Math.floor(Math.random() * 9);
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 4 + Math.random() * 2;
-            p.velocityX = Math.cos(angle) * speed;
-            p.velocityY = Math.sin(angle) * speed;
-            return p;
-        }
-
-        function handleDifficultySelection(event) {
-            // closest(), not classList.contains(event.target) - the button
-            // now wraps a title/note pair of child spans, and a click on
-            // either of those would otherwise never match the button itself.
-            const button = event.target.closest('.difficulty-button');
-            if (button) {
-                currentDifficulty = button.dataset.difficulty;
-                aiConfig = aiSpeedMap[currentDifficulty];
-
-                sfx('start');
-                difficultySelectionScreen.classList.add('hidden');
-                gameScreen.classList.remove('hidden');
-
-                // Start game loop
-                initGame();
-                if (!gameLoopRunning) {
-                    requestAnimationFrame(gameLoop);
-                    gameLoopRunning = true;
-                }
-                fitToViewport();
-            }
-        }
-
-        function paddleUpdate(paddle, targetX, targetY) {
-            // Apply simple interpolation (smoother movement)
-            const dx = targetX - paddle.x;
-            const dy = targetY - paddle.y;
-
-            // Move based on distance and speed multiplier
-            paddle.velocityX = dx * PADDLE_SPEED_MULTIPLIER;
-            paddle.velocityY = dy * PADDLE_SPEED_MULTIPLIER;
-
-            paddle.x += paddle.velocityX;
-            paddle.y += paddle.velocityY;
-
-            // Boundary checks (Player is always clamped to the left half)
-            const minX = (paddle === playerPaddle) ? PADDLE_RADIUS : HALF_COURT + PADDLE_RADIUS;
-            const maxX = (paddle === playerPaddle) ? HALF_COURT - PADDLE_RADIUS : GAME_WIDTH - PADDLE_RADIUS;
-
-            paddle.x = Math.max(minX, Math.min(maxX, paddle.x));
-            paddle.y = Math.max(PADDLE_RADIUS, Math.min(GAME_HEIGHT - PADDLE_RADIUS, paddle.y));
-        }
-
-        function aiLogic() {
-            if (!pucks.length) return;
-            // With five pucks moving at once, the AI tracks whichever one
-            // is the biggest active threat right now - furthest into its
-            // own half, weighted toward ones heading further in. A puck
-            // that has come to rest (friction stopped it, often in a
-            // corner) is never picked as the threat, even if its raw x
-            // position is the largest - otherwise the AI parks next to a
-            // dead puck forever and ignores whatever else is in play.
-            const REST_SPEED = 0.3;
-            let puck = null, bestThreat = -Infinity, anyMoving = false;
-            pucks.forEach(p => {
-                const speed = Math.sqrt(p.velocityX * p.velocityX + p.velocityY * p.velocityY);
-                if (speed > REST_SPEED) anyMoving = true;
-                const threat = speed > REST_SPEED
-                    ? p.x + (p.velocityX > 0 ? p.velocityX * 10 : 0)
-                    : -Infinity;
-                if (threat > bestThreat) { bestThreat = threat; puck = p; }
-            });
-
-            const OFFENSIVE_LIMIT_X = HALF_COURT - 50;
-            let targetX, targetY;
-
-            if (!anyMoving || !puck) {
-                // Nothing on the board is worth chasing - drift back to a
-                // ready position at mid-court instead of staying wherever
-                // the last real threat happened to leave it. This is what
-                // frees the AI from a corner once play moves on.
-                targetX = HALF_COURT + (GAME_WIDTH - HALF_COURT) / 2;
-                targetY = GAME_HEIGHT / 2;
-            } else if (puck.x >= OFFENSIVE_LIMIT_X || puck.velocityX < -1) {
-                // --- DEFENSIVE STRATEGY ---
-                const errorFactor = (1 - aiConfig.accuracy) * 100;
-                const trackingError = (Math.random() - 0.5) * errorFactor;
-                targetX = GAME_WIDTH - PADDLE_RADIUS - 30;
-                targetY = puck.y + trackingError;
-            } else {
-                // --- OFFENSIVE STRATEGY ---
-                targetX = puck.x + PADDLE_RADIUS + 5;
-                targetY = GAME_HEIGHT / 2; // Aim for center goal
-            }
-
-            // Simple speed-limited movement towards targetX/targetY
-            const dx = targetX - aiPaddle.x;
-            const dy = targetY - aiPaddle.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist > 1) {
-                const angle = Math.atan2(dy, dx);
-                const offense = puck && puck.x < OFFENSIVE_LIMIT_X && puck.velocityX > -1 && anyMoving;
-                const speed = Math.min(dist * 0.2, offense ? aiConfig.maxSpeed * 1.5 : aiConfig.maxSpeed);
-                aiPaddle.x += Math.cos(angle) * speed;
-                aiPaddle.y += Math.sin(angle) * speed;
-            }
-
-            // Clamp AI paddle boundaries (right side)
-            aiPaddle.x = Math.max(HALF_COURT + PADDLE_RADIUS, Math.min(GAME_WIDTH - PADDLE_RADIUS, aiPaddle.x));
-            aiPaddle.y = Math.max(PADDLE_RADIUS, Math.min(GAME_HEIGHT - PADDLE_RADIUS, aiPaddle.y));
-        }
-
-        /** Returns 'ai', 'player', or null for whichever goal this puck
-            just scored in, so the caller can retire it, credit its value,
-            and grow the running addition chain. */
-        function puckUpdate(puck) {
-            puck.x += puck.velocityX;
-            puck.y += puck.velocityY;
-
-            // Apply friction
-            puck.velocityX *= PUCK_FRICTION;
-            puck.velocityY *= PUCK_FRICTION;
-
-            // Corner-trap check: every STUCK_CHECK_FRAMES, compare current
-            // position against the last checkpoint. A puck pinned between a
-            // wall and a paddle bounces at real speed but covers almost no
-            // net ground, which is exactly what this catches (aiLogic()'s
-            // speed-only "is anything moving" check can't tell the two
-            // apart, which is why the AI used to camp next to one forever).
-            // Repositioning it - not just nudging its velocity - matters:
-            // a velocity-only fix can get immediately overwritten by the
-            // very next paddleCollision() call this same frame if the puck
-            // is still overlapping the paddle.
-            if (puck.stuckCheckX === undefined) {
-                puck.stuckCheckX = puck.x;
-                puck.stuckCheckY = puck.y;
-                puck.stuckFrames = 0;
-            }
-            puck.stuckFrames++;
-            if (puck.stuckFrames >= STUCK_CHECK_FRAMES) {
-                const netDist = Math.hypot(puck.x - puck.stuckCheckX, puck.y - puck.stuckCheckY);
-                if (netDist < puck.radius * 3) {
-                    puck.x = GAME_WIDTH / 2 + (Math.random() - 0.5) * 120;
-                    puck.y = GAME_HEIGHT / 2 + (Math.random() - 0.5) * 200;
-                    const angle = Math.random() * Math.PI * 2;
-                    const speed = 4 + Math.random() * 2;
-                    puck.velocityX = Math.cos(angle) * speed;
-                    puck.velocityY = Math.sin(angle) * speed;
-                }
-                puck.stuckCheckX = puck.x;
-                puck.stuckCheckY = puck.y;
-                puck.stuckFrames = 0;
-            }
-
-            // Wall collision (Top/Bottom)
-            if (puck.y - PUCK_RADIUS < 0) {
-                puck.y = PUCK_RADIUS;
-                puck.velocityY *= -1;
-                wallSound(puck);
-            } else if (puck.y + PUCK_RADIUS > GAME_HEIGHT) {
-                puck.y = GAME_HEIGHT - PUCK_RADIUS;
-                puck.velocityY *= -1;
-                wallSound(puck);
-            }
-
-            // Goal detection (Left/Right)
-            if (puck.x < PUCK_RADIUS || puck.x > GAME_WIDTH - PUCK_RADIUS) {
-
-                const isGoalArea = puck.y > (GAME_HEIGHT / 2 - GOAL_HEIGHT / 2) &&
-                                   puck.y < (GAME_HEIGHT / 2 + GOAL_HEIGHT / 2);
-
-                if (isGoalArea) {
-                    if (puck.x < PUCK_RADIUS) return 'ai';
-                    if (puck.x > GAME_WIDTH - PUCK_RADIUS) return 'player';
-                } else {
-                    // Rebound off the wall outside the goal area
-                    if (puck.x < PUCK_RADIUS) {
-                        puck.x = PUCK_RADIUS;
-                    } else {
-                        puck.x = GAME_WIDTH - PUCK_RADIUS;
-                    }
-                    puck.velocityX *= -1;
-                    wallSound(puck);
-                }
-            }
-            return null;
-        }
-
-        function paddleCollision(puck, paddle) {
-            const dx = puck.x - paddle.x;
-            const dy = puck.y - paddle.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            const minDistance = puck.radius + paddle.radius;
-
-            if (distance < minDistance) {
-                // Collision occurred
-
-                // 1. Move puck out of overlap (prevents sticking)
-                const angle = Math.atan2(dy, dx);
-                const overlap = minDistance - distance;
-                puck.x += overlap * Math.cos(angle);
-                puck.y += overlap * Math.sin(angle);
-
-                // 2. Simple impulse based collision
-                let newSpeed = Math.sqrt(paddle.velocityX * paddle.velocityX + paddle.velocityY * paddle.velocityY) * 0.5 + 8;
-                newSpeed = Math.min(newSpeed, MAX_PUCK_SPEED);
-
-                puck.velocityX = newSpeed * Math.cos(angle) * 1.5;
-                puck.velocityY = newSpeed * Math.sin(angle) * 1.5;
-
-                // A springy knock, higher the harder the puck was hit.
-                sfx('bounce', { pitch: 0.8 + Math.min(1, newSpeed / MAX_PUCK_SPEED) * 0.5, volume: 0.7 });
-            }
-        }
-
-        /** A soft knock off the side rails - only for a puck moving at a
-            real pace, so slow drifters stay quiet. */
-        function wallSound(puck) {
-            const speed = puckSpeed(puck);
-            if (speed > 3) sfx('thud', { pitch: 1.6 + Math.min(1, speed / MAX_PUCK_SPEED) * 0.6, volume: 0.35 });
-        }
-
-        /** Equal-mass elastic collision between two pucks (every puck is
-            the same radius/mass) - without this they were passing straight
-            through each other despite the field having five in play. */
-        function puckCollision(a, b) {
-            const dx = b.x - a.x;
-            const dy = b.y - a.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            const minDistance = a.radius + b.radius;
-            if (distance <= 0 || distance >= minDistance) return;
-
-            const nx = dx / distance;
-            const ny = dy / distance;
-
-            // Separate them evenly so they don't sink into each other.
-            const overlap = (minDistance - distance) / 2;
-            a.x -= overlap * nx;
-            a.y -= overlap * ny;
-            b.x += overlap * nx;
-            b.y += overlap * ny;
-
-            // Swap the velocity component along the collision normal;
-            // equal masses mean a full exchange, no mass-weighting needed.
-            const relVel = (b.velocityX - a.velocityX) * nx + (b.velocityY - a.velocityY) * ny;
-            if (relVel >= 0) return; // already moving apart
-            if (relVel < -2) sfx('tick', { pitch: 0.7, volume: 0.6 });
-            a.velocityX += relVel * nx;
-            a.velocityY += relVel * ny;
-            b.velocityX -= relVel * nx;
-            b.velocityY -= relVel * ny;
-        }
-
-        function checkWinCondition() {
-            if (playerScore >= WINNING_SCORE) {
-                endGame("YOU WIN!");
-            } else if (aiScore >= WINNING_SCORE) {
-                endGame("Sorry, try again");
-            }
-        }
-
-        function endGame(message) {
-            gameActive = false;
-
-            // Populate modal content
-            let titleText = message;
-            let titleColor, messageText;
-
-            sfx(message.includes("WIN") ? 'win' : 'lose');
-
-            if (message.includes("WIN")) {
-                titleColor = "text-green-400";
-                messageText = "Congratulations! You aced this match. Let's see if you can do it again!";
-            } else { // Sorry, try again
-                titleColor = "text-red-400";
-                messageText = "The AI was tough this time. Don't give up—ready for a rematch?";
-            }
-
-            modalTitle.textContent = titleText;
-            modalTitle.className = `text-5xl font-extrabold mb-4 uppercase ${titleColor} leading-tight`;
-            modalMessage.textContent = messageText;
-
-            // Show the modal
-            gameModal.classList.remove('hidden');
-
-            // Clear the small message box text
-            gameMessage.textContent = "";
-        }
-
-        function drawCourt() {
-            // Center Line
-            ctx.setLineDash([10, 10]);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(HALF_COURT, 0);
-            ctx.lineTo(HALF_COURT, GAME_HEIGHT);
-            ctx.stroke();
-
-            // Center Circle
-            ctx.setLineDash([]);
-            ctx.beginPath();
-            ctx.arc(HALF_COURT, GAME_HEIGHT / 2, 60, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // Goals (Semi-circles at the ends)
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-            ctx.fillRect(0, GAME_HEIGHT / 2 - GOAL_HEIGHT / 2, GOAL_WIDTH, GOAL_HEIGHT);
-            ctx.fillRect(GAME_WIDTH - GOAL_WIDTH, GAME_HEIGHT / 2 - GOAL_HEIGHT / 2, GOAL_WIDTH, GOAL_HEIGHT);
-
-            // Goal Posts (Lines)
-            ctx.strokeStyle = '#F5B921';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            // Left Goal Posts
-            ctx.moveTo(GOAL_WIDTH, GAME_HEIGHT / 2 - GOAL_HEIGHT / 2);
-            ctx.lineTo(GOAL_WIDTH, GAME_HEIGHT / 2 + GOAL_HEIGHT / 2);
-            // Right Goal Posts
-            ctx.moveTo(GAME_WIDTH - GOAL_WIDTH, GAME_HEIGHT / 2 - GOAL_HEIGHT / 2);
-            ctx.lineTo(GAME_WIDTH - GOAL_WIDTH, GAME_HEIGHT / 2 + GOAL_HEIGHT / 2);
-            ctx.stroke();
-        }
-
-        function gameLoop(timestamp) {
-            const deltaTime = timestamp - lastTime;
-            lastTime = timestamp;
-
-            // Clear the canvas
-            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-
-            // Draw the court elements
-            drawCourt();
-
-            if (gameActive) {
-                // Arrow keys nudge the shared mouse target by a
-                // frame-rate-independent step, clamped to the same bounds
-                // paddleUpdate() itself enforces for the player's half.
-                if (keysPressed.up || keysPressed.down || keysPressed.left || keysPressed.right) {
-                    const moveStep = KEY_PADDLE_SPEED * ((deltaTime || 16.7) / 16.7);
-                    if (keysPressed.up) mouseY -= moveStep;
-                    if (keysPressed.down) mouseY += moveStep;
-                    if (keysPressed.left) mouseX -= moveStep;
-                    if (keysPressed.right) mouseX += moveStep;
-                    mouseX = Math.max(PADDLE_RADIUS, Math.min(mouseX, HALF_COURT - PADDLE_RADIUS));
-                    mouseY = Math.max(PADDLE_RADIUS, Math.min(mouseY, GAME_HEIGHT - PADDLE_RADIUS));
-                }
-
-                // Update player paddle (tracks mouse or keyboard)
-                const playerTargetX = Math.min(mouseX, HALF_COURT - playerPaddle.radius);
-                paddleUpdate(playerPaddle, playerTargetX, mouseY);
-
-                // AI Logic & Update
-                aiLogic();
-
-                // Puck movement and collision - each puck is scored and
-                // replaced independently, so five stay in play throughout.
-                for (let i = pucks.length - 1; i >= 0; i--) {
-                    const p = pucks[i];
-                    const scorer = puckUpdate(p);
-                    if (scorer) {
-                        if (scorer === 'ai') {
-                            aiScore += p.value;
-                            aiScoreDisplay.textContent = aiScore;
-                            appendTally(aiTally, p.value);
-                            aiTallyDisplay.innerHTML = renderTallyChips(aiTally);
-                            gameMessage.textContent = "Goal for AI! +" + p.value;
-                            sfx('bad', { volume: 0.5 });
-                        } else {
-                            playerScore += p.value;
-                            playerScoreDisplay.textContent = playerScore;
-                            appendTally(playerTally, p.value);
-                            playerTallyDisplay.innerHTML = renderTallyChips(playerTally);
-                            gameMessage.textContent = "Goal for Player! +" + p.value;
-                            // a brighter chime for a bigger number
-                            sfx(p.value >= 7 ? 'good' : 'coin', { pitch: 0.85 + p.value * 0.05 });
-                        }
-                        checkWinCondition();
-                        pucks.splice(i, 1);
-                        if (gameActive) pucks.push(spawnPuck());
-                        continue;
-                    }
-                    paddleCollision(p, playerPaddle);
-                    paddleCollision(p, aiPaddle);
-                }
-
-                // Puck-vs-puck collisions - every unique pair, once per frame.
-                for (let i = 0; i < pucks.length; i++) {
-                    for (let j = i + 1; j < pucks.length; j++) {
-                        puckCollision(pucks[i], pucks[j]);
-                    }
-                }
-            }
-
-            // Draw objects
-            playerPaddle.draw();
-            aiPaddle.draw();
-            pucks.forEach(p => p.draw());
-
-            // Request the next frame
-            requestAnimationFrame(gameLoop);
-        }
-
-        // --- Responsiveness and Event Listeners ---
-
-        // Function to handle canvas visual resizing (maintaining aspect ratio)
-        function resizeCanvas() {
-            const container = document.getElementById('game-container');
-            const containerWidth = container.clientWidth - 48; // Account for padding
-            const aspectRatio = GAME_WIDTH / GAME_HEIGHT;
-
-            // The table also has to leave room for the title, the reset button,
-            // the scoreboard and the message line, or the page runs off screen.
-            const chrome = 250;
-            const heightBudget = Math.max(180, window.innerHeight - chrome);
-
-            let newWidth = Math.min(containerWidth, heightBudget * aspectRatio);
-            let newHeight = newWidth / aspectRatio;
-
-            // Set canvas style dimensions (visual scaling)
-            canvas.style.width = `${newWidth}px`;
-            canvas.style.height = `${newHeight}px`;
-
-            // Match scoreboard width to canvas width for better visual alignment
-            if (scoreboard) {
-                 scoreboard.style.width = `${newWidth}px`;
-            }
-        }
-
-        /** Scales the whole game (title, difficulty screen or game screen,
-            whichever is showing) down to fit the viewport, on top of
-            resizeCanvas()'s own width-based sizing - the two are
-            complementary, not redundant: resizeCanvas() keeps the canvas
-            itself at the right aspect ratio for the space it's given, and
-            this catches the case where the *total* stacked height (title +
-            buttons/scoreboard/tally + canvas) still doesn't fit a short
-            viewport, which no per-element width calculation can see.
-            Reset to natural size first so the measurement isn't scaled by
-            a previous call. */
-        function fitToViewport() {
-            const container = document.getElementById('game-container');
-            const fitWrapper = document.getElementById('game-fit');
-            container.style.transform = 'none';
-            fitWrapper.style.width = '';
-            fitWrapper.style.height = '';
-
-            const rect = container.getBoundingClientRect();
-            const margin = 16;
-            const scale = Math.min(
-                1,
-                (window.innerWidth - margin) / rect.width,
-                (window.innerHeight - margin) / rect.height
-            );
-
-            if (scale < 1) {
-                container.style.transform = `scale(${scale})`;
-                fitWrapper.style.width = (rect.width * scale) + 'px';
-                fitWrapper.style.height = (rect.height * scale) + 'px';
-            }
-        }
-
-        // Player Input: Track mouse position
-        canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-
-            // Scale mouse coordinates back to the internal 1000x500 system
-            const scaleX = GAME_WIDTH / rect.width;
-            const scaleY = GAME_HEIGHT / rect.height;
-
-            mouseX = (e.clientX - rect.left) * scaleX;
-            mouseY = (e.clientY - rect.top) * scaleY;
-
-            mouseX = Math.min(mouseX, HALF_COURT - PADDLE_RADIUS);
-        });
-
-        // UI Interaction: Set up difficulty buttons
-        difficultyButtons.forEach(button => {
-            button.addEventListener('click', handleDifficultySelection);
-        });
-
-        // UI Interaction: Reserve Button (Resets scores and puck position)
-        reserveButton.addEventListener('click', () => {
-            sfx('click');
-            gameModal.classList.add('hidden');
-            gameMessage.textContent = "Match Reset! Click to serve.";
-            initGame(); // initGame resets scores and sets up paddles/puck
-        });
-
-        // UI Interaction: Modal Restart Button
-        modalRestartButton.addEventListener('click', () => {
-            sfx('start');
-            gameModal.classList.add('hidden');
-            initGame();
-        });
-
-        // Initial setup and resize handling
-        window.addEventListener('resize', () => { resizeCanvas(); fitToViewport(); });
-        window.onload = () => {
-            resizeCanvas(); // Initial call
-            difficultySelectionScreen.classList.remove('hidden');
-            gameScreen.classList.add('hidden');
-            fitToViewport();
-        };
-
+/* LOGIC-START */
+/* The whole game in flat table units, with no drawing in it: the 3D scene only shows what this says.
+   The table is W across and L long. y = 0 is Chike's end (far from the camera), y = L is the player's
+   end (nearest the camera), and the centre line is at y = MID. One "tick" is 1/60 of a second;
+   speeds are table units per tick. Five numbered pucks are in play at once, and a goal is worth the
+   number on the puck, so each side's score is a running sum. */
+var W = 500, L = 1000, MID = 500, GOAL_W = 180, PUCK_R = 19, PADDLE_R = 34;
+var WIN_SCORE = 25, PUCK_COUNT = 5, SUBSTEPS = 4, FRICTION = 0.997, WALL_E = 0.9, PUCK_E = 0.95;
+var PLAYER_SPEED = 32, KEY_SPEED = 10, REST_TICKS = 180, SERVE_GAP = 20, RESERVE_DELAY = 45;
+/* Chike, the computer player, at each level. speed: most it moves per tick. react: ticks between fresh
+   looks at the table. error: how far off its aim and its blocks can be. attack: chance it goes after a
+   slow puck. soft: how much a block takes out of the puck (1 = none). maxPuck: fastest any puck may go. */
+var LEVELS = {
+  easy:   { name: "Easy",   speed: 2.5, react: 26, error: 150, attack: 0.12, soft: 0.35, maxPuck: 13, predict: false, homeY: 70,  lunge: 0 },
+  medium: { name: "Medium", speed: 4.4, react: 12, error: 70,  attack: 0.45, soft: 0.65, maxPuck: 17, predict: true,  homeY: 85,  lunge: 6, careful: true },
+  hard:   { name: "Hard",   speed: 11,  react: 2,  error: 6,  attack: 0.95, soft: 0.95, maxPuck: 22, predict: true,  homeY: 100, lunge: 12, careful: true }
+};
+/* mulberry32: a small seeded random generator, so a match can be replayed exactly */
+function makeRng(seed){ var s = seed >>> 0; return function(){ s = (s + 0x6D2B79F5) | 0; var t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function clamp(v, a, b){ return v < a ? a : v > b ? b : v; }
+function newPaddle(side){ var y = side === "player" ? L - 110 : 110; return { x: W / 2, y: y, px: W / 2, py: y, vx: 0, vy: 0, r: PADDLE_R }; }
+/* where a paddle may go: its own half only, never over the centre line */
+function clampToHalf(side, x, y){
+  return { x: clamp(x, PADDLE_R, W - PADDLE_R),
+           y: side === "player" ? clamp(y, MID + PADDLE_R, L - PADDLE_R) : clamp(y, PADDLE_R, MID - PADDLE_R) };
+}
+function newMatch(level){
+  var w = { level: level, cfg: LEVELS[level] || LEVELS.medium, tick: 0, pucks: [], nextId: 1, queue: [],
+            player: newPaddle("player"), ai: newPaddle("ai"), score: { player: 0, ai: 0 }, tally: { player: [], ai: [] },
+            winner: null, brain: { ai: { next: 0, tx: W / 2, ty: 110 }, player: { next: 0, tx: W / 2, ty: 110 } } };
+  for (var i = 0; i < PUCK_COUNT; i++) w.queue.push({ at: 1 + i * SERVE_GAP, toward: i % 2 ? "ai" : "player" });
+  return w;
+}
+/* a fresh numbered puck from the middle of the table, drifting toward one side */
+function makePuck(w, rng, toward){
+  var x = W / 2, y = MID, tries = 0;
+  do { x = W / 2 + (rng() - 0.5) * 160; y = MID + (rng() - 0.5) * 60; tries++; }
+  while (tries < 12 && w.pucks.some(function(p){ return Math.hypot(p.x - x, p.y - y) < PUCK_R * 2.4; }));
+  var dir = toward === "ai" ? -1 : toward === "player" ? 1 : (rng() < 0.5 ? -1 : 1);
+  var ang = (rng() - 0.5) * 1.6, sp = 3 + rng() * 1.5;
+  var p = { id: w.nextId++, x: x, y: y, px: x, py: y, vx: Math.sin(ang) * sp, vy: Math.cos(ang) * sp * dir, r: PUCK_R,
+            value: 1 + Math.floor(rng() * 9), ax: x, ay: y, since: 0 };
+  return p;
+}
+/* moves a paddle toward a target, no faster than maxSpeed; its velocity is what it hits pucks with */
+function steerPaddle(p, side, tx, ty, maxSpeed){
+  var t = clampToHalf(side, tx, ty), dx = t.x - p.x, dy = t.y - p.y, d = Math.hypot(dx, dy);
+  if (d > maxSpeed){ dx *= maxSpeed / d; dy *= maxSpeed / d; }
+  p.vx = dx; p.vy = dy;
+}
+/* side rails, end rails and the two goal slots. Returns who scored ("player" or "ai"), or null. */
+function hitWalls(p, out){
+  var inMouth = Math.abs(p.x - W / 2) < GOAL_W / 2 - p.r * 0.35;
+  if (p.x < p.r){ p.x = p.r; if (p.vx < 0){ out.wall = Math.max(out.wall, -p.vx); p.vx = -p.vx * WALL_E; } }
+  else if (p.x > W - p.r){ p.x = W - p.r; if (p.vx > 0){ out.wall = Math.max(out.wall, p.vx); p.vx = -p.vx * WALL_E; } }
+  if (inMouth){
+    if (p.y >= L) return "ai";       /* into the player's goal: a point for Chike */
+    if (p.y <= 0) return "player";   /* into Chike's goal: a point for the player */
+  } else {
+    if (p.y < p.r){ p.y = p.r; if (p.vy < 0){ out.wall = Math.max(out.wall, -p.vy); p.vy = -p.vy * WALL_E; } }
+    else if (p.y > L - p.r){ p.y = L - p.r; if (p.vy > 0){ out.wall = Math.max(out.wall, p.vy); p.vy = -p.vy * WALL_E; } }
+  }
+  return null;
+}
+/* puck against a paddle (the paddle is far heavier, so only the puck bounces). soft takes speed out of a
+   block; minOut makes sure a hit always sends the puck away. Returns how hard it hit (0 for no contact). */
+function hitPaddle(p, pad, soft, minOut){
+  var dx = p.x - pad.x, dy = p.y - pad.y, d = Math.hypot(dx, dy), min = p.r + pad.r;
+  if (d >= min) return 0;
+  if (d < 1e-6){ dx = 0; dy = pad.y < MID ? 1 : -1; d = 1; }
+  var nx = dx / d, ny = dy / d;
+  p.x = pad.x + nx * min; p.y = pad.y + ny * min;
+  var vn = (p.vx - pad.vx) * nx + (p.vy - pad.vy) * ny;
+  if (vn < 0){ p.vx -= (1 + soft) * vn * nx; p.vy -= (1 + soft) * vn * ny; }
+  var outSp = p.vx * nx + p.vy * ny, want = Math.max(0, pad.vx * nx + pad.vy * ny) + minOut;
+  if (outSp < want){ p.vx += (want - outSp) * nx; p.vy += (want - outSp) * ny; }
+  return Math.max(-vn, 0.01);
+}
+/* two pucks (same size and weight) bounce off each other. Returns how hard they met. */
+function hitPucks(a, b){
+  var dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), min = a.r + b.r;
+  if (d <= 1e-6 || d >= min) return 0;
+  var nx = dx / d, ny = dy / d, push = (min - d) / 2;
+  a.x -= push * nx; a.y -= push * ny; b.x += push * nx; b.y += push * ny;
+  var rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+  if (rel >= 0) return 0;
+  var j = rel * (1 + PUCK_E) / 2;
+  a.vx += j * nx; a.vy += j * ny; b.vx -= j * nx; b.vy -= j * ny;
+  return -rel;
+}
+function capSpeed(p, max){ var s = Math.hypot(p.vx, p.vy); if (s > max){ p.vx *= max / s; p.vy *= max / s; } if (s < 0.04){ p.vx = 0; p.vy = 0; } }
+/* where a puck will be across the table after t ticks, bouncing off the side rails */
+function predictX(x, vx, t){
+  var lo = PUCK_R, span = W - 2 * PUCK_R, u = x - lo + vx * t, m = 2 * span;
+  u = ((u % m) + m) % m;
+  return lo + (u > span ? m - u : u);
+}
+/* where a computer-run paddle wants to go this tick. It thinks in its own frame (its goal at y = 0),
+   so the same brain can play either end: Chike at the far end, or the demo player on the title screen. */
+function aiTarget(w, side, cfg, rng){
+  var flip = side === "player", me = w[side], brain = w.brain[side];
+  var F = function(y){ return flip ? L - y : y; };
+  if (w.tick < brain.next) return { x: brain.tx, y: F(brain.ty) };
+  var myY = F(me.y), threat = null, threatT = Infinity, prey = null, preyD = Infinity, near = null, nearD = Infinity;
+  w.pucks.forEach(function(p){
+    var py = F(p.y), vy = flip ? -p.vy : p.vy, sp = Math.hypot(p.vx, p.vy);
+    var d = Math.hypot(p.x - me.x, py - myY);
+    if (py < MID && d < nearD){ nearD = d; near = p; }
+    if (vy < -0.4 && py > cfg.homeY - 20){
+      var t = (py - cfg.homeY) / -vy;
+      if (sp < 4 && py < MID) t += 40;          /* slow ones on my side can be attacked instead */
+      if (t < threatT){ threatT = t; threat = { p: p, py: py, vy: vy, sp: sp }; }
+    }
+    if (py < MID - PUCK_R && py > PUCK_R && sp < 4 && d < preyD){ preyD = d; prey = { p: p, py: py }; }
+  });
+  var tx = W / 2, ty = cfg.homeY;
+  var attacking = prey && (!threat || threat.sp < 4 || threatT > 70) && rng() < cfg.attack;
+  if (attacking){
+    var gx = W / 2 + (rng() - 0.5) * cfg.error, gy = L;           /* aim at the far goal */
+    var ax = gx - prey.p.x, ay = gy - prey.py, al = Math.hypot(ax, ay) || 1; ax /= al; ay /= al;
+    var bx = me.x - prey.p.x, by = myY - prey.py, along = bx * ax + by * ay, side2 = Math.abs(bx * ay - by * ax);
+    if (along < -PUCK_R && side2 < PADDLE_R * 0.8){ tx = prey.p.x + ax * 40; ty = prey.py + ay * 40; }     /* lined up: strike */
+    else if (cfg.careful && along > -PUCK_R * 0.5){                                                           /* wrong side: go round it */
+      var sx = me.x < prey.p.x ? -1 : 1;
+      if (prey.p.x + sx * (PADDLE_R + PUCK_R + 24) < PADDLE_R || prey.p.x + sx * (PADDLE_R + PUCK_R + 24) > W - PADDLE_R) sx = -sx;
+      tx = prey.p.x + sx * (PADDLE_R + PUCK_R + 24); ty = prey.py - PUCK_R;
+    }
+    else { tx = prey.p.x - ax * (PADDLE_R + PUCK_R + 14); ty = prey.py - ay * (PADDLE_R + PUCK_R + 14); } /* get behind it */
+    brain.next = w.tick + Math.max(1, Math.round(cfg.react / 2));
+  } else if (threat){
+    var px = cfg.predict ? predictX(threat.p.x, threat.p.vx, Math.max(0, threatT)) : threat.p.x;
+    if (!cfg.predict) px = W / 2 + (px - W / 2) * 0.8;
+    tx = px + (rng() - 0.5) * cfg.error;
+    ty = cfg.homeY;
+    if (cfg.lunge && threatT < cfg.lunge && threat.py < MID) ty = threat.py;   /* step up and meet it */
+    if (cfg.careful && threat.py < myY + 6){                                    /* it got past: drop back between it and the goal */
+      tx = threat.p.x + (threat.p.x < W / 2 ? 8 : -8); ty = Math.max(PADDLE_R, threat.py - PADDLE_R - PUCK_R - 6);
+    }
+    brain.next = w.tick + cfg.react;
+  } else {
+    if (near) tx = W / 2 + (near.x - W / 2) * 0.4;
+    brain.next = w.tick + cfg.react;
+  }
+  brain.tx = tx; brain.ty = ty;
+  return { x: tx, y: F(ty) };
+}
+/* "6 + 7 + 5 = 18": a side's goals as an addition, with older goals folded into the first number so it
+   stays short. Every line is true math. */
+function tallyText(list, maxTerms){
+  if (!list.length) return "";
+  var total = list.reduce(function(a, b){ return a + b; }, 0);
+  if (list.length === 1) return String(total);
+  var n = Math.max(2, maxTerms || 4), terms = list.slice();
+  if (terms.length > n){ var head = terms.splice(0, terms.length - n + 1); terms.unshift(head.reduce(function(a, b){ return a + b; }, 0)); }
+  return terms.join(" + ") + " = " + total;
+}
+/* scores a goal: the puck's number is added to that side's sum */
+function addGoal(w, scorer, value){
+  var before = w.score[scorer];
+  w.score[scorer] = before + value;
+  w.tally[scorer].push(value);
+  if (!w.winner && w.score[scorer] >= WIN_SCORE) w.winner = scorer;
+  return { before: before, total: w.score[scorer] };
+}
+/* one tick of play. input: where the player's paddle is headed ({x, y}, table units) or null to let the
+   demo brain play it (the title screen). Returns what happened, for sounds and effects. */
+function step(w, input, rng){
+  var cfg = w.cfg, ev = [];
+  w.tick++;
+  for (var q = w.queue.length - 1; q >= 0; q--){
+    if (w.queue[q].at <= w.tick && w.pucks.length < PUCK_COUNT && !w.winner){
+      var np = makePuck(w, rng, w.queue[q].toward); w.pucks.push(np); w.queue.splice(q, 1);
+      ev.push({ type: "serve", id: np.id, x: np.x, y: np.y });
+    }
+  }
+  var tp = input || aiTarget(w, "player", LEVELS.medium, rng);
+  steerPaddle(w.player, "player", tp.x, tp.y, input ? (input.speed || PLAYER_SPEED) : LEVELS.medium.speed);
+  var ta = aiTarget(w, "ai", cfg, rng);
+  steerPaddle(w.ai, "ai", ta.x, ta.y, cfg.speed);
+  [w.player, w.ai].forEach(function(pd){ pd.px = pd.x; pd.py = pd.y; });
+  w.pucks.forEach(function(p){ p.px = p.x; p.py = p.y; });
+  var hits = {}, scored = [];
+  for (var s = 0; s < SUBSTEPS; s++){
+    [w.player, w.ai].forEach(function(pd){ pd.x += pd.vx / SUBSTEPS; pd.y += pd.vy / SUBSTEPS; });
+    for (var i = 0; i < w.pucks.length; i++){
+      var p = w.pucks[i]; if (p.gone) continue;
+      p.x += p.vx / SUBSTEPS; p.y += p.vy / SUBSTEPS;
+      var hp = hitPaddle(p, w.player, 0.9, 2.5), ha = hitPaddle(p, w.ai, cfg.soft, 1.5);
+      if (hp && !hits["p" + p.id]){ hits["p" + p.id] = 1; ev.push({ type: "hit", who: "player", id: p.id, speed: hp, x: p.x, y: p.y }); }
+      if (ha && !hits["a" + p.id]){ hits["a" + p.id] = 1; ev.push({ type: "hit", who: "ai", id: p.id, speed: ha, x: p.x, y: p.y }); }
+      var out = { wall: 0 }, g = hitWalls(p, out);
+      if (out.wall > 2.5 && !hits["w" + p.id]){ hits["w" + p.id] = 1; ev.push({ type: "wall", id: p.id, speed: out.wall, x: p.x, y: p.y }); }
+      /* a puck pinned between a paddle and a rail: the paddle gives way */
+      [w.player, w.ai].forEach(function(pd){
+        var dx = pd.x - p.x, dy = pd.y - p.y, d = Math.hypot(dx, dy) || 1, min = p.r + pd.r;
+        if (d < min){ pd.x = p.x + dx / d * min; pd.y = p.y + dy / d * min; var c = clampToHalf(pd === w.player ? "player" : "ai", pd.x, pd.y); pd.x = c.x; pd.y = c.y; }
+      });
+      capSpeed(p, cfg.maxPuck);
+      if (g){ p.gone = true; scored.push({ p: p, scorer: g }); }
+    }
+    for (var a = 0; a < w.pucks.length; a++) for (var b = a + 1; b < w.pucks.length; b++){
+      if (w.pucks[a].gone || w.pucks[b].gone) continue;
+      var k = hitPucks(w.pucks[a], w.pucks[b]);
+      if (k > 1.5) ev.push({ type: "clack", speed: k, a: w.pucks[a].id, b: w.pucks[b].id, x: w.pucks[a].x, y: w.pucks[a].y });
+      capSpeed(w.pucks[a], cfg.maxPuck); capSpeed(w.pucks[b], cfg.maxPuck);
+    }
+  }
+  w.pucks.forEach(function(p){
+    if (p.gone) return;
+    p.vx *= FRICTION; p.vy *= FRICTION;
+    /* a puck that has hardly moved for 3 seconds (stopped, or stuck in a corner) is served again */
+    if (++p.since >= REST_TICKS){
+      if (Math.hypot(p.x - p.ax, p.y - p.ay) < PUCK_R * 1.5){
+        var fresh = makePuck(w, rng, p.y < MID ? "player" : "ai");
+        p.x = p.px = fresh.x; p.y = p.py = fresh.y; p.vx = fresh.vx; p.vy = fresh.vy;
+        ev.push({ type: "reserve", id: p.id, x: p.x, y: p.y });
+      }
+      p.ax = p.x; p.ay = p.y; p.since = 0;
+    }
+  });
+  scored.forEach(function(sc){
+    var r = addGoal(w, sc.scorer, sc.p.value);
+    ev.push({ type: "goal", scorer: sc.scorer, value: sc.p.value, before: r.before, total: r.total, x: sc.p.x, id: sc.p.id });
+    w.queue.push({ at: w.tick + RESERVE_DELAY, toward: sc.scorer === "player" ? "ai" : "player" });
+  });
+  if (scored.length) w.pucks = w.pucks.filter(function(p){ return !p.gone; });
+  if (w.winner && !w.announced){ w.announced = true; ev.push({ type: "win", winner: w.winner }); }
+  return ev;
+}
+/* LOGIC-END */
+
+/* ============================================================
+   Everything below draws the logic above as a 3D arcade table and
+   wires up the controls, sounds and screens.
+   ============================================================ */
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var REDUCED = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+var COARSE = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+var titleEl = $("title-screen"), overEl = $("over"), toastEl = $("toast"), countEl = $("count"), hintEl = $("hint"), liveEl = $("live");
+
+/* ---------- sound: the shared kit, with our own spacing so a busy table never buzzes ---------- */
+var lastSound = {};
+function sfx(name, opts, gap){
+  if (!window.CCSSound) return;
+  var now = performance.now();
+  if (gap && lastSound[name] && now - lastSound[name] < gap) return;
+  lastSound[name] = now;
+  CCSSound.play(name, opts);
+}
+if (window.CCSSound) $("hud-right").appendChild(CCSSound.button({ background: "rgba(16,12,24,.82)" }));
+
+/* ---------- small saved things: the last level picked, and wins at each level on this device ---------- */
+function load(key, fallback){ try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } }
+function save(key, v){ try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) {} }
+var wins = load("ah-wins", { easy: 0, medium: 0, hard: 0 });
+var level = load("ah-level", "easy");
+if (!LEVELS[level]) level = "easy";
+function showWins(){
+  var el = $("wins"), total = wins.easy + wins.medium + wins.hard;
+  el.hidden = !total;
+  el.textContent = "Your wins: Easy " + wins.easy + " · Medium " + wins.medium + " · Hard " + wins.hard;
+}
+showWins();
+
+var announceTimer = 0;
+function announce(text){ clearTimeout(announceTimer); liveEl.textContent = ""; announceTimer = setTimeout(function(){ liveEl.textContent = text; }, 40); }
+
+if (COARSE) hintEl.textContent = "Drag your finger to move your paddle.";
+
+/* ---------- three.js: load it (with a second source if the first is down), then build ---------- */
+function boot(){
+  if (window.THREE) return start();
+  var s = document.createElement("script");
+  s.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+  s.onload = start; s.onerror = noGL;
+  document.head.appendChild(s);
+}
+function noGL(){ $("nogl").hidden = false; titleEl.hidden = true; }
+
+function start(){
+var T = window.THREE, renderer;
+if (!T) return noGL();
+var canvas = $("scene");
+try { renderer = new T.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: "high-performance" }); }
+catch (e) { return noGL(); }
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.setClearColor(0x0A0812);
+var ANISO = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+var S = 0.01;                                  /* world units per table unit */
+var HW = W * S / 2, HL = L * S / 2;            /* half width / half length in world units */
+function wx(x){ return (x - W / 2) * S; }
+function wz(y){ return (y - L / 2) * S; }
+var COL = { cyan: 0x3FE0FF, sun: 0xFFC93C, red: 0xFF5A4C, pink: 0xFF5FD2, green: 0x7BE866, plum: 0xD08BE6, white: 0xffffff };
+var SIDE_COL = { player: COL.cyan, ai: COL.red };
+function puckCol(v){ return v <= 3 ? COL.sun : v <= 6 ? COL.green : COL.pink; }
+function hex(c){ return "#" + ("000000" + c.toString(16)).slice(-6); }
+
+var scene = new T.Scene();
+scene.fog = new T.Fog(0x0A0812, 18, 50);
+var camera = new T.PerspectiveCamera(46, 1, 0.3, 140);
+var pickCam = new T.PerspectiveCamera(46, 1, 0.3, 140);   /* the camera with no shake or sway, for reading the pointer */
+
+/* ---------- canvas-drawn textures ---------- */
+function cvs(w, h){ var c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+function tex(c){ var t = new T.CanvasTexture(c); t.anisotropy = ANISO; return t; }
+var glowTex = (function(){
+  var c = cvs(128, 128), g = c.getContext("2d"), r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(.22, "rgba(255,255,255,.55)"); r.addColorStop(.55, "rgba(255,255,255,.14)"); r.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = r; g.fillRect(0, 0, 128, 128); return tex(c);
+})();
+var edgeTex = (function(){
+  var c = cvs(64, 4), g = c.getContext("2d"), r = g.createLinearGradient(0, 0, 64, 0);
+  r.addColorStop(0, "rgba(255,255,255,.95)"); r.addColorStop(.25, "rgba(255,255,255,.35)"); r.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = r; g.fillRect(0, 0, 64, 4); return tex(c);
+})();
+/* the playing surface: deep blue, a grid of air holes, and glowing lines (canvas top = Chike's end) */
+var tableCanvas = cvs(1024, 2048);
+(function drawTable(){
+  var g = tableCanvas.getContext("2d"), k = 1024 / W, cx = 512, cy = 1024;
+  var bg = g.createLinearGradient(0, 0, 0, 2048);
+  bg.addColorStop(0, "#081C29"); bg.addColorStop(.5, "#0C2A3C"); bg.addColorStop(1, "#0E3247");
+  g.fillStyle = bg; g.fillRect(0, 0, 1024, 2048);
+  var sheen = g.createRadialGradient(cx, 1250, 40, cx, 1250, 1100);
+  sheen.addColorStop(0, "rgba(120,220,255,.10)"); sheen.addColorStop(1, "rgba(120,220,255,0)");
+  g.fillStyle = sheen; g.fillRect(0, 0, 1024, 2048);
+  var holes = new Path2D(), lights = new Path2D(), step = 26;
+  for (var y = step / 2; y < 2048; y += step) for (var x = step / 2; x < 1024; x += step){
+    holes.moveTo(x + 2.6, y); holes.arc(x, y, 2.6, 0, Math.PI * 2);
+    lights.moveTo(x + 1.6, y + 2.4); lights.arc(x, y + 2.4, 1.2, 0, Math.PI * 2);
+  }
+  g.fillStyle = "rgba(0,0,0,.6)"; g.fill(holes);
+  g.fillStyle = "rgba(140,230,255,.16)"; g.fill(lights);
+  function glowLine(color, width, draw){ g.save(); g.strokeStyle = color; g.lineWidth = width; g.shadowColor = color; g.shadowBlur = 26; g.beginPath(); draw(); g.stroke(); g.shadowBlur = 8; g.stroke(); g.restore(); }
+  glowLine("rgba(63,224,255,.5)", 5, function(){ g.rect(14, 14, 996, 2020); });
+  glowLine("#FF5A4C", 12, function(){ g.moveTo(0, cy); g.lineTo(1024, cy); });
+  glowLine("#3FE0FF", 8, function(){ g.arc(cx, cy, 95 * k, 0, Math.PI * 2); });
+  glowLine("#3FE0FF", 6, function(){ g.arc(cx, cy, 22, 0, Math.PI * 2); });
+  glowLine("#FF5A4C", 8, function(){ g.arc(cx, 0, 125 * k, 0, Math.PI); });
+  glowLine("#3FE0FF", 8, function(){ g.arc(cx, 2048, 125 * k, Math.PI, Math.PI * 2); });
+  glowLine("rgba(255,201,60,.55)", 5, function(){ [[256, 512], [768, 512], [256, 1536], [768, 1536]].forEach(function(p){ g.moveTo(p[0] + 34, p[1]); g.arc(p[0], p[1], 34, 0, Math.PI * 2); }); });
+})();
+var tableTex = tex(tableCanvas);
+
+/* numbered puck faces, one per number */
+var numTex = {};
+function drawNumbers(){
+  for (var v = 1; v <= 9; v++){
+    var c = numTex[v] ? numTex[v].image : cvs(128, 128), g = c.getContext("2d");
+    g.clearRect(0, 0, 128, 128);
+    g.fillStyle = "#FFFBF3"; g.beginPath(); g.arc(64, 64, 63, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = hex(puckCol(v)); g.lineWidth = 13; g.beginPath(); g.arc(64, 64, 55, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = "#1E2226"; g.font = "800 80px 'Plus Jakarta Sans', 'Arial Black', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(String(v), 64, 68);
+    if (v === 6 || v === 9) g.fillRect(48, 103, 32, 7);
+    if (numTex[v]) numTex[v].needsUpdate = true; else numTex[v] = tex(c);
+  }
+}
+drawNumbers();
+
+/* ---------- the room ---------- */
+scene.add(new T.HemisphereLight(0x9a8cff, 0x140a1c, 0.55));
+scene.add(new T.AmbientLight(0x40405a, 0.5));
+var key = new T.DirectionalLight(0xffffff, 0.75); key.position.set(2, 9, 7); scene.add(key);
+var nearLight = new T.PointLight(COL.cyan, 0.9, 14); nearLight.position.set(0, 2.6, 4); scene.add(nearLight);
+var farLight = new T.PointLight(COL.pink, 0.9, 14); farLight.position.set(0, 2.6, -4); scene.add(farLight);
+
+var FLOOR_Y = -2.8;
+(function room(){
+  var c = cvs(256, 256), g = c.getContext("2d");
+  g.fillStyle = "#07060C"; g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = "rgba(208,139,230,.55)"; g.lineWidth = 4; g.strokeRect(0, 0, 256, 256);
+  var t = tex(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(30, 30);
+  var floor = new T.Mesh(new T.PlaneGeometry(120, 120), new T.MeshBasicMaterial({ map: t }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = FLOOR_Y; scene.add(floor);
+  var under = new T.Mesh(new T.PlaneGeometry(10, 15), new T.MeshBasicMaterial({ map: glowTex, color: COL.cyan, transparent: true, opacity: .55, blending: T.AdditiveBlending, depthWrite: false }));
+  under.rotation.x = -Math.PI / 2; under.position.y = FLOOR_Y + 0.01; scene.add(under);
+  /* a row of other arcade machines glowing in the dark on each side */
+  var screens = [0, 1, 2].map(function(n){
+    var s = cvs(128, 96), sg = s.getContext("2d"), hues = [["#3FE0FF", "#FF5FD2"], ["#FFC93C", "#7BE866"], ["#FF5A4C", "#D08BE6"]][n];
+    sg.fillStyle = "#0B0716"; sg.fillRect(0, 0, 128, 96);
+    for (var i = 0; i < 26; i++){ sg.fillStyle = hues[i % 2]; sg.globalAlpha = .45 + (i % 5) * .1; sg.fillRect((i * 37) % 120, (i * 23) % 88, 8 + (i % 3) * 4, 8); }
+    sg.globalAlpha = 1; sg.fillStyle = hues[0]; sg.fillRect(10, 80, 108, 4);
+    return tex(s);
+  });
+  var bodyMat = new T.MeshPhongMaterial({ color: 0x1A1424, shininess: 30 });
+  [-1, 1].forEach(function(side){
+    [-10, -6, -2, 2].forEach(function(z, i){
+      var x = side * 8.6, cab = new T.Mesh(new T.BoxGeometry(1.8, 3.4, 1.6), bodyMat);
+      cab.position.set(x, FLOOR_Y + 1.7, z); scene.add(cab);
+      var scr = new T.Mesh(new T.PlaneGeometry(1.3, 1.0), new T.MeshBasicMaterial({ map: screens[(i + (side > 0 ? 1 : 0)) % 3] }));
+      scr.position.set(x - side * 0.91, FLOOR_Y + 2.15, z); scr.rotation.y = -side * Math.PI / 2; scene.add(scr);
+      var mq = new T.Mesh(new T.PlaneGeometry(1.5, 0.32), new T.MeshBasicMaterial({ color: [COL.sun, COL.pink, COL.cyan, COL.green][(i + (side > 0 ? 2 : 0)) % 4] }));
+      mq.position.set(x - side * 0.91, FLOOR_Y + 3.05, z); mq.rotation.y = -side * Math.PI / 2; scene.add(mq);
+    });
+  });
+})();
+/* a neon sign on the far wall */
+var signCanvas = cvs(1024, 256), signTex = tex(signCanvas);
+function drawSign(){
+  var g = signCanvas.getContext("2d");
+  g.clearRect(0, 0, 1024, 256); g.fillStyle = "#000"; g.fillRect(0, 0, 1024, 256);
+  g.font = "112px Bungee, 'Arial Black', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+  g.shadowBlur = 30; g.shadowColor = "#FF5FD2"; g.fillStyle = "#FF8FE0"; g.fillText("CHIKE'S", 330, 132);
+  g.shadowColor = "#3FE0FF"; g.fillStyle = "#9FF0FF"; g.fillText("ARCADE", 760, 132);
+  signTex.needsUpdate = true;
+}
+drawSign();
+var sign = new T.Mesh(new T.PlaneGeometry(16, 4), new T.MeshBasicMaterial({ map: signTex, blending: T.AdditiveBlending, transparent: true, depthWrite: false }));
+sign.position.set(0, 7.5, -24); scene.add(sign);
+
+/* ---------- the table ---------- */
+var RAIL_W = 0.3, RAIL_H = 0.24, GOAL_HW = GOAL_W * S / 2;
+var surfaceMat = new T.MeshPhongMaterial({ map: tableTex, emissiveMap: tableTex, emissive: 0xffffff, emissiveIntensity: 0.5, specular: 0x22384a, shininess: 40, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+var surface = new T.Mesh(new T.PlaneGeometry(W * S, L * S), surfaceMat);
+surface.rotation.x = -Math.PI / 2; scene.add(surface);
+var railMat = new T.MeshPhongMaterial({ color: 0x17121F, specular: 0x8a7aa0, shininess: 80 });
+var cabMat = new T.MeshPhongMaterial({ color: 0x241829, specular: 0x403050, shininess: 40 });
+function box(w, h, d, mat, x, y, z){ var m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); scene.add(m); return m; }
+box(W * S + RAIL_W * 2 + 0.1, 1.28, L * S + RAIL_W * 2 + 0.1, cabMat, 0, -0.66, 0);
+box(W * S - 0.6, 1.6, L * S - 1.2, new T.MeshPhongMaterial({ color: 0x0E0A14 }), 0, FLOOR_Y + 0.8, 0);
+/* side rails, and the end rails with a slot for each goal */
+var neonMat = {};
+function neon(name, color){ return (neonMat[name] = new T.MeshBasicMaterial({ color: color })); }
+[-1, 1].forEach(function(s){
+  box(RAIL_W, RAIL_H, L * S + RAIL_W * 2, railMat, s * (HW + RAIL_W / 2), RAIL_H / 2, 0);
+  box(0.06, 0.06, L * S + RAIL_W * 2, neonMat.side || neon("side", COL.plum), s * (HW + 0.03), RAIL_H + 0.01, 0);
+  box(0.05, 0.05, L * S + RAIL_W * 2 + 0.1, neonMat.under || neon("under", COL.pink), s * (HW + RAIL_W + 0.06), -0.06, 0);
+});
+var endLen = HW - GOAL_HW;
+[["ai", -1], ["player", 1]].forEach(function(e){
+  var who = e[0], s = e[1], z = s * (HL + RAIL_W / 2), m = neon(who, SIDE_COL[who]);
+  [-1, 1].forEach(function(xs){
+    box(endLen, RAIL_H, RAIL_W, railMat, xs * (GOAL_HW + endLen / 2), RAIL_H / 2, z);
+    box(endLen, 0.06, 0.06, m, xs * (GOAL_HW + endLen / 2), RAIL_H + 0.01, s * (HL + 0.03));
+    box(0.06, RAIL_H + 0.08, RAIL_W, m, xs * GOAL_HW, (RAIL_H + 0.08) / 2, z);          /* goal posts */
+  });
+  box(GOAL_HW * 2 + 0.06, 0.06, 0.06, m, 0, RAIL_H + 0.06, s * (HL + RAIL_W));           /* crossbar */
+  box(GOAL_HW * 2, 0.5, RAIL_W, new T.MeshBasicMaterial({ color: 0x000000 }), 0, -0.2, z); /* the dark slot */
+  var halo = new T.Mesh(new T.PlaneGeometry(3.2, 1.2), new T.MeshBasicMaterial({ map: glowTex, color: SIDE_COL[who], transparent: true, opacity: .55, blending: T.AdditiveBlending, depthWrite: false }));
+  halo.position.set(0, 0.3, s * (HL + RAIL_W + 0.02)); if (s > 0) halo.rotation.y = Math.PI; scene.add(halo);
+});
+/* glow the rails throw onto the table */
+function edgeGlow(len, depth, color, x, z, rotY, opacity){
+  var grp = new T.Group(), m = new T.Mesh(new T.PlaneGeometry(depth, len), new T.MeshBasicMaterial({ map: edgeTex, color: color, transparent: true, opacity: opacity, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide }));
+  m.rotation.x = -Math.PI / 2; grp.add(m); grp.position.set(x, 0.004, z); grp.rotation.y = rotY; scene.add(grp); return m;
+}
+edgeGlow(L * S, 0.7, COL.plum, -HW + 0.35, 0, 0, .5);
+edgeGlow(L * S, 0.7, COL.plum, HW - 0.35, 0, Math.PI, .5);
+var endGlow = { ai: edgeGlow(W * S, 0.9, COL.red, 0, -HL + 0.45, -Math.PI / 2, .55), player: edgeGlow(W * S, 0.9, COL.cyan, 0, HL - 0.45, Math.PI / 2, .55) };
+
+/* chasing marquee bulbs round the cabinet and the scoreboard (one instanced mesh, recoloured each frame) */
+var bulbSpots = [];
+for (var bi = 0; bi < 34; bi++){ var bz = -HL - 0.1 + (L * S + 0.2) * bi / 33; bulbSpots.push([-(HW + RAIL_W + 0.06), -0.42, bz], [HW + RAIL_W + 0.06, -0.42, bz]); }
+for (var bj = 0; bj < 14; bj++){ var bx = -HW - 0.1 + (W * S + 0.2) * bj / 13; bulbSpots.push([bx, -0.42, HL + RAIL_W + 0.06]); }
+
+/* ---------- the LED scoreboard hanging over Chike's end ---------- */
+var board = new T.Group();
+board.position.set(0, 2.55, -HL - 1.1); board.rotation.x = -0.2; scene.add(board);
+var ledCanvas = cvs(1024, 384), ledSrc = cvs(1024, 384), ledTex = tex(ledCanvas);
+var frame = new T.Mesh(new T.BoxGeometry(6.0, 2.5, 0.3), new T.MeshPhongMaterial({ color: 0x120D1A, specular: 0x554466, shininess: 60 }));
+board.add(frame);
+var screenMesh = new T.Mesh(new T.PlaneGeometry(5.6, 2.1), new T.MeshBasicMaterial({ map: ledTex }));
+screenMesh.position.z = 0.16; board.add(screenMesh);
+[[0, 1.11, 5.76, 0.06], [0, -1.11, 5.76, 0.06], [-2.85, 0, 0.06, 2.28], [2.85, 0, 0.06, 2.28]].forEach(function(b){
+  var m = new T.Mesh(new T.BoxGeometry(b[2], b[3], 0.06), neonMat.board || neon("board", COL.sun)); m.position.set(b[0], b[1], 0.17); board.add(m);
+});
+var boardHalo = new T.Mesh(new T.PlaneGeometry(10, 4.6), new T.MeshBasicMaterial({ map: glowTex, color: COL.plum, transparent: true, opacity: .6, blending: T.AdditiveBlending, depthWrite: false }));
+boardHalo.position.z = -0.25; board.add(boardHalo);
+[-2.4, 2.4].forEach(function(x){ var c = new T.Mesh(new T.CylinderGeometry(0.025, 0.025, 12, 6), railMat); c.position.set(x, 7.2, 0); board.add(c); });
+for (var bk = 0; bk < 22; bk++){ bulbSpots.push({ board: true, x: -2.95 + 5.9 * bk / 21, y: 1.32 }); bulbSpots.push({ board: true, x: -2.95 + 5.9 * bk / 21, y: -1.32 }); }
+var bulbGeo = new T.SphereGeometry(0.05, 8, 6), bulbs = new T.InstancedMesh(bulbGeo, new T.MeshBasicMaterial({ color: 0xffffff }), bulbSpots.length);
+var bulbBoard = new T.InstancedMesh(bulbGeo, new T.MeshBasicMaterial({ color: 0xffffff }), 44);
+(function placeBulbs(){
+  var mtx = new T.Matrix4(), c = new T.Color(), n = 0, nb = 0;
+  bulbSpots.forEach(function(p){
+    if (p.board){ mtx.makeTranslation(p.x, p.y, 0.17); bulbBoard.setMatrixAt(nb, mtx); bulbBoard.setColorAt(nb++, c.set(0x332200)); }
+    else { mtx.makeTranslation(p[0], p[1], p[2]); bulbs.setMatrixAt(n, mtx); bulbs.setColorAt(n++, c.set(0x332200)); }
+  });
+  bulbs.count = n; scene.add(bulbs); board.add(bulbBoard);
+})();
+var bulbColor = new T.Color(), BULB_ON = [new T.Color(COL.sun), new T.Color(COL.cyan)], BULB_OFF = new T.Color(0x2A1E10);
+function chaseBulbs(t, fast){
+  var phase = Math.floor(t * (fast ? 18 : 7));
+  for (var i = 0; i < bulbs.count; i++){ var on = REDUCED ? i % 2 === 0 : (Math.floor(i / 2) + phase) % 4 === 0; bulbs.setColorAt(i, on ? BULB_ON[Math.floor(i / 2) % 2] : BULB_OFF); }
+  for (var j = 0; j < 44; j++){ var on2 = REDUCED ? j % 2 === 0 : (Math.floor(j / 2) + phase) % 3 === 0; bulbBoard.setColorAt(j, on2 ? BULB_ON[(j >> 1) % 2] : BULB_OFF); }
+  bulbs.instanceColor.needsUpdate = true; bulbBoard.instanceColor.needsUpdate = true;
+}
+
+/* ---------- LED board drawing: text on a hidden canvas, then sampled into round LEDs ---------- */
+var PITCH = 4, ledBack = null, boardDirty = true, boardMode = "title", boardFlash = 0, boardFlashCol = "#FFC93C";
+function ledBackground(){
+  var c = cvs(1024, 384), g = c.getContext("2d");
+  g.fillStyle = "#06040A"; g.fillRect(0, 0, 1024, 384);
+  var p = new Path2D();
+  for (var y = PITCH / 2; y < 384; y += PITCH) for (var x = PITCH / 2; x < 1024; x += PITCH){ p.moveTo(x + 1.4, y); p.arc(x, y, 1.4, 0, Math.PI * 2); }
+  g.fillStyle = "#1A1220"; g.fill(p);
+  return c;
+}
+function pixelFont(px){ return px + "px 'Press Start 2P', 'Courier New', monospace"; }
+function drawBoard(now){
+  var g = ledSrc.getContext("2d", { willReadFrequently: true });
+  g.fillStyle = "#000"; g.fillRect(0, 0, 1024, 384);
+  g.textAlign = "center"; g.textBaseline = "middle";
+  function text(s, x, y, px, col){ g.font = pixelFont(px); g.fillStyle = col; g.fillText(s, x, y); }
+  var blink = REDUCED ? true : Math.floor(now / 520) % 2 === 0;
+  if (boardMode === "title"){
+    text("AIR HOCKEY", 512, 84, 72, "#FFC93C");
+    if (blink) text("PRESS START", 512, 206, 56, "#3FE0FF");
+    text("FREE PLAY", 512, 318, 36, "#FF5FD2");
+  } else {
+    var sc = world.score, tl = world.tally;
+    text("YOU", 196, 52, 40, "#3FE0FF"); text("CHIKE", 828, 52, 40, "#FF5A4C"); text("TO " + WIN_SCORE, 512, 52, 32, "#FFC93C");
+    if (boardFlash > now && blink){ text("GOAL!", 512, 196, 120, boardFlashCol); }
+    else {
+      text(("0" + sc.player).slice(-2), 196, 200, 152, "#3FE0FF");
+      text(("0" + sc.ai).slice(-2), 828, 200, 152, "#FF5A4C");
+      text(world.cfg.name.toUpperCase(), 512, 200, 32, "#FFFFFF");
+    }
+    text(tallyText(tl.player, 3).replace(/ /g, "") || "-", 196, 336, 32, "#FFE7A8");
+    text(tallyText(tl.ai, 3).replace(/ /g, "") || "-", 828, 336, 32, "#FFE7A8");
+  }
+  var data = g.getImageData(0, 0, 1024, 384).data, out = ledCanvas.getContext("2d"), groups = {};
+  if (!ledBack) ledBack = ledBackground();
+  out.drawImage(ledBack, 0, 0);
+  for (var y = PITCH / 2; y < 384; y += PITCH){
+    for (var x = PITCH / 2; x < 1024; x += PITCH){
+      var i = ((y | 0) * 1024 + (x | 0)) * 4, r = data[i], gg = data[i + 1], b = data[i + 2];
+      if (r + gg + b < 150) continue;
+      var key2 = (r >> 4) + "," + (gg >> 4) + "," + (b >> 4);
+      (groups[key2] || (groups[key2] = new Path2D())).moveTo(x + 1.85, y);
+      groups[key2].arc(x, y, 1.85, 0, Math.PI * 2);
+    }
+  }
+  Object.keys(groups).forEach(function(k2){ var c = k2.split(",").map(function(n){ return Math.min(255, Math.round(((+n << 4) + 15) * 1.12)); }); out.fillStyle = "rgb(" + c.join(",") + ")"; out.fill(groups[k2]); });
+  /* a soft halo round the lit letters, where the browser can blur */
+  if ("filter" in out){ out.save(); out.filter = "blur(6px)"; out.globalCompositeOperation = "lighter"; out.globalAlpha = .45; out.drawImage(ledSrc, 0, 0); out.restore(); }
+  ledTex.needsUpdate = true;
+}
+
+/* ---------- paddles and pucks ---------- */
+function makePaddle(color){
+  var g = new T.Group();
+  var dark = new T.MeshPhongMaterial({ color: 0x15141C, specular: 0x666688, shininess: 70 });
+  var body = new T.MeshPhongMaterial({ color: color, emissive: color, emissiveIntensity: .28, specular: 0xffffff, shininess: 120 });
+  var base = new T.Mesh(new T.CylinderGeometry(PADDLE_R * S, PADDLE_R * S, 0.07, 40), dark); base.position.y = 0.035; g.add(base);
+  var ring = new T.Mesh(new T.TorusGeometry(PADDLE_R * S - 0.04, 0.035, 10, 44), new T.MeshBasicMaterial({ color: color })); ring.rotation.x = Math.PI / 2; ring.position.y = 0.075; g.add(ring);
+  var dome = new T.Mesh(new T.SphereGeometry(PADDLE_R * S - 0.06, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2), body); dome.scale.y = .38; dome.position.y = 0.07; g.add(dome);
+  var stem = new T.Mesh(new T.CylinderGeometry(0.1, 0.13, 0.2, 24), body); stem.position.y = 0.2; g.add(stem);
+  var knob = new T.Mesh(new T.SphereGeometry(0.15, 24, 16), body); knob.scale.y = .8; knob.position.y = 0.33; g.add(knob);
+  var glow = new T.Mesh(new T.PlaneGeometry(1.5, 1.5), new T.MeshBasicMaterial({ map: glowTex, color: color, transparent: true, opacity: .7, blending: T.AdditiveBlending, depthWrite: false }));
+  glow.rotation.x = -Math.PI / 2; glow.position.y = 0.006; g.add(glow);
+  scene.add(g); return g;
+}
+var padMesh = { player: makePaddle(COL.cyan), ai: makePaddle(COL.red) };
+
+var TRAIL_N = 16;
+var trailMat = new T.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide });
+function makePuckMesh(){
+  var g = new T.Group();
+  var bodyMat = new T.MeshPhongMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: .5, specular: 0xffffff, shininess: 90 });
+  var body = new T.Mesh(new T.CylinderGeometry(PUCK_R * S, PUCK_R * S, 0.06, 36), bodyMat); body.position.y = 0.03; g.add(body);
+  var topMat = new T.MeshBasicMaterial({ map: numTex[1] });
+  var top = new T.Mesh(new T.CircleGeometry(PUCK_R * S - 0.012, 36), topMat); top.rotation.x = -Math.PI / 2; top.position.y = 0.0605; g.add(top);
+  var glowMat = new T.MeshBasicMaterial({ map: glowTex, color: 0xffffff, transparent: true, opacity: .85, blending: T.AdditiveBlending, depthWrite: false });
+  var glow = new T.Mesh(new T.PlaneGeometry(1.0, 1.0), glowMat); glow.rotation.x = -Math.PI / 2; glow.position.y = 0.005; g.add(glow);
+  var tg = new T.BufferGeometry(), idx = [];
+  tg.setAttribute("position", new T.BufferAttribute(new Float32Array(TRAIL_N * 6), 3));
+  tg.setAttribute("color", new T.BufferAttribute(new Float32Array(TRAIL_N * 6), 3));
+  for (var i = 0; i < TRAIL_N - 1; i++){ var a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  tg.setIndex(idx);
+  var trail = new T.Mesh(tg, trailMat); trail.frustumCulled = false; trail.renderOrder = 2; scene.add(trail);
+  g.visible = false; trail.visible = false; scene.add(g);
+  return { g: g, body: bodyMat, top: topMat, glow: glowMat, trail: trail, pts: [], id: 0, born: 0, col: new T.Color() };
+}
+var puckPool = []; for (var pi = 0; pi < PUCK_COUNT + 1; pi++) puckPool.push(makePuckMesh());
+function meshFor(id){ for (var i = 0; i < puckPool.length; i++) if (puckPool[i].id === id) return puckPool[i]; return null; }
+
+/* ---------- sparks, rings and flashes ---------- */
+var SPARKS = 320, sparkPos = new Float32Array(SPARKS * 3), sparkCol = new Float32Array(SPARKS * 3), sparks = [];
+for (var si = 0; si < SPARKS; si++){ sparks.push({ life: 0, max: 1, vx: 0, vy: 0, vz: 0, r: 1, g: 1, b: 1 }); sparkPos[si * 3 + 1] = -50; }
+var sparkGeo = new T.BufferGeometry();
+sparkGeo.setAttribute("position", new T.BufferAttribute(sparkPos, 3)); sparkGeo.setAttribute("color", new T.BufferAttribute(sparkCol, 3));
+var sparkPts = new T.Points(sparkGeo, new T.PointsMaterial({ size: 0.16, map: glowTex, vertexColors: true, transparent: true, blending: T.AdditiveBlending, depthWrite: false }));
+sparkPts.frustumCulled = false; sparkPts.renderOrder = 3; scene.add(sparkPts);
+var sparkNext = 0, tmpCol = new T.Color();
+function burst(x, y, z, color, n, power, up){
+  n = REDUCED ? Math.ceil(n / 4) : n; power = REDUCED ? power * .5 : power;
+  tmpCol.set(color);
+  for (var i = 0; i < n; i++){
+    var s = sparks[sparkNext], k = sparkNext * 3; sparkNext = (sparkNext + 1) % SPARKS;
+    var a = Math.random() * Math.PI * 2, sp = power * (0.35 + Math.random() * 0.65);
+    s.vx = Math.cos(a) * sp; s.vz = Math.sin(a) * sp; s.vy = (up || 0.4) * power * (0.4 + Math.random());
+    s.life = s.max = 0.5 + Math.random() * 0.7;
+    var white = Math.random() < .3; s.r = white ? 1 : tmpCol.r; s.g = white ? 1 : tmpCol.g; s.b = white ? 1 : tmpCol.b;
+    sparkPos[k] = x; sparkPos[k + 1] = y; sparkPos[k + 2] = z;
+  }
+}
+function updateSparks(dt){
+  for (var i = 0; i < SPARKS; i++){
+    var s = sparks[i], k = i * 3;
+    if (s.life <= 0){ sparkCol[k] = sparkCol[k + 1] = sparkCol[k + 2] = 0; continue; }
+    s.life -= dt; s.vy -= 7 * dt;
+    sparkPos[k] += s.vx * dt; sparkPos[k + 1] += s.vy * dt; sparkPos[k + 2] += s.vz * dt;
+    if (sparkPos[k + 1] < 0.02 && s.vy < 0){ sparkPos[k + 1] = 0.02; s.vy *= -0.35; s.vx *= .7; s.vz *= .7; }
+    var f = Math.max(0, s.life / s.max); sparkCol[k] = s.r * f; sparkCol[k + 1] = s.g * f; sparkCol[k + 2] = s.b * f;
+  }
+  sparkGeo.attributes.position.needsUpdate = true; sparkGeo.attributes.color.needsUpdate = true;
+}
+var rings = [];
+for (var ri = 0; ri < 12; ri++){
+  var rm = new T.Mesh(new T.RingGeometry(0.82, 1, 48), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide }));
+  rm.rotation.x = -Math.PI / 2; rm.visible = false; scene.add(rm); rings.push({ m: rm, life: 0, max: 1, from: .2, to: 1 });
+}
+var ringNext = 0;
+function ring(x, z, color, from, to, life){
+  var r = rings[ringNext]; ringNext = (ringNext + 1) % rings.length;
+  r.m.material.color.set(color); r.m.position.set(x, 0.012, z); r.from = from; r.to = to; r.life = r.max = life; r.m.visible = true;
+}
+function updateRings(dt){
+  rings.forEach(function(r){
+    if (r.life <= 0){ r.m.visible = false; return; }
+    r.life -= dt; var f = 1 - Math.max(0, r.life / r.max), s = r.from + (r.to - r.from) * (1 - Math.pow(1 - f, 3));
+    r.m.scale.set(s, s, s); r.m.material.opacity = (1 - f) * 0.9;
+  });
+}
+var goalLight = { ai: new T.PointLight(COL.red, 0, 9), player: new T.PointLight(COL.cyan, 0, 9) };
+goalLight.ai.position.set(0, 0.8, -HL + 0.3); goalLight.player.position.set(0, 0.8, HL - 0.3);
+scene.add(goalLight.ai); scene.add(goalLight.player);
+var flash = { ai: 0, player: 0 }, shake = 0;
+
+/* ---------- fitting the camera to any screen ---------- */
+var base = { pos: new T.Vector3(), target: new T.Vector3(0, 0, -0.6), dist: 12 };
+var fitPts = [];
+[[-HW - RAIL_W, RAIL_H, -HL - RAIL_W], [HW + RAIL_W, RAIL_H, -HL - RAIL_W], [-HW - RAIL_W, RAIL_H, HL + RAIL_W], [HW + RAIL_W, RAIL_H, HL + RAIL_W],
+ [-HW - RAIL_W, -0.5, HL + RAIL_W], [HW + RAIL_W, -0.5, HL + RAIL_W]].forEach(function(p){ fitPts.push(new T.Vector3(p[0], p[1], p[2])); });
+var boardPts = [[-3, 1.25, 0.15], [3, 1.25, 0.15], [-3, -1.25, 0.15], [3, -1.25, 0.15]].map(function(p){ return new T.Vector3(p[0], p[1], p[2]); });
+var tv = new T.Vector3();
+function fitCamera(){
+  var w = window.innerWidth, h = window.innerHeight, aspect = w / h;
+  renderer.setSize(w, h, false);
+  var k = clamp((aspect - 0.5) / (1.5 - 0.5), 0, 1);
+  camera.fov = 44 + (1 - k) * 16;
+  camera.aspect = aspect;
+  var pitch = (52 - 25 * k) * Math.PI / 180;
+  base.target.set(0, 0, -0.6 - 0.8 * k);
+  var hudH = $("hud").offsetHeight || 50;
+  var limTop = 1 - 2 * (hudH + 6) / h, limBot = -1 + 2 * 8 / h, limX = 0.96;
+  camera.clearViewOffset(); camera.updateProjectionMatrix();
+  board.updateMatrixWorld(true);
+  var pts = fitPts.concat(boardPts.map(function(p){ return p.clone().applyMatrix4(board.matrixWorld); }));
+  var dir = new T.Vector3(0, Math.sin(pitch), Math.cos(pitch));
+  function measure(d){
+    camera.position.copy(base.target).addScaledVector(dir, d); camera.lookAt(base.target); camera.updateMatrixWorld(true);
+    var m = { x: 0, y0: Infinity, y1: -Infinity, ok: true };
+    pts.forEach(function(p){ tv.copy(p).project(camera); if (tv.z > 1 || tv.z < -1) m.ok = false; m.x = Math.max(m.x, Math.abs(tv.x)); m.y0 = Math.min(m.y0, tv.y); m.y1 = Math.max(m.y1, tv.y); });
+    return m;
+  }
+  var lo = 3, hi = 80;
+  for (var i = 0; i < 28; i++){
+    var mid = (lo + hi) / 2, m = measure(mid);
+    if (m.ok && m.x <= limX && m.y1 - m.y0 <= limTop - limBot) hi = mid; else lo = mid;
+  }
+  var mm = measure(hi);
+  base.dist = hi; base.pos.copy(camera.position);
+  var shift = (limTop + limBot) / 2 - (mm.y1 + mm.y0) / 2;
+  camera.setViewOffset(w, h, 0, -shift * h / 2, w, h);
+  pickCam.copy(camera); pickCam.updateMatrixWorld(true);
+  scene.fog.near = hi + 5; scene.fog.far = hi + 34;
+}
+
+/* ---------- input: the pointer is read off the table itself, so the paddle sits right under it ---------- */
+var target = { x: W / 2, y: L - 110 }, keys = { up: 0, down: 0, left: 0, right: 0 };
+var ray = new T.Raycaster(), ndc = new T.Vector2(), plane = new T.Plane(new T.Vector3(0, 1, 0), -0.12), hitPt = new T.Vector3();
+function pointerToTable(e){
+  ndc.set(e.clientX / window.innerWidth * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, pickCam);
+  var y;
+  if (!ray.ray.intersectPlane(plane, hitPt)) { hitPt.set(ray.ray.direction.x * 50, 0, -50); }
+  var tx = hitPt.x / S + W / 2; y = hitPt.z / S + L / 2;
+  if (e.pointerType === "touch") y -= 55;        /* keep the paddle just ahead of the finger, so it stays in sight */
+  var c = clampToHalf("player", tx, y); target.x = c.x; target.y = c.y;
+}
+canvas.addEventListener("pointermove", function(e){ if (mode === "play" || mode === "count") pointerToTable(e); });
+canvas.addEventListener("pointerdown", function(e){
+  if (mode === "play" || mode === "count"){ pointerToTable(e); try { canvas.setPointerCapture(e.pointerId); } catch (er) {} }
+});
+var KEYMAP = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right", w: "up", s: "down", a: "left", d: "right", W: "up", S: "down", A: "left", D: "right" };
+document.addEventListener("keydown", function(e){
+  var k = KEYMAP[e.key];
+  if (k && (mode === "play" || mode === "count")){ keys[k] = 1; if (e.key.indexOf("Arrow") === 0) e.preventDefault(); return; }
+  if (mode === "title" && (e.key === "Enter" || e.key === " ") && !(e.target && e.target.closest && e.target.closest("button"))){ e.preventDefault(); startMatch(level); }
+});
+document.addEventListener("keyup", function(e){ var k = KEYMAP[e.key]; if (k) keys[k] = 0; });
+window.addEventListener("blur", function(){ keys.up = keys.down = keys.left = keys.right = 0; });
+function keySteer(){
+  var dx = keys.right - keys.left, dy = keys.down - keys.up;
+  if (!dx && !dy) return;
+  var c = clampToHalf("player", target.x + dx * KEY_SPEED, target.y + dy * KEY_SPEED); target.x = c.x; target.y = c.y;
+}
+
+/* ---------- game flow ---------- */
+var rng = makeRng((Date.now() ^ 0x5eed) >>> 0), world = newMatch("medium"), mode = "title", demoRestart = 0;
+var countStep = -1, countTime = 0, wonAt = 0, playedFor = 0, hintTimer = 0, clock = 0;
+function clearPucks(){ puckPool.forEach(function(m){ m.id = 0; m.g.visible = false; m.trail.visible = false; m.pts.length = 0; }); }
+function showTitle(){
+  mode = "title"; document.body.classList.add("on-title"); document.body.classList.remove("is-playing");
+  titleEl.hidden = false; overEl.hidden = true; toastEl.className = ""; countEl.className = "";
+  document.querySelectorAll(".title-only").forEach(function(el){ el.hidden = false; });
+  world = newMatch("medium"); clearPucks(); boardMode = "title"; boardDirty = true;
+}
+function startMatch(lv){
+  level = LEVELS[lv] ? lv : "easy"; save("ah-level", level);
+  world = newMatch(level); clearPucks();
+  target.x = W / 2; target.y = L - 110;
+  mode = "count"; countStep = -1; countTime = 0; playedFor = 0;
+  document.body.classList.remove("on-title"); document.body.classList.add("is-playing");
+  titleEl.hidden = true; overEl.hidden = true;
+  document.querySelectorAll(".title-only").forEach(function(el){ el.hidden = true; });
+  boardMode = "game"; boardDirty = true; boardFlash = 0;
+  hintEl.classList.remove("gone"); clearTimeout(hintTimer); hintTimer = setTimeout(function(){ hintEl.classList.add("gone"); }, 9000);
+  announce(LEVELS[level].name + " level. You against Chike. First to " + WIN_SCORE + " wins. Get ready!");
+  canvas.focus({ preventScroll: true });
+}
+function showCount(text){
+  countEl.innerHTML = ""; var s = document.createElement("span"); s.className = "t-big"; s.textContent = text; countEl.appendChild(s);
+  countEl.className = ""; void countEl.offsetWidth; countEl.className = "show";
+}
+function toast(label, big, sum, color){
+  toastEl.innerHTML = "";
+  [["t-label", label], ["t-big", big], ["t-sum", sum]].forEach(function(p){
+    if (!p[1]) return; var s = document.createElement("span"); s.className = p[0]; s.textContent = p[1]; if (p[0] === "t-big") s.style.color = color; toastEl.appendChild(s);
+  });
+  toastEl.className = ""; void toastEl.offsetWidth; toastEl.className = "show";
+}
+function showOver(){
+  var won = world.winner === "player";
+  mode = "over"; document.body.classList.remove("is-playing");
+  $("over-card").className = "over-card" + (won ? "" : " lost");
+  $("over-title").textContent = won ? "You win!" : "Chike wins";
+  $("over-msg").textContent = won ? "You reached " + world.score.player + " first. Super shooting!" : "So close! Want a rematch?";
+  $("over-you").textContent = world.score.player; $("over-chike").textContent = world.score.ai;
+  overEl.hidden = false; $("again-btn").focus();
+}
+document.querySelectorAll(".lv-btn").forEach(function(b){
+  b.addEventListener("click", function(){ sfx("click"); startMatch(b.dataset.difficulty); });
+});
+$("reserve-button").addEventListener("click", function(){ sfx("click"); startMatch(level); });
+$("level-btn").addEventListener("click", function(){ sfx("click"); showTitle(); var b = document.querySelector('.lv-btn[data-difficulty="' + level + '"]'); if (b) b.focus(); });
+$("again-btn").addEventListener("click", function(){ sfx("click"); startMatch(level); });
+$("pick-btn").addEventListener("click", function(){ sfx("click"); showTitle(); var b = document.querySelector('.lv-btn[data-difficulty="' + level + '"]'); if (b) b.focus(); });
+
+/* what each thing that happened on the table looks and sounds like */
+function handle(ev, live){
+  ev.forEach(function(e){
+    var X = wx(e.x || W / 2), Z = wz(e.y || MID), k;
+    if (e.type === "hit"){
+      k = Math.min(1, e.speed / 20);
+      if (live) sfx("bounce", { pitch: (e.who === "player" ? 0.8 : 0.7) + k * 0.9, volume: 0.35 + k * 0.6 }, 60);
+      if (live && e.who === "player" && k > 0.6) sfx("whoosh", { pitch: 1.2, volume: 0.35 }, 220);
+      ring(X, Z, e.who === "player" ? COL.cyan : COL.red, 0.15, 0.4 + k * 0.5, 0.35);
+      if (k > 0.35) burst(X, 0.06, Z, e.who === "player" ? COL.cyan : COL.red, Math.round(4 + k * 10), 1.4 + k * 2, 0.5);
+      if (e.who === "player" && live && !hintEl.classList.contains("gone") && playedFor > 3) hintEl.classList.add("gone");
+    } else if (e.type === "wall"){
+      k = Math.min(1, e.speed / 20);
+      if (live) sfx("thud", { pitch: 1.4 + k * 0.8, volume: 0.18 + k * 0.4 }, 75);
+      if (k > 0.4) burst(X, 0.08, Z, COL.plum, 4, 1.2, 0.4);
+    } else if (e.type === "clack"){
+      if (live) sfx("tick", { pitch: 0.75 + Math.min(1, e.speed / 15) * 0.5, volume: 0.6 }, 55);
+    } else if (e.type === "serve" || e.type === "reserve"){
+      if (live) sfx(e.type === "serve" ? "pop" : "flip", { pitch: 1.2, volume: 0.45 }, 120);
+      ring(X, Z, COL.sun, 0.1, 0.7, 0.5);
+    } else if (e.type === "goal"){
+      var mine = e.scorer === "player", end = mine ? "ai" : "player", col = mine ? COL.cyan : COL.red;
+      var gz = mine ? -HL : HL;
+      flash[end] = 1; shake = REDUCED || !live ? 0 : 0.11;
+      burst(wx(e.x), 0.15, gz, col, 70, 3.2, 1.2); burst(wx(e.x), 0.15, gz, COL.sun, 30, 2.4, 1.6);
+      ring(wx(e.x), gz, col, 0.3, 2.6, 0.7);
+      if (!live) return;
+      boardFlash = performance.now() + 1500; boardFlashCol = mine ? "#3FE0FF" : "#FF5A4C"; boardDirty = true;
+      var sum = e.before ? e.before + " + " + e.value + " = " + e.total : String(e.total);
+      if (mine){
+        sfx("boom", { volume: 0.55, pitch: 1.1 });
+        setTimeout(function(){ sfx("good", { pitch: 0.9 + e.value * 0.03 }); }, 130);
+        if (e.value >= 7) setTimeout(function(){ sfx("coin", { pitch: 1.1 }); }, 430);
+        toast("GOAL!", "+" + e.value, sum, "#3FE0FF");
+        announce("Goal! You scored a " + e.value + ". " + (e.before ? sum.replace("=", "makes") + ". " : "") + "You " + world.score.player + ", Chike " + world.score.ai + ".");
+      } else {
+        sfx("boom", { volume: 0.4, pitch: 0.8 });
+        setTimeout(function(){ sfx("bad"); }, 150);
+        toast("CHIKE SCORES", "+" + e.value, sum, "#FF5A4C");
+        announce("Chike scored a " + e.value + ". You " + world.score.player + ", Chike " + world.score.ai + ".");
+      }
+    } else if (e.type === "win" && live){
+      mode = "won"; wonAt = clock;
+      var won = e.winner === "player";
+      if (won){ wins[level] = (wins[level] || 0) + 1; save("ah-wins", wins); showWins(); }
+      setTimeout(function(){ sfx(won ? "win" : "lose"); }, 450);
+      if (won) for (var c = 0; c < 4; c++) burst((Math.random() - .5) * 4, 0.5, (Math.random() - .5) * 6, [COL.sun, COL.cyan, COL.pink, COL.green][c], 40, 3, 2);
+      announce(won ? "You win, " + world.score.player + " to " + world.score.ai + "!" : "Chike wins, " + world.score.ai + " to " + world.score.player + ". Try again!");
+    }
+  });
+}
+
+/* ---------- drawing a frame ---------- */
+var TICK = 1 / 60, acc = 0, last = 0, raf = 0, running = false;
+function tick(){
+  var live = mode === "play";
+  if (live){ keySteer(); playedFor += TICK; }
+  var ev = step(world, live ? { x: target.x, y: target.y } : null, rng);
+  world.pucks.forEach(function(p){ var m = meshFor(p.id); if (m){ m.pts.unshift(wx(p.x), wz(p.y)); if (m.pts.length > TRAIL_N * 2) m.pts.length = TRAIL_N * 2; } });
+  ev.forEach(function(e){ if (e.type === "reserve"){ var m = meshFor(e.id); if (m) m.pts.length = 0; } });
+  handle(ev, live);
+  if (mode === "title" && world.winner){ if (!demoRestart) demoRestart = clock + 2; }
+}
+function syncPucks(alpha, now){
+  var ids = {};
+  world.pucks.forEach(function(p){ ids[p.id] = 1; });
+  puckPool.forEach(function(m){ if (m.id && !ids[m.id]){ m.id = 0; m.g.visible = false; m.trail.visible = false; m.pts.length = 0; } });
+  world.pucks.forEach(function(p){
+    var m = meshFor(p.id);
+    if (!m){
+      m = puckPool.filter(function(q){ return !q.id; })[0]; if (!m) return;
+      m.id = p.id; m.born = now; m.pts.length = 0; m.top.map = numTex[p.value]; m.top.needsUpdate = true;
+      m.col.set(puckCol(p.value)); m.body.color.copy(m.col); m.body.emissive.copy(m.col); m.glow.color.copy(m.col);
+      m.g.visible = true; m.trail.visible = true;
+    }
+    var x = wx(p.px + (p.x - p.px) * alpha), z = wz(p.py + (p.y - p.py) * alpha);
+    var age = (now - m.born) / 1000, drop = REDUCED ? 0 : Math.max(0, 1 - age / 0.35);
+    m.g.position.set(x, drop * drop * 1.6, z);
+    var sp = Math.hypot(p.vx, p.vy);
+    m.glow.opacity = 0.55 + Math.min(0.4, sp / 30);
+    updateTrail(m, x, z, Math.min(1, sp / 14));
+  });
+}
+function updateTrail(m, x, z, k){
+  var pos = m.trail.geometry.attributes.position.array, col = m.trail.geometry.attributes.color.array;
+  var pts = m.pts, n = Math.max(1, pts.length / 2), px = x, pz = z, w0 = PUCK_R * S * 0.95;
+  for (var i = 0; i < TRAIL_N; i++){
+    var j = Math.min(i, n - 1), cx = i === 0 ? x : pts[j * 2], cz = i === 0 ? z : pts[j * 2 + 1];
+    if (cx === undefined){ cx = x; cz = z; }
+    var dx = cx - px, dz = cz - pz, d = Math.hypot(dx, dz) || 1, nx = -dz / d, nz = dx / d;
+    if (i === 0){ var ax = (pts[2] !== undefined ? pts[2] : x) - x, az = (pts[3] !== undefined ? pts[3] : z) - z, ad = Math.hypot(ax, az) || 1; nx = -az / ad; nz = ax / ad; }
+    var f = 1 - i / (TRAIL_N - 1), w = w0 * f, b = Math.pow(f, 1.6) * k * 0.9;
+    pos[i * 6] = cx + nx * w; pos[i * 6 + 1] = 0.01; pos[i * 6 + 2] = cz + nz * w;
+    pos[i * 6 + 3] = cx - nx * w; pos[i * 6 + 4] = 0.01; pos[i * 6 + 5] = cz - nz * w;
+    col[i * 6] = col[i * 6 + 3] = m.col.r * b; col[i * 6 + 1] = col[i * 6 + 4] = m.col.g * b; col[i * 6 + 2] = col[i * 6 + 5] = m.col.b * b;
+    px = cx; pz = cz;
+  }
+  m.trail.geometry.attributes.position.needsUpdate = true; m.trail.geometry.attributes.color.needsUpdate = true;
+}
+var nextBlink = 0;
+function render(dt, alpha, now){
+  ["player", "ai"].forEach(function(s){
+    var p = world[s], m = padMesh[s];
+    m.position.set(wx(p.px + (p.x - p.px) * alpha), 0, wz(p.py + (p.y - p.py) * alpha));
+  });
+  syncPucks(alpha, now);
+  updateSparks(dt); updateRings(dt);
+  ["ai", "player"].forEach(function(s){
+    flash[s] = Math.max(0, flash[s] - dt * 1.4);
+    goalLight[s].intensity = flash[s] * 4;
+    neonMat[s].color.set(SIDE_COL[s]).lerp(new T.Color(0xffffff), flash[s]);
+    endGlow[s].material.opacity = 0.55 + flash[s] * 0.45;
+  });
+  chaseBulbs(clock, flash.ai > 0 || flash.player > 0 || mode === "won");
+  var blinking = boardMode === "title" || boardFlash > now - 300;
+  if (boardDirty || (blinking && now >= nextBlink)){ drawBoard(now); boardDirty = false; nextBlink = now + 260; }
+  /* the camera: fitted pose, a gentle sway with your paddle, a slow drift on the title screen, and a shake on goals */
+  camera.position.copy(base.pos);
+  if (mode === "title" && !REDUCED){
+    var yaw = Math.sin(clock * 0.25) * 0.22, rel = tv.copy(base.pos).sub(base.target);
+    rel.applyAxisAngle(new T.Vector3(0, 1, 0), yaw); camera.position.copy(base.target).add(rel);
+    camera.lookAt(base.target);
+  } else {
+    if (!REDUCED) camera.position.x += (world.player.x - W / 2) * S * 0.06;
+    camera.lookAt(tv.copy(base.target).setX(REDUCED ? 0 : (world.player.x - W / 2) * S * 0.03));
+  }
+  if (shake > 0.002){ camera.position.x += (Math.random() - .5) * shake; camera.position.y += (Math.random() - .5) * shake; shake *= Math.pow(0.02, dt); }
+  renderer.render(scene, camera);
+}
+function loop(now){
+  raf = requestAnimationFrame(loop);
+  var dt = last ? (now - last) / 1000 : 0; last = now;
+  if (dt > 0.1) dt = 0.1;
+  clock += dt;
+  if (mode === "count"){
+    countTime += dt;
+    var stepNo = Math.floor(countTime / 0.8);
+    if (stepNo !== countStep){
+      countStep = stepNo;
+      if (stepNo < 3){ showCount(String(3 - stepNo)); sfx("tick", { pitch: 1 + stepNo * 0.1, volume: 1 }); }
+      else { showCount("GO!"); sfx("start"); mode = "play"; acc = 0; announce("Go!"); }
+    }
+    steerPaddle(world.player, "player", target.x, target.y, PLAYER_SPEED); keySteer();
+    world.player.px = world.player.x; world.player.py = world.player.y;
+    world.player.x += world.player.vx; world.player.y += world.player.vy;
+  }
+  if (mode === "title" && demoRestart && clock > demoRestart){ demoRestart = 0; world = newMatch("medium"); clearPucks(); }
+  if (mode === "won" && clock - wonAt > 1.4) showOver();
+  var stepping = mode === "title" || mode === "play";
+  if (stepping){
+    acc += dt; var n = 0;
+    while (acc >= TICK && n < 8){ tick(); acc -= TICK; n++; if (mode !== "play" && mode !== "title") break; }
+    if (n >= 8) acc = 0;
+  }
+  render(dt, stepping ? Math.min(1, acc / TICK) : 1, now);
+}
+function run(){ if (running) return; running = true; last = 0; acc = 0; raf = requestAnimationFrame(loop); }
+function pause(){ running = false; cancelAnimationFrame(raf); }
+document.addEventListener("visibilitychange", function(){ if (document.hidden) pause(); else run(); });
+window.addEventListener("resize", fitCamera);
+if (document.fonts && document.fonts.load){
+  Promise.all([document.fonts.load("40px 'Press Start 2P'"), document.fonts.load("80px Bungee"), document.fonts.load("800 80px 'Plus Jakarta Sans'")])
+    .then(function(){ drawNumbers(); drawSign(); boardDirty = true; }).catch(function(){});
+}
+canvas.tabIndex = -1;
+fitCamera();
+showTitle();
+run();
+/* a small window for checking the game from the browser console */
+window.airHockey = { get world(){ return world; }, get mode(){ return mode; }, get target(){ return target; }, start: startMatch, title: showTitle };
+}
+boot();
+})();
     </script>
 </body>
 </html>
