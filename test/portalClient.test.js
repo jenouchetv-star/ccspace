@@ -5,6 +5,7 @@ import { readFileSync, existsSync } from "node:fs";
 import {
   PORTAL_LAYOUTS, portalEntryUrl, portalReadQuery, portalVideoEmbed, portalSafeUrl, portalParseGallery, portalFormatGallery,
   portalSlug, portalLinkUrl, portalBookPath, portalValidate, portalGateMessage, portalErrorState, portalEmailOk, PORTAL_CATEGORIES,
+  portalSections,
 } from "../assets/lib/portal.js";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -576,5 +577,20 @@ describe("the portal's own sign-in box uses the 6-digit code", () => {
       expect(portalGateMessage(s).tone).toBe("assertive");
     }
     expect(portalGateMessage("sent", "a@b.co").text).toContain("6-digit code");
+  });
+});
+
+describe("long posts as cards", () => {
+  it("puts each big heading and what follows it in its own card, with the opening text above", () => {
+    const out = portalSections("<p>Intro</p><h2>One</h2><p>a</p><h2>Two</h2><ul><li>b</li></ul>");
+    expect(out).toBe('<p>Intro</p><div class="psecs"><section class="panel psec"><h2>One</h2><p>a</p></section>'
+      + '<section class="panel psec"><h2>Two</h2><ul><li>b</li></ul></section></div>');
+  });
+  it("leaves short posts alone", () => {
+    expect(portalSections("<p>Hi</p><h2>Only one</h2><p>x</p>")).toBe("<p>Hi</p><h2>Only one</h2><p>x</p>");
+    expect(portalSections("")).toBe("");
+  });
+  it("is used on the cleaned text of every entry page", () => {
+    expect(body("portalEntryHTML")).toContain("portalSections(sanitizeHTML(e.body))");
   });
 });

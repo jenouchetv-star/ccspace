@@ -97,6 +97,18 @@ export function portalParseGallery(lines) {
     .map((p) => ({ src: p[0], alt: p[1] || "", caption: p[2] || "" }));
 }
 
+/** An entry's text, already cleaned by sanitizeHTML: when it has two or more big headings (h2), each heading and
+    everything under it becomes its own card, so a long post reads as separate boxes. Text before the first
+    heading stays above the cards. Fewer than two headings: the text is returned as it was. */
+export function portalSections(html) {
+  const s = String(html || "");
+  const parts = s.split(/(?=<h2>)/);
+  const secs = parts.filter((p) => p.startsWith("<h2>"));
+  if (secs.length < 2) return s;
+  const lead = parts[0].startsWith("<h2>") ? "" : parts[0];
+  return lead + '<div class="psecs">' + secs.map((p) => '<section class="panel psec">' + p + "</section>").join("") + "</div>";
+}
+
 export function portalFormatGallery(images) {
   return (images || []).map((i) => [i.src, i.alt || "", i.caption || ""].join(" | ").replace(/( \| )+$/, ""));
 }
