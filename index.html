@@ -16569,6 +16569,7 @@ function adminNewsletterCompose(id){
   const t = findNewsletterTemplate(nc.templateId);
   const count = db.list("subscribers").filter(s => s.status === "published").length;
   const scheduling = nc.mode === "schedule";
+  const portalProblem = nlPortalProblem(nc.ctaUrl);
 
   return backLink
     + '<div class="row-between" style="margin-bottom:20px;align-items:flex-start;gap:12px">'
@@ -16581,6 +16582,8 @@ function adminNewsletterCompose(id){
     + '<span>' + (count
         ? 'Will send to <b>' + count + '</b> active subscriber' + (count === 1 ? '' : 's') + '. Every email gets a working unsubscribe link automatically - nothing to add yourself.'
         : 'No active subscribers yet, so there is no one to send to.') + '</span></div>'
+    + (portalProblem ? '<div class="admin-callout admin-callout--warn" role="alert" style="margin-bottom:20px">' + ic("triangle-alert")
+        + '<span>' + E(portalProblem.text) + ' <a href="#/admin/portalEntries">Open Portal content</a></span></div>' : "")
     + '<form id="nl-form" data-act="nl-form-submit">'
     + '<div class="row" role="group" aria-label="When to send" style="margin-bottom:14px">'
     + '<button type="button" class="admin-btn admin-btn--sm' + (scheduling ? ' admin-btn--ghost' : ' admin-btn--primary') + '" data-act="nl-mode" data-mode="now">' + ic("send") + ' Send now</button>'
@@ -16662,6 +16665,22 @@ function adminNewsletterCompose(id){
     + '</form>';
 }
 
+/** The Subscriber's Portal post an email's button opens, when subscribers could not see it yet: it is still a
+    draft, it is set to appear after `atMs`, or there is no post at that address. Subscribers would land on
+    "That entry is not here", so sending is held back until it is published. null when the button goes
+    somewhere else, or the post is live. */
+function nlPortalProblem(ctaUrl, atMs){
+  const m = String(ctaUrl || "").match(/\/newsletter\/([^/?#]+)/);
+  if (!m) return null;
+  let slug = m[1]; try { slug = decodeURIComponent(slug); } catch(_e){}
+  const e = db.list("portalEntries").find(x => x.slug === slug || x.id === slug);
+  if (!e) return { title: slug, text: "The button links to a Subscriber’s Portal post that does not exist (“" + slug + "”). Check the button link, or pick the post from the list below it." };
+  const when = Date.parse(String(e.publishedAt || "").length === 10 ? e.publishedAt + "T00:00:00Z" : e.publishedAt);
+  if (e.status !== "published") return { title: e.title, text: "The button opens “" + e.title + "” in the Subscriber’s Portal, but that post is still a draft, so subscribers would see “That entry is not here”. Publish it in Portal content first." };
+  if (!isNaN(when) && when > (atMs || Date.now())) return { title: e.title, text: "The button opens “" + e.title + "”, but that post only appears in the Subscriber’s Portal on " + portalDate(e.publishedAt) + ". Change its date in Portal content, or send the email after that." };
+  return null;
+}
+
 /** Reads every structured field straight off the compose form's live DOM,
     matching every other free-typing admin form here (typing never
     triggers a rerender, so this is the only source of truth for what's
@@ -16721,6 +16740,8 @@ async function nlSchedule(form){
   const iso = localDatetimeToISO(localVal);
   if (!iso || new Date(iso).getTime() <= Date.now()){ toast("Pick a time in the future.", "bad"); return; }
   const whenLabel = fmtDate(iso, true);
+  const portalProblem = nlPortalProblem(f.ctaUrl, new Date(iso).getTime());
+  if (portalProblem){ toast(portalProblem.text, "bad"); return; }
   const nc = AppState.admin.newsletterCompose;
   const html = renderNewsletterHTML(Object.assign({}, nc, f));
   if (html.includes(NO_POSTAL_ADDRESS_MARKER)){
@@ -16758,6 +16779,8 @@ async function nlSendNow(form){
     toast("Add a postal mailing address in Settings before sending a newsletter - required by law.", "bad");
     return;
   }
+  const portalProblem = nlPortalProblem(f.ctaUrl);
+  if (portalProblem){ toast(portalProblem.text, "bad"); return; }
   confirmSendNewsletter(f.subject, count, async () => {
     const res = await sb.functions.invoke("send-newsletter", { body: { subject: f.subject, html: html } });
     /* Same unwrap as "send-invite" elsewhere: a non-2xx response's
@@ -16813,6 +16836,8 @@ async function nlSendTest(form){
     toast("Add a postal mailing address in Settings before sending a newsletter - required by law.", "bad");
     return;
   }
+  const portalProblem = nlPortalProblem(f.ctaUrl);
+  if (portalProblem) toast("Sending the test. Note: " + portalProblem.text, "bad");
   const btn = form.querySelector('[data-act="nl-send-test"]');
   const restoreBtn = btn ? btn.innerHTML : "";
   if (btn){ btn.disabled = true; btn.innerHTML = ic("refresh-cw") + " Sending..."; }

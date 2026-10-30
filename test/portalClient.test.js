@@ -603,3 +603,29 @@ describe("the email that goes with an entry", () => {
     expect(f.indexOf("E(p)")).toBeLessThan(f.indexOf("<strong>"));
   });
 });
+
+describe("an email that links to a portal post that subscribers cannot see yet", () => {
+  const make = (entries) => new Function("db", "portalDate",
+    "return function nlPortalProblem(" + body("nlPortalProblem"))({ list: () => entries }, (d) => d);
+  const url = "https://www.chikescreativespace.com/newsletter/arcade-makeover?k=__ACCESS_KEY__";
+  it("is held back while the post is a draft, or does not exist", () => {
+    expect(make([{ id: "p1", slug: "arcade-makeover", title: "Arcade", status: "draft", publishedAt: "2026-10-30" }])(url).text).toContain("still a draft");
+    expect(make([])(url).text).toContain("does not exist");
+  });
+  it("is fine once the post is published, and for buttons that go anywhere else", () => {
+    expect(make([{ id: "p1", slug: "arcade-makeover", title: "Arcade", status: "published", publishedAt: "2026-10-30" }])(url, Date.parse("2026-10-31T00:00:00Z"))).toBe(null);
+    expect(make([])("https://www.chikescreativespace.com/#/play")).toBe(null);
+  });
+  it("is held back when the post only appears after the send", () => {
+    const f = make([{ id: "p1", slug: "arcade-makeover", title: "Arcade", status: "published", publishedAt: "2026-11-05" }]);
+    expect(f(url, Date.parse("2026-11-01T00:00:00Z")).text).toContain("only appears");
+  });
+  it("blocks Send and Schedule, warns on Send test, and shows on the compose screen", () => {
+    const send = body("nlSendNow");
+    expect(send.indexOf("nlPortalProblem(f.ctaUrl)")).toBeGreaterThan(-1);
+    expect(send.indexOf("nlPortalProblem(f.ctaUrl)")).toBeLessThan(send.indexOf("confirmSendNewsletter("));
+    expect(body("nlSchedule")).toContain("nlPortalProblem(f.ctaUrl, new Date(iso).getTime())");
+    expect(body("nlSendTest")).toContain('toast("Sending the test. Note: "');
+    expect(body("adminNewsletterCompose")).toContain("const portalProblem = nlPortalProblem(nc.ctaUrl);");
+  });
+});
