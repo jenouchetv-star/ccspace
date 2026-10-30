@@ -1,0 +1,5 @@
+-- Balloon Pop Math: the Play page card and How to play now describe the grade picker (K to 5th), 25-question rounds,
+-- Chike's hints and chalkboard, and the saved place. Run once in the Supabase SQL Editor (safe to run again).
+update games set data = data || $j${"summary":"Pick your grade, from Kindergarten to 5th, then pop the hot air balloon with the right answer. Chike cheers you on and can show the work.","ageMax":11,"rules":["Pick your grade: Kindergarten to 5th grade. Each grade has its own kind of math.","Read the question, then click the balloon with the right answer, or type it and press Enter.","A wrong balloon wobbles and you try again. After two misses Chike gives a hint.","Stuck? Press Show me how and Chike writes out the work on his chalkboard.","Answer 25 questions to finish a round and earn up to three stars. Right answers in a row build a streak for bonus points.","Your place is saved, so you can come back later and pick up where you left off."]}$j$::jsonb,
+  updated_at = now()
+where id = 'game-balloon-math';

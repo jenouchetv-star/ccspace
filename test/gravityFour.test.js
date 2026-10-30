@@ -52,9 +52,12 @@ describe("the rules", () => {
 });
 
 describe("Chike, the computer player", () => {
-  it("takes a win when it has one, on either level", () => {
+  it("smart Chike always takes a win; easy Chike usually does, but not always", () => {
     const b = play([[0, 2], [1, 2], [2, 2], [0, 1], [1, 1], [2, 1]]);   /* 2 can win at column 3 */
-    for (const level of ["easy", "smart"]) expect(L.aiMove(b, 2, level, seeded(7))).toBe(3);
+    for (let s = 1; s < 30; s++) expect(L.aiMove(b, 2, "smart", seeded(s))).toBe(3);
+    const took = Array.from({ length: 200 }, (_, s) => L.aiMove(b, 2, "easy", seeded(s + 1))).filter((c) => c === 3).length;
+    expect(took).toBeGreaterThan(100);
+    expect(took).toBeLessThan(190);
   });
 
   it("smart Chike always blocks a win", () => {
@@ -62,12 +65,35 @@ describe("Chike, the computer player", () => {
     for (let s = 1; s < 30; s++) expect(L.aiMove(b, 2, "smart", seeded(s))).toBe(3);
   });
 
-  it("easy Chike blocks most of the time but not always", () => {
+  it("easy Chike blocks only some of the time, so a child's four in a row often gets through", () => {
     const b = play([[0, 1], [1, 1], [2, 1], [0, 2], [1, 2]]);
     const picks = Array.from({ length: 200 }, (_, s) => L.aiMove(b, 2, "easy", seeded(s + 1)));
     const blocked = picks.filter((c) => c === 3).length;
-    expect(blocked).toBeGreaterThan(100);
-    expect(blocked).toBeLessThan(200);
+    expect(blocked).toBeGreaterThan(30);
+    expect(blocked).toBeLessThan(110);
+  });
+
+  it("easy Chike loses most games to a simple player who just takes wins and blocks", () => {
+    /* the kind of play a young child manages: win if you can, block if you must, otherwise play near the middle */
+    const kid = (b, rnd) => {
+      const w = L.winningCol(b, 1); if (w >= 0) return w;
+      const k = L.winningCol(b, 2); if (k >= 0) return k;
+      const cols = L.openCols(b).sort((x, y) => Math.abs(x - 3) - Math.abs(y - 3));
+      return cols[Math.floor(rnd() * Math.min(3, cols.length))];
+    };
+    let kidWins = 0, chikeWins = 0;
+    for (let g = 0; g < 60; g++){
+      const b = L.newBoard(), rnd = seeded(g + 101);
+      let turn = g % 2 === 0 ? 1 : 2;
+      for (let i = 0; i < 42; i++){
+        const col = turn === 1 ? kid(b, rnd) : L.aiMove(b, 2, "easy", rnd);
+        b[L.rowFor(b, col)][col] = turn;
+        const w = L.findWin(b);
+        if (w){ if (w.p === 1) kidWins++; else chikeWins++; break; }
+        turn = turn === 1 ? 2 : 1;
+      }
+    }
+    expect(kidWins).toBeGreaterThan(chikeWins * 2);
   });
 
   it("only ever picks a column that is open, and does not change the board", () => {

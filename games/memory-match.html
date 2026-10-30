@@ -4,48 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Memory Match</title>
-    <!-- Import Poppins and Roboto Mono fonts from Google Fonts -->
+    <!-- Import Plus Jakarta Sans (the site's typeface) from Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
 
     <style>
         /* CSS Variables matching the CCS site's brand palette */
         :root {
+            --ink: #1E2226;
             --paper: #FAF4E6;
             --paper-card: #FFFBF3;
-            --ink: #1E2226;
-            --cyan-deep: #0A5280;
-            --cyan-hover: #1670A6;
+            --sun: #F5B921;
+            --cyan: #17B3CE;
+            --deep-blue: #0A5280;
+            --plum: #7A4A86;
             --leaf: #3A7A37;
-            --leaf-deep: #2F6B2C;
             --berry: #BC3229;
-            --sun: #F2C230;
-            --sun-hot: #DD7A22;
+            --orange: #DD7A22;
+            --pink: #F8C0B9;
+            --sky: #B9E7F2;
+            --mint: #C9E7BC;
+            --butter: #FFE6A6;
 
-            --color-card-back: var(--cyan-deep);
-            --color-card-front-pattern: var(--paper);
-            --color-card-match: var(--leaf);
-            --color-card-mismatch: var(--berry);
-            --color-text-light: var(--ink);
-            --color-accent-1: var(--berry);
-            --color-timer: var(--sun-hot);
-            --color-font-main: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
-            --color-font-digital: 'Roboto Mono', monospace;
-            --shadow-card: 0 4px 6px rgba(20, 40, 60, 0.14), 0 1px 3px rgba(20, 40, 60, 0.1);
-            --shadow-modal: 0 10px 25px rgba(20, 40, 60, 0.22);
-            --transition-speed: 0.4s;
-            --transition-timing: ease-in-out;
+            --hard: 4px 4px 0 var(--ink);
+            --card-radius: 16px;
+            --font-main: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+            --flip-speed: 0.55s;
+            --flip-ease: cubic-bezier(.34, 1.32, .64, 1);
         }
 
+        /* Paper with a soft halftone dot, like the site's pages */
         body {
-            background: var(--paper);
+            background-color: var(--paper);
             background-image:
-                radial-gradient(circle at center, rgba(30,52,62,.09) 1px, transparent 1.2px),
-                linear-gradient(180deg, #E2EDEF 0%, #EEF4F3 26%, var(--paper) 66%, #FDF8EC 100%);
-            background-size: 7px 7px, 100% 100%;
-            color: var(--color-text-light);
-            font-family: var(--color-font-main);
+                radial-gradient(circle, rgba(30, 34, 38, .10) 1.1px, transparent 1.5px),
+                radial-gradient(ellipse at 50% -10%, rgba(185, 231, 242, .7), transparent 62%);
+            background-size: 9px 9px, 100% 100%;
+            color: var(--ink);
+            font-family: var(--font-main);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -54,13 +51,13 @@
             font-size: 16px;
             box-sizing: border-box;
             overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
         }
 
         .game-container {
             text-align: center;
             width: 100vw;
             height: 100vh;
-            max-width: none;
             display: flex;
             flex-direction: column;
             gap: 2vh;
@@ -73,267 +70,458 @@
         header {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
             align-items: center;
             width: 100%;
-        }
-
-        h1 {
-            font-size: clamp(1.5rem, 5vw, 2.5rem);
-            letter-spacing: 2px;
-            font-weight: 800;
-            text-transform: uppercase;
-            margin: 0;
-            color: var(--ink);
-            font-family: var(--color-font-main);
         }
 
         .game-info {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: clamp(0.5rem, 2vw, 1rem);
-            font-size: clamp(0.9rem, 2.5vw, 1.25rem);
-            font-weight: 600;
+            gap: 10px;
             width: 100%;
             flex-wrap: wrap;
-            font-family: var(--color-font-main);
         }
 
-        .timer, .best-time, .match-counter {
-            background-color: var(--paper-card);
-            border: 2px solid var(--ink);
-            padding: clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.8rem, 3vw, 1rem);
-            border-radius: 15px;
-            box-shadow: 4px 4px 0 var(--ink);
-            min-width: 120px;
+        /* ---------- Readout chips (Time, Best, Pairs) ---------- */
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: .45em;
+            background: var(--paper-card);
+            border: 3px solid var(--ink);
+            border-radius: 999px;
+            box-shadow: var(--hard);
+            font-size: clamp(.8rem, 2.3vh, 1.05rem);
+            font-weight: 800;
+            line-height: 1.2;
             color: var(--ink);
+            white-space: nowrap;
         }
 
-        .timer, .best-time {
-            font-family: var(--color-font-digital);
-            color: var(--color-timer);
-            font-weight: 700;
+        /* game-skin.css pads these 5px 12px; the label pill wants a tighter left edge */
+        body.ccs-memory .game-info .chip {
+            padding: 4px 12px 4px 4px !important;
         }
 
+        .chip-label {
+            background: var(--sun);
+            border: 2px solid var(--ink);
+            border-radius: 999px;
+            padding: .12em .6em;
+            font-size: .72em;
+            letter-spacing: .07em;
+            text-transform: uppercase;
+        }
+
+        .best-time .chip-label { background: var(--cyan); }
+        .match-counter .chip-label { background: var(--mint); }
+
+        #timer-display, #best-time-display, #match-count-display,
+        #final-time-display, #final-best-display {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .chip-total { opacity: .55; }
+
+        /* ---------- Board ---------- */
         .card-grid {
             display: grid;
-            gap: clamp(0.5rem, 2vw, 0.75rem);
-            perspective: 1000px;
+            gap: 10px;
             width: 100%;
-            max-width: none;
             margin: 0 auto;
-            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            grid-template-columns: repeat(5, 1fr);
         }
 
-        /* Specific mobile layout: 4 columns for screens up to 576px */
-        @media (max-width: 576px) {
-            .card-grid {
-                grid-template-columns: repeat(4, 1fr);
-                width: calc(100% - 20px); /* Adjust width to fit */
-                padding: 10px;
-            }
-        }
-
+        /* The wrapper is the part that flips. It draws nothing itself:
+           each face carries its own ink outline and hard shadow. */
         .card-wrapper {
             position: relative;
             height: 0;
             padding-bottom: 100%;
             cursor: pointer;
-            border-radius: 20px;
-            transform-style: preserve-3d;
-            transition: transform var(--transition-speed) var(--transition-timing), border-color 0.4s ease-in-out;
-            box-shadow: var(--shadow-card);
-            border: 4px solid var(--ink);
+            border: none;
+            border-radius: var(--card-radius);
             outline: none;
-        }
-
-        .card-wrapper:hover, .card-wrapper:focus {
-            transform: scale(1.05) translateY(-5px);
-            box-shadow: 0 8px 10px rgba(20, 40, 60, 0.22), 0 3px 6px rgba(20, 40, 60, 0.12);
-        }
-
-        .card-wrapper:hover .card-front, .card-wrapper:focus .card-front {
-            background-color: var(--cyan-hover);
+            transform-style: preserve-3d;
+            transform: perspective(900px) rotateY(0deg);
+            transition: transform var(--flip-speed) var(--flip-ease);
         }
 
         .card-wrapper.flipped {
-            transform: rotateY(180deg);
+            transform: perspective(900px) rotateY(180deg);
         }
 
-        .card-wrapper.mismatched {
-            border-color: var(--color-card-mismatch) !important;
-        }
-
-        .card-wrapper.flipped:hover,
-        .card-wrapper.matched:hover,
-        .card-wrapper.flipped:focus,
-        .card-wrapper.matched:focus {
-            transform: rotateY(180deg);
-            box-shadow: var(--shadow-card);
+        .card-wrapper.matched {
+            z-index: 1;
         }
 
         .card-face {
             position: absolute;
-            width: 100%;
-            height: 100%;
-            backface-visibility: hidden;
+            inset: 0;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            border-radius: 15px;
-            font-size: clamp(2rem, 8vw, 2.5rem);
-            transition: transform var(--transition-speed) var(--transition-timing), background-color 0.3s ease;
+            border: 3px solid var(--ink);
+            border-radius: var(--card-radius);
+            box-shadow: var(--hard);
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
             user-select: none;
             -webkit-user-select: none;
+            transition: background-color .3s ease, border-color .3s ease;
         }
 
+        /* Card cover (shown face down): sun yellow, halftone fading in from
+           the edges, a dashed stitch frame and the little spark badge */
         .card-front {
-            background-color: var(--color-card-back);
-            background-image: radial-gradient(var(--color-card-front-pattern) 15%, transparent 15%),
-                              radial-gradient(var(--color-card-front-pattern) 15%, transparent 15%);
-            background-size: 15px 15px;
-            background-position: 0 0, 7.5px 7.5px;
+            background:
+                radial-gradient(circle at 50% 50%, var(--sun) 0 32%, rgba(245, 185, 33, 0) 74%),
+                radial-gradient(circle, rgba(221, 122, 34, .6) 0 1.6px, transparent 2px) 0 0 / 9px 9px,
+                var(--sun);
+            transition: transform .15s ease, box-shadow .15s ease;
         }
 
+        .card-front::after {
+            content: '';
+            position: absolute;
+            inset: 7%;
+            border: 2px dashed rgba(30, 34, 38, .3);
+            border-radius: 10px;
+            pointer-events: none;
+        }
+
+        .cover-mark {
+            width: 62%;
+            height: 62%;
+            display: block;
+        }
+
+        @media (hover: hover) {
+            .card-wrapper:not(.flipped):hover .card-front {
+                transform: translate(-2px, -2px);
+                box-shadow: 6px 6px 0 var(--ink);
+            }
+        }
+
+        .card-wrapper:not(.flipped):active .card-front {
+            transform: translate(2px, 2px);
+            box-shadow: 1px 1px 0 var(--ink);
+        }
+
+        /* Picture side: the illustration with its name underneath */
         .card-back {
-            background-color: var(--paper-card);
+            --face-bg: var(--paper-card);
+            background-color: var(--face-bg);
             transform: rotateY(180deg);
+            padding: 8% 7% 6%;
+            container-type: inline-size;
         }
 
-        .card-face svg {
-            transition: transform 0.3s ease-out;
-            width: 60%;
-            height: 70%;
-        }
-
-        .card-wrapper.matched .card-back {
-            background-color: var(--color-card-match);
-            animation: pulse 0.8s ease-in-out;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1.0) rotateY(180deg); }
-            50% { transform: scale(1.1) rotateY(180deg); }
-            100% { transform: scale(1.0) rotateY(180deg); }
-        }
-
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
+        .card-art {
+            display: block;
+            flex: 1 1 0;
+            min-height: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
+            overflow: visible;
+        }
+
+        .card-art .hole { fill: var(--face-bg); transition: fill .3s ease; }
+
+        .card-label {
+            display: block;
+            margin-top: 3%;
+            font-size: .7rem;
+            font-size: max(9px, 11.5cqw);
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: .01em;
+            white-space: nowrap;
+        }
+
+        /* A matched pair: a soft mint glow, a quick bounce, a burst of
+           sparkles and a green tick sticker on the corner */
+        .card-wrapper.matched .card-back {
+            --face-bg: #E5F2DC;
+            animation: match-pop .6s .35s both;
+        }
+
+        .card-wrapper.matched .card-back::after {
+            content: '';
+            position: absolute;
+            top: -9%;
+            right: -9%;
+            width: 28%;
+            height: 28%;
+            border: 2.5px solid var(--ink);
+            border-radius: 50%;
+            background: var(--leaf) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%23FFFBF3' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 78% no-repeat;
+            animation: tick-in .4s .6s both;
+        }
+
+        .sparkles {
+            position: absolute;
+            left: -18%;
+            top: -18%;
+            width: 136%;
+            height: 136%;
+            overflow: visible;
+            pointer-events: none;
+        }
+
+        .sparkles path {
+            fill: var(--sun);
+            stroke: var(--ink);
+            stroke-width: 2;
+            stroke-linejoin: round;
+            transform-box: fill-box;
+            transform-origin: center;
+            transform: scale(0);
+        }
+
+        .card-wrapper.matched .sparkles path { animation: sparkle .8s .35s both; }
+        .card-wrapper.matched .sparkles path:nth-child(2) { animation-delay: .45s; }
+        .card-wrapper.matched .sparkles path:nth-child(3) { animation-delay: .4s; }
+        .card-wrapper.matched .sparkles path:nth-child(4) { animation-delay: .5s; }
+
+        /* Not a pair: a red outline and a little head-shake */
+        .card-wrapper.mismatched .card-back {
+            --face-bg: #FDE7E3;
+            border-color: var(--berry);
+            animation: nope .45s .3s both;
+        }
+
+        @keyframes match-pop {
+            0%   { transform: rotateY(180deg) scale(1); }
+            35%  { transform: rotateY(180deg) scale(1.12); }
+            65%  { transform: rotateY(180deg) scale(.96); }
+            100% { transform: rotateY(180deg) scale(1); }
+        }
+
+        @keyframes tick-in {
+            from { transform: scale(0) rotate(-40deg); }
+            to   { transform: scale(1) rotate(0deg); }
+        }
+
+        @keyframes sparkle {
+            0%   { transform: scale(0) rotate(0deg); }
+            45%  { transform: scale(1.15) rotate(45deg); }
+            100% { transform: scale(0) rotate(90deg); }
+        }
+
+        @keyframes nope {
+            0%, 100% { transform: rotateY(180deg) translateX(0); }
+            20% { transform: rotateY(180deg) translateX(-5%); }
+            40% { transform: rotateY(180deg) translateX(5%); }
+            60% { transform: rotateY(180deg) translateX(-3%); }
+            80% { transform: rotateY(180deg) translateX(3%); }
+        }
+
+        /* ---------- Start and win cards ---------- */
+        .modal {
+            position: fixed;
+            inset: 0;
+            padding: 16px;
+            box-sizing: border-box;
+            background-color: rgba(30, 34, 38, .55);
             display: flex;
             justify-content: center;
             align-items: center;
             opacity: 0;
             visibility: hidden;
-            transition: opacity 0.5s, visibility 0.5s;
+            transition: opacity .35s, visibility .35s;
             z-index: 100;
         }
 
+        /* visible at once when opening, so the button inside can take focus */
         .modal.show {
             opacity: 1;
             visibility: visible;
+            transition: opacity .35s, visibility 0s;
         }
 
-        .modal-content {
+        .modal .modal-content {
+            width: min(440px, 100%);
+            max-height: 100%;
+            overflow-y: auto;
+            box-sizing: border-box;
             background-color: var(--paper-card);
             border: 3px solid var(--ink);
-            padding: 3rem;
             border-radius: 20px;
+            box-shadow: 6px 6px 0 var(--ink);
+            padding: clamp(18px, 4vh, 32px) clamp(18px, 5vw, 32px);
             text-align: center;
-            box-shadow: var(--shadow-modal);
-            transform: scale(0.9);
-            transition: transform 0.5s var(--transition-timing);
+            transform: translateY(14px) scale(.94);
+            transition: transform .45s var(--flip-ease);
             position: relative;
-            overflow: hidden;
             z-index: 1;
         }
 
         .modal.show .modal-content {
-            transform: scale(1);
+            transform: none;
         }
 
         .modal-content h2 {
-            font-size: 3rem;
-            margin-bottom: 0.5rem;
-            color: var(--leaf-deep);
+            font-size: clamp(1.5rem, 4.8vh, 2.1rem);
+            margin: 0 0 .4rem;
+            color: var(--ink);
             font-weight: 800;
-            font-family: var(--color-font-main);
         }
 
         .modal-content p {
-            font-size: 1.5rem;
-            margin-bottom: 2rem;
+            font-size: clamp(.95rem, 2.4vh, 1.1rem);
+            font-weight: 600;
+            line-height: 1.45;
+            margin: 0 auto 1rem;
+            max-width: 340px;
             color: var(--ink);
-            font-family: var(--color-font-main);
         }
 
-        .start-modal .modal-content h2 {
-            margin-bottom: 1.5rem;
+        /* three mini cards fanned out above the title */
+        .start-fan {
+            display: flex;
+            justify-content: center;
+            margin: 0 0 clamp(10px, 2.5vh, 18px);
         }
 
-        .start-modal .modal-content p {
-            font-size: 1rem;
-            max-width: 400px;
-            margin: 0 auto 1.5rem;
-            line-height: 1.5;
+        .fan-card {
+            width: clamp(52px, 11vh, 72px);
+            height: clamp(52px, 11vh, 72px);
+            padding: 6px;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--paper-card);
+            border: 3px solid var(--ink);
+            border-radius: 14px;
+            box-shadow: 3px 3px 0 var(--ink);
         }
 
-        .start-modal .modal-content ul {
+        .fan-card .card-art { flex: none; }
+        .fan-card .card-art .hole { fill: var(--paper-card); }
+        .fan-card:nth-child(1) { transform: rotate(-9deg) translateY(6px); margin-right: -8px; }
+        .fan-card:nth-child(2) { position: relative; z-index: 1; }
+        .fan-card:nth-child(3) { transform: rotate(9deg) translateY(6px); margin-left: -8px; }
+
+        .fan-card.is-cover {
+            background:
+                radial-gradient(circle at 50% 50%, var(--sun) 0 32%, rgba(245, 185, 33, 0) 74%),
+                radial-gradient(circle, rgba(221, 122, 34, .6) 0 1.4px, transparent 1.8px) 0 0 / 7px 7px,
+                var(--sun);
+        }
+
+        .start-modal ul {
             text-align: left;
-            margin-bottom: 1.5rem;
-            padding-left: 1.5rem;
-            list-style-type: none;
-            max-width: 400px;
-            margin: 0 auto 1.5rem;
+            list-style: none;
+            padding: 0;
+            max-width: 300px;
+            margin: 0 auto clamp(14px, 3vh, 22px);
         }
 
-        .start-modal .modal-content li {
+        .start-modal li {
             position: relative;
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-            color: var(--ink);
-            opacity: .85;
+            padding-left: 1.6rem;
+            margin-bottom: .45rem;
+            font-size: clamp(.85rem, 2.2vh, .98rem);
+            font-weight: 600;
+            line-height: 1.35;
         }
 
-        .start-modal .modal-content li::before {
-            content: '\2022';
+        .start-modal li::before {
+            content: '';
             position: absolute;
-            left: -1rem;
-            color: var(--color-timer);
-        }
-
-
-        .btn {
-            background: var(--berry);
-            color: #FFF6EE;
+            left: 0;
+            top: .2em;
+            width: .85em;
+            height: .85em;
             border: 2px solid var(--ink);
-            padding: 0.75rem 1.5rem;
-            border-radius: 999px;
-            font-size: 1rem;
+            border-radius: 50%;
+            background: var(--sun);
+        }
+
+        .start-modal li:nth-child(2)::before { background: var(--cyan); }
+        .start-modal li:nth-child(3)::before { background: var(--pink); }
+
+        .win-badge {
+            width: clamp(64px, 14vh, 92px);
+            height: clamp(64px, 14vh, 92px);
+            margin: 0 auto clamp(6px, 1.5vh, 12px);
+            display: block;
+        }
+
+        .modal.show .win-badge {
+            animation: badge-pop .7s .15s both;
+        }
+
+        @keyframes badge-pop {
+            0%   { transform: scale(.3) rotate(-25deg); opacity: 0; }
+            60%  { transform: scale(1.12) rotate(6deg); opacity: 1; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        .win-stats {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 0 0 clamp(10px, 2.5vh, 18px);
+        }
+
+        .win-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            min-width: 110px;
+            padding: 10px 14px 12px;
+            background: var(--butter);
+            border: 3px solid var(--ink);
+            border-radius: 16px;
+            box-shadow: var(--hard);
+        }
+
+        .win-stat .chip-label { font-size: .7rem; }
+        .win-stat .best-label { background: var(--cyan); }
+
+        .win-stat-value {
+            font-size: clamp(1.4rem, 4.4vh, 1.9rem);
             font-weight: 800;
-            cursor: pointer;
-            transition: all 0.3s ease-in-out;
-            box-shadow: 4px 4px 0 var(--ink);
-            font-family: var(--color-font-main);
+            line-height: 1;
         }
 
-        .btn:focus {
-            outline: 3px solid var(--ink);
+        .new-best {
+            display: inline-block;
+            margin: 0 0 clamp(12px, 2.5vh, 18px);
+            padding: .25em .9em;
+            background: var(--pink);
+            border: 2px solid var(--ink);
+            border-radius: 999px;
+            font-weight: 800;
+            transform: rotate(-3deg);
         }
 
-        .btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 6px 6px 0 var(--ink);
-        }
+        .new-best[hidden] { display: none; }
 
-        .play-again-btn, .start-game-btn {
+        /* ---------- Buttons (game-skin.css adds the pill outline and shadow) ---------- */
+        .btn {
             background: var(--sun);
             color: var(--ink);
+            border: 3px solid var(--ink);
+            padding: .75rem 1.6rem;
+            border-radius: 999px;
+            font-size: 1.05rem;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: var(--hard);
+        }
+
+        #replay-btn {
+            min-height: 0;
+            padding: 5px 16px;
+            font-size: clamp(.8rem, 2.3vh, 1rem);
         }
 
         .confetti-container {
@@ -351,8 +539,8 @@
             position: absolute;
             width: 10px;
             height: 10px;
-            background-color: #f0f;
-            animation: confetti-fall 5s linear infinite;
+            border-radius: 2px;
+            animation: confetti-fall 5s linear infinite backwards;
         }
 
         @keyframes confetti-fall {
@@ -360,25 +548,34 @@
             100% { transform: translateY(100vh) rotateZ(720deg); opacity: 0.5; }
         }
 
-        /* Responsive adjustments for larger cards on different screen sizes */
-        @media (min-width: 577px) and (max-width: 768px) {
-            .card-grid {
-                grid-template-columns: repeat(4, 1fr);
-                max-width: 500px;
-            }
-            h1 { font-size: 2rem; }
-            .game-info { font-size: 1rem; }
-        }
+        /* ---------- Small screens ---------- */
         @media (max-width: 576px) {
-            .card-grid {
-                grid-template-columns: repeat(4, 1fr); /* 4 columns for mobile */
-            }
+            .card-grid { grid-template-columns: repeat(4, 1fr); }
         }
-        @media (min-width: 1024px) {
-            .card-grid {
-                grid-template-columns: repeat(5, 1fr);
-                max-width: 1000px;
+
+        @media (max-width: 480px) {
+            :root {
+                --hard: 3px 3px 0 var(--ink);
+                --card-radius: 12px;
             }
+            .card-front::after { border-radius: 7px; }
+            .chip { font-size: 12px; gap: .35em; }
+            body.ccs-memory .game-info .chip { padding: 3px 9px 3px 3px !important; }
+            .chip-label { font-size: .66em; padding: .12em .45em; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .card-wrapper, .card-face, .card-front, .modal, .modal .modal-content {
+                transition: none !important;
+            }
+            .card-wrapper.matched .card-back,
+            .card-wrapper.matched .card-back::after,
+            .card-wrapper.mismatched .card-back,
+            .card-wrapper.matched .sparkles path,
+            .modal.show .win-badge {
+                animation: none !important;
+            }
+            .confetti-container { display: none; }
         }
     </style>
     <link rel="stylesheet" href="game-skin.css">
@@ -387,10 +584,10 @@
     <div class="game-container">
         <header>
             <div class="game-info">
-                <div class="timer">Time: <span id="timer-display">00:00</span></div>
-                <div class="best-time">Best: <span id="best-time-display">--:--</span></div>
-                <div class="match-counter"><span id="match-count-display">0</span> / 10</div>
-                <button id="replay-btn" class="btn play-again-btn" style="display:none">Play Again</button>
+                <div class="timer chip"><span class="chip-label">Time</span> <span id="timer-display">00:00</span></div>
+                <div class="best-time chip"><span class="chip-label">Best</span> <span id="best-time-display">--:--</span></div>
+                <div class="match-counter chip"><span class="chip-label">Pairs</span> <span><span id="match-count-display">0</span> <span class="chip-total">/ 10</span></span></div>
+                <button id="replay-btn" class="btn play-again-btn" style="display:none">Play again</button>
             </div>
         </header>
 
@@ -399,26 +596,42 @@
     </div>
 
     <!-- Start Game Modal -->
-    <div class="modal start-modal" id="start-modal">
+    <div class="modal start-modal" id="start-modal" role="dialog" aria-modal="true" aria-labelledby="start-title">
         <div class="modal-content">
-            <h2>Memory Match</h2>
-            <p>Ready to test your memory? Flip two cards to find a match. Find all the pairs to win!</p>
+            <div class="start-fan" id="start-fan" aria-hidden="true"></div>
+            <h2 id="start-title">Memory Match</h2>
+            <p>Flip two cards at a time. Find every matching pair to win!</p>
             <ul>
-                <li>Tap or click a card to flip it over.</li>
-                <li>Find two cards with the same shape to make a pair.</li>
-                <li>Watch the timer and try to beat your best time!</li>
+                <li>Tap a card (or press Enter) to flip it over.</li>
+                <li>Two the same? They stay face up.</li>
+                <li>Find all 10 pairs and beat your best time!</li>
             </ul>
-            <button id="start-game-btn" class="btn start-game-btn">Start Game</button>
+            <button id="start-game-btn" class="btn start-game-btn">Start game</button>
         </div>
     </div>
 
     <!-- Win Game Modal -->
-    <div class="modal win-modal" id="win-modal">
+    <div class="modal win-modal" id="win-modal" role="dialog" aria-modal="true" aria-labelledby="win-title">
         <div class="modal-content">
             <div class="confetti-container" id="confetti-container"></div>
-            <h2>Congratulations!</h2>
-            <p>You finished in <span id="final-time-display">00:00</span>!</p>
-            <button id="play-again-btn" class="btn play-again-btn">Play Again</button>
+            <svg class="win-badge" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                <g stroke="#1E2226" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M32 8 L38.8 24.7 L56.7 26 L42.9 37.6 L47.3 55 L32 45.5 L16.7 55 L21.1 37.6 L7.3 26 L25.2 24.7 Z" fill="#F5B921"/>
+                    <path d="M28 40 Q32 43.5 36 40" fill="none" stroke-width="2.5"/>
+                    <path d="M58 8 L58 14 M55 11 L61 11 M7 46 L7 51 M4.5 48.5 L9.5 48.5" fill="none" stroke-width="2.5"/>
+                </g>
+                <circle cx="27.5" cy="34" r="2.2" fill="#1E2226"/>
+                <circle cx="36.5" cy="34" r="2.2" fill="#1E2226"/>
+                <path d="M30 17 L27.5 23" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>
+            </svg>
+            <h2 id="win-title">You matched them all!</h2>
+            <p>All 10 pairs found. What a memory!</p>
+            <div class="win-stats">
+                <div class="win-stat"><span class="chip-label">Time</span><span class="win-stat-value" id="final-time-display">00:00</span></div>
+                <div class="win-stat"><span class="chip-label best-label">Best</span><span class="win-stat-value" id="final-best-display">--:--</span></div>
+            </div>
+            <p class="new-best" id="new-best" hidden>New best time!</p>
+            <div><button id="play-again-btn" class="btn play-again-btn">Play again</button></div>
         </div>
     </div>
 
@@ -429,24 +642,31 @@
             const bestTimeDisplay = document.getElementById('best-time-display');
             const winModal = document.getElementById('win-modal');
             const finalTimeDisplay = document.getElementById('final-time-display');
+            const finalBestDisplay = document.getElementById('final-best-display');
+            const newBestNote = document.getElementById('new-best');
             const playAgainBtn = document.getElementById('play-again-btn');
             const confettiContainer = document.getElementById('confetti-container');
             const matchCountDisplay = document.getElementById('match-count-display');
             const startModal = document.getElementById('start-modal');
             const startGameBtn = document.getElementById('start-game-btn');
             const replayBtn = document.getElementById('replay-btn');
+            const startFan = document.getElementById('start-fan');
 
+            const REDUCED_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+            // Ten objects from the world of making. Every one has its own
+            // silhouette AND its own main colour, so pairs never rely on colour alone.
             const cardShapes = [
-                { shape: 'star', color: '#ff6b6b' },
-                { shape: 'circle', color: '#4ecdc4' },
-                { shape: 'square', color: '#f5b55e' },
-                { shape: 'triangle', color: '#42a5f5' },
-                { shape: 'hexagon', color: '#ab47bc' },
-                { shape: 'diamond', color: '#66bb6a' },
-                { shape: 'pentagon', color: '#d25d6b' },
-                { shape: 'heart', color: '#ffe66d' },
-                { shape: 'spade', color: '#88d8b0' },
-                { shape: 'club', color: '#ff995c' }
+                { shape: 'crayon',   color: '#BC3229', label: 'Crayon' },
+                { shape: 'guitar',   color: '#DD7A22', label: 'Guitar' },
+                { shape: 'bulb',     color: '#F5B921', label: 'Light bulb' },
+                { shape: 'palette',  color: '#FFE6A6', label: 'Palette' },
+                { shape: 'puzzle',   color: '#3A7A37', label: 'Puzzle' },
+                { shape: 'robot',    color: '#17B3CE', label: 'Robot' },
+                { shape: 'book',     color: '#0A5280', label: 'Book' },
+                { shape: 'scissors', color: '#7A4A86', label: 'Scissors' },
+                { shape: 'rocket',   color: '#F8C0B9', label: 'Rocket' },
+                { shape: 'camera',   color: '#5B6670', label: 'Camera' }
             ];
 
             let cards = [];
@@ -459,20 +679,147 @@
 
             const totalPairs = cardShapes.length;
 
+            const INK = '#1E2226';
+            const CARD = '#FFFBF3';
+            const SHINE = 'stroke="#FFFFFF" stroke-opacity=".65"';
+
+            // Every illustration shares one 64x64 canvas and the brand's 3px ink line
+            const art = (body) => `<svg class="card-art" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><g fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
+
             const getShapeSvg = (shape, color) => {
                 const svgMap = {
-                    'star': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.77 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`,
-                    'circle': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><circle cx="12" cy="12" r="10"/></svg>`,
-                    'square': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><rect x="4" y="4" width="16" height="16"/></svg>`,
-                    'triangle': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 2L2 22h20L12 2z"/></svg>`,
-                    'hexagon': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 2l-8 4v8l8 4 8-4v-8l-8-4z"/></svg>`,
-                    'diamond': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 2l10 10-10 10-10-10 10-10z"/></svg>`,
-                    'pentagon': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 2l-9.5 7.2L5.8 22h12.4l3.3-12.8L12 2z"/></svg>`,
-                    'heart': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5A5.4 5.4 0 017.5 3c2.45 0 4.24 1.22 5.5 2.5 1.26-1.28 3.05-2.5 5.5-2.5A5.4 5.4 0 0122 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`,
-                    'spade': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 22l-6-6h12l-6 6zm0-16c-3.3 0-6 2.7-6 6s6 12 6 12 6-8.7 6-12-2.7-6-6-6z"/></svg>`,
-                    'club': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="M12 18a4 4 0 01-4-4 4 4 0 01-4-4 4 4 0 018-2 4 4 0 018 2 4 4 0 01-4 4 4 4 0 01-4 4z"/></svg>`
+                    'crayon': art(`<g transform="rotate(45 32 32) translate(32 32) scale(1.12) translate(-32 -32)">
+                        <path d="M25 22 L29.5 9.5 Q32 5 34.5 9.5 L39 22 Z" fill="${color}"/>
+                        <rect x="24" y="21" width="16" height="35" rx="3" fill="${color}"/>
+                        <rect x="24" y="29" width="16" height="19" fill="${CARD}"/>
+                        <path d="M27.5 38.5 q2.25 -3 4.5 0 t4.5 0" stroke="${color}" stroke-width="2.5"/>
+                        <path d="M28.5 23.5 V26 M28.5 50.5 V53 M30.5 12.5 L29.3 17" ${SHINE} stroke-width="2.5"/>
+                    </g>`),
+                    'guitar': art(`<g transform="rotate(-32 32 32) translate(32 31) scale(1.06) translate(-32 -31)">
+                        <rect x="29" y="6" width="6" height="24" fill="#FFE6A6"/>
+                        <path d="M29.5 15 H34.5 M29.5 20 H34.5" stroke-width="1.5"/>
+                        <rect x="27" y="2.5" width="10" height="8.5" rx="2.5" fill="${INK}"/>
+                        <path d="M32 24 C24.5 24 22.5 28.5 23.5 32 C24.5 35 20 37 19 42 C17.5 51 24 59 32 59 C40 59 46.5 51 45 42 C44 37 39.5 35 40.5 32 C41.5 28.5 39.5 24 32 24 Z" fill="${color}"/>
+                        <circle cx="32" cy="42" r="5" fill="${INK}"/>
+                        <rect x="26" y="50.5" width="12" height="3.5" rx="1.75" fill="${INK}"/>
+                        <path d="M31 26 V51 M33 26 V51" stroke="${CARD}" stroke-width="1.2"/>
+                        <path d="M23.5 46 C23 42.5 24.5 39.5 26.5 38.5 M26.5 29.5 C26.8 28 27.8 27 29 26.6" ${SHINE} stroke-width="2.5"/>
+                    </g>`),
+                    'bulb': art(`
+                        <path d="M10.5 10.5 L7 7 M53.5 10.5 L57 7 M7 25 H2.5 M57 25 H61.5"/>
+                        <rect x="24" y="45" width="16" height="11" rx="2.5" fill="#B9E7F2"/>
+                        <path d="M24.5 50.5 H39.5" stroke-width="2"/>
+                        <path d="M28.5 56 H35.5 L34 60 H30 Z" fill="${INK}"/>
+                        <path d="M32 6 C20.5 6 13.5 15 13.5 25 C13.5 32 17.5 36 21 39.5 C23 41.5 24 43.5 24 47 H40 C40 43.5 41 41.5 43 39.5 C46.5 36 50.5 32 50.5 25 C50.5 15 43.5 6 32 6 Z" fill="${color}"/>
+                        <path d="M28.5 46 V35 M35.5 46 V35" stroke-width="2"/>
+                        <path d="M27 35 L29.5 30 L32 35 L34.5 30 L37 35" stroke-width="2.5"/>
+                        <path d="M19.5 24 C19.5 18 23 13.5 28.5 12" ${SHINE} stroke-width="3"/>
+                    `),
+                    'palette': art(`
+                        <path d="M32 7 C46.5 7 58 16.5 58 29.5 C58 39.5 51 44 45 42 C40 40.5 37 43.5 38.5 48.5 C40 54.5 35.5 58 29 57 C16 55.5 6 45.5 6 32 C6 18 17.5 7 32 7 Z" fill="${color}"/>
+                        <circle class="hole" cx="23" cy="44" r="4.5"/>
+                        <circle cx="18.5" cy="28" r="5.5" fill="#BC3229"/>
+                        <circle cx="29.5" cy="18" r="5.5" fill="#17B3CE"/>
+                        <circle cx="42.5" cy="18.5" r="5.5" fill="#3A7A37"/>
+                        <circle cx="49.5" cy="30" r="5" fill="#7A4A86"/>
+                        <path d="M17 26.5 h0.1 M28 16.5 h0.1 M41 17 h0.1 M48 28.5 h0.1" ${SHINE} stroke-width="2.5"/>
+                        <path d="M10.5 25 C12 18.5 17 13.5 22.5 11.5" ${SHINE} stroke-width="2.5"/>
+                    `),
+                    'puzzle': art(`
+                        <path d="M12 19 H24.5 C22.5 15 23.5 8 31 8 C38.5 8 39.5 15 37.5 19 H50 V31 C54 29 60 30 60 37 C60 44 54 45 50 43 V57 H12 V45 C16 47 21.5 45 21.5 38 C21.5 31 16 29 12 31 Z" fill="${color}"/>
+                        <path d="M16.5 23.5 H23 M27.5 12.5 C28.5 11.5 30 11 31.5 11 M54.5 33.5 C55.5 33.2 56.5 33.6 57 34.5" ${SHINE} stroke-width="2.5"/>
+                    `),
+                    'robot': art(`
+                        <path d="M32 13 V9"/>
+                        <circle cx="32" cy="6.5" r="3.5" fill="#BC3229"/>
+                        <rect x="19" y="46" width="26" height="14" rx="3" fill="#B9E7F2"/>
+                        <rect x="6" y="24" width="7" height="13" rx="2.5" fill="#B9E7F2"/>
+                        <rect x="51" y="24" width="7" height="13" rx="2.5" fill="#B9E7F2"/>
+                        <rect x="12" y="13" width="40" height="35" rx="9" fill="${color}"/>
+                        <circle cx="24" cy="27" r="6" fill="${CARD}"/>
+                        <circle cx="40" cy="27" r="6" fill="${CARD}"/>
+                        <rect x="22" y="37" width="20" height="6" rx="2" fill="${CARD}"/>
+                        <path d="M28.5 37 V43 M35.5 37 V43" stroke-width="2"/>
+                        <path d="M17 18.5 H24" ${SHINE} stroke-width="2.5"/>
+                    </g><g stroke="none">
+                        <circle cx="25" cy="27.5" r="2.6" fill="${INK}"/>
+                        <circle cx="41" cy="27.5" r="2.6" fill="${INK}"/>
+                        <circle cx="16.5" cy="38" r="2.2" fill="#F8C0B9"/>
+                        <circle cx="47.5" cy="38" r="2.2" fill="#F8C0B9"/>
+                    `),
+                    'book': art(`
+                        <rect x="16" y="10" width="37" height="48" rx="3" fill="${CARD}"/>
+                        <path d="M50.5 14 V54" stroke-width="1.5"/>
+                        <path d="M35 52 V62 L38 59 L41 62 V52" fill="#BC3229"/>
+                        <rect x="11" y="6" width="37" height="48" rx="4" fill="${color}"/>
+                        <path d="M18.5 6.5 V53.5"/>
+                        <rect x="24" y="13" width="18" height="9" rx="2" fill="${CARD}"/>
+                        <path d="M27.5 17.5 H38.5" stroke-width="2"/>
+                        <path d="M33 30 L34.8 34.6 L39.7 34.8 L35.9 37.9 L37.1 42.7 L33 40 L28.9 42.7 L30.1 37.9 L26.3 34.8 L31.2 34.6 Z" fill="#F5B921" stroke-width="2.5"/>
+                        <path d="M14.8 11 V22" ${SHINE} stroke-width="2.5"/>
+                    `),
+                    'scissors': art(`
+                        <path d="M32 31 L21.5 45 M32 31 L42.5 45" stroke-width="10"/>
+                        <path d="M32 31 L21.5 45 M32 31 L42.5 45" stroke="${color}" stroke-width="4"/>
+                        <circle cx="19" cy="50" r="9" fill="${color}"/>
+                        <circle class="hole" cx="19" cy="50" r="4.5"/>
+                        <circle cx="45" cy="50" r="9" fill="${color}"/>
+                        <circle class="hole" cx="45" cy="50" r="4.5"/>
+                        <path d="M15 4 Q20.5 17 35.5 28.5 L29 32.5 Z" fill="#B9E7F2"/>
+                        <path d="M49 4 Q43.5 17 28.5 28.5 L35 32.5 Z" fill="#B9E7F2"/>
+                        <circle cx="32" cy="30.5" r="3" fill="#F5B921" stroke-width="2"/>
+                        <path d="M13 45.5 C14 43.5 15.5 42.5 17 42 M39 45.5 C40 43.5 41.5 42.5 43 42" ${SHINE} stroke-width="2"/>
+                    `),
+                    'rocket': art(`
+                        <path d="M21.5 33 L12 45 V53 L21.5 46.5 Z" fill="#BC3229"/>
+                        <path d="M42.5 33 L52 45 V53 L42.5 46.5 Z" fill="#BC3229"/>
+                        <path d="M26.5 48 Q27.5 56 32 62 Q36.5 56 37.5 48 Z" fill="#DD7A22"/>
+                        <path d="M29.5 49 Q30.5 54 32 57 Q33.5 54 34.5 49 Z" fill="#F5B921" stroke="none"/>
+                        <rect x="25" y="43" width="14" height="6" rx="2" fill="#5B6670"/>
+                        <path d="M32 3 C42 11 46.5 23 44 45 H20 C17.5 23 22 11 32 3 Z" fill="${color}"/>
+                        <path d="M32 3 C36 6.3 39 10.2 41 15 H23 C25 10.2 28 6.3 32 3 Z" fill="#BC3229"/>
+                        <circle cx="32" cy="27" r="6.5" fill="#B9E7F2"/>
+                        <path d="M29 26 A3.5 3.5 0 0 1 31.5 23.5" ${SHINE} stroke-width="2"/>
+                        <path d="M25.5 21 V37" ${SHINE} stroke-width="2.5"/>
+                    `),
+                    'camera': art(`
+                        <rect x="19" y="10" width="17" height="11" rx="3" fill="${color}"/>
+                        <rect x="43" y="12.5" width="9" height="7" rx="2" fill="#BC3229"/>
+                        <rect x="5" y="17" width="54" height="37" rx="7" fill="${color}"/>
+                        <rect x="10" y="22" width="8" height="5" rx="1.5" fill="#F5B921"/>
+                        <circle cx="33" cy="36.5" r="13" fill="${CARD}"/>
+                        <circle cx="33" cy="36.5" r="7.5" fill="#0A5280"/>
+                        <path d="M9.5 32 V47" ${SHINE} stroke-width="2.5"/>
+                    </g><g stroke="none">
+                        <circle cx="30.5" cy="34" r="2.3" fill="#FFFFFF"/>
+                    `)
                 };
                 return svgMap[shape];
+            };
+
+            // The cover's centred mark: a spark on a cyan badge
+            const coverSvg = `<svg class="cover-mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><g stroke="${INK}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><circle cx="32" cy="32" r="19" fill="#17B3CE"/><path d="M32 18 C33.5 27 37 30.5 46 32 C37 33.5 33.5 37 32 46 C30.5 37 27 33.5 18 32 C27 30.5 30.5 27 32 18 Z" fill="${CARD}"/><path d="M52 6 C52.6 9.6 53.4 10.4 57 11 C53.4 11.6 52.6 12.4 52 16 C51.4 12.4 50.6 11.6 47 11 C50.6 10.4 51.4 9.6 52 6 Z" fill="${CARD}" stroke-width="2"/></g><circle cx="11" cy="53" r="3" fill="${INK}"/><path d="M24.5 22.5 A12 12 0 0 1 30 19.8" stroke="#FFFFFF" stroke-opacity=".7" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>`;
+
+            // Four little four-point stars that burst from a matched card
+            const spark = (x, y, s) => `M${x} ${y - s} Q${x} ${y} ${x + s} ${y} Q${x} ${y} ${x} ${y + s} Q${x} ${y} ${x - s} ${y} Q${x} ${y} ${x} ${y - s} Z`;
+            const sparklesSvg = `<svg class="sparkles" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path d="${spark(12, 16, 9)}"/><path d="${spark(88, 22, 7)}"/><path d="${spark(84, 86, 9)}"/><path d="${spark(15, 82, 6)}"/></svg>`;
+
+            startFan.innerHTML =
+                `<div class="fan-card is-cover">${coverSvg}</div>` +
+                `<div class="fan-card">${getShapeSvg('rocket', '#F8C0B9')}</div>` +
+                `<div class="fan-card">${getShapeSvg('bulb', '#F5B921')}</div>`;
+
+            // Screen readers hear "face down" until a card is turned over,
+            // so a picture's name is never given away early.
+            const labelCard = (cardWrapper) => {
+                const name = cardWrapper.dataset.label;
+                if (cardWrapper.classList.contains('matched')) {
+                    cardWrapper.setAttribute('aria-label', `${name}, matched`);
+                } else if (cardWrapper.classList.contains('flipped')) {
+                    cardWrapper.setAttribute('aria-label', name);
+                } else {
+                    cardWrapper.setAttribute('aria-label', 'Card, face down');
+                }
             };
 
             const shuffle = (array) => {
@@ -496,7 +843,10 @@
                     cardWrapper.classList.add('card-wrapper');
                     cardWrapper.dataset.shape = card.shape;
                     cardWrapper.dataset.color = card.color;
+                    cardWrapper.dataset.label = card.label;
                     cardWrapper.setAttribute('tabindex', '0');
+                    cardWrapper.setAttribute('role', 'button');
+                    labelCard(cardWrapper);
                     cardWrapper.addEventListener('click', (event) => handleCardClick(event.currentTarget));
                     cardWrapper.addEventListener('keydown', (event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
@@ -505,12 +855,16 @@
                         }
                     });
 
+                    // card-front is the cover seen face down; card-back holds the picture
                     const cardFront = document.createElement('div');
                     cardFront.classList.add('card-face', 'card-front');
+                    cardFront.setAttribute('aria-hidden', 'true');
+                    cardFront.innerHTML = coverSvg;
 
                     const cardBack = document.createElement('div');
                     cardBack.classList.add('card-face', 'card-back');
-                    cardBack.innerHTML = getShapeSvg(card.shape, card.color);
+                    cardBack.setAttribute('aria-hidden', 'true');
+                    cardBack.innerHTML = `${getShapeSvg(card.shape, card.color)}<span class="card-label">${card.label}</span>${sparklesSvg}`;
 
                     cardWrapper.appendChild(cardFront);
                     cardWrapper.appendChild(cardBack);
@@ -572,6 +926,7 @@
                 }
 
                 cardWrapper.classList.add('flipped');
+                labelCard(cardWrapper);
                 flippedCards.push(cardWrapper);
 
                 if (flippedCards.length === 1) {
@@ -590,6 +945,8 @@
                 if (card1.dataset.shape === card2.dataset.shape && card1.dataset.color === card2.dataset.color) {
                     card1.classList.add('matched');
                     card2.classList.add('matched');
+                    labelCard(card1);
+                    labelCard(card2);
                     matchedPairs++;
                     matchCountDisplay.textContent = matchedPairs;
                     checkWinCondition();
@@ -601,6 +958,8 @@
                     setTimeout(() => {
                         card1.classList.remove('flipped', 'mismatched');
                         card2.classList.remove('flipped', 'mismatched');
+                        labelCard(card1);
+                        labelCard(card2);
                         resetTurn();
                     }, 1200);
                 }
@@ -616,7 +975,10 @@
                     stopTimer();
                     const finalTime = timerDisplay.textContent;
                     saveBestTime(finalTime);
-                    showWinModal(finalTime);
+                    // A short pause so the last pair's bounce is seen before the end card
+                    setTimeout(() => {
+                        if (matchedPairs === totalPairs) showWinModal(finalTime);
+                    }, REDUCED_MOTION ? 0 : 900);
                     replayBtn.style.display = 'inline-block';
                 }
             };
@@ -631,12 +993,17 @@
 
             const showWinModal = (finalTime) => {
                 finalTimeDisplay.textContent = finalTime;
+                finalBestDisplay.textContent = bestTimeDisplay.textContent;
+                newBestNote.hidden = bestTimeDisplay.textContent !== finalTime;
                 winModal.classList.add('show');
-                const confettiColors = ['#0A5280', '#3A7A37', '#BC3229', '#F2C230', '#BFA5E0', '#7FD1C1'];
+                // wait a frame so the card is visible before it can take focus
+                requestAnimationFrame(() => playAgainBtn.focus());
+                if (REDUCED_MOTION) return;
+                const confettiColors = ['#F5B921', '#17B3CE', '#0A5280', '#7A4A86', '#3A7A37', '#BC3229', '#DD7A22', '#F8C0B9'];
                 for (let i = 0; i < 50; i++) {
                     const confetti = document.createElement('div');
                     confetti.classList.add('confetti');
-                    confetti.style.left = `${Math.random() * 100}vw`;
+                    confetti.style.left = `${Math.random() * 100}%`;
                     confetti.style.backgroundColor = confettiColors[Math.floor(Math.random() * confettiColors.length)];
                     confetti.style.animationDelay = `${Math.random() * 2}s`;
                     confetti.style.animationDuration = `${5 + Math.random() * 5}s`;
@@ -649,19 +1016,28 @@
                 confettiContainer.innerHTML = '';
             };
 
+            // After a modal closes, keyboard players land on the first card
+            const focusFirstCard = () => {
+                const first = cardGrid.querySelector('.card-wrapper');
+                if (first) first.focus();
+            };
+
             startGameBtn.addEventListener('click', () => {
                 hideStartModal();
                 initGame();
+                focusFirstCard();
             });
 
             playAgainBtn.addEventListener('click', () => {
                 hideWinModal();
                 initGame();
+                focusFirstCard();
             });
 
             replayBtn.addEventListener('click', () => {
                 hideWinModal();
                 initGame();
+                focusFirstCard();
             });
 
             loadBestTime();

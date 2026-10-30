@@ -300,17 +300,21 @@ function winningCol(b, p){
   }
   return -1;
 }
-/* level "easy" slips up now and then; "smart" looks five moves ahead. `rnd` is Math.random in the game. */
+/* level "easy" is beatable by a young child: it sometimes misses its own win, blocks only now and then, and otherwise
+   just plays somewhere near the middle without looking ahead. "smart" looks five moves ahead. `rnd` is Math.random in the game. */
 function aiMove(b, me, level, rnd){
   const cols = openCols(b);
   if (!cols.length) return -1;
-  const win = winningCol(b, me);
-  if (win >= 0) return win;
   const smart = level === "smart";
+  const win = winningCol(b, me);
+  if (win >= 0 && (smart || rnd() < 0.6)) return win;
   const block = winningCol(b, other(me));
-  if (block >= 0 && (smart || rnd() < 0.7)) return block;
-  if (!smart && rnd() < 0.25) return cols[Math.floor(rnd() * cols.length)];
-  const depth = smart ? 5 : 2;
+  if (block >= 0 && (smart || rnd() < 0.3)) return block;
+  if (!smart){
+    const near = cols.slice().sort(byCentre).slice(0, 4);
+    return near[Math.floor(rnd() * near.length)];
+  }
+  const depth = 5;
   let best = -Infinity, pick = [];
   for (const c of cols.slice().sort(byCentre)){
     const r = rowFor(b, c);

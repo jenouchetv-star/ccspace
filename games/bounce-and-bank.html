@@ -6,26 +6,34 @@
     <title>Bounce &amp; Bank</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
+    <!-- Bungee for the marquee and big arcade lettering, Press Start 2P for
+         the lit LED digits; Plus Jakarta Sans stays for anything to read. -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Dancing+Script:wght@600&family=Bungee&family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
-        /* Brought in line with the site's own palette (index.html :root) -
-           --slate, --berry, --leaf and --sun, rather than a one-off set of
-           colours invented for this game alone. */
+        /* The arcade look, built from the site's own palette (index.html
+           :root) - ink, sun, cyan, plum, leaf, berry and paper - turned up
+           to neon for a dark cabinet. The board's own neon colours live in
+           the script (NEON), since they're drawn on the canvas; these are
+           for the cabinet, the scoreboard and the panels around it. */
         :root {
-            --bg-color: #1B2A32;    /* --slate */
-            --peg-color: #0A5280;   /* --cyan-deep, the regular pegs */
-            --risk-color: #BC3229;  /* --berry, kept for warnings: the used-ball marker, slot dividers, risky slots and the 2x ball's ring */
-            --bouncer-peg-color: #3A7A37; /* --leaf, green for bouncer pegs */
-            --ball-color: #F2C230;  /* --sun */
-            --slot-color: #131F26;
+            --ink: #1E2226;
+            --sun: #F5B921;
+            --cyan: #17B3CE;
+            --plum: #7A4A86;
+            --leaf: #3A7A37;
+            --berry: #BC3229;
+            --paper: #FAF4E6;
+            /* Neon versions, for glows and lit readouts. */
+            --neon-sun: #FFC93C;
+            --neon-cyan: #3FE0FF;
+            --neon-plum: #D08BE6;
+            --neon-green: #7BE866;
+            --neon-red: #FF5A4C;
+            --cabinet: #241829;      /* the cabinet's painted plum body */
+            --cabinet-edge: #0B0A10; /* the black trim between its parts */
+            --led-bg: #070A0F;       /* an unlit LED panel */
             --text-color: #ffffff;
-            --highlight-color: #263C46; /* --slate-2, still used behind the Game Over cheque */
-            --container-bg: #D7EDE8; /* --teal-soft - the frame around the dark pegboard */
-            --container-ink: #1B2A32; /* --slate, for text sitting on the light frame */
-            --button-bg: #BC3229;   /* --berry */
-            --button-hover: #96281F;
-            --cash-bg: #3A7A37;     /* --leaf */
-            --slot-divider-color: #8FD9A8; /* light green slot dividers */
+            --ball-color: #F2C230;  /* --sun */
             --teal-ball: #1B9C93;   /* the 2x ball */
             --green-ball: #3A7A37;  /* the 3x ball, --leaf */
             /* Light/dark tints of each ball colour, for the 3D sphere shading
@@ -40,15 +48,18 @@
             --green-ball-dark:  #244D22;
         }
 
+        html { background-color: #110D16; }
         body {
             font-family: 'Plus Jakarta Sans', 'Segoe UI', 'Helvetica Neue', Helvetica, sans-serif;
-            /* The site's own warm-cream ground and halftone wash (index.html
-               body) - the dark board keeps its own contrast on top of it. */
-            background: #FAF4E6;
+            /* A dim arcade room: a plum glow overhead, a cyan one off the
+               floor, and the site's own halftone wash laid over both. */
+            background-color: #110D16;
             background-image:
-                radial-gradient(circle at center, rgba(30,52,62,.09) 1px, transparent 1.2px),
-                linear-gradient(180deg, #E2EDEF 0%, #EEF4F3 26%, #FAF4E6 66%, #FDF8EC 100%);
-            background-size: 7px 7px, 100% 100%;
+                radial-gradient(circle at center, rgba(250,244,230,.07) 1px, transparent 1.2px),
+                radial-gradient(70% 55% at 15% 0%, rgba(122,74,134,.55), transparent 70%),
+                radial-gradient(60% 50% at 90% 100%, rgba(23,179,206,.28), transparent 70%),
+                linear-gradient(180deg, #1C1424 0%, #0E0B13 100%);
+            background-size: 7px 7px, 100% 100%, 100% 100%, 100% 100%;
             color: var(--text-color);
             display: flex;
             justify-content: center;
@@ -60,15 +71,25 @@
             -moz-osx-font-smoothing: grayscale;
         }
 
+        /* The cabinet: painted plum bodywork with black trim and a cyan
+           T-moulding down each side, holding the marquee, the scoreboard,
+           the playfield and the control deck, top to bottom. */
         .game-container {
             display: flex;
             flex-direction: column;
             align-items: center;
             text-align: center;
-            padding: 20px;
-            background-color: var(--container-bg);
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            padding: 12px 18px 14px;
+            background:
+                linear-gradient(90deg, rgba(0,0,0,.45) 0, transparent 7%, transparent 93%, rgba(0,0,0,.45) 100%),
+                radial-gradient(130% 60% at 50% 0%, #4B2D59 0%, var(--cabinet) 55%, #150F19 100%);
+            border-radius: 22px;
+            box-shadow:
+                inset 4px 0 0 var(--cyan), inset -4px 0 0 var(--cyan),
+                inset 8px 0 0 var(--cabinet-edge), inset -8px 0 0 var(--cabinet-edge),
+                0 0 0 3px var(--cabinet-edge),
+                0 0 40px rgba(23,179,206,.28),
+                0 18px 40px rgba(0,0,0,.6);
             /* Responsive adjustments - sized by the window's height first
                (the board's aspect ratio decides its width from there), so
                a tall desktop window gets a genuinely bigger board instead
@@ -87,72 +108,332 @@
             box-sizing: border-box;
             position: relative; /* For positioning child elements */
         }
+        /* Nothing in the cabinet gets squeezed - the board is sized to fit
+           what's left instead (setupCanvas). */
+        .game-container > * { flex-shrink: 0; }
 
-        h1 {
-            color: var(--container-ink);
-            margin-bottom: 5px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
+        /* The marquee: a lit sign over the playfield, ringed with bulbs.
+           The ring is the marquee's own background (the unlit glass of
+           every bulb) plus two lit layers, ::before and ::after, holding
+           alternate bulbs and taking turns to light - the classic chase.
+           The sign itself, the h1, covers the middle so only the ring of
+           bulbs shows around it. */
+        .marquee {
+            position: relative;
+            width: 100%;
+            max-width: 560px;
+            padding: 8px;
+            border-radius: 10px;
+            background:
+                radial-gradient(circle at 25% 25%, #4A3714 0 2.4px, transparent 3px),
+                radial-gradient(circle at 75% 75%, #4A3714 0 2.4px, transparent 3px),
+                radial-gradient(circle at 75% 25%, #4A3714 0 2.4px, transparent 3px),
+                radial-gradient(circle at 25% 75%, #4A3714 0 2.4px, transparent 3px),
+                #2A0F2E;
+            background-size: 16px 16px;
+            background-repeat: round;
+            box-shadow: 0 0 0 3px var(--cabinet-edge), 0 0 26px rgba(245,185,33,.25);
         }
-
-        #instructions {
+        .marquee::before, .marquee::after {
+            content: "";
             position: absolute;
-            top: 16px;
-            left: 20px;
+            inset: 0;
+            border-radius: inherit;
+            background-size: 16px 16px;
+            background-repeat: round;
+            pointer-events: none;
+            animation: bulbs-chase .9s linear infinite;
+        }
+        .marquee::before {
+            background-image:
+                radial-gradient(circle at 25% 25%, #FFF7D6 0 1.2px, var(--neon-sun) 2.4px, rgba(255,201,60,.35) 3.4px, transparent 5px),
+                radial-gradient(circle at 75% 75%, #FFF7D6 0 1.2px, var(--neon-sun) 2.4px, rgba(255,201,60,.35) 3.4px, transparent 5px);
+        }
+        .marquee::after {
+            background-image:
+                radial-gradient(circle at 75% 25%, #FFF7D6 0 1.2px, var(--neon-sun) 2.4px, rgba(255,201,60,.35) 3.4px, transparent 5px),
+                radial-gradient(circle at 25% 75%, #FFF7D6 0 1.2px, var(--neon-sun) 2.4px, rgba(255,201,60,.35) 3.4px, transparent 5px);
+            animation-delay: -.45s; /* half a beat behind, so the two take turns */
+        }
+        @keyframes bulbs-chase {
+            0%, 49.9% { opacity: 1; }
+            50%, 100% { opacity: .1; }
+        }
+        .marquee-title {
+            position: relative;
+            z-index: 1;
             margin: 0;
-            color: var(--container-ink);
-            opacity: 0.75;
-            font-size: 11px;
-            text-align: left;
+            padding: 5px 12px 8px;
+            border-radius: 6px;
+            background:
+                radial-gradient(90% 130% at 50% 0%, rgba(122,74,134,.8), transparent 70%),
+                linear-gradient(180deg, #1A0F20, #0C0810);
+            box-shadow: inset 0 0 0 2px #000, inset 0 0 22px rgba(0,0,0,.85);
+            font-size: 2rem;
+            line-height: 1.1;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        /* Chunky display lettering - the shared skin sets every heading
+           and span to inherit Plus Jakarta Sans, so the arcade faces need
+           a more specific selector (and !important) to show through. */
+        .ccs-bounce .marquee-title,
+        .ccs-bounce .cash-label,
+        .ccs-bounce .shop-heading,
+        .ccs-bounce .shop-ball,
+        .ccs-bounce #finalScoreMessage,
+        .ccs-bounce #startRoundBtn,
+        .ccs-bounce #depositAndPlayAgainBtn {
+            font-family: 'Bungee', 'Plus Jakarta Sans', sans-serif !important;
+            font-weight: 400 !important;
+        }
+        /* ...and the pixel face for the lit digits and attract text. */
+        .ccs-bounce #bankBalance,
+        .ccs-bounce #totalScore,
+        .ccs-bounce .game-counter,
+        .ccs-bounce .shop-kicker,
+        .ccs-bounce .press-start,
+        .ccs-bounce .shop-ball-price {
+            font-family: 'Press Start 2P', 'Courier New', monospace !important;
+            font-weight: 400 !important;
+        }
+        /* Each word lit its own neon, with a two-step drop shade under it
+           for that chunky, stamped-out sign look. */
+        .mq-bounce {
+            color: var(--neon-sun);
+            text-shadow: 0 2px 0 #A8650A, 0 4px 0 var(--ink), 0 0 16px rgba(255,201,60,.65);
+        }
+        .mq-amp {
+            color: var(--neon-red);
+            font-size: .78em;
+            text-shadow: 0 2px 0 #7A1E18, 0 4px 0 var(--ink), 0 0 14px rgba(255,90,76,.7);
+        }
+        .mq-bank {
+            color: var(--neon-cyan);
+            text-shadow: 0 2px 0 #0A5280, 0 4px 0 var(--ink), 0 0 16px rgba(63,224,255,.65);
+        }
+        /* The sign flickers on when the machine powers up, one word after
+           the other - and flashes along with the bulbs on a jackpot. */
+        .marquee-title span { animation: sign-on 1.1s linear both; }
+        .marquee-title .mq-amp { animation-delay: .18s; }
+        .marquee-title .mq-bank { animation-delay: .32s; }
+        @keyframes sign-on {
+            0%   { opacity: .12; }
+            8%   { opacity: 1; }
+            13%  { opacity: .25; }
+            22%  { opacity: 1; }
+            28%  { opacity: .45; }
+            34%, 100% { opacity: 1; }
+        }
+        .is-jackpot .marquee::before, .is-jackpot .marquee::after { animation-duration: .2s; }
+        .is-jackpot .marquee::after { animation-delay: -.1s; }
+        .is-jackpot .marquee-title span { animation: sign-jackpot .3s steps(2) 5; }
+        @keyframes sign-jackpot {
+            from { filter: brightness(1.9) saturate(1.3); }
+            to   { filter: none; }
         }
 
+        /* The control deck under the playfield - a joystick, the how-to
+           line and two buttons, like the panel on a real cabinet. Its
+           height is fixed so hiding the how-to at the end of a round never
+           shifts the board above it. */
+        .control-deck {
+            width: 100%;
+            max-width: 560px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 0 12px;
+            border-radius: 10px;
+            background: linear-gradient(180deg, #33263E 0%, #1A1320 100%);
+            box-shadow: 0 0 0 2px var(--cabinet-edge), inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 rgba(0,0,0,.4);
+        }
+        #instructions {
+            margin: 0;
+            min-width: 0;
+            color: var(--paper);
+            opacity: .92;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #instructions kbd {
+            display: inline-block;
+            min-width: 1.6em;
+            padding: 0 .3em;
+            border-radius: 4px;
+            background: var(--paper);
+            color: var(--ink);
+            font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+            font-weight: 800;
+            font-size: .95em;
+            line-height: 1.35;
+            box-shadow: 0 2px 0 #9C9382;
+        }
+        /* A joystick: a red ball on a short stick over a round base. */
+        .deck-stick {
+            position: relative;
+            width: 22px;
+            height: 24px;
+            flex: 0 0 22px;
+        }
+        .deck-stick::before {
+            content: "";
+            position: absolute; left: 1px; right: 1px; bottom: 1px; height: 8px;
+            border-radius: 50%;
+            background: #0B0A10;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.15);
+        }
+        .deck-stick::after {
+            content: "";
+            position: absolute; left: 50%; top: 1px;
+            width: 12px; height: 12px; margin-left: -6px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #FF9A8F 0%, var(--berry) 60%, #6E1A14 100%);
+            box-shadow: 0 7px 0 -4px #555, 0 9px 0 -4px #333;
+        }
+        .deck-buttons { display: flex; gap: 6px; flex: 0 0 auto; }
+        .deck-buttons i {
+            width: 15px; height: 15px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #A8F5FF 0%, var(--cyan) 60%, #0A5280 100%);
+            box-shadow: 0 2px 0 #062F49;
+        }
+        .deck-buttons i + i {
+            background: radial-gradient(circle at 35% 30%, #FFF0B5 0%, var(--sun) 60%, #9A6A08 100%);
+            box-shadow: 0 2px 0 #5E4005;
+        }
+
+        /* The playfield: a dark neon board behind glass, with a faint grid
+           and a plum glow coming up from the slots. The bezel is drawn
+           with box-shadows only, so it never takes space from the board
+           itself or throws off where a click lands. */
         #gameCanvas {
-            background-color: var(--slot-color);
-            border-radius: 15px;
-            box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
+            display: block;
+            margin: 10px 0 12px;
+            border-radius: 12px;
             cursor: pointer;
+            background:
+                radial-gradient(120% 55% at 50% 0%, rgba(23,179,206,.2), transparent 60%),
+                radial-gradient(120% 45% at 50% 100%, rgba(122,74,134,.6), transparent 70%),
+                linear-gradient(rgba(63,224,255,.05) 1px, transparent 1px) 0 0 / 22px 22px,
+                linear-gradient(90deg, rgba(63,224,255,.05) 1px, transparent 1px) 0 0 / 22px 22px,
+                #0B0F1A;
+            box-shadow:
+                inset 0 0 30px rgba(0,0,0,.85),
+                0 0 0 3px #05070B,
+                0 0 0 6px var(--cyan),
+                0 0 0 8px #05070B,
+                0 0 26px 6px rgba(23,179,206,.45);
+        }
+        /* A short, sharp rattle when the jackpot pays out. */
+        #gameCanvas.is-shaking { animation: board-shake .45s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes board-shake {
+            10%, 90% { transform: translate(-1px, 1px); }
+            20%, 80% { transform: translate(3px, -2px); }
+            30%, 50%, 70% { transform: translate(-5px, 2px); }
+            40%, 60% { transform: translate(5px, -1px); }
         }
 
         .controls {
-            margin-top: 20px;
-            margin-bottom: 8px;
+            margin-top: 10px;
+            margin-bottom: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 15px;
-        }
-
-        .stats {
-            display: flex;
-            justify-content: center;
-            align-items: stretch; /* Make items same height */
+            gap: 8px;
             width: 100%;
-            gap: 20px;
-            flex-wrap: wrap;
+            max-width: 640px;
         }
 
+        /* The scoreboard - three readouts side by side, each its own
+           column so a ball bought mid-shop or a longer number never
+           wraps the row and pushes the board down. */
+        .stats {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            align-items: stretch;
+            width: 100%;
+            gap: 10px;
+        }
+
+        /* Each readout is a recessed LED panel: near-black glass behind a
+           plum bezel, a faint scanline sheen, and the digits lit in neon. */
         .stat-item {
-            background: var(--slot-color);
-            padding: 10px 20px;
+            position: relative;
+            min-width: 0;
+            padding: 6px 12px;
             border-radius: 10px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            background: linear-gradient(180deg, #0C1118 0%, var(--led-bg) 100%);
+            box-shadow:
+                0 0 0 2px #000,
+                0 0 0 4px #3B2846,
+                inset 0 0 0 1px rgba(255,255,255,.05),
+                inset 0 8px 16px rgba(0,0,0,.85);
+            overflow: hidden;
+        }
+        .stat-item::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px),
+                linear-gradient(180deg, rgba(255,255,255,.07), transparent 45%);
         }
 
-        .cash-stat {
-            background-color: var(--cash-bg);
-            padding: 5px 20px;
+        .cash-label {
+            font-size: 10px;
+            line-height: 1.1;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            color: var(--paper);
+            margin-bottom: 3px;
+        }
+        .bank-stat .cash-label { color: var(--neon-sun); }
+        .balls-stat .cash-label { color: var(--neon-cyan); }
+        .cash-stat .cash-label { color: var(--neon-green); }
+
+        #totalScore, #bankBalance {
+            display: inline-block;
+            font-size: 22px;
+            line-height: 1.25;
+            letter-spacing: .02em;
+            white-space: nowrap;
+        }
+        #bankBalance {
+            color: var(--neon-sun);
+            text-shadow: 0 0 6px rgba(255,201,60,.85), 0 0 16px rgba(255,201,60,.4);
+        }
+        #totalScore {
+            color: var(--neon-green);
+            text-shadow: 0 0 6px rgba(123,232,102,.85), 0 0 16px rgba(123,232,102,.4);
+        }
+        /* Money owed reads in red, the way the risky slots do. */
+        #totalScore.is-negative, #bankBalance.is-negative {
+            color: var(--neon-red);
+            text-shadow: 0 0 6px rgba(255,90,76,.85), 0 0 16px rgba(255,90,76,.4);
+        }
+        /* A quick punch whenever a readout changes. */
+        .is-bumped { animation: readout-bump .38s cubic-bezier(.2,1.6,.4,1); }
+        @keyframes readout-bump {
+            0%   { transform: scale(1.25); filter: brightness(1.7); }
+            100% { transform: scale(1); filter: none; }
         }
 
-        .bank-stat {
-            background-color: #FFFFFF;
-            color: var(--container-ink);
-            padding: 5px 20px;
-        }
-        .bank-stat #bankBalance { color: var(--container-ink); }
-
+        /* The $1,000 goal as an LED bar meter - lit segments filling from
+           leaf green to sun gold, shimmering once it's full. */
         .bank-goal {
             display: flex;
             flex-direction: column;
@@ -162,78 +443,229 @@
             margin-top: 4px;
         }
         .bank-goal-track {
+            position: relative;
             width: 100%;
-            min-width: 90px;
-            height: 6px;
-            border-radius: 4px;
-            background: rgba(27, 42, 50, 0.25);
+            min-width: 80px;
+            height: 8px;
+            border-radius: 3px;
+            background: #03050A;
+            box-shadow: 0 0 0 1px rgba(255,201,60,.35);
             overflow: hidden;
+        }
+        .bank-goal-track::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(90deg, transparent 0 6px, #03050A 6px 8px);
         }
         .bank-goal-fill {
             height: 100%;
             width: 0%;
-            background: var(--cash-bg);
-            border-radius: 4px;
-            transition: width 0.4s ease;
+            background: linear-gradient(90deg, var(--leaf), var(--neon-green) 60%, var(--neon-sun));
+            box-shadow: 0 0 8px rgba(123,232,102,.8);
+            transition: width .5s cubic-bezier(.2,.9,.3,1.2);
         }
-        .bank-goal-fill.reached { background: var(--button-bg); }
+        .bank-goal-fill.reached {
+            background: linear-gradient(90deg, var(--neon-sun), #FFF2B0, var(--neon-sun), #FFF2B0);
+            background-size: 200% 100%;
+            box-shadow: 0 0 10px var(--neon-sun);
+            animation: goal-shimmer 1.2s linear infinite;
+        }
+        @keyframes goal-shimmer {
+            from { background-position: 0 0; }
+            to   { background-position: -200% 0; }
+        }
         .bank-goal-label {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 700;
-            opacity: 0.85;
+            line-height: 1.2;
+            color: var(--paper);
+            opacity: .8;
             white-space: nowrap;
         }
-
-        .shop-heading {
-            font-size: 1.3em;
-            font-weight: 700;
-            text-align: center;
+        /* The bank panel itself blazes for a moment when the goal is hit. */
+        .bank-stat.goal-hit { animation: goal-hit .5s ease 3; }
+        @keyframes goal-hit {
+            50% { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--neon-sun), 0 0 24px 6px rgba(255,201,60,.8), inset 0 8px 16px rgba(0,0,0,.85); }
         }
+
+        .game-counter {
+            margin: 0;
+            font-size: 9px;
+            line-height: 1;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: var(--neon-cyan);
+            text-shadow: 0 0 6px rgba(63,224,255,.75);
+        }
+
+        /* Balls left, as a row of lit bulbs - a spent ball goes dark with a
+           red X. */
+        #attempts-circles {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: nowrap;
+        }
+        .attempt-circle {
+            flex: 0 0 auto;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: clamp(8px, 1.3vh, 12px);
+            background: radial-gradient(circle at 35% 30%, #FFF6CF 0%, var(--neon-sun) 42%, #B47A0C 100%);
+            box-shadow: 0 0 8px rgba(255,201,60,.8), inset 0 -2px 3px rgba(0,0,0,.3);
+            transition: background .3s ease, box-shadow .3s ease;
+        }
+        .attempt-circle.used {
+            background: radial-gradient(circle at 35% 30%, #2A303A 0%, #12161C 100%);
+            box-shadow: inset 0 1px 3px rgba(0,0,0,.9), 0 0 0 1px rgba(255,90,76,.35);
+        }
+        .attempt-circle.used::after {
+            content: 'X';
+            font-family: 'Bungee', 'Plus Jakarta Sans', sans-serif;
+            line-height: 1;
+            color: var(--neon-red);
+            text-shadow: 0 0 5px rgba(255,90,76,.9);
+        }
+
+        /* The shop and the end-of-round card share one panel style: dark
+           plum glass with a lit sun-gold rim, popping in when shown. */
+        #gameOverScreen, #ballShopModal {
+            display: none;
+            position: absolute;
+            top: 200px;
+            left: 50%;
+            transform: translate(-50%, 0);
+            padding: 18px 20px 20px;
+            border-radius: 18px;
+            z-index: 10;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            background:
+                radial-gradient(120% 70% at 50% 0%, rgba(122,74,134,.65), transparent 70%),
+                linear-gradient(180deg, #221828 0%, #120E17 100%);
+            box-shadow:
+                0 0 0 3px var(--cabinet-edge),
+                0 0 0 6px var(--neon-sun),
+                0 0 0 9px var(--cabinet-edge),
+                0 0 30px rgba(255,201,60,.45),
+                0 18px 36px rgba(0,0,0,.7);
+            width: min(480px, 92vw);
+            box-sizing: border-box;
+            animation: panel-pop .32s cubic-bezier(.2,1.5,.4,1);
+        }
+        /* Both panels open just inside the top of the board (--board-top
+           is set by setupCanvas), so the scoreboard - and the extra ball
+           bulbs lighting up as they're bought - stays in view above. */
+        #gameOverScreen, #ballShopModal { top: calc(var(--board-top, 188px) + 12px); }
+        @keyframes panel-pop {
+            from { transform: translate(-50%, 0) scale(.86); opacity: 0; }
+            to   { transform: translate(-50%, 0) scale(1); opacity: 1; }
+        }
+
+        .shop-kicker {
+            margin: 0;
+            font-size: 9px;
+            line-height: 1.2;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: var(--neon-cyan);
+            text-shadow: 0 0 6px rgba(63,224,255,.8);
+        }
+        .shop-heading {
+            font-size: 1.35em;
+            line-height: 1.1;
+            text-align: center;
+            color: var(--neon-sun);
+            text-shadow: 0 2px 0 #A8650A, 0 4px 0 var(--ink), 0 0 14px rgba(255,201,60,.6);
+        }
+        /* The honest line - in the plain body face, at full strength, so
+           it's as easy to read as anything else in the shop. */
         .shop-subtext {
             margin: 0;
-            opacity: 0.8;
-            font-size: 0.85em;
+            max-width: 36ch;
+            color: var(--paper);
+            font-size: .85em;
+            font-weight: 600;
+            line-height: 1.4;
             text-align: center;
         }
         .ball-shop-row {
             display: flex;
-            gap: 24px;
+            gap: 14px;
             justify-content: center;
         }
-        .ball-shop-item {
-            background: none;
-            border: none;
-            cursor: pointer;
+        /* Each ball is a lit button tile in its own colour. An ID selector,
+           so it wins over the shared skin's pill shape (game-skin.css)
+           without needing to change that rule for every other game. */
+        #ballShopModal .ball-shop-item {
+            --tile: var(--neon-sun);
+            --tile-glow: rgba(255,201,60,.35);
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 8px;
+            min-width: 84px;
+            min-height: 0 !important;
+            padding: 12px 12px 10px !important;
             color: var(--text-color);
-            font-family: inherit;
-            padding: 0;
+            cursor: pointer;
+            background: linear-gradient(180deg, #1B2330 0%, #0D1219 100%) !important;
+            border: 2px solid var(--tile) !important;
+            border-radius: 14px !important;
+            box-shadow: 0 5px 0 #05070B, 0 0 14px var(--tile-glow) !important;
+            transition: transform .12s cubic-bezier(.2,.9,.3,1.4), box-shadow .12s;
         }
-        .ball-shop-item:disabled { opacity: 0.4; cursor: not-allowed; }
+        #ballShopModal .ball-shop-item[data-type="2x"] { --tile: var(--neon-cyan); --tile-glow: rgba(63,224,255,.35); }
+        #ballShopModal .ball-shop-item[data-type="3x"] { --tile: var(--neon-green); --tile-glow: rgba(123,232,102,.35); }
+        #ballShopModal .ball-shop-item:hover:not(:disabled) {
+            transform: translateY(-3px) !important;
+            box-shadow: 0 8px 0 #05070B, 0 0 24px var(--tile-glow), 0 0 0 1px var(--tile) !important;
+        }
+        #ballShopModal .ball-shop-item:active:not(:disabled) {
+            transform: translateY(4px) !important;
+            box-shadow: 0 1px 0 #05070B, 0 0 10px var(--tile-glow) !important;
+        }
+        #ballShopModal .ball-shop-item:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: 0 5px 0 #05070B !important;
+        }
+        #ballShopModal .ball-shop-item.bought:disabled { opacity: .8; }
+        #ballShopModal .ball-shop-item:focus-visible {
+            outline: 3px solid #fff !important;
+            outline-offset: 3px !important;
+            box-shadow: 0 5px 0 #05070B, 0 0 0 8px var(--sun) !important;
+        }
         .shop-ball {
-            width: 56px;
-            height: 56px;
+            width: 52px;
+            height: 52px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 800;
-            font-size: 0.95em;
+            font-size: 1em;
             color: #fff;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.55);
             position: relative;
             /* A dark inset toward the lower-right (the sphere's shadowed
                side), a soft light inset toward the upper-left (ambient
-               bounce light), and a grounded drop shadow underneath -
+               bounce light), and a neon glow of its own colour around it -
                same three-layer idea as the Codrops ball, adapted to a
                small flat icon instead of a big hero ball. */
             box-shadow:
                 inset -8px -9px 14px rgba(0, 0, 0, 0.35),
                 inset 5px 6px 10px rgba(255, 255, 255, 0.5),
-                0 4px 8px rgba(0, 0, 0, 0.4);
+                0 0 14px var(--tile-glow);
         }
         /* The specular highlight - a small blurred white oval sitting where
            an overhead light would catch the ball. Kept clear of the centre
@@ -252,105 +684,101 @@
         .shop-ball--normal { background: radial-gradient(circle at 34% 30%, var(--ball-color-light) 0%, var(--ball-color) 55%, var(--ball-color-dark) 100%); }
         .shop-ball--2x { background: radial-gradient(circle at 34% 30%, var(--teal-ball-light) 0%, var(--teal-ball) 55%, var(--teal-ball-dark) 100%); }
         .shop-ball--3x { background: radial-gradient(circle at 34% 30%, var(--green-ball-light) 0%, var(--green-ball) 55%, var(--green-ball-dark) 100%); }
-        .shop-ball-price { font-weight: 700; font-size: 0.95em; }
-        .ball-shop-item.bought .shop-ball { opacity: 0.35; }
+        .shop-ball-price {
+            font-size: 11px;
+            line-height: 1.2;
+            color: var(--tile);
+            text-shadow: 0 0 6px var(--tile-glow);
+        }
+        /* A bought ball gets a big green tick over it. */
+        .ball-shop-item.bought .shop-ball::after {
+            content: "\2713";
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(58,122,55,.88);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1.6em;
+            color: #fff;
+        }
         .ball-shop-item.bought .shop-ball-price { opacity: 0.6; }
 
-        .button--berry {
-            background-color: var(--button-bg);
-            box-shadow: 0 4px 15px rgba(193, 59, 49, 0.4);
-        }
-        .button--berry:hover:not(:disabled) { background-color: var(--button-hover); }
-
-        .cash-label {
-            font-size: 14px;
-            font-weight: 600;
+        /* Attract-mode text, blinking the way an idle arcade machine asks
+           for a player. */
+        .press-start {
+            margin: 2px 0 -4px;
+            font-size: 10px;
+            line-height: 1.2;
+            letter-spacing: .12em;
             text-transform: uppercase;
-            opacity: 0.9;
-            margin-bottom: 5px;
+            color: var(--neon-sun);
+            text-shadow: 0 0 8px rgba(255,201,60,.85);
+            animation: attract-blink 1.1s steps(1) infinite;
+        }
+        @keyframes attract-blink {
+            0%, 59% { opacity: 1; }
+            60%, 100% { opacity: 0; }
         }
 
-        .game-counter {
-            color: var(--container-ink);
-            font-weight: 800;
-            font-size: 0.8em;
+        /* The big arcade push buttons - a chunky lip underneath that the
+           button sinks into when pressed. IDs again, so these win over
+           the shared skin's pill shape; the colours swap with
+           button--leaf / button--berry the same way they always have. */
+        #startRoundBtn, #depositAndPlayAgainBtn {
+            --btn-top: #62C24F;
+            --btn-base: var(--leaf);
+            --btn-lip: #1F4A1D;
+            padding: 12px 26px !important;
+            min-height: 50px;
+            font-size: 15px;
+            letter-spacing: .06em;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            opacity: 0.8;
-            margin: 0;
-            line-height: 1;
-        }
-
-        #totalScore, #bankBalance {
-            font-size: 40px;
-            font-weight: bold;
-            line-height: 1.1;
-        }
-
-        #attempts-circles {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .attempt-circle {
-            width: 25px;
-            height: 25px;
-            background-color: var(--ball-color);
-            border-radius: 50%;
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-weight: bold;
-            font-size: 1.2em;
-            transition: background-color 0.3s ease;
-        }
-
-        .attempt-circle.used {
-            background-color: var(--risk-color); /* Red background when used */
-        }
-
-        .attempt-circle.used::after {
-            content: 'X';
-            color: var(--text-color); /* White X */
-        }
-
-        .button {
-            background-color: var(--button-bg);
-            color: var(--text-color);
-            border: none;
-            padding: 15px 30px;
-            border-radius: 10px;
-            font-size: 1em;
-            font-weight: 600;
+            color: #fff;
+            text-shadow: 0 2px 0 rgba(0,0,0,.35);
             cursor: pointer;
-            transition: background-color 0.3s ease, transform 0.2s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 4px 15px rgba(193, 59, 49, 0.4);
+            background: linear-gradient(180deg, var(--btn-top) 0%, var(--btn-base) 100%) !important;
+            border: 3px solid var(--cabinet-edge) !important;
+            border-radius: 14px !important;
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,.35),
+                0 6px 0 var(--btn-lip),
+                0 6px 0 3px var(--cabinet-edge),
+                0 12px 18px rgba(0,0,0,.5) !important;
+            transition: transform .08s ease, box-shadow .08s ease, filter .12s ease;
         }
-
-        .button:hover:not(:disabled) {
-            background-color: var(--button-hover);
-            transform: translateY(-2px);
+        #depositAndPlayAgainBtn.button--berry {
+            --btn-top: #E0574B;
+            --btn-base: var(--berry);
+            --btn-lip: #5E1712;
         }
-
-        .button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        #startRoundBtn:hover, #depositAndPlayAgainBtn:hover {
+            transform: translateY(-2px) !important;
+            filter: brightness(1.08);
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,.35),
+                0 8px 0 var(--btn-lip),
+                0 8px 0 3px var(--cabinet-edge),
+                0 14px 20px rgba(0,0,0,.5) !important;
         }
-
-        .button--leaf {
-            background-color: var(--cash-bg);
-            box-shadow: 0 4px 15px rgba(58, 122, 55, 0.4);
+        #startRoundBtn:active, #depositAndPlayAgainBtn:active {
+            transform: translateY(5px) !important;
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,.25),
+                0 1px 0 var(--btn-lip),
+                0 1px 0 3px var(--cabinet-edge),
+                0 3px 6px rgba(0,0,0,.4) !important;
         }
-        .button--leaf:hover:not(:disabled) { background-color: #2F6B2C; }
-
-        .button--sm {
-            padding: 9px 18px;
-            font-size: 0.8em;
+        #startRoundBtn:focus-visible, #depositAndPlayAgainBtn:focus-visible {
+            outline: 3px solid #fff !important;
+            outline-offset: 4px !important;
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,.35),
+                0 6px 0 var(--btn-lip),
+                0 6px 0 3px var(--cabinet-edge),
+                0 0 0 10px var(--sun) !important;
         }
 
         .gameover-actions {
@@ -461,7 +889,9 @@
 
         /* On a phone there is no room for the receipt beside the board -
            it stacks below instead, and stays out of the way until the
-           game actually ends, when it appears as the final summary. */
+           game actually ends, when it appears as the final summary. The
+           scoreboard goes to two rows: bank and cash side by side, the
+           row of ball bulbs across the full width under them. */
         @media (max-width: 700px) {
             .layout { flex-direction: column; align-items: center; }
             .game-container { margin: 16px; max-height: calc(100vh - 32px); }
@@ -469,66 +899,87 @@
             #receipt-unit.mobile-reveal { display: block; }
             #receipt { width: min(320px, 90vw); margin-left: auto; margin-right: auto; }
             #receipt-printer { width: min(360px, 96vw); }
-            .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-            .bank-stat { grid-column: 1 / -1; }
-            .stat-item { padding: 6px 8px; }
-            .cash-label { font-size: 11px; }
-            .game-counter { font-size: 0.7em; }
+            .stats {
+                grid-template-columns: 1fr 1fr;
+                grid-template-areas: "bank cash" "balls balls";
+                gap: 8px;
+            }
+            .bank-stat { grid-area: bank; }
+            .cash-stat { grid-area: cash; }
+            .balls-stat { grid-area: balls; flex-direction: row; gap: 10px; }
+            .balls-stat .cash-label { margin-bottom: 0; }
+            .stat-item { padding: 5px 8px; }
+            .cash-label { font-size: 9px; }
+            .game-counter { font-size: 8px; }
             #attempts-circles { gap: 5px; }
-            .attempt-circle { width: 18px; height: 18px; font-size: 0.9em; }
-            .bank-goal-track { min-width: 70px; }
-            .bank-goal-label { font-size: 10px; }
+            .bank-goal-track { min-width: 60px; }
+            .bank-goal-label { font-size: 9px; }
+            .marquee { padding: 7px; }
+            .control-deck { gap: 8px; padding: 0 8px; }
+            .ball-shop-row { gap: 10px; }
+            #ballShopModal .ball-shop-item { min-width: 72px; padding: 10px 8px 8px !important; }
         }
-
-        #gameOverScreen, #ballShopModal {
-            display: none;
-            position: absolute;
-            top: 200px;
-            left: 50%;
-            transform: translate(-50%, 0);
-            background-color: var(--highlight-color);
-            padding: 26px;
-            border-radius: 20px;
-            z-index: 10;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.6);
-            width: min(480px, 92vw);
-            box-sizing: border-box;
+        @media (max-width: 400px) {
+            .deck-buttons { display: none; }
         }
 
         #finalScoreMessage {
-            font-size: 1.3em;
-            font-weight: 700;
+            font-size: 1.5em;
+            line-height: 1.15;
             text-align: center;
+            text-transform: uppercase;
+            color: var(--paper);
+            text-shadow: 0 2px 0 var(--plum), 0 4px 0 var(--ink), 0 0 14px rgba(208,139,230,.7);
+        }
+        /* The quip and the detail line under the result stay in the plain
+           body face - they're sentences, for reading. */
+        .run-result-quip, .run-result-detail {
+            text-transform: none;
+            text-shadow: none;
+            letter-spacing: 0;
+        }
+        .ccs-bounce .run-result-quip, .ccs-bounce .run-result-detail {
+            font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif !important;
         }
         .run-result-quip {
             display: block;
-            margin-top: 6px;
-            font-size: 0.6em;
-            font-weight: 600;
+            margin-top: 8px;
+            font-size: 0.5em;
+            font-weight: 700;
             font-style: italic;
-            color: var(--ball-color);
+            color: var(--neon-sun);
         }
         .run-result-detail {
             display: block;
-            margin-top: 8px;
-            font-size: 0.7em;
+            margin-top: 6px;
+            font-size: 0.47em;
             font-weight: 600;
-            opacity: 0.85;
+            color: var(--paper);
+            opacity: 0.9;
         }
 
-        /* A win gets a brighter frame and a bouncier message - the loss
-           screen stays exactly as understated as before. */
+        /* A win gets a brighter, double-lit frame and a bouncier message -
+           the loss screen stays as understated as before. */
         #gameOverScreen.is-win {
-            background-color: var(--teal-ball);
-            box-shadow: 0 0 0 4px var(--ball-color), 0 8px 25px rgba(0,0,0,0.6);
+            background:
+                radial-gradient(120% 80% at 50% 0%, rgba(255,201,60,.35), transparent 70%),
+                linear-gradient(180deg, #1B6E69 0%, #0E3B3A 100%);
+            box-shadow:
+                0 0 0 3px var(--cabinet-edge),
+                0 0 0 6px var(--neon-sun),
+                0 0 0 9px var(--cabinet-edge),
+                0 0 0 12px var(--neon-cyan),
+                0 0 44px rgba(255,201,60,.6),
+                0 18px 36px rgba(0,0,0,.7);
         }
         #gameOverScreen.is-win #finalScoreMessage {
-            font-size: 1.6em;
+            font-size: 1.9em;
+            color: var(--neon-sun);
+            text-shadow: 0 3px 0 #A8650A, 0 5px 0 var(--ink), 0 0 20px rgba(255,201,60,.8);
             animation: win-pop .5s cubic-bezier(.2,1.6,.4,1);
         }
+        #gameOverScreen.is-win .run-result-quip { font-size: .42em; color: #fff; }
+        #gameOverScreen.is-win .run-result-detail { font-size: .38em; }
         @keyframes win-pop {
             0%   { transform: scale(.4); opacity: 0; }
             60%  { transform: scale(1.12); opacity: 1; }
@@ -559,8 +1010,48 @@
             0%   { opacity: 1; transform: translate(0, 0) rotate(0deg); }
             100% { opacity: 1; transform: translate(var(--drift), 100vh) rotate(var(--spin)); }
         }
+        /* Gold coins for reaching the $1,000 goal - same fall, but they
+           flip end over end like a coin tossed in the air. */
+        .confetti-piece.is-coin {
+            top: -32px;
+            height: var(--size);
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #FFF3BF 0%, var(--sun) 45%, #B47A0C 100%);
+            box-shadow: inset 0 0 0 2px rgba(122,74,10,.55), 0 0 10px rgba(255,201,60,.6);
+            animation-name: coin-fall;
+        }
+        .confetti-piece.is-coin::after {
+            content: "$";
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Bungee', sans-serif;
+            font-size: calc(var(--size) * .58);
+            line-height: 1;
+            color: #8A5A08;
+        }
+        @keyframes coin-fall {
+            0%   { opacity: 1; transform: translate(0, 0) rotateY(0deg); }
+            100% { opacity: 1; transform: translate(var(--drift), 100vh) rotateY(var(--spin)); }
+        }
+
+        /* Reduced motion: the bulbs stay lit instead of chasing, nothing
+           blinks, shakes, pops or rains down - the game plays the same. */
         @media (prefers-reduced-motion: reduce) {
-            #gameOverScreen.is-win #finalScoreMessage { animation: none; }
+            .marquee::before, .marquee::after,
+            .marquee-title span,
+            .press-start,
+            .bank-goal-fill.reached,
+            .bank-stat.goal-hit,
+            .is-bumped,
+            #gameCanvas.is-shaking,
+            #gameOverScreen, #ballShopModal,
+            #gameOverScreen.is-win #finalScoreMessage { animation: none !important; }
+            .marquee::before, .marquee::after { opacity: 1; }
+            .bank-goal-fill { transition: none; }
+            #ballShopModal .ball-shop-item { transition: none; }
             .confetti-piece { display: none; }
         }
 
@@ -665,8 +1156,9 @@
 
 <div class="layout">
 <div class="game-container">
-    <h1>BOUNCE &amp; BANK</h1>
-    <p id="instructions">Use &larr; &rarr; keys to move, &darr; or click to drop!</p>
+    <header class="marquee">
+        <h1 class="marquee-title"><span class="mq-bounce">Bounce</span> <span class="mq-amp">&amp;</span> <span class="mq-bank">Bank</span></h1>
+    </header>
     <div class="controls">
         <p class="game-counter">Game <span id="gameNumberText">1</span> of <span id="totalGamesText">6</span></p>
         <div class="stats">
@@ -678,8 +1170,8 @@
                     <span class="bank-goal-label">Goal: <span id="bankGoalText">$0 / $1,000</span></span>
                 </div>
             </div>
-            <div class="stat-item">
-                <span class="cash-label">Remaining Balls</span>
+            <div class="stat-item balls-stat">
+                <span class="cash-label">Balls Left</span>
                 <div id="attempts-circles">
                     <div class="attempt-circle"></div>
                     <div class="attempt-circle"></div>
@@ -696,7 +1188,13 @@
         </div>
     </div>
     <canvas id="gameCanvas"></canvas>
+    <div class="control-deck" id="controlDeck">
+        <span class="deck-stick" aria-hidden="true"></span>
+        <p id="instructions">Use <kbd>&larr;</kbd> <kbd>&rarr;</kbd> keys to move, <kbd>&darr;</kbd> or click to drop!</p>
+        <span class="deck-buttons" aria-hidden="true"><i></i><i></i></span>
+    </div>
     <div id="ballShopModal">
+        <p class="shop-kicker" aria-hidden="true">&#9733; Bonus balls &#9733;</p>
         <div class="shop-heading">Buy extra balls?</div>
         <p class="shop-subtext">One of each, at most. Buying never changes what the slots pay out.</p>
         <div class="ball-shop-row">
@@ -713,6 +1211,7 @@
                 <span class="shop-ball-price">$75</span>
             </button>
         </div>
+        <p class="press-start" aria-hidden="true">Press start</p>
         <div class="gameover-actions">
             <button id="startRoundBtn" class="button button--leaf" type="button">Start Playing</button>
         </div>
@@ -900,16 +1399,30 @@
         // Slot scores never change no matter what the player buys.
         const SLOT_SCORES = [50, 10, 25, -10, 100, -10, 25, 10, 50];
 
+        // How far the playfield's neon bezel (the box-shadow rings on
+        // #gameCanvas) reaches past the board's own edge - kept clear on
+        // each side so the frame never runs off a narrow screen.
+        const PLAYFIELD_BEZEL = 8;
+
         /**
          * Sets up the canvas dimensions and scales it for high-DPI displays.
          */
         function setupCanvas() {
             const container = canvas.parentElement;
+            const deck = document.getElementById('controlDeck');
+            const px = (el, prop) => parseFloat(getComputedStyle(el)[prop]) || 0;
 
-            // Room left over once the title, the hint line and the stats row
-            // have taken their share of the container.
-            const canvasMaxHeight = Math.max(220, container.clientHeight - 240);
-            const canvasMaxWidth = container.clientWidth;
+            // Room left over once the marquee and the scoreboard above the
+            // board, and the control deck below it, have taken their share
+            // of the cabinet - measured from the page rather than a fixed
+            // guess, since the arcade header's height changes with the window.
+            const roomBelow = px(canvas, 'marginBottom') + deck.offsetHeight
+                + px(deck, 'marginTop') + px(deck, 'marginBottom') + px(container, 'paddingBottom');
+            const canvasMaxHeight = Math.max(220, container.clientHeight - canvas.offsetTop - roomBelow);
+            const canvasMaxWidth = container.clientWidth - px(container, 'paddingLeft')
+                - px(container, 'paddingRight') - PLAYFIELD_BEZEL * 2;
+            // Where the board starts, for the shop and end-of-round panels.
+            container.style.setProperty('--board-top', canvas.offsetTop + 'px');
             const aspectRatio = 1.2;
             const size = Math.min(canvasMaxWidth, canvasMaxHeight / aspectRatio);
 
@@ -978,46 +1491,573 @@
             }
         }
 
-        /**
-         * Draws all the pegs on the canvas.
-         */
-        function drawPegs() {
-            const bouncerColor = getComputedStyle(document.documentElement).getPropertyValue('--bouncer-peg-color').trim();
-            const regularColor = getComputedStyle(document.documentElement).getPropertyValue('--peg-color').trim();
+        /* ---------- The arcade look ----------
+           Everything from here to drawBall only draws. None of it feeds
+           back into where a ball goes, which slot it lands in or what
+           that slot pays - the physics and scoring are untouched. */
 
-            pegs.forEach(peg => {
-                ctx.fillStyle = peg.isBouncer ? bouncerColor : regularColor;
-                ctx.beginPath();
-                ctx.arc(peg.x, peg.y, peg.radius, 0, Math.PI * 2);
-                ctx.fill();
-            });
+        // Honour the player's "reduce motion" setting: no shake, flash,
+        // sparks, blinking or rising pop-ups while it's on.
+        const reducedMotionQuery = window.matchMedia
+            ? window.matchMedia('(prefers-reduced-motion: reduce)')
+            : { matches: false };
+        const motionOK = () => !reducedMotionQuery.matches;
+
+        // Neon versions of the site palette (sun, cyan, plum, leaf, berry,
+        // paper and ink), bright enough to glow on the dark playfield.
+        const NEON = {
+            sun:   '#FFC93C',
+            cyan:  '#3FE0FF',
+            plum:  '#D08BE6',
+            green: '#7BE866',
+            red:   '#FF5A4C',
+            paper: '#FAF4E6',
+            ink:   '#1E2226'
+        };
+        const DISPLAY_FONT = 'Bungee, "Plus Jakarta Sans", sans-serif';
+        const JACKPOT_VALUE = Math.max(...SLOT_SCORES); // the $100 slot
+        const PEG_FLASH_MS = 280;
+        const SLOT_FLASH_MS = 750;
+
+        let boardLayer = null;  // the pegs and slots, painted once per board size
+        let litPegs = [];       // pegs a ball has touched in the last moment
+        let slotFlashes = [];   // per slot: when a ball last landed in it
+        let particles = [];     // sparks thrown up out of a slot
+        let popups = [];        // the "+$25" / "-$10" amounts floating up
+        let jackpotFlashAt = -Infinity;
+        let jackpotTimer = null;
+        const cabinet = document.querySelector('.game-container');
+
+        /** "#rrggbb" plus an alpha, as an rgba() string. */
+        function withAlpha(hex, alpha) {
+            const h = hex.replace('#', '');
+            return 'rgba(' + parseInt(h.substring(0, 2), 16) + ',' + parseInt(h.substring(2, 4), 16) + ','
+                + parseInt(h.substring(4, 6), 16) + ',' + alpha + ')';
+        }
+
+        /** Each slot's neon colour, by what it pays - sun gold for the
+            jackpot, red for the slots that take money away. */
+        function slotColor(value) {
+            if (value >= JACKPOT_VALUE) return NEON.sun;
+            if (value >= 50) return NEON.cyan;
+            if (value >= 25) return NEON.green;
+            if (value > 0) return NEON.plum;
+            return NEON.red;
+        }
+
+        /** A rounded-rectangle path, for browsers without ctx.roundRect. */
+        function roundRectPath(g, x, y, w, h, r) {
+            g.beginPath();
+            g.moveTo(x + r, y);
+            g.arcTo(x + w, y, x + w, y + h, r);
+            g.arcTo(x + w, y + h, x, y + h, r);
+            g.arcTo(x, y + h, x, y, r);
+            g.arcTo(x, y, x + w, y, r);
+            g.closePath();
+        }
+
+        /** Paints the parts of the board that never move - the launch
+            rail, the glowing pegs and the slot wells with their prices -
+            onto an off-screen canvas once, so each frame only has to copy
+            it across instead of redrawing a few hundred glows. Rebuilt
+            whenever the board is resized. */
+        function buildBoardLayer() {
+            const w = getCanvasWidth();
+            const h = getCanvasHeight();
+            const dpr = window.devicePixelRatio || 1;
+            const layer = document.createElement('canvas');
+            layer.width = canvas.width;
+            layer.height = canvas.height;
+            const g = layer.getContext('2d');
+            g.scale(dpr, dpr);
+
+            // The launch rail the waiting ball slides along.
+            g.strokeStyle = withAlpha(NEON.cyan, 0.22);
+            g.lineWidth = Math.max(1, 2 * boardScale);
+            g.lineCap = 'round';
+            g.beginPath();
+            g.moveTo(BALL_RADIUS, 20);
+            g.lineTo(w - BALL_RADIUS, 20);
+            g.stroke();
+
+            drawSlotWells(g, w, h);
+            pegs.forEach(peg => drawPegLight(g, peg));
+            boardLayer = layer;
+            litPegs = [];
+            slotFlashes = [];
+        }
+
+        /** One resting peg: a soft halo, the peg itself and a white glint.
+            The harder-bouncing bouncer pegs are green with a ring round
+            them, so players can learn to spot them. */
+        function drawPegLight(g, peg) {
+            const color = peg.isBouncer ? NEON.green : NEON.cyan;
+            const r = peg.radius;
+            const halo = g.createRadialGradient(peg.x, peg.y, 0, peg.x, peg.y, r * 3.6);
+            halo.addColorStop(0, withAlpha(color, peg.isBouncer ? 0.5 : 0.38));
+            halo.addColorStop(1, withAlpha(color, 0));
+            g.fillStyle = halo;
+            g.beginPath();
+            g.arc(peg.x, peg.y, r * 3.6, 0, Math.PI * 2);
+            g.fill();
+            if (peg.isBouncer) {
+                g.strokeStyle = withAlpha(color, 0.75);
+                g.lineWidth = Math.max(1, r * 0.45);
+                g.beginPath();
+                g.arc(peg.x, peg.y, r * 1.9, 0, Math.PI * 2);
+                g.stroke();
+            }
+            g.fillStyle = color;
+            g.beginPath();
+            g.arc(peg.x, peg.y, r, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            g.beginPath();
+            g.arc(peg.x - r * 0.3, peg.y - r * 0.3, r * 0.45, 0, Math.PI * 2);
+            g.fill();
+        }
+
+        /** The slot wells along the bottom: each tinted its own neon colour
+            with a lit lip and its price, the jackpot filled solid gold with
+            a JACKPOT tag over it, and a glowing post between each pair. */
+        function drawSlotWells(g, w, h) {
+            const slotWidth = w / SLOT_COUNT;
+            const slotHeight = 40 * boardScale;
+            const top = h - slotHeight;
+            const lip = Math.max(2, 3 * boardScale);
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+
+            for (let i = 0; i < SLOT_COUNT; i++) {
+                const value = SLOT_SCORES[i];
+                const color = slotColor(value);
+                const x = i * slotWidth;
+                const cx = x + slotWidth / 2;
+                const isJackpot = value === JACKPOT_VALUE;
+
+                const well = g.createLinearGradient(0, top, 0, h);
+                if (isJackpot) {
+                    well.addColorStop(0, '#FFE58A');
+                    well.addColorStop(0.5, NEON.sun);
+                    well.addColorStop(1, '#B47A0C');
+                } else {
+                    well.addColorStop(0, withAlpha(color, 0.32));
+                    well.addColorStop(1, withAlpha(color, 0.04));
+                }
+                g.fillStyle = well;
+                g.fillRect(x, top, slotWidth, slotHeight);
+
+                g.shadowColor = color;
+                g.shadowBlur = 8 * boardScale;
+                g.fillStyle = color;
+                g.fillRect(x, top, slotWidth, lip);
+
+                // The price, shrunk until it fits its slot.
+                const label = fmtMoney(value);
+                let size = Math.max(10, Math.round(15 * boardScale));
+                g.font = size + 'px ' + DISPLAY_FONT;
+                while (size > 7 && g.measureText(label).width > slotWidth * 0.84) {
+                    size--;
+                    g.font = size + 'px ' + DISPLAY_FONT;
+                }
+                const labelY = top + lip + (slotHeight - lip) / 2 + 1;
+                if (isJackpot) {
+                    g.shadowBlur = 0;
+                    g.fillStyle = NEON.ink;
+                } else {
+                    g.shadowBlur = 10 * boardScale;
+                    g.fillStyle = shadeColor(color, 0.45);
+                }
+                g.fillText(label, cx, labelY);
+
+                if (isJackpot) {
+                    let tagSize = Math.max(7, Math.round(9 * boardScale));
+                    g.font = tagSize + 'px ' + DISPLAY_FONT;
+                    while (tagSize > 6 && g.measureText('JACKPOT').width > slotWidth * 1.3) {
+                        tagSize--;
+                        g.font = tagSize + 'px ' + DISPLAY_FONT;
+                    }
+                    g.shadowColor = NEON.sun;
+                    g.shadowBlur = 8 * boardScale;
+                    g.fillStyle = NEON.sun;
+                    g.fillText('JACKPOT', cx, top - tagSize * 0.9);
+                }
+                g.shadowBlur = 0;
+            }
+
+            // Posts between the slots, lit from behind.
+            const postW = Math.max(2, 4 * boardScale);
+            g.fillStyle = NEON.paper;
+            g.shadowColor = withAlpha(NEON.cyan, 0.9);
+            g.shadowBlur = 8 * boardScale;
+            for (let i = 1; i < SLOT_COUNT; i++) {
+                g.fillRect(i * slotWidth - postW / 2, top - 4 * boardScale, postW, slotHeight + 4 * boardScale);
+            }
+            g.shadowBlur = 0;
         }
 
         /**
-         * Draws the slots at the bottom of the board.
+         * Draws all the pegs on the canvas - the cached board (see
+         * buildBoardLayer), then a bright flash on any peg a ball has
+         * just touched, with a ring bursting off a bouncer peg.
+         */
+        function drawPegs() {
+            if (boardLayer) ctx.drawImage(boardLayer, 0, 0, getCanvasWidth(), getCanvasHeight());
+            if (!litPegs.length) return;
+            const now = performance.now();
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            for (let i = litPegs.length - 1; i >= 0; i--) {
+                const peg = litPegs[i];
+                const age = now - peg.litAt;
+                if (age >= PEG_FLASH_MS) {
+                    peg.lit = false;
+                    litPegs.splice(i, 1);
+                    continue;
+                }
+                const k = 1 - age / PEG_FLASH_MS; // 1 the instant it's hit, fading to 0
+                const color = peg.isBouncer ? NEON.green : NEON.sun;
+                const r = peg.radius;
+                const reach = r * (3 + 3 * k);
+                const flash = ctx.createRadialGradient(peg.x, peg.y, 0, peg.x, peg.y, reach);
+                flash.addColorStop(0, 'rgba(255, 255, 255, ' + (0.95 * k) + ')');
+                flash.addColorStop(0.35, withAlpha(color, 0.8 * k));
+                flash.addColorStop(1, withAlpha(color, 0));
+                ctx.fillStyle = flash;
+                ctx.beginPath();
+                ctx.arc(peg.x, peg.y, reach, 0, Math.PI * 2);
+                ctx.fill();
+                if (peg.isBouncer && motionOK()) {
+                    ctx.strokeStyle = withAlpha(NEON.green, k);
+                    ctx.lineWidth = Math.max(1, r * 0.6);
+                    ctx.beginPath();
+                    ctx.arc(peg.x, peg.y, r * (2 + 5 * (1 - k)), 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+        }
+
+        /** Lights a peg up for a moment when a ball touches it. */
+        function markPegHit(peg) {
+            peg.litAt = performance.now();
+            if (!peg.lit) {
+                peg.lit = true;
+                litPegs.push(peg);
+            }
+        }
+
+        /**
+         * Draws the slots' live lighting over the cached board: the
+         * jackpot's slow glow and passing glint, and light flashing up out
+         * of any slot a ball has just landed in.
          */
         function drawSlots() {
-            const canvasWidth = getCanvasWidth();
-            const canvasHeight = getCanvasHeight();
-            const slotWidth = canvasWidth / SLOT_COUNT;
+            const w = getCanvasWidth();
+            const h = getCanvasHeight();
+            const slotWidth = w / SLOT_COUNT;
             const slotHeight = 40 * boardScale;
-            for (let i = 0; i < SLOT_COUNT; i++) {
-                const x = i * slotWidth;
-                ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--slot-divider-color').trim();
-                ctx.lineWidth = Math.max(2, 4 * boardScale);
-                ctx.beginPath();
-                ctx.moveTo(x, canvasHeight - slotHeight);
-                ctx.lineTo(x, canvasHeight);
-                ctx.stroke();
-                const slotValue = SLOT_SCORES[i];
-                ctx.fillStyle = slotValue < 0
-                    ? getComputedStyle(document.documentElement).getPropertyValue('--risk-color').trim()
-                    : getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim();
-                ctx.font = 'bold ' + Math.max(10, Math.round(16 * boardScale)) + 'px "Plus Jakarta Sans"';
-                ctx.textAlign = 'center';
-                const label = slotValue < 0 ? ('-$' + Math.abs(slotValue)) : ('$' + slotValue);
-                ctx.fillText(label, x + slotWidth / 2, canvasHeight - 15 * boardScale);
+            const top = h - slotHeight;
+            const now = performance.now();
+            const moving = motionOK();
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+
+            // The jackpot breathes, with a glint sweeping across it now and then.
+            const jx = SLOT_SCORES.indexOf(JACKPOT_VALUE) * slotWidth;
+            const breath = moving ? 0.5 + 0.5 * Math.sin(now / 320) : 0.5;
+            const auraTop = top - slotHeight * 1.2;
+            const aura = ctx.createLinearGradient(0, auraTop, 0, top);
+            aura.addColorStop(0, withAlpha(NEON.sun, 0));
+            aura.addColorStop(1, withAlpha(NEON.sun, 0.12 + 0.18 * breath));
+            ctx.fillStyle = aura;
+            ctx.fillRect(jx, auraTop, slotWidth, top - auraTop);
+            const sweep = (now % 2600) / 2600; // across in the first 40%, then a pause
+            if (moving && sweep < 0.4) {
+                const sx = jx - slotWidth * 0.3 + (sweep / 0.4) * slotWidth * 1.6;
+                const glint = ctx.createLinearGradient(sx - slotWidth * 0.25, 0, sx + slotWidth * 0.25, 0);
+                glint.addColorStop(0, 'rgba(255, 255, 255, 0)');
+                glint.addColorStop(0.5, 'rgba(255, 255, 255, 0.55)');
+                glint.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = glint;
+                ctx.fillRect(jx, top, slotWidth, slotHeight);
             }
+
+            slotFlashes.forEach((landedAt, i) => {
+                const age = now - landedAt;
+                if (!(age < SLOT_FLASH_MS)) return;
+                const k = 1 - age / SLOT_FLASH_MS;
+                const color = slotColor(SLOT_SCORES[i]);
+                const x = i * slotWidth;
+                const blink = moving ? 0.6 + 0.4 * Math.cos(age / 45) : 1; // flickers as it fades
+                ctx.fillStyle = withAlpha(color, 0.55 * k * blink);
+                ctx.fillRect(x, top, slotWidth, slotHeight);
+                const beamH = slotHeight * 3;
+                const beam = ctx.createLinearGradient(0, top, 0, top - beamH);
+                beam.addColorStop(0, withAlpha(color, 0.45 * k));
+                beam.addColorStop(1, withAlpha(color, 0));
+                ctx.fillStyle = beam;
+                ctx.fillRect(x, top - beamH, slotWidth, beamH);
+            });
+            ctx.restore();
+        }
+
+        /** The moment a ball drops into a slot: the slot lights up, the
+            amount it won (or lost) pops up over it and sparks fly - plus a
+            shake, a flash and the marquee going wild for the jackpot.
+            Called from landed() with the score it has already added. */
+        function celebrateLanding(slotIndex, score, mult) {
+            const slot = Math.max(0, Math.min(SLOT_COUNT - 1, slotIndex));
+            const slotWidth = getCanvasWidth() / SLOT_COUNT;
+            const top = getCanvasHeight() - 40 * boardScale;
+            const cx = slot * slotWidth + slotWidth / 2;
+            const value = SLOT_SCORES[slot];
+            const isJackpot = value === JACKPOT_VALUE;
+            const color = score < 0 ? NEON.red : slotColor(value);
+            const now = performance.now();
+
+            slotFlashes[slot] = now;
+            popups.push({
+                x: cx,
+                y: top - 16 * boardScale,
+                text: (score > 0 ? '+' : '') + fmtMoney(score) + (isJackpot ? '!' : ''),
+                sub: isJackpot ? 'JACKPOT' : (mult > 1 ? mult + 'X BALL' : ''),
+                color,
+                big: isJackpot,
+                born: now
+            });
+            if (popups.length > 8) popups.shift();
+
+            if (!motionOK()) return;
+            const count = isJackpot ? 48 : 14;
+            const s = Math.max(0.7, boardScale);
+            for (let i = 0; i < count; i++) {
+                const angle = -Math.PI / 2 + (Math.random() - 0.5) * (isJackpot ? 2.4 : 1.6);
+                const speed = (isJackpot ? 3 + Math.random() * 5 : 2 + Math.random() * 3) * s;
+                particles.push({
+                    x: cx + (Math.random() - 0.5) * slotWidth * 0.6,
+                    y: top,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    size: (1.5 + Math.random() * 2.5) * s,
+                    color: Math.random() < 0.3 ? NEON.paper : color,
+                    life: 1,
+                    decay: 0.018 + Math.random() * 0.02
+                });
+            }
+            if (particles.length > 220) particles.splice(0, particles.length - 220);
+
+            if (isJackpot) {
+                jackpotFlashAt = now;
+                canvas.classList.remove('is-shaking');
+                void canvas.offsetWidth; // restart the shake if one is already running
+                canvas.classList.add('is-shaking');
+                cabinet.classList.add('is-jackpot');
+                clearTimeout(jackpotTimer);
+                jackpotTimer = setTimeout(() => cabinet.classList.remove('is-jackpot'), 1600);
+            }
+        }
+        canvas.addEventListener('animationend', () => canvas.classList.remove('is-shaking'));
+
+        /** Draws everything that sits on top of the board: the dimmer
+            behind the shop and the end-of-round card, sparks, the pop-up
+            amounts, the jackpot flash, and the "drop a ball" attract text
+            before the first ball of a round. */
+        function drawEffects() {
+            const w = getCanvasWidth();
+            const h = getCanvasHeight();
+            const now = performance.now();
+
+            const idle = !isGameOver && !shopOpen && !roundStarted && balls.length === 0;
+            if (shopOpen || isGameOver) {
+                ctx.fillStyle = 'rgba(6, 5, 10, 0.55)';
+                ctx.fillRect(0, 0, w, h);
+            }
+
+            if (particles.length) {
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+                    p.vy += 0.16 * boardScale;
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life -= p.decay;
+                    if (p.life <= 0) {
+                        particles.splice(i, 1);
+                        continue;
+                    }
+                    ctx.globalAlpha = p.life;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            for (let i = popups.length - 1; i >= 0; i--) {
+                const p = popups[i];
+                const life = p.big ? 1400 : 950;
+                const age = now - p.born;
+                if (age >= life) {
+                    popups.splice(i, 1);
+                    continue;
+                }
+                drawPopup(p, age, life, w);
+            }
+
+            if (motionOK() && now - jackpotFlashAt < 360) {
+                ctx.fillStyle = 'rgba(255, 233, 160, ' + (0.45 * (1 - (now - jackpotFlashAt) / 360)) + ')';
+                ctx.fillRect(0, 0, w, h);
+            }
+
+            if (idle) drawAttract(now, w, h);
+        }
+
+        /** One floating amount: a springy pop in, a slow drift up, then a
+            fade - or, with reduced motion, just a fade where it lands. */
+        function drawPopup(p, age, life, w) {
+            const moving = motionOK();
+            const t = age / life;
+            const base = Math.max(p.big ? 20 : 14, (p.big ? 30 : 19) * boardScale);
+            const pop = moving ? (age < 160 ? 0.5 + 0.75 * (age / 160) : 1.25 - Math.min(0.25, (age - 160) / 400)) : 1;
+            const rise = moving ? t * 50 * boardScale : 0;
+            ctx.save();
+            ctx.globalAlpha = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+            ctx.font = base + 'px ' + DISPLAY_FONT;
+            const half = ctx.measureText(p.text).width / 2 * pop + 6;
+            ctx.translate(Math.min(w - half, Math.max(half, p.x)), p.y - rise);
+            ctx.scale(pop, pop);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = base * 0.24;
+            ctx.strokeStyle = NEON.ink;
+            ctx.strokeText(p.text, 0, 0);
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = p.color;
+            ctx.fillText(p.text, 0, 0);
+            if (p.sub) {
+                ctx.shadowBlur = 0;
+                ctx.font = Math.round(base * 0.45) + 'px ' + DISPLAY_FONT;
+                ctx.lineWidth = base * 0.14;
+                ctx.strokeText(p.sub, 0, -base * 0.8);
+                ctx.fillStyle = NEON.paper;
+                ctx.fillText(p.sub, 0, -base * 0.8);
+            }
+            ctx.restore();
+        }
+
+        /** The attract text before the first ball of a round - "DROP A
+            BALL!" blinking over the board the way an idle arcade machine
+            begs for a player, with the controls spelled out underneath. */
+        function drawAttract(now, w, h) {
+            const title = 'DROP A BALL!';
+            const hint = '← → to aim · ↓ or click to drop';
+            const big = Math.max(16, Math.round(24 * boardScale));
+            const small = Math.max(11, Math.round(12 * boardScale));
+            const hintFont = '700 ' + small + 'px "Plus Jakarta Sans", sans-serif';
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = big + 'px ' + DISPLAY_FONT;
+            const titleW = ctx.measureText(title).width;
+            ctx.font = hintFont;
+            const hintW = ctx.measureText(hint).width;
+            const plateW = Math.min(w - 12, Math.max(titleW, hintW) + 28);
+            const plateH = big + small + 28;
+            const plateY = h * 0.46 - plateH / 2;
+
+            // A dark plate so the text reads over the pegs.
+            roundRectPath(ctx, (w - plateW) / 2, plateY, plateW, plateH, 10);
+            ctx.fillStyle = 'rgba(8, 6, 14, 0.8)';
+            ctx.fill();
+            ctx.strokeStyle = withAlpha(NEON.cyan, 0.6);
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            const titleY = plateY + 11 + big / 2;
+            const lit = !motionOK() || Math.floor(now / 520) % 2 === 0;
+            if (lit) {
+                ctx.font = big + 'px ' + DISPLAY_FONT;
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = big * 0.2;
+                ctx.strokeStyle = NEON.ink;
+                ctx.strokeText(title, w / 2, titleY);
+                ctx.shadowColor = NEON.sun;
+                ctx.shadowBlur = 12;
+                ctx.fillStyle = NEON.sun;
+                ctx.fillText(title, w / 2, titleY);
+                ctx.shadowBlur = 0;
+            }
+            ctx.font = hintFont;
+            ctx.fillStyle = NEON.paper;
+            ctx.fillText(hint, w / 2, titleY + big / 2 + 6 + small / 2);
+            ctx.restore();
+        }
+
+        /** A dotted drop line under the waiting ball, down to the top row
+            of pegs, so it's clear where the next drop will start. */
+        function drawAimGuide(ball) {
+            const firstRow = pegs.length ? pegs[0].y : getCanvasHeight() * 0.15;
+            const from = ball.y + ball.radius + 4;
+            const to = firstRow - PEG_RADIUS * 3;
+            if (to <= from) return;
+            ctx.save();
+            ctx.strokeStyle = withAlpha(NEON.paper, 0.35);
+            ctx.lineWidth = Math.max(1, 1.5 * boardScale);
+            ctx.setLineDash([2 * boardScale + 1, 5 * boardScale + 2]);
+            ctx.lineDashOffset = motionOK() ? -(performance.now() / 30) : 0;
+            ctx.beginPath();
+            ctx.moveTo(ball.x, from);
+            ctx.lineTo(ball.x, to);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        /** Swaps a scoreboard readout's text, with a quick punch of the
+            digits when the number actually changes. */
+        function setReadout(el, text) {
+            if (el.textContent === text) return;
+            el.textContent = text;
+            if (!motionOK()) return;
+            el.classList.remove('is-bumped');
+            void el.offsetWidth; // restart the punch
+            el.classList.add('is-bumped');
+        }
+
+        /** A shower of gold coins the moment the bank reaches the $1,000
+            goal, and the bank panel blazing for a beat. Waits a tick
+            first: a deposit that crosses the goal is followed straight
+            away by the next round's reset, which clears the falling layer. */
+        let lastBankSeen = null;
+        function watchBankGoal() {
+            if (lastBankSeen !== null && lastBankSeen < BANK_GOAL && bankBalance >= BANK_GOAL) {
+                setTimeout(launchCoins, 60);
+            }
+            lastBankSeen = bankBalance;
+        }
+        function launchCoins() {
+            if (!motionOK()) return; // nothing rains down with reduced motion
+            const layer = document.getElementById('confettiLayer');
+            for (let i = 0; i < 36; i++) {
+                const coin = document.createElement('div');
+                coin.className = 'confetti-piece is-coin';
+                coin.style.setProperty('--x', (Math.random() * 100) + 'vw');
+                coin.style.setProperty('--size', (16 + Math.random() * 10) + 'px');
+                coin.style.setProperty('--drift', ((Math.random() - 0.5) * 120) + 'px');
+                coin.style.setProperty('--spin', ((Math.random() < 0.5 ? -1 : 1) * (540 + Math.random() * 540)) + 'deg');
+                coin.style.setProperty('--duration', (1.8 + Math.random() * 1.2) + 's');
+                coin.style.setProperty('--delay', (Math.random() * 0.6) + 's');
+                coin.addEventListener('animationend', () => coin.remove());
+                layer.appendChild(coin);
+            }
+            const bankStat = document.querySelector('.bank-stat');
+            bankStat.classList.remove('goal-hit');
+            void bankStat.offsetWidth;
+            bankStat.classList.add('goal-hit');
         }
 
         /**
@@ -1056,6 +2096,19 @@
             ctx.save();
             if (isPreview) ctx.globalAlpha = 0.6;
 
+            // A neon halo round the ball - steady once it's in play, gently
+            // pulsing while it waits on the launch rail.
+            const glow = isPreview
+                ? (motionOK() ? 0.35 + 0.2 * Math.sin(performance.now() / 200) : 0.4)
+                : 0.55;
+            const halo = ctx.createRadialGradient(ballToDraw.x, ballToDraw.y, r * 0.6, ballToDraw.x, ballToDraw.y, r * 2.4);
+            halo.addColorStop(0, withAlpha(baseColor, glow));
+            halo.addColorStop(1, withAlpha(baseColor, 0));
+            ctx.fillStyle = halo;
+            ctx.beginPath();
+            ctx.arc(ballToDraw.x, ballToDraw.y, r * 2.4, 0, Math.PI * 2);
+            ctx.fill();
+
             const gradient = ctx.createRadialGradient(
                 ballToDraw.x - r * 0.35, ballToDraw.y - r * 0.35, r * 0.05,
                 ballToDraw.x, ballToDraw.y, r
@@ -1089,23 +2142,25 @@
             ctx.restore();
         }
 
-        /** A faint, fading trail of the ball's last few positions - drawn
+        /** A glowing comet trail of the ball's last few positions - drawn
             behind the ball itself each frame so a fast drop or bounce
             reads as motion rather than a series of teleports. Each point
-            is the same ball colour at falling opacity, oldest first. */
-        const TRAIL_LENGTH = 8;
+            is the same ball colour at falling opacity, oldest first, added
+            together ('lighter') so the streak glows where it overlaps. */
+        const TRAIL_LENGTH = 12;
         function drawBallTrail(ballToDraw) {
             const trail = ballToDraw.trail;
             if (!trail || trail.length < 2) return;
             const color = getComputedStyle(document.documentElement).getPropertyValue(ballColorVar(ballToDraw.mult || 1)).trim();
             ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
             for (let i = 0; i < trail.length; i++) {
                 const point = trail[i];
                 const age = (i + 1) / trail.length; // 0 (oldest) .. 1 (newest)
-                ctx.globalAlpha = age * 0.28;
+                ctx.globalAlpha = age * 0.42;
                 ctx.fillStyle = color;
                 ctx.beginPath();
-                ctx.arc(point.x, point.y, ballToDraw.radius * (0.4 + age * 0.5), 0, Math.PI * 2);
+                ctx.arc(point.x, point.y, ballToDraw.radius * (0.3 + age * 0.6), 0, Math.PI * 2);
                 ctx.fill();
             }
             ctx.restore();
@@ -1175,6 +2230,7 @@
                         const overlap = minDistance - distance;
                         currentBall.x += Math.cos(angle) * overlap;
                         currentBall.y += Math.sin(angle) * overlap;
+                        markPegHit(peg); // lights the peg up - drawing only
                     }
                 });
                 if (!currentBall.trail) currentBall.trail = [];
@@ -1190,8 +2246,10 @@
             if (!isGameOver && !shopOpen) {
                 const nextMult = pendingBoosts.length ? pendingBoosts[0] : 1;
                 const previewBall = { x: mousePos.x, y: 20, radius: BALL_RADIUS, mult: nextMult };
+                drawAimGuide(previewBall);
                 drawBall(previewBall, true);
             }
+            drawEffects();
             animationId = requestAnimationFrame(gameLoop);
         }
 
@@ -1206,6 +2264,7 @@
             totalScore += score;
             landedValues.push(score);
             printReceiptLine(landedValues.length, score, mult);
+            celebrateLanding(slotIndex >= 0 ? slotIndex : 0, score, mult); // lights and pop-ups only
 
             balls.splice(index, 1); // Remove the landed ball
             updateUI();
@@ -1261,8 +2320,10 @@
          * Updates the UI elements.
          */
         function updateUI() {
-            totalScoreSpan.textContent = '$' + totalScore;
-            bankBalanceSpan.textContent = '$' + bankBalance;
+            setReadout(totalScoreSpan, '$' + totalScore);
+            setReadout(bankBalanceSpan, '$' + bankBalance);
+            totalScoreSpan.classList.toggle('is-negative', totalScore < 0);
+            bankBalanceSpan.classList.toggle('is-negative', bankBalance < 0);
             gameNumberText.textContent = Math.min(gameNumber, TOTAL_GAMES);
             renderAttemptCircles();
 
@@ -1270,6 +2331,7 @@
             bankGoalFill.style.width = goalPct + '%';
             bankGoalFill.classList.toggle('reached', bankBalance >= BANK_GOAL);
             bankGoalText.textContent = '$' + bankBalance.toLocaleString() + ' / $' + BANK_GOAL.toLocaleString();
+            watchBankGoal();
 
             if (shopOpen) refreshShopButtons();
         }
@@ -1399,7 +2461,7 @@
             game's own palette. Plain DOM/CSS, no canvas or library - each
             piece removes itself once its fall animation ends, and the
             whole thing is skipped for prefers-reduced-motion (see CSS). */
-        const CONFETTI_COLORS = ['#F2C230', '#3A7A37', '#BC3229', '#1B9C93', '#D7EDE8', '#0A5280'];
+        const CONFETTI_COLORS = ['#F5B921', '#17B3CE', '#7A4A86', '#3A7A37', '#BC3229', '#FAF4E6'];
         function launchConfetti() {
             const layer = document.getElementById('confettiLayer');
             const count = 60;
@@ -1505,6 +2567,7 @@
             loadBank();
             setupCanvas();
             createPegs();
+            buildBoardLayer();
             resetGame();
         }
 
@@ -1559,6 +2622,12 @@
         // Start the game
         setupBoard();
         wireEvents();
+
+        // The slot prices are drawn in Bungee - repaint the cached board
+        // once that font has actually arrived.
+        if (document.fonts && document.fonts.load) {
+            document.fonts.load('16px Bungee').then(buildBoardLayer, () => {});
+        }
     })();
 </script>
 

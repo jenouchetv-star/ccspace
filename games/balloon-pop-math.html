@@ -5,791 +5,867 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Balloon Pop Math</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,700&family=Patrick+Hand&display=swap');
 
   :root {
-    --color-pink: #BC3229;
-    --color-blue: #0A5280;
-    --color-green: #3A7A37;
-    --color-yellow: #F2C230;
-    --color-purple: #BFA5E0;
-    --color-orange: #DD7A22;
-    --color-red: #BC3229;
-    --color-teal: #7FD1C1;
     --ink: #1E2226;
-    --cyan-deep: #0A5280;
-    --leaf-deep: #2F6B2C;
     --paper: #FAF4E6;
-    --paper-card: #FFFBF3;
-    --sun: #F2C230;
+    --card: #FFFBF3;
+    --sun: #F5B921;
+    --cyan: #17B3CE;
+    --cyan-deep: #0A5280;
+    --plum: #7A4A86;
+    --leaf: #3A7A37;
+    --leaf-deep: #2F6B2C;
+    --red: #BC3229;
+    --orange: #DD7A22;
+    --mut: #5B6670;
+    --hard: 4px 4px 0 #1E2226;
   }
 
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
   body {
     font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+    color: var(--ink);
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    margin: 0;
-    padding: 20px;
-    background: linear-gradient(180deg, #5FB8E6 0%, #8FD3EE 28%, #CDECE4 62%, var(--paper) 100%);
-    color: var(--ink);
-    overflow: hidden;
-    position: relative;
-    text-align: center;
-    box-sizing: border-box;
+    background: linear-gradient(180deg, #4FA9DE 0%, #7CC8EC 30%, #BDE6EE 64%, #E9F4E4 100%);
   }
 
-  .sun{
-    position:absolute; top:4vmin; right:6vmin; width:9vmin; height:9vmin; min-width:52px; min-height:52px;
-    background:radial-gradient(circle at 35% 35%, #FDE28A, var(--sun) 70%);
-    border-radius:50%; box-shadow:0 0 5vmin rgba(242,194,48,.55);
-    pointer-events:none; z-index:0;
+  /* ---------- the top bar: where you are, your score, your streak ---------- */
+  .hud {
+    position: relative; z-index: 5;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 10px 10px 0; padding: 8px 10px 8px 14px;
+    background: var(--card); border: 3px solid var(--ink); border-radius: 18px; box-shadow: var(--hard);
   }
-
-  .cloud{ position:absolute; background:#fff; border-radius:50%; opacity:.9; pointer-events:none; z-index:0; filter:blur(.2px); }
-  .cloud::before, .cloud::after{ content:''; position:absolute; background:#fff; border-radius:50%; }
-  .cloud--a{ width:9vmin; height:4vmin; top:10vmin; left:-14vmin; animation:cloudDrift 46s linear infinite; }
-  .cloud--a::before{ width:6vmin; height:6vmin; top:-3vmin; left:1vmin; }
-  .cloud--a::after{ width:5vmin; height:5vmin; top:-2vmin; left:5.5vmin; }
-  .cloud--b{ width:7vmin; height:3vmin; top:26vmin; left:-12vmin; animation:cloudDrift 62s linear infinite; animation-delay:-18s; opacity:.75; }
-  .cloud--b::before{ width:4.5vmin; height:4.5vmin; top:-2.2vmin; left:1vmin; }
-  .cloud--b::after{ width:3.5vmin; height:3.5vmin; top:-1.5vmin; left:4vmin; }
-  .cloud--c{ width:11vmin; height:4.5vmin; top:2vmin; left:-16vmin; animation:cloudDrift 54s linear infinite; animation-delay:-30s; opacity:.7; }
-  .cloud--c::before{ width:7vmin; height:7vmin; top:-3.5vmin; left:1.5vmin; }
-  .cloud--c::after{ width:5.5vmin; height:5.5vmin; top:-2.5vmin; left:6.5vmin; }
-
-  @keyframes cloudDrift{
-    0%{ transform:translateX(0); }
-    100%{ transform:translateX(130vw); }
+  .hud__brand { font-weight: 800; font-size: clamp(.95rem, 2.4vh, 1.2rem); letter-spacing: -.02em; white-space: nowrap; }
+  .hud__brand b { color: var(--red); }
+  .hud__progress { flex: 1 1 180px; min-width: 140px; }
+  .hud__label { font-size: .74rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--mut); display: flex; justify-content: space-between; }
+  .bar { height: 12px; border: 2px solid var(--ink); border-radius: 999px; background: #fff; overflow: hidden; margin-top: 4px; }
+  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--sun), var(--orange)); transition: width .4s ease; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    border: 2px solid var(--ink); border-radius: 999px; padding: 4px 12px; font-weight: 800; font-size: .9rem; background: #fff;
   }
-
-  h1 {
-    font-size: 5vmin;
-    color: var(--ink);
-    text-shadow: 0 2px 0 rgba(255, 255, 255, 0.55);
-    margin: 0 0 2vmin;
-    font-weight: 800;
-    position: relative; z-index: 2;
+  .chip svg { width: 18px; height: 18px; }
+  .chip--score { background: #FFF1C4; }
+  .chip--streak { background: #FFD9C2; }
+  .chip--streak.hot { animation: hot .5s ease; }
+  @keyframes hot { 50% { transform: scale(1.18); } }
+  .hud button {
+    font: inherit; font-weight: 800; font-size: .88rem; color: var(--ink); cursor: pointer;
+    border: 2px solid var(--ink); border-radius: 999px; padding: 5px 12px; min-height: 36px;
+    display: inline-flex; align-items: center; gap: 6px;
   }
+  .hud button svg { width: 18px; height: 18px; }
 
-  #prompt {
-    font-size: 4vmin;
-    color: var(--ink);
-    margin-bottom: 3vmin;
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
-    font-weight: 700;
-    position: relative; z-index: 2;
+  /* ---------- the question, and the box to type an answer ---------- */
+  .ask {
+    position: relative; z-index: 5;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    margin: 10px auto 0; padding: 0 10px; width: min(820px, 100%);
   }
-
-  #challenge-counter {
-    font-size: 2.5vmin;
-    color: var(--leaf-deep);
-    font-weight: 800;
-    margin-bottom: 2vmin;
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
-    position: relative; z-index: 2;
+  #question {
+    margin: 0; text-align: center; font-weight: 800; letter-spacing: -.02em; line-height: 1.15;
+    font-size: clamp(1.15rem, 3.6vh, 2rem);
+    background: var(--card); border: 3px solid var(--ink); border-radius: 18px; box-shadow: var(--hard);
+    padding: 10px 20px; width: 100%;
   }
-
-  #keyboard-instructions {
-    position: fixed;
-    left: 50%;
-    bottom: 1.4vmin;
-    transform: translateX(-50%);
-    font-size: clamp(10px, 1.3vmin, 13px);
-    color: var(--ink);
-    opacity: .75;
-    margin: 0;
-    max-width: 94vw;
-    text-align: center;
-    z-index: 2;
-  }
-
-  #answer-form {
-    display: flex;
-    gap: 1.2vmin;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 2vmin;
-    position: relative; z-index: 2;
-  }
-
+  #question .stars { color: var(--sun); -webkit-text-stroke: 1px var(--ink); letter-spacing: .08em; }
+  #answer-form { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  #answer-form label { font-weight: 700; font-size: .9rem; }
   #answer-input {
-    font-family: inherit;
-    font-size: 2.6vmin;
-    font-weight: 700;
-    text-align: center;
-    width: 20vmin;
-    min-width: 140px;
-    padding: 1vmin 1.4vmin;
-    border-radius: 999px;
-    border: 3px solid var(--ink);
-    color: var(--ink);
-    background: var(--paper-card);
-    box-shadow: inset 0 2px 4px rgba(0,0,0,.08);
+    font: inherit; font-weight: 800; font-size: 1.25rem; text-align: center; width: 9em;
+    padding: 8px 14px; border-radius: 999px; border: 3px solid var(--ink); background: #fff; color: var(--ink);
   }
-  #answer-input:focus {
-    outline: 3px solid var(--cyan-deep);
-    outline-offset: 2px;
-  }
-
+  #answer-input::placeholder { font-size: .85rem; font-weight: 600; color: #8a949c; }
   #answer-submit {
-    padding: 1vmin 2.4vmin;
-    font-size: 2.4vmin;
-    background: var(--cyan-deep);
-    border: 2px solid var(--ink);
-    border-radius: 999px;
-    color: #FFF6EE;
-    font-family: inherit;
-    font-weight: 800;
-    cursor: pointer;
-    box-shadow: 0 4px 0 rgba(30,34,38,.4);
+    font: inherit; font-weight: 800; font-size: 1.15rem; color: var(--ink); cursor: pointer;
+    border: 3px solid var(--ink); border-radius: 999px; box-shadow: var(--hard); padding: 8px 22px; min-height: 48px;
+    transition: transform .13s cubic-bezier(.2,.9,.3,1.4), box-shadow .13s;
   }
-  #answer-submit:hover { background: var(--leaf-deep); }
+  #answer-submit:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--ink); }
+  #answer-submit:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
 
-  #game-container {
-    width: 100%;
-    height: 100%;
-    max-width: none;
-    max-height: none;
-    position: relative;
-    overflow: hidden;
-    z-index: 1;
+  /* ---------- the sky the balloons float in ---------- */
+  #sky { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .sun {
+    position: absolute; top: 4%; right: 7%; width: 11vmin; height: 11vmin; min-width: 56px; min-height: 56px; border-radius: 50%;
+    background: radial-gradient(circle at 38% 38%, #FFF0A8, var(--sun) 64%, #E9A100);
+    box-shadow: 0 0 0 10px rgba(245,185,33,.18), 0 0 60px rgba(245,185,33,.55); pointer-events: none;
   }
+  .cloud { position: absolute; left: -30vmin; pointer-events: none; opacity: .92; animation: drift linear infinite; }
+  .cloud svg { display: block; width: 100%; height: auto; }
+  .cloud--1 { top: 6%;  width: 22vmin; animation-duration: 70s; }
+  .cloud--2 { top: 30%; width: 15vmin; animation-duration: 95s; animation-delay: -40s; opacity: .7; }
+  .cloud--3 { top: 52%; width: 26vmin; animation-duration: 120s; animation-delay: -75s; opacity: .55; }
+  @keyframes drift { to { transform: translateX(140vw); } }
+  .hills { position: absolute; left: 0; right: 0; bottom: 0; height: 18%; min-height: 70px; pointer-events: none; }
+  .hills svg { width: 100%; height: 100%; display: block; }
 
-  .balloon {
-    position: absolute;
-    width: 9vmin;
-    height: 10.5vmin;
-    min-width: 56px;
-    min-height: 66px;
-    border-radius: 50% 50% 46% 46% / 62% 62% 38% 38%;
-    color: white;
-    font-size: 4.4vmin;
-    font-weight: 800;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    border: 3px solid rgba(30, 34, 38, .38);
-    box-shadow: inset -6px -8px 0 rgba(0, 0, 0, 0.14), 0 10px 16px rgba(10, 40, 60, 0.22);
-    transition: transform 0.3s ease;
-  }
-
-  .balloon::before{
-    /* wicker basket */
-    content: '';
-    position: absolute;
-    bottom: -30%;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 36%;
-    height: 18%;
-    background: #8A5A2B;
-    border: 2px solid rgba(30,34,38,.4);
-    border-radius: 3px;
-    box-shadow: inset 0 3px 0 rgba(255,255,255,.15), inset 0 -3px 0 rgba(0,0,0,.2);
-  }
-
-  .balloon::after {
-    /* two rigging lines from envelope to basket */
-    content: '';
-    position: absolute;
-    width: 2px;
-    height: 20%;
-    background: rgba(30, 34, 38, .55);
-    bottom: -18%;
-    left: 50%;
-    transform: translateX(-50%);
-    box-shadow: -9px 0 0 rgba(30, 34, 38, .55), 9px 0 0 rgba(30, 34, 38, .55);
-  }
-
-  .balloon:hover {
-    transform: scale(1.1);
-  }
-
-  .popped {
-    animation: popAnim 0.4s forwards;
-    cursor: default;
-  }
-
-  @keyframes popAnim {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.5) rotate(15deg); opacity: 0.6; }
-    100% { transform: scale(0); opacity: 0; }
-  }
-
-  #message {
-    font-size: 3vmin;
-    color: var(--leaf-deep);
-    margin-top: 3vmin;
-    min-height: 4vmin;
-    font-weight: 800;
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
-    position: relative; z-index: 2;
-  }
-
-  #next-btn {
-    padding: 1.5vmin 3vmin;
-    font-size: 2.5vmin;
-    background: var(--cyan-deep);
-    border: 2px solid var(--ink);
-    border-radius: 999px;
-    color: #FFF6EE;
-    font-family: inherit;
-    font-weight: 800;
-    cursor: pointer;
-    box-shadow: 0 4px 0 rgba(30,34,38,.4);
-    user-select: none;
-    transition: transform 0.2s, background 0.2s;
-    margin-top: 2vmin;
-    position: relative; z-index: 2;
-  }
-
-  #next-btn:hover {
-    background: var(--leaf-deep);
-    transform: translateY(-2px);
-  }
-
-  /* Modal styles */
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(20, 30, 38, 0.55);
-    display: none; /* Hidden by default */
-    justify-content: center;
-    align-items: center;
-    z-index: 100;
-  }
-
-  .modal-content {
-    background: var(--paper-card);
-    padding: 4vmin 6vmin;
-    border-radius: 20px;
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
-    text-align: center;
-    transform: scale(0.8);
-    animation: popIn 0.3s forwards;
+  /* a hot-air balloon: a striped envelope with the number, ropes, and a wicker basket */
+  /* .balloon is moved around the sky (its transform); .float inside it bobs gently, so the two never fight */
+  .balloon { position: absolute; left: 0; top: 0; width: clamp(66px, 11vmin, 116px); cursor: pointer; user-select: none; will-change: transform; }
+  .float { display: flex; flex-direction: column; align-items: center; animation: bob 3.2s ease-in-out infinite; animation-delay: var(--d, 0s); }
+  @keyframes bob { 50% { transform: translateY(-6px) rotate(var(--tilt, 1.5deg)); } }
+  .env {
+    position: relative; width: 100%; aspect-ratio: 1 / 1.12;
+    border-radius: 50% 50% 46% 46% / 58% 58% 42% 42%;
     border: 3px solid var(--ink);
-    font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+    background:
+      radial-gradient(circle at 32% 26%, rgba(255,255,255,.85) 0 7%, rgba(255,255,255,0) 18%),
+      repeating-linear-gradient(90deg, var(--c1) 0 20%, var(--c2) 20% 40%);
+    box-shadow: inset -10px -12px 0 rgba(0,0,0,.16), 0 12px 18px rgba(10,40,60,.18);
+    display: grid; place-items: center;
+    transition: transform .15s ease;
   }
-
-  @keyframes popIn {
-    to { transform: scale(1); }
+  .balloon:hover .env { transform: scale(1.07); }
+  .num {
+    font-weight: 800; color: var(--ink); line-height: 1; letter-spacing: -.03em;
+    background: var(--card); border: 2.5px solid var(--ink); border-radius: 999px;
+    padding: .18em .42em; font-size: var(--fs, 1.5rem); box-shadow: 2px 2px 0 var(--ink);
   }
-
-  .modal-content h2 {
-    font-size: 4vmin;
-    color: var(--leaf-deep);
-    font-weight: 800;
-    margin: 0 0 3vmin;
+  .ropes { width: 46%; height: 14px; border-left: 2px solid var(--ink); border-right: 2px solid var(--ink); margin-top: -3px; }
+  .basket {
+    width: 34%; height: 15px; border: 2.5px solid var(--ink); border-radius: 3px 3px 7px 7px;
+    background: repeating-linear-gradient(90deg, #A86B32 0 5px, #8A5426 5px 9px);
   }
-
-  .modal-content p {
-    font-size: 2vmin;
-    margin: 1vmin 0;
-    color: var(--ink);
+  .balloon.wobble .env { animation: wobble .45s ease; }
+  @keyframes wobble { 20% { transform: rotate(-10deg); } 40% { transform: rotate(9deg); } 60% { transform: rotate(-6deg); } 80% { transform: rotate(3deg); } }
+  .balloon .x {
+    position: absolute; top: 18%; left: 50%; transform: translateX(-50%); pointer-events: none;
+    font-size: clamp(2rem, 7vmin, 3.6rem); font-weight: 800; color: var(--red); -webkit-text-stroke: 2px var(--ink);
+    animation: xfade 1s forwards;
   }
-
-  .modal-content button {
-    padding: 2vmin 4vmin;
-    font-size: 3vmin;
-    background: var(--cyan-deep);
-    border: 2px solid var(--ink);
-    border-radius: 999px;
-    color: #FFF6EE;
-    font-family: inherit;
-    font-weight: 800;
-    cursor: pointer;
-    box-shadow: 0 4px 0 rgba(30,34,38,.4);
-    transition: transform 0.2s, background 0.2s;
-    margin-top: 4vmin;
+  @keyframes xfade { to { opacity: 0; transform: translateX(-50%) scale(1.5); } }
+  .balloon.glow .env { box-shadow: 0 0 0 6px var(--sun), 0 0 28px 8px rgba(245,185,33,.85); }
+  .balloon.popped { pointer-events: none; }
+  .balloon.popped .float { animation: none; }
+  .balloon.popped .env { animation: burst .32s ease-out forwards; }
+  .balloon.popped .ropes, .balloon.popped .basket { animation: fall .9s ease-in forwards; }
+  @keyframes burst { 60% { transform: scale(1.35); opacity: .9; } 100% { transform: scale(1.6); opacity: 0; } }
+  @keyframes fall { to { transform: translateY(60vh) rotate(25deg); opacity: 0; } }
+  .bit { position: absolute; width: 10px; height: 10px; border: 2px solid var(--ink); border-radius: 3px; pointer-events: none; animation: fly .8s ease-out forwards; }
+  @keyframes fly { to { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); opacity: 0; } }
+  .plus {
+    position: absolute; pointer-events: none; font-weight: 800; font-size: clamp(1.4rem, 4vmin, 2.2rem);
+    color: var(--leaf); -webkit-text-stroke: 1.5px var(--ink); animation: rise 1s ease-out forwards;
   }
+  @keyframes rise { to { transform: translateY(-70px); opacity: 0; } }
 
-  .modal-content button:hover {
-    background: var(--leaf-deep);
-    transform: translateY(-2px);
+  /* Chike rides along in the corner and talks */
+  .chike { position: absolute; left: 10px; bottom: 6px; z-index: 4; display: flex; align-items: flex-end; gap: 6px; pointer-events: none; }
+  .chike img { width: clamp(78px, 15vh, 140px); height: auto; display: block; filter: drop-shadow(3px 3px 0 rgba(30,34,38,.35)); }
+  .say {
+    max-width: min(340px, 58vw); margin-bottom: clamp(50px, 10vh, 100px);
+    background: var(--card); border: 3px solid var(--ink); border-radius: 16px 16px 16px 4px; box-shadow: var(--hard);
+    padding: 8px 12px; font-weight: 700; font-size: clamp(.82rem, 2vh, 1rem); line-height: 1.3;
+    opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s;
   }
+  .say.on { opacity: 1; transform: none; }
+  .say.good { background: #E1F3D6; }
+  .say.hint { background: #FFF1C4; }
 
-  /* Style for the X marker */
-  .wrong-answer-x {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 8vmin;
-    color: var(--color-red);
-    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
-    pointer-events: none; /* Don't interfere with balloon clicks */
-    animation: fadeOut 1s forwards;
+  /* the "Show me how" button sits beside Pop! */
+  #showBtn {
+    font: inherit; font-weight: 800; font-size: 1rem; color: var(--ink); cursor: pointer;
+    border: 3px solid var(--ink); border-radius: 999px; box-shadow: var(--hard); padding: 8px 16px; min-height: 48px;
+    display: inline-flex; align-items: center; gap: 6px;
   }
+  #showBtn svg { width: 20px; height: 20px; }
+  #showBtn:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--ink); }
 
-  @keyframes fadeOut {
-    0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+  /* Chike's chalkboard: a green board in a wooden frame, written in chalk */
+  .board {
+    position: absolute; z-index: 6; left: clamp(96px, 17vh, 160px); bottom: 14px;
+    width: min(520px, calc(100% - 180px)); max-height: calc(100% - 28px); overflow: auto;
+    background: #24493B; color: #F4F1E6;
+    border: 10px solid #8A5426; border-radius: 14px; box-shadow: 0 0 0 3px var(--ink), 8px 8px 0 3px var(--ink);
+    padding: 12px 16px 14px;
+    background-image: radial-gradient(rgba(255,255,255,.05) 1px, transparent 1.2px); background-size: 6px 6px;
+  }
+  .board[hidden] { display: none; }
+  .board__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .board__head b { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; font-weight: 400; font-size: 1.15rem; letter-spacing: .03em; color: #FFE6A6; }
+  #boardClose { font: inherit; font-weight: 800; color: var(--ink); border: 2px solid var(--ink); border-radius: 999px; width: 34px; height: 34px; padding: 0; cursor: pointer; }
+  .board__q { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; font-size: clamp(1.3rem, 3.4vh, 1.8rem); margin: 4px 0 8px; }
+  .board__q .stars { color: #FFE6A6; }
+  .board__steps { margin: 8px 0 0; padding-left: 1.4em; font-family: 'Patrick Hand', 'Comic Sans MS', cursive; font-size: clamp(1.05rem, 2.6vh, 1.35rem); line-height: 1.35; }
+  .board__steps li { opacity: 0; transform: translateY(4px); animation: chalk .45s ease forwards; animation-delay: calc(var(--i) * .7s + .3s); }
+  .board__steps li:last-child { color: #FFE6A6; }
+  @keyframes chalk { to { opacity: 1; transform: none; } }
+  /* the pictures: columns, a number line, dots, place-value columns */
+  .board__vis:empty { display: none; }
+  .board__vis { display: flex; justify-content: center; margin: 4px 0; font-family: 'Patrick Hand', 'Comic Sans MS', cursive; }
+  .cols { border-collapse: collapse; font-size: clamp(1.4rem, 3.6vh, 2rem); }
+  .cols td { width: 1.1em; text-align: center; padding: 0 .05em; }
+  .cols .op { color: #FFE6A6; }
+  .cols .carry td { font-size: .55em; color: #9FE0F0; height: 1em; }
+  .cols .rule td { border-top: 3px solid #F4F1E6; height: 4px; padding: 0; }
+  .line { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; font-size: clamp(1.1rem, 2.8vh, 1.5rem); }
+  .line span { min-width: 2em; text-align: center; border-bottom: 3px solid rgba(244,241,230,.6); padding: 0 .2em; }
+  .line .from { color: #9FE0F0; border-color: #9FE0F0; }
+  .line .to { color: #FFE6A6; border-color: #FFE6A6; font-weight: 700; }
+  .line .mid { opacity: .7; border-bottom-style: dashed; }
+  .dots { display: grid; grid-template-columns: repeat(var(--c), 1fr); gap: 5px; }
+  .dots i { width: clamp(10px, 1.8vh, 16px); height: clamp(10px, 1.8vh, 16px); border-radius: 50%; background: #FFE6A6; display: block; }
+  .places { border-collapse: collapse; text-align: center; }
+  .places th { font-weight: 400; font-size: .85rem; color: #9FE0F0; padding: 0 8px; }
+  .places td { font-size: clamp(1.5rem, 4vh, 2.2rem); padding: 0 8px; }
+  .places td.hit { color: var(--ink); background: #FFE6A6; border-radius: 10px; }
+  @media (max-width: 640px) {
+    .board { left: 8px; right: 8px; width: auto; bottom: 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .board__steps li { animation: none; opacity: 1; transform: none; } }
+
+  /* ---------- the start box (pick your grade) and the end box ---------- */
+  .over {
+    position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 14px; overflow: auto;
+    background: rgba(20, 40, 60, .42); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  }
+  .over[hidden] { display: none; }
+  .sheet {
+    width: min(720px, 100%); background: var(--card); border: 3px solid var(--ink); border-radius: 24px; box-shadow: 8px 8px 0 var(--ink);
+    padding: clamp(16px, 3.4vh, 28px) clamp(16px, 3vw, 30px); text-align: center; position: relative;
+  }
+  .sheet h1, .sheet h2 { margin: 0; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; }
+  .sheet h1 { font-size: clamp(1.7rem, 5.4vh, 2.8rem); }
+  .sheet h1 b { color: var(--red); }
+  .sheet h2 { font-size: clamp(1.4rem, 4.4vh, 2.2rem); }
+  .lede { margin: 6px 0 14px; color: var(--mut); font-weight: 600; font-size: clamp(.9rem, 2.2vh, 1.05rem); }
+  .hello { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 4px; }
+  .hello img { width: clamp(64px, 12vh, 104px); height: auto; }
+  .resume {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; text-align: left;
+    background: #FFF1C4; border: 3px solid var(--ink); border-radius: 18px; padding: 10px 12px 10px 16px; margin-bottom: 12px;
+  }
+  .resume[hidden] { display: none; }
+  .resume b { display: block; font-size: 1.05rem; }
+  .resume span { font-size: .88rem; font-weight: 600; color: var(--mut); }
+  .resume .big { padding: 10px 26px; min-height: 46px; }
+  .pickline { margin: 0 0 8px; text-align: left; font-weight: 800; font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; color: var(--mut); }
+  .pickline:empty { display: none; }
+  .grades { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .grade {
+    font: inherit; color: var(--ink); cursor: pointer; text-align: left;
+    border: 3px solid var(--ink); border-radius: 18px; box-shadow: var(--hard); padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 2px; min-height: 92px;
+    transition: transform .13s cubic-bezier(.2,.9,.3,1.4), box-shadow .13s;
+  }
+  .grade:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--ink); }
+  .grade:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  .grade b { font-size: clamp(1.1rem, 3vh, 1.45rem); letter-spacing: -.02em; }
+  .grade span { font-size: .8rem; font-weight: 600; line-height: 1.3; }
+  .grade em { font-style: normal; font-size: .72rem; font-weight: 800; margin-top: auto; opacity: .75; }
+  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+  .big {
+    font: inherit; font-weight: 800; font-size: 1.05rem; color: var(--ink); cursor: pointer;
+    border: 3px solid var(--ink); border-radius: 999px; box-shadow: var(--hard); padding: 12px 24px; min-height: 50px;
+  }
+  .tiny { font-size: .8rem; color: var(--mut); font-weight: 600; margin: 12px 0 0; }
+  .medals { display: flex; justify-content: center; gap: 8px; margin: 10px 0 4px; }
+  .medals svg { width: clamp(44px, 9vh, 70px); height: auto; }
+  .medals .off { opacity: .22; }
+  .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .fact { border: 2px solid var(--ink); border-radius: 14px; padding: 8px; background: #fff; }
+  .fact b { display: block; font-size: clamp(1.2rem, 3.4vh, 1.7rem); }
+  .fact span { font-size: .72rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--mut); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 640px) {
+    .hud__brand { display: none; }
+    .grades { grid-template-columns: repeat(2, 1fr); }
+    .grade { min-height: 78px; }
+    #answer-form label { display: none; }
+    .say { margin-bottom: 40px; }
+  }
+  @media (max-height: 560px) {
+    .hello img, .chike img { display: none; }
+    .say { margin-bottom: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cloud, .float, .chip--streak.hot { animation: none !important; }
+    .bar i, .say { transition: none; }
   }
 </style>
-    <link rel="stylesheet" href="game-skin.css">
+<link rel="stylesheet" href="game-skin.css">
 </head>
-<body class="ccs-game ccs-balloon">
+<body class="ccs-game">
 
-  <div class="sun" aria-hidden="true"></div>
-  <div class="cloud cloud--a" aria-hidden="true"></div>
-  <div class="cloud cloud--b" aria-hidden="true"></div>
-  <div class="cloud cloud--c" aria-hidden="true"></div>
+  <!-- the top bar -->
+  <header class="hud">
+    <div class="hud__brand">Balloon <b>Pop</b> Math</div>
+    <div class="hud__progress">
+      <div class="hud__label"><span id="qcount">Question 1 of 25</span><span id="gradeName">Grade 1</span></div>
+      <div class="bar" aria-hidden="true"><i id="barFill"></i></div>
+    </div>
+    <span class="chip chip--score" title="Score"><svg viewBox="0 0 24 24" fill="#F5B921" stroke="#1E2226" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.2 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg><span id="score">0</span><span class="sr"> points</span></span>
+    <span class="chip chip--streak" id="streakChip" title="Right answers in a row"><svg viewBox="0 0 24 24" fill="#DD7A22" stroke="#1E2226" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-10-1 3-3 4-4 4 0-2-1-4-2-5-1 4-4 6-4 11 0 4 3 7 7 7z"/></svg><span id="streak">0</span><span class="sr"> in a row</span></span>
+    <button type="button" id="soundBtn" style="background:#fff" aria-pressed="true"></button>
+    <button type="button" id="gradeBtn" style="background:#B9E7F2">Change grade</button>
+  </header>
 
-  <h1>Balloon Pop Math</h1>
-  <div id="challenge-counter"></div>
-  <div id="prompt"></div>
-  <p id="keyboard-instructions">Playing with a mouse? Click the balloon with the right answer. Playing with a keyboard? Press Enter, type the number, then press Enter to pop it.</p>
-  <form id="answer-form">
-    <label for="answer-input">Type your answer</label>
-    <input type="text" id="answer-input" inputmode="numeric" pattern="-?[0-9]*" autocomplete="off" placeholder="Type answer, press Enter">
-    <button type="submit" id="answer-submit">Pop!</button>
-  </form>
-  <div id="game-container"></div>
-  <div id="message"></div>
-  <button id="next-btn" style="display:none;">Next Round</button>
+  <!-- the question -->
+  <section class="ask">
+    <p id="question" aria-live="polite"></p>
+    <form id="answer-form" autocomplete="off">
+      <label for="answer-input">Type your answer</label>
+      <input type="text" id="answer-input" inputmode="numeric" placeholder="Type it, press Enter" aria-describedby="question">
+      <button type="submit" id="answer-submit" style="background:var(--sun)">Pop!</button>
+      <button type="button" id="showBtn" style="background:#C9E7BC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/><path d="m7 12 3-3 2 2 4-4"/></svg> Show me how</button>
+    </form>
+  </section>
 
-  <!-- The Modal -->
-  <div id="myModal" class="modal-overlay">
-    <div class="modal-content">
-      <h2 id="modal-heading">Great Job!</h2>
-      <p id="modal-question"></p>
-      <p id="modal-answer"></p>
-      <button id="modal-next-btn">Next math challenge</button>
+  <!-- the sky -->
+  <main id="sky">
+    <div class="sun" aria-hidden="true"></div>
+    <div class="cloud cloud--1" aria-hidden="true"><svg viewBox="0 0 120 50"><path d="M20 46h82a16 16 0 0 0 0-32 22 22 0 0 0-41-6 18 18 0 0 0-31 9 15 15 0 0 0-10 29z" fill="#fff"/></svg></div>
+    <div class="cloud cloud--2" aria-hidden="true"><svg viewBox="0 0 120 50"><path d="M20 46h82a16 16 0 0 0 0-32 22 22 0 0 0-41-6 18 18 0 0 0-31 9 15 15 0 0 0-10 29z" fill="#fff"/></svg></div>
+    <div class="cloud cloud--3" aria-hidden="true"><svg viewBox="0 0 120 50"><path d="M20 46h82a16 16 0 0 0 0-32 22 22 0 0 0-41-6 18 18 0 0 0-31 9 15 15 0 0 0-10 29z" fill="#fff"/></svg></div>
+    <div class="hills" aria-hidden="true">
+      <svg viewBox="0 0 1200 160" preserveAspectRatio="none"><path d="M0 90 C 200 20 380 40 560 90 S 900 30 1200 80 V160 H0z" fill="#8BC97A"/><path d="M0 120 C 240 70 420 90 640 125 S 1000 80 1200 115 V160 H0z" fill="#5FAE55"/></svg>
+    </div>
+    <div id="balloons"></div>
+    <!-- Chike's chalkboard: the work for this question, written out step by step -->
+    <section class="board" id="board" aria-labelledby="boardTitle" hidden>
+      <div class="board__head"><b id="boardTitle">Chike shows the work</b><button type="button" id="boardClose" style="background:#FFFBF3" aria-label="Close the chalkboard">✕</button></div>
+      <div class="board__q" id="boardQ"></div>
+      <div class="board__vis" id="boardVis"></div>
+      <ol class="board__steps" id="boardSteps"></ol>
+    </section>
+    <div class="chike" aria-hidden="true">
+      <img id="chikeImg" src="../assets/characters/chike-pose-wave.png" alt="" width="378" height="391">
+      <div class="say" id="say"></div>
+    </div>
+  </main>
+  <p class="sr" id="live" aria-live="assertive"></p>
+
+  <!-- pick your grade -->
+  <div class="over" id="start" role="dialog" aria-modal="true" aria-labelledby="startTitle">
+    <div class="sheet">
+      <div class="hello">
+        <img src="../assets/characters/chike-pose-wave.png" alt="" width="378" height="391">
+        <div>
+          <h1 id="startTitle">Balloon <b>Pop</b> Math</h1>
+          <p class="lede">Pick your grade, then pop the balloon with the right answer!</p>
+        </div>
+      </div>
+      <div class="resume" id="resume" hidden>
+        <div><b>Pick up where you left off</b><span id="resumeText"></span></div>
+        <button type="button" class="big" id="resumeBtn" style="background:var(--sun)">Continue</button>
+      </div>
+      <p class="pickline" id="startPick"></p>
+      <div class="grades" id="grades"></div>
+      <p class="tiny">25 questions a round. Click a balloon, or type the answer and press Enter.</p>
     </div>
   </div>
 
-  <script>
-    // Get all the DOM elements and store them in constants
-    const container = document.getElementById("game-container");
-    const promptEl = document.getElementById("prompt");
-    const messageEl = document.getElementById("message");
-    const modal = document.getElementById("myModal");
-    const modalHeadingEl = document.getElementById("modal-heading");
-    const modalQuestionEl = document.getElementById("modal-question");
-    const modalAnswerEl = document.getElementById("modal-answer");
-    const modalNextBtn = document.getElementById("modal-next-btn");
-    const counterEl = document.getElementById("challenge-counter");
-    const answerForm = document.getElementById("answer-form");
-    const answerInput = document.getElementById("answer-input");
+  <!-- the end of a round -->
+  <div class="over" id="done" role="dialog" aria-modal="true" aria-labelledby="doneTitle" hidden>
+    <div class="sheet">
+      <h2 id="doneTitle">Round complete!</h2>
+      <div class="medals" id="medals"></div>
+      <p class="lede" id="doneText"></p>
+      <div class="facts">
+        <div class="fact"><b id="fScore">0</b><span>Score</span></div>
+        <div class="fact"><b id="fFirst">0</b><span>Right first try</span></div>
+        <div class="fact"><b id="fStreak">0</b><span>Best streak</span></div>
+      </div>
+      <div class="row">
+        <button type="button" class="big" id="again" style="background:var(--sun)">Play again</button>
+        <button type="button" class="big" id="regrade" style="background:#fff">Change grade</button>
+      </div>
+    </div>
+  </div>
 
-    // Array of colors for the balloons
-    const colors = [
-      'var(--color-pink)',
-      'var(--color-blue)',
-      'var(--color-green)',
-      'var(--color-yellow)',
-      'var(--color-purple)',
-      'var(--color-orange)',
-      'var(--color-red)',
-      'var(--color-teal)'
-    ];
+<script>
+(function(){
+"use strict";
 
-    // Array of names for the word problems
-    const wordProblemNames = ["Chike", "Zecharai", "Kaleb", "Kelysta", "Gabby", "Olivia", "Chloe", "Alexus"];
+/* =====================================================================
+   THE MATH: what each grade is asked. Every maker returns
+   { q: the question, a: the answer, hint, say: what Chike says after,
+     choices: (optional) the eight balloon numbers when they must be special }
+   ===================================================================== */
+/* BEGIN math */
+const R = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const fmt = (n) => Number(n).toLocaleString("en-US");
+const NAMES = ["Chike", "Zech", "Averi", "Corey", "Kylah", "Mateo", "Stacey", "Yuna"];
+const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+const PLACES = { ones: 1, tens: 10, hundreds: 100, thousands: 1000, "ten thousands": 10000 };
+const digitAt = (n, place) => Math.floor(n / PLACES[place]) % 10;
 
-    let balloons = [];
-    let targetNumber = null;
-    let poppedCount = 0;
-    const speed = 0.5; // Constant speed for all balloons
-    const repulsionForce = 0.1; // Reduced repulsion force for smoother separation
-    let animationFrameId = null; // Variable to store the animation frame ID
-    let currentChallenge = 0;
-    const totalChallenges = 50;
-    const NUM_BALLOONS = 8; // Constant for the number of balloons
+/* ---------- showing the work: the steps Chike writes on the chalkboard, and a picture of the math ----------
+   Each is { steps: [...lines], vis: html }. The last step always says the answer. */
+const PLACE_NAMES = ["ones", "tens", "hundreds", "thousands", "ten thousands"];
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+/* the sum written in columns: carries on top, the two numbers, a line, the answer */
+function columnVis(a, b, sign, ans, marks){
+  const w = Math.max(String(a).length, String(b).length, String(ans).length) + 1;
+  const row = (n, lead) => { const s = String(n).padStart(w - 1, " "); return `<tr><td class="op">${lead || ""}</td>${[...s].map((c) => `<td>${c.trim()}</td>`).join("")}</tr>`; };
+  const top = `<tr class="carry"><td></td>${Array.from({ length: w - 1 }, (_, i) => `<td>${marks[w - 2 - i] || ""}</td>`).join("")}</tr>`;
+  return `<table class="cols">${top}${row(a)}${row(b, sign)}<tr class="rule"><td colspan="${w}"></td></tr>${row(ans)}</table>`;
+}
+function addWork(a, b){
+  if (a + b <= 20) return countWork(a, b, 1);
+  const steps = [], marks = []; let x = a, y = b, carry = 0, i = 0;
+  while (x > 0 || y > 0 || carry){
+    const da = x % 10, db = y % 10, s = da + db + carry;
+    steps.push(`${cap(PLACE_NAMES[i])}: ${da} + ${db}${carry ? " + 1 carried" : ""} = ${s}${s >= 10 ? `. Write ${s % 10}, carry 1.` : "."}`);
+    carry = s >= 10 ? 1 : 0; marks[i + 1] = carry ? "1" : "";
+    x = Math.floor(x / 10); y = Math.floor(y / 10); i++;
+  }
+  steps.push(`So ${fmt(a)} + ${fmt(b)} = ${fmt(a + b)}.`);
+  return { steps, vis: columnVis(a, b, "+", a + b, marks) };
+}
+function subWork(a, b){
+  if (a <= 20) return countWork(a, b, -1);
+  const steps = [], marks = []; let x = a, y = b, borrow = 0, i = 0;
+  while (x > 0){
+    const raw = x % 10, da = raw - borrow, db = y % 10;
+    if (x < 10 && y === 0 && da === 0) break;
+    if (da < 0){
+      /* a 0 that already lent 1: it borrows from the next place too, so it becomes 10 − 1 = 9 */
+      steps.push(`${cap(PLACE_NAMES[i])}: the 0 lent 1, so it borrows from the ${PLACE_NAMES[i + 1]}: 9 − ${db} = ${9 - db}.`); borrow = 1; marks[i] = "9";
+    } else if (da < db){ steps.push(`${cap(PLACE_NAMES[i])}: ${da} − ${db} won't go, so borrow 1 from the ${PLACE_NAMES[i + 1]}: ${da + 10} − ${db} = ${da + 10 - db}.`); borrow = 1; marks[i] = String(da + 10); }
+    else { steps.push(`${cap(PLACE_NAMES[i])}: ${borrow ? `the ${raw} lent 1, so it is ${da} now. ` : ""}${da} − ${db} = ${da - db}.`); borrow = 0; }
+    x = Math.floor(x / 10); y = Math.floor(y / 10); i++;
+  }
+  steps.push(`So ${fmt(a)} − ${fmt(b)} = ${fmt(a - b)}.`);
+  return { steps, vis: columnVis(a, b, "−", a - b, marks) };
+}
+/* counting on (or back) along a number line, for small numbers */
+function countWork(a, b, dir){
+  const end = a + dir * b, nums = [];
+  for (let n = a; dir > 0 ? n <= end : n >= end; n += dir) nums.push(n);
+  const vis = `<div class="line">${nums.map((n, i) => `<span class="${i === 0 ? "from" : i === nums.length - 1 ? "to" : ""}">${n}</span>`).join("")}</div>`;
+  return { steps: [`Start at ${a}.`, `Count ${dir > 0 ? "up" : "back"} ${b}: ${nums.slice(1).join(", ")}.`, `You land on ${end}. So ${a} ${dir > 0 ? "+" : "−"} ${b} = ${end}.`], vis };
+}
+/* a grid of dots: rows × columns */
+function dotsVis(rows, cols){ return `<div class="dots" style="--c:${cols}">${Array.from({ length: rows * cols }, () => "<i></i>").join("")}</div>`; }
+function mulWork(a, b){
+  if (a <= 10 && b <= 10) return { steps: [`Make ${a} rows of ${b} dots.`, `Count by ${b}s: ${Array.from({ length: a }, (_, i) => (i + 1) * b).join(", ")}.`, `So ${a} × ${b} = ${a * b}.`], vis: dotsVis(a, b) };
+  const t = a - (a % 10), o = a % 10;
+  return { steps: [`Break ${fmt(a)} into ${fmt(t)} and ${o}.`, `${fmt(t)} × ${b} = ${fmt(t * b)}.`, `${o} × ${b} = ${o * b}.`, `Add them: ${fmt(t * b)} + ${o * b} = ${fmt(a * b)}.`, `So ${fmt(a)} × ${b} = ${fmt(a * b)}.`] };
+}
+function divWork(n, b){
+  const q = n / b;
+  if (q <= 10 && b <= 10) return { steps: [`Share ${n} dots into ${b} equal rows.`, `Each row gets ${q}.`, `Check: ${b} × ${q} = ${n}. So ${n} ÷ ${b} = ${q}.`], vis: dotsVis(b, q) };
+  const steps = []; let left = n, total = 0;
+  for (const p of [100, 10, 1]){
+    const k = Math.floor(left / (b * p)) * p;
+    if (k){ steps.push(`${b} × ${fmt(k)} = ${fmt(b * k)}. That leaves ${fmt(left)} − ${fmt(b * k)} = ${fmt(left - b * k)}.`); left -= b * k; total += k; }
+  }
+  steps.push(`Add up the parts: ${fmt(total)}. So ${fmt(n)} ÷ ${b} = ${fmt(q)}.`);
+  return { steps };
+}
+function placeVis(n, place){
+  const digits = String(n).split(""), names = digits.map((_, i) => PLACE_NAMES[digits.length - 1 - i]);
+  return `<table class="places"><tr>${names.map((p) => `<th>${p}</th>`).join("")}</tr><tr>${digits.map((d, i) => `<td class="${names[i] === place ? "hit" : ""}">${d}</td>`).join("")}</tr></table>`;
+}
 
-    // Function to get a random gradient color
-    function getRandomColor() {
-      const randomIndex = Math.floor(Math.random() * colors.length);
-      const startColor = colors[randomIndex];
-      const endColor = colors[(randomIndex + 1) % colors.length];
-      return `radial-gradient(circle at 30% 30%, ${startColor} 40%, ${endColor})`;
-    }
+const add = (a, b) => ({ q: `${fmt(a)} + ${fmt(b)}`, a: a + b, hint: a + b <= 20 ? `Start at ${a} and count up ${b} more.` : "Add the ones first, then the tens (and hundreds).", say: `${fmt(a)} + ${fmt(b)} = ${fmt(a + b)}`, work: addWork(a, b) });
+const sub = (a, b) => ({ q: `${fmt(a)} − ${fmt(b)}`, a: a - b, hint: a <= 20 ? `Start at ${a} and count back ${b}.` : "Take away the ones first, then the tens. Borrow a ten if you need to.", say: `${fmt(a)} − ${fmt(b)} = ${fmt(a - b)}`, work: subWork(a, b) });
+const mul = (a, b) => ({ q: `${fmt(a)} × ${fmt(b)}`, a: a * b, hint: a <= 10 && b <= 10 ? `Think of ${a} groups of ${b}.` : `Break it apart: ${fmt(a)} × ${b} is ${fmt(a - (a % 10))} × ${b} plus ${a % 10} × ${b}.`, say: `${fmt(a)} × ${fmt(b)} = ${fmt(a * b)}`, work: mulWork(a, b) });
+const div = (n, b) => ({ q: `${fmt(n)} ÷ ${b}`, a: n / b, hint: `What number times ${b} makes ${fmt(n)}?`, say: `${fmt(n)} ÷ ${b} = ${fmt(n / b)}`, work: divWork(n, b) });
+function placeQ(n, place){
+  const d = digitAt(n, place);
+  return { q: `Which digit is in the ${place} place of ${fmt(n)}?`, a: d, choices: digitChoices(d), hint: `Read the places from the right: ones, tens, hundreds${n >= 1000 ? ", thousands" : ""}${n >= 10000 ? ", ten thousands" : ""}.`, say: `In ${fmt(n)}, the ${place} digit is ${d}.`,
+    work: { steps: [`Write each digit under its place, starting with ones on the right.`, `Find the ${place} column.`, `The digit there is ${d}.`], vis: placeVis(n, place) } };
+}
+function seqQ(step, start){
+  const s = [start, start + step, start + 2 * step, start + 3 * step, start + 4 * step];
+  return { q: `What is missing? ${fmt(s[0])}, ${fmt(s[1])}, __, ${fmt(s[3])}, ${fmt(s[4])}`, a: s[2], hint: `Each number is ${step} more than the one before.`, say: `${fmt(s[1])} + ${step} = ${fmt(s[2])}`,
+    work: { steps: [`${fmt(s[0])} to ${fmt(s[1])} is +${step}. So is ${fmt(s[3])} to ${fmt(s[4])}.`, `The pattern is +${step} each time.`, `${fmt(s[1])} + ${step} = ${fmt(s[2])}.`], vis: `<div class="line">${s.map((n, i) => `<span class="${i === 2 ? "to" : ""}">${fmt(n)}</span>`).join("")}</div>` } };
+}
+function roundQ(n, to){
+  const r = Math.round(n / to) * to, lo = Math.floor(n / to) * to, hi = lo + to, mid = lo + to / 2;
+  return { q: `Round ${fmt(n)} to the nearest ${fmt(to)}.`, a: r, choices: spread(r, [r - to, r + to, n, r - 2 * to, r + 2 * to, Math.floor(n / to) * to === r ? r + to : Math.floor(n / to) * to]), hint: `Look at the digit to the right of the ${to === 10 ? "tens" : to === 100 ? "hundreds" : "thousands"} place. 5 or more rounds up.`, say: `${fmt(n)} rounds to ${fmt(r)}.`,
+    work: { steps: [`${fmt(n)} is between ${fmt(lo)} and ${fmt(hi)}.`, `Halfway is ${fmt(mid)}.`, n >= mid ? `${fmt(n)} is at or past halfway, so it rounds up to ${fmt(hi)}.` : `${fmt(n)} is before halfway, so it rounds down to ${fmt(lo)}.`],
+      vis: `<div class="line"><span class="${r === lo ? "to" : ""}">${fmt(lo)}</span><span class="mid">${fmt(mid)}</span><span class="from">${fmt(n)}</span><span class="${r === hi ? "to" : ""}">${fmt(hi)}</span></div>` } };
+}
+function wordAdd(){ const n = pick(NAMES), a = R(3, 9), b = R(2, 9), t = pick(["apples", "crayons", "stickers", "shells"]); return { q: `${n} has ${a} ${t} and finds ${b} more. How many now?`, a: a + b, hint: `Add them: ${a} + ${b}.`, say: `${a} + ${b} = ${a + b} ${t}.`, work: { steps: [`"Finds more" means add.`, ...addWork(a, b).steps], vis: addWork(a, b).vis } }; }
+function wordSub(){ const n = pick(NAMES), a = R(8, 18), b = R(2, 7), t = pick(["marbles", "blocks", "toy cars", "cookies"]); return { q: `${n} has ${a} ${t} and gives away ${b}. How many are left?`, a: a - b, hint: `Take away: ${a} − ${b}.`, say: `${a} − ${b} = ${a - b} ${t}.`, work: { steps: [`"Gives away" means take away.`, ...subWork(a, b).steps], vis: subWork(a, b).vis } }; }
+function wordBig(){ const n = pick(NAMES), a = R(24, 65), b = R(12, 34), t = pick(["stickers", "beads", "cards", "points"]); const w = addWork(a, b); return { q: `${n} has ${a} ${t} and gets ${b} more. How many now?`, a: a + b, hint: "Add the tens, then the ones.", say: `${a} + ${b} = ${a + b} ${t}.`, work: { steps: [`"Gets more" means add.`, ...w.steps], vis: w.vis } }; }
+function wordMul(){ const a = R(3, 9), b = R(3, 9), t = pick([["bags", "apples"], ["boxes", "crayons"], ["rows", "chairs"], ["packs", "cards"]]); const w = mulWork(a, b); return { q: `There are ${a} ${t[0]} with ${b} ${t[1]} in each. How many ${t[1]}?`, a: a * b, hint: `${a} groups of ${b}: ${a} × ${b}.`, say: `${a} × ${b} = ${a * b} ${t[1]}.`, work: { steps: [`${a} ${t[0]} of ${b} is ${a} × ${b}.`, ...w.steps], vis: w.vis } }; }
+function wordDiv(){ const b = R(3, 9), q = R(4, 12), n = b * q; const w = divWork(n, b); return { q: `${fmt(n)} stickers are shared equally by ${b} friends. How many each?`, a: q, hint: `${fmt(n)} ÷ ${b}: what times ${b} makes ${fmt(n)}?`, say: `${fmt(n)} ÷ ${b} = ${q} each.`, work: { steps: [`Sharing equally means divide: ${fmt(n)} ÷ ${b}.`, ...w.steps], vis: w.vis } }; }
 
-    // Function to create a new balloon element
-    function createBalloon(number) {
-      const balloon = document.createElement("div");
-      balloon.className = "balloon";
-      balloon.textContent = number;
-      balloon.style.background = getRandomColor();
-      balloon.dataset.number = number;
-      balloon.radius = balloon.offsetWidth / 2;
+const GRADES = [
+  { id: "k", name: "Kindergarten", short: "K", bg: "#FFE6A6", about: "Counting, adding and taking away to 10", makers: [
+    () => { const n = R(3, 10); return { q: `How many stars? <span class="stars">${"★".repeat(n)}</span>`, a: n, hint: "Point at each star as you count: 1, 2, 3…", say: `There are ${n} stars.`, html: true }; },
+    () => { const a = R(1, 5), b = R(1, 5); return add(a, b); },
+    () => { const a = R(3, 10), b = R(1, a - 1); return sub(a, b); },
+    () => { const n = R(1, 19); return { q: `What number comes after ${n}?`, a: n + 1, hint: `Count: …${n}, then?`, say: `After ${n} comes ${n + 1}.` }; },
+    () => { const n = R(2, 20); return { q: `What number comes before ${n}?`, a: n - 1, hint: `Count back from ${n}.`, say: `Before ${n} comes ${n - 1}.` }; },
+    () => { let a = R(1, 20), b = R(1, 20); while (b === a) b = R(1, 20); const big = Math.max(a, b); return { q: `Which is bigger: ${a} or ${b}?`, a: big, hint: "The bigger number comes later when you count.", say: `${big} is bigger.` }; },
+    () => { const a = R(1, 9); return { q: `${a} + ? = 10`, a: 10 - a, hint: `Count up from ${a} to 10.`, say: `${a} + ${10 - a} = 10` }; }
+  ]},
+  { id: "1", name: "1st grade", short: "1st", bg: "#B9E7F2", about: "Adding and taking away to 20, tens and ones", makers: [
+    () => { const a = R(3, 12), b = R(2, 20 - a); return add(a, b); },
+    () => { const a = R(9, 20), b = R(2, 9); return sub(a, b); },
+    () => { const a = R(2, 10), s = R(a + 2, 20); return { q: `${a} + ? = ${s}`, a: s - a, hint: `Count up from ${a} to ${s}.`, say: `${a} + ${s - a} = ${s}` }; },
+    () => { const t = R(1, 9), o = R(0, 9); return { q: `What number is ${t} tens and ${o} ones?`, a: 10 * t + o, hint: `${t} tens is ${t * 10}. Add ${o}.`, say: `${t} tens and ${o} ones is ${10 * t + o}.` }; },
+    () => { const n = R(11, 89), up = Math.random() < .5; return { q: `What is 10 ${up ? "more" : "less"} than ${n}?`, a: up ? n + 10 : n - 10, hint: `Only the tens digit changes: it goes ${up ? "up" : "down"} by 1.`, say: `10 ${up ? "more" : "less"} than ${n} is ${up ? n + 10 : n - 10}.` }; },
+    () => seqQ(1, R(10, 90)),
+    wordAdd, wordSub
+  ]},
+  { id: "2", name: "2nd grade", short: "2nd", bg: "#C9E7BC", about: "Adding and taking away to 100, place value", makers: [
+    () => { const a = R(12, 68), b = R(11, 99 - a); return add(a, b); },
+    () => { const a = R(30, 99), b = R(11, a - 5); return sub(a, b); },
+    () => placeQ(R(100, 999), pick(["ones", "tens", "hundreds"])),
+    () => { const st = pick([2, 5, 10, 100]); return seqQ(st, st * R(1, 9)); },
+    () => { const even = R(5, 49) * 2, odds = []; while (odds.length < 7){ const o = R(5, 49) * 2 + 1; if (!odds.includes(o)) odds.push(o); } return { q: "Pop the even number.", a: even, choices: [even, ...odds], hint: "Even numbers end in 0, 2, 4, 6 or 8.", say: `${even} is even: it ends in ${even % 10}.` }; },
+    wordBig
+  ]},
+  { id: "3", name: "3rd grade", short: "3rd", bg: "#F8C0B9", about: "Times tables, dividing, rounding", makers: [
+    () => mul(R(2, 10), R(2, 10)),
+    () => { const b = R(2, 10), q = R(2, 10); return div(b * q, b); },
+    () => { const a = R(2, 10), b = R(2, 10); return { q: `${a} × ? = ${a * b}`, a: b, hint: `Count by ${a}s until you reach ${a * b}.`, say: `${a} × ${b} = ${a * b}` }; },
+    () => Math.random() < .5 ? roundQ(R(12, 98), 10) : roundQ(R(120, 980), 100),
+    () => { const a = R(100, 600), b = R(100, 999 - a); return add(a, b); },
+    () => { const a = R(300, 999), b = R(100, a - 50); return sub(a, b); },
+    wordMul
+  ]},
+  { id: "4", name: "4th grade", short: "4th", bg: "#D9C2E3", about: "Bigger times tables, factors, multiples", makers: [
+    () => mul(R(12, 99), R(3, 9)),
+    () => { const b = R(3, 9), q = R(12, 99); return div(b * q, b); },
+    () => { const N = pick([12, 18, 20, 24, 30, 36, 40, 42, 48]), fs = [], non = []; for (let i = 2; i < N + 12; i++){ (N % i === 0 ? fs : non).push(i); } const f = pick(fs.filter((x) => x <= N / 2)); const others = shuffle(non).slice(0, 7); return { q: `Pop a factor of ${N}.`, a: f, choices: [f, ...others], hint: `A factor of ${N} divides it with nothing left over.`, say: `${N} ÷ ${f} = ${N / f}, so ${f} is a factor of ${N}.` }; },
+    () => { const k = R(3, 9), m = k * R(3, 12), others = []; while (others.length < 7){ const x = R(Math.max(2, m - 30), m + 30); if (x % k && !others.includes(x)) others.push(x); } return { q: `Pop a multiple of ${k}.`, a: m, choices: [m, ...others], hint: `Multiples of ${k} are in the ${k} times table.`, say: `${k} × ${m / k} = ${m}` }; },
+    () => roundQ(R(1100, 9899), 1000),
+    () => placeQ(R(10000, 99999), pick(["thousands", "hundreds", "ten thousands", "tens"])),
+    () => { const a = R(1200, 5800), b = R(1100, 9999 - a); return add(a, b); }
+  ]},
+  { id: "5", name: "5th grade", short: "5th", bg: "#FFD9C2", about: "Big multiplying and dividing, order of operations", makers: [
+    () => mul(R(11, 25), R(11, 19)),
+    () => { const b = R(3, 9), q = R(21, 111); return div(b * q, b); },
+    () => { const a = R(2, 20), b = R(2, 9), c = R(2, 9); return { q: `${a} + ${b} × ${c}`, a: a + b * c, choices: spread(a + b * c, [(a + b) * c, a + b + c, a * b + c]), hint: "Multiply before you add.", say: `${b} × ${c} = ${b * c}, then ${a} + ${b * c} = ${a + b * c}.` }; },
+    () => { const n = R(2, 99), k = R(1, 3), p = 10 ** k; return { q: `${n} × ${fmt(p)}`, a: n * p, choices: spread(n * p, [n * p / 10, n * p * 10, n + p]), hint: `Multiplying by ${fmt(p)} adds ${k} zero${k > 1 ? "s" : ""} to the end.`, say: `${n} × ${fmt(p)} = ${fmt(n * p)}` }; },
+    () => { const [x, y] = pick([[12, 18], [16, 24], [20, 30], [24, 36], [15, 25], [14, 21], [18, 27], [28, 42], [30, 45]]), g = gcd(x, y); return { q: `What is the greatest common factor of ${x} and ${y}?`, a: g, hint: `Find the biggest number that divides both ${x} and ${y}.`, say: `${g} divides ${x} and ${y}, and no bigger number does.` }; },
+    () => { const n = R(3, 12); return { q: `What is ${n}²?`, a: n * n, choices: spread(n * n, [n * 2, n * n + n, (n - 1) * (n - 1)]), hint: `${n}² means ${n} × ${n}.`, say: `${n} × ${n} = ${n * n}` }; },
+    wordDiv
+  ]}
+];
 
-      let initialX, initialY;
-      let overlapping = true;
-      let attempts = 0;
+function shuffle(arr){ const a = arr.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+/* eight balloons: the answer, any near-misses given, then nearby numbers so a guess is never obvious */
+function spread(ans, near){
+  const out = [ans];
+  const add1 = (n) => { if (Number.isInteger(n) && n >= 0 && !out.includes(n) && out.length < 8) out.push(n); };
+  (near || []).forEach(add1);
+  const step = ans >= 1000 ? 100 : ans >= 100 ? 10 : 1;
+  [1, -1, 2, -2, 10, -10, 3, -3].forEach((d) => add1(ans + d * step));
+  if (ans >= 10){ const s = String(ans), sw = s.length > 1 ? Number(s.slice(0, -2) + s.slice(-1) + s.slice(-2, -1)) : ans; add1(sw); }
+  let guard = 0;
+  while (out.length < 8 && guard++ < 200) add1(ans + R(-6, 6) * step);
+  return out;
+}
+function digitChoices(d){ return [d, ...shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter((x) => x !== d)).slice(0, 7)]; }
+/* END math */
 
-      // Attempt to place the balloon without overlapping
-      while (overlapping && attempts < 100) {
-        initialX = Math.random() * (container.clientWidth - balloon.offsetWidth);
-        initialY = Math.random() * (container.clientHeight - balloon.offsetHeight);
-        overlapping = false;
-        for (const existingBalloon of balloons) {
-          const dx = (initialX + balloon.offsetWidth / 2) - (existingBalloon.posX + existingBalloon.offsetWidth / 2);
-          const dy = (initialY + balloon.offsetHeight / 2) - (existingBalloon.posY + existingBalloon.offsetHeight / 2);
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          if (distance < (balloon.offsetWidth / 2 + existingBalloon.offsetWidth / 2) * 1.5) {
-            overlapping = true;
-            break;
-          }
-        }
-        attempts++;
-      }
+/* =====================================================================
+   SOUND: made in the browser, no files. On unless the player turns it off.
+   ===================================================================== */
+let ctx = null, soundOn = true;
+try { soundOn = localStorage.getItem("bpm-sound") !== "off"; } catch (e) {}
+function audio(){ if (!ctx){ const A = window.AudioContext || window.webkitAudioContext; if (A) ctx = new A(); } if (ctx && ctx.state === "suspended") ctx.resume(); return ctx; }
+function tone(freq, start, dur, type, vol, slideTo){
+  const c = audio(); if (!c) return;
+  const o = c.createOscillator(), g = c.createGain(), t = c.currentTime + start;
+  o.type = type || "sine"; o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || .18, t + .01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + .02);
+}
+function noise(start, dur, vol){
+  const c = audio(); if (!c) return;
+  const len = Math.floor(c.sampleRate * dur), buf = c.createBuffer(1, len, c.sampleRate), data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime + start;
+  f.type = "highpass"; f.frequency.value = 900; g.gain.value = vol || .35;
+  s.buffer = buf; s.connect(f).connect(g).connect(c.destination); s.start(t);
+}
+const SFX = {
+  pop(){ noise(0, .09, .4); tone(700, 0, .12, "triangle", .14, 180); },
+  right(){ tone(784, .05, .12, "triangle", .16); tone(988, .14, .12, "triangle", .16); tone(1319, .23, .22, "triangle", .16); },
+  wrong(){ tone(240, 0, .22, "sine", .14, 150); },
+  streak(){ [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, i * .06, .14, "square", .05)); },
+  done(){ [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, i * .13, .2, "triangle", .15)); }
+};
+function play(name){ if (soundOn) { try { SFX[name](); } catch (e) {} } }
 
-      balloon.style.left = `${initialX}px`;
-      balloon.style.top = `${initialY}px`;
+/* =====================================================================
+   THE GAME
+   ===================================================================== */
+const $ = (id) => document.getElementById(id);
+const TOTAL = 25, N_BALLOONS = 8;
+const REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const COLORS = [["#F2C230", "#DD7A22"], ["#17B3CE", "#0A5280"], ["#BC3229", "#F8C0B9"], ["#3A7A37", "#C9E7BC"], ["#7A4A86", "#D9C2E3"], ["#DD7A22", "#FFE6A6"], ["#0A5280", "#B9E7F2"], ["#F8C0B9", "#BC3229"]];
+const sky = $("balloons"), qEl = $("question"), input = $("answer-input");
+let grade = null, cur = null, qNum = 0, score = 0, streak = 0, bestStreak = 0, firstTries = 0, misses = 0, busy = false, recent = [];
+let balloons = [], raf = 0, sayTimer = 0;
 
-      // Store position and velocity for physics simulation
-      balloon.posX = parseFloat(balloon.style.left);
-      balloon.posY = parseFloat(balloon.style.top);
+function bestKey(){ return "bpm-best-" + grade.id; }
+function getBest(g){ try { return Number(localStorage.getItem("bpm-best-" + g.id)) || 0; } catch (e) { return 0; } }
 
-      // Create a random initial velocity vector and normalize it to a constant speed
-      const angle = Math.random() * Math.PI * 2;
-      balloon.velX = Math.cos(angle) * speed;
-      balloon.velY = Math.sin(angle) * speed;
+/* ---------- a saved place: the round in progress, kept on this device so a player can pick up where they left off ---------- */
+const SAVE_KEY = "bpm-save";
+function saveGame(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ g: grade.id, q: qNum, score, streak, bestStreak, firstTries, at: Date.now() })); } catch (e) {}
+}
+function loadSave(){
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
+    if (!s || !GRADES.some((g) => g.id === s.g) || !(s.q >= 1 && s.q <= TOTAL)) return null;
+    return s;
+  } catch (e) { return null; }
+}
+function clearSave(){ try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 
-      // Add a click listener to the balloon
-      balloon.addEventListener("click", () => {
-        if (!balloon.classList.contains("popped")) {
-          handleBalloonClick(balloon);
-        }
-      });
-      container.appendChild(balloon);
-      return balloon;
-    }
+/* ---------- the grade picker ---------- */
+function drawGrades(){
+  const s = loadSave(), sg = s && GRADES.find((g) => g.id === s.g);
+  $("resume").hidden = !s;
+  if (s){
+    $("resumeText").textContent = `${sg.name}, question ${s.q} of ${TOTAL}, ${s.score} points`;
+    $("startPick").textContent = "Or start a new round:";
+  } else $("startPick").textContent = "";
+  $("grades").innerHTML = GRADES.map((g, i) => {
+    const best = getBest(g);
+    return `<button type="button" class="grade" data-i="${i}" style="background:${g.bg}"><b>${g.name}</b><span>${g.about}</span>${best ? `<em>Best score: ${best}</em>` : "<em>&nbsp;</em>"}</button>`;
+  }).join("");
+}
+$("grades").addEventListener("click", (e) => {
+  const b = e.target.closest(".grade"); if (!b) return;
+  audio();                                   /* a tap starts the sound */
+  grade = GRADES[Number(b.dataset.i)];
+  startRound();
+});
+$("resumeBtn").addEventListener("click", () => {
+  const s = loadSave(); if (!s) return;
+  audio();
+  grade = GRADES.find((g) => g.id === s.g);
+  startRound(s);
+});
 
-    // Function to generate a shuffled array of numbers with a guaranteed target
-    function getNumbersForChallenge(target, range) {
-        const numbers = new Set();
-        numbers.add(target);
-        while (numbers.size < NUM_BALLOONS) {
-            numbers.add(Math.floor(Math.random() * range) + 1);
-        }
-        const shuffledNumbers = [...numbers];
-        for (let i = shuffledNumbers.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [shuffledNumbers[i], shuffledNumbers[j]] = [shuffledNumbers[j], shuffledNumbers[i]];
-        }
-        return shuffledNumbers;
-    }
+/* a new round, or (with a saved place) the round picked up at the question it was on */
+function startRound(saved){
+  qNum = 0; score = 0; streak = 0; bestStreak = 0; firstTries = 0; recent = [];
+  if (saved){ qNum = saved.q - 1; score = saved.score || 0; streak = saved.streak || 0; bestStreak = saved.bestStreak || 0; firstTries = saved.firstTries || 0; }
+  $("start").hidden = true; $("done").hidden = true;
+  $("gradeName").textContent = grade.name;
+  $("score").textContent = score; $("streak").textContent = streak;
+  chike("wave", saved ? `Welcome back! You were on question ${saved.q}. Let's keep going!` : `Let's go! ${grade.name} math. Pop the right balloon!`, "", 2800);
+  nextQuestion();
+  input.focus();
+}
 
-    // Function to handle a balloon click
-    function handleBalloonClick(balloon) {
-      const num = Number(balloon.dataset.number);
-      let isCorrect = false;
+function nextQuestion(){
+  qNum++;
+  if (qNum > TOTAL) return finish();
+  misses = 0; busy = false; hideWork();
+  let q, tries = 0;
+  do { q = pick(grade.makers)(); } while (recent.includes(q.q) && ++tries < 20);
+  recent.push(q.q); if (recent.length > 8) recent.shift();
+  cur = q;
+  saveGame();                                /* the place is kept after every answer, so closing the game loses nothing */
+  if (q.html) qEl.innerHTML = q.q; else qEl.textContent = q.q;
+  $("qcount").textContent = `Question ${qNum} of ${TOTAL}`;
+  $("barFill").style.width = ((qNum - 1) / TOTAL * 100) + "%";
+  makeBalloons(shuffle(q.choices ? q.choices.slice(0, N_BALLOONS) : spread(q.a)));
+}
 
-      // Check if the prompt is for "greater than" or a specific number
-      const promptText = promptEl.textContent.toLowerCase();
-
-      // Handle greater/less than problems first
-      if (promptText.includes("greater than")) {
-        isCorrect = num > targetNumber;
-      } else if (promptText.includes("less than")) {
-        isCorrect = num < targetNumber;
-      }
-      // Handle place value problems
-      else if (promptText.includes("number in the ones place")) {
-        // The previous bug was here. Corrected to check the ones digit of the target number
-        isCorrect = num === (targetNumber % 10);
-      } else if (promptText.includes("number in the tens place")) {
-        // The previous bug was here. Corrected to check the tens digit of the target number
-        isCorrect = num === Math.floor(targetNumber / 10);
-      }
-      // All other problems, including addition, subtraction, word problems, and "tens and ones" grouping
-      else {
-        isCorrect = num === targetNumber;
-      }
-
-      if (isCorrect) {
-        balloon.classList.add("popped");
-        poppedCount++;
-        balloon.style.pointerEvents = "none";
-
-        // Check if all correct balloons have been popped
-        let totalCorrect = 1;
-        if (promptText.includes("greater than")) {
-          totalCorrect = balloons.filter(b => Number(b.dataset.number) > targetNumber).length;
-        } else if (promptText.includes("less than")) {
-          totalCorrect = balloons.filter(b => Number(b.dataset.number) < targetNumber).length;
-        }
-
-        if (poppedCount === totalCorrect) {
-          endRound(true);
-        }
-      } else {
-        messageEl.textContent = "Oops! Try again!";
-        messageEl.style.color = '#C13B31';
-
-        // Add the 'X' marker
-        const xMarker = document.createElement("div");
-        xMarker.className = "wrong-answer-x";
-        xMarker.textContent = "X";
-        balloon.appendChild(xMarker);
-
-        // Remove the 'X' after a short delay
-        setTimeout(() => {
-          xMarker.remove();
-          messageEl.textContent = "";
-        }, 1500);
-      }
-    }
-
-    // Function to handle a typed keyboard answer - same correctness rules as
-    // clicking a balloon (handleBalloonClick), driven by #answer-input
-    // instead of a click. If the typed number matches a balloon still on
-    // screen, popping it goes through the exact same code path as a click,
-    // so scoring/round-completion stay in one place.
-    function submitTypedAnswer() {
-      const raw = answerInput.value.trim();
-      answerInput.value = "";
-      if (raw === "" || modal.style.display === "flex") return;
-      const num = Number(raw);
-      if (Number.isNaN(num)) return;
-      const matchingBalloon = balloons.find(b => Number(b.dataset.number) === num && !b.classList.contains("popped"));
-      if (matchingBalloon) {
-        handleBalloonClick(matchingBalloon);
-      } else {
-        messageEl.textContent = "That number isn't floating up there. Try again!";
-        messageEl.style.color = '#C13B31';
-        setTimeout(() => { messageEl.textContent = ""; }, 1500);
-      }
-    }
-    answerForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      submitTypedAnswer();
-    });
-    // Pressing Enter anywhere on the page (not already typing in the input)
-    // moves focus into it, matching the on-screen instructions: the first
-    // Enter "opens" the answer box, typing fills it in, and the second
-    // Enter (the form submit above) pops the matching balloon.
-    document.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter") return;
-      if (document.activeElement === answerInput) return;
-      if (modal.style.display === "flex") return;
-      e.preventDefault();
-      answerInput.focus();
-    });
-
-    // Function to handle the end of a round
-    function endRound(success) {
-      if (success) {
-        // Check if the game is complete
-        if (currentChallenge >= totalChallenges) {
-          modalHeadingEl.textContent = "Congratulations!";
-          modalQuestionEl.textContent = "You've completed all 50 challenges!";
-          modalAnswerEl.textContent = "Great job on your math skills!";
-          modalNextBtn.style.display = "none"; // Hide the button
-        } else {
-          // Update the modal with the question and correct answer
-          modalHeadingEl.textContent = "Great Job!";
-          modalQuestionEl.textContent = `Question: ${promptEl.textContent}`;
-          modalAnswerEl.textContent = `Correct Answer: ${targetNumber}`;
-          modalNextBtn.textContent = "Next math challenge";
-          modalNextBtn.style.display = "block";
-        }
-        modal.style.display = "flex";
-        // Keep the modal reachable by keyboard once it's up - the button
-        // is the only thing in it, so it's also where focus should land.
-        if (modalNextBtn.style.display !== "none") modalNextBtn.focus();
-      }
-    }
-
-    // Function to set the game prompt for the round
-    function setPrompt() {
-      const challengeType = Math.floor(Math.random() * 8); // 0-7 for different challenges
-      let numbers = [];
-      let tempNum;
-
-      const randomName = wordProblemNames[Math.floor(Math.random() * wordProblemNames.length)];
-
-      switch(challengeType) {
-        case 0:
-          // Basic addition facts within 20
-          let num1 = Math.floor(Math.random() * 10) + 1;
-          let num2 = Math.floor(Math.random() * 10) + 1;
-          targetNumber = num1 + num2;
-          promptEl.textContent = `Pop the balloon that is ${num1} + ${num2}`;
-          numbers = getNumbersForChallenge(targetNumber, 20);
-          break;
-        case 1:
-          // Subtraction facts within 20
-          tempNum = Math.floor(Math.random() * 15) + 5;
-          let tempNum2 = Math.floor(Math.random() * 4) + 1;
-          targetNumber = tempNum - tempNum2;
-          promptEl.textContent = `Pop the balloon that is ${tempNum} - ${tempNum2}`;
-          numbers = getNumbersForChallenge(targetNumber, 15);
-          break;
-        case 2:
-          // Place value - ones digit
-          tempNum = Math.floor(Math.random() * 89) + 11;
-          targetNumber = tempNum;
-          promptEl.textContent = `Pop the number in the ones place of ${tempNum}`;
-          // Generate numbers for the ones place challenge
-          numbers = getNumbersForChallenge(targetNumber % 10, 9);
-          break;
-        case 3:
-          // Place value - tens digit
-          tempNum = Math.floor(Math.random() * 89) + 11;
-          targetNumber = tempNum;
-          promptEl.textContent = `Pop the number in the tens place of ${tempNum}`;
-          // Generate numbers for the tens place challenge
-          numbers = getNumbersForChallenge(Math.floor(targetNumber / 10), 9);
-          break;
-        case 4:
-          // Word problem - combining
-          let obj1 = Math.floor(Math.random() * 5) + 2;
-          let obj2 = Math.floor(Math.random() * 5) + 2;
-          const items = ["apples", "crayons", "pencils", "cookies"];
-          const item = items[Math.floor(Math.random() * items.length)];
-          targetNumber = obj1 + obj2;
-          promptEl.textContent = `${randomName} has ${obj1} ${item} and finds ${obj2} more. Pop the total.`;
-          numbers = getNumbersForChallenge(targetNumber, 15);
-          break;
-        case 5:
-          // Word problem - taking away
-          let obj3 = Math.floor(Math.random() * 5) + 5;
-          let obj4 = Math.floor(Math.random() * 4) + 1;
-          const items2 = ["marbles", "stickers", "blocks", "toy cars"];
-          const item2 = items2[Math.floor(Math.random() * items2.length)];
-          targetNumber = obj3 - obj4;
-          promptEl.textContent = `${randomName} has ${obj3} ${item2} and gives away ${obj4}. Pop what's left.`;
-          numbers = getNumbersForChallenge(targetNumber, 10);
-          break;
-        case 6:
-          // Number sequence
-          let startNum = Math.floor(Math.random() * 30) + 10;
-          let endNum = startNum + 4;
-          targetNumber = startNum + 2;
-          promptEl.textContent = `Pop the missing number in the sequence: ${startNum}, ${startNum+1}, __, ${endNum-1}, ${endNum}`;
-          numbers = getNumbersForChallenge(targetNumber, 10);
-          break;
-        case 7:
-          // Grouping tens and ones
-          let tens = Math.floor(Math.random() * 5) + 1;
-          let ones = Math.floor(Math.random() * 9);
-          targetNumber = (tens * 10) + ones;
-          promptEl.textContent = `Pop the number that is ${tens} tens and ${ones} ones.`;
-          numbers = getNumbersForChallenge(targetNumber, 50);
-          break;
-      }
-      messageEl.textContent = "";
-      poppedCount = 0;
-      generateBalloons(numbers);
-    }
-
-    // Function to generate new balloons
-    function generateBalloons(numbers) {
-      container.innerHTML = "";
-      balloons = [];
-      numbers.forEach(num => {
-        balloons.push(createBalloon(num));
-      });
-    }
-
-    // Function to check for balloon collisions and apply physics
-    function checkBalloonCollisions() {
-      for (let i = 0; i < balloons.length; i++) {
-        for (let j = i + 1; j < balloons.length; j++) {
-          const b1 = balloons[i];
-          const b2 = balloons[j];
-
-          if (b1.classList.contains("popped") || b2.classList.contains("popped")) continue;
-
-          // Calculate the distance and vector between balloon centers
-          const dx = (b1.posX + b1.offsetWidth / 2) - (b2.posX + b2.offsetWidth / 2);
-          const dy = (b1.posY + b1.offsetHeight / 2) - (b2.posY + b2.offsetHeight / 2);
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          const sumOfRadii = (b1.offsetWidth + b2.offsetWidth) / 2;
-
-          // If the balloons are too close or touching
-          if (distance < sumOfRadii) {
-            // Apply a gentle repulsion force to prevent overlap
-            const overlap = sumOfRadii - distance;
-            const separationX = (dx / distance) * overlap;
-            const separationY = (dy / distance) * overlap;
-
-            // Adjust positions to prevent overlap
-            b1.posX += separationX * repulsionForce;
-            b1.posY += separationY * repulsionForce;
-            b2.posX -= separationX * repulsionForce;
-            b2.posY -= separationY * repulsionForce;
-
-            // Simplified elastic collision
-            const temp_velX = b1.velX;
-            const temp_velY = b1.velY;
-            b1.velX = b2.velX;
-            b1.velY = b2.velY;
-            b2.velX = temp_velX;
-            b2.velY = temp_velY;
-          }
-        }
-      }
-    }
-
-    // The main animation loop
-    function animateBalloons() {
-      balloons.forEach(balloon => {
-        if (!balloon.classList.contains("popped")) {
-          let newX = balloon.posX + balloon.velX;
-          let newY = balloon.posY + balloon.velY;
-
-          const balloonWidth = balloon.offsetWidth;
-          const balloonHeight = balloon.offsetHeight;
-
-          // Check for collision with container boundaries
-          if (newX + balloonWidth > container.clientWidth || newX < 0) {
-            balloon.velX = -balloon.velX;
-            newX = Math.max(0, Math.min(newX, container.clientWidth - balloonWidth));
-          }
-          if (newY + balloonHeight > container.clientHeight || newY < 0) {
-            balloon.velY = -balloon.velY;
-            newY = Math.max(0, Math.min(newY, container.clientHeight - balloonHeight));
-          }
-
-          // Update position
-          balloon.posX = newX;
-          balloon.posY = newY;
-          balloon.style.left = `${newX}px`;
-          balloon.style.top = `${newY}px`;
-
-          // Normalize the velocity to maintain a constant speed
-          const currentSpeed = Math.sqrt(balloon.velX * balloon.velX + balloon.velY * balloon.velY);
-          if (currentSpeed > 0) {
-            balloon.velX = (balloon.velX / currentSpeed) * speed;
-            balloon.velY = (balloon.velY / currentSpeed) * speed;
-          }
-        }
-      });
-      // Call the collision detection function
-      checkBalloonCollisions();
-      animationFrameId = requestAnimationFrame(animateBalloons);
-    }
-
-    // Function to start a new game round
-    function startGame() {
-      // Cancel any existing animation frame to prevent multiple loops
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-      modal.style.display = "none";
-      currentChallenge++;
-      counterEl.textContent = `Challenge ${currentChallenge} of ${totalChallenges}`;
-      setPrompt();
-      animateBalloons();
-      answerInput.focus();
-    }
-
-    // Call startGame() and set up event listeners once the window has loaded
-    window.onload = function() {
-      modalNextBtn.addEventListener("click", startGame);
-      startGame();
+/* ---------- balloons ---------- */
+function makeBalloons(nums){
+  sky.innerHTML = ""; balloons = [];
+  const W = sky.clientWidth, H = $("sky").clientHeight;
+  const cols = W < 520 ? 3 : 4, rows = Math.ceil(nums.length / cols);
+  const order = shuffle(COLORS);
+  nums.forEach((n, i) => {
+    const el = document.createElement("div");
+    el.className = "balloon";
+    const [c1, c2] = order[i % order.length];
+    const text = fmt(n), len = text.replace(/,/g, "").length;
+    el.style.setProperty("--c1", c1); el.style.setProperty("--c2", c2);
+    el.style.setProperty("--fs", len <= 2 ? "clamp(1.1rem,4.2vmin,2rem)" : len === 3 ? "clamp(.95rem,3.4vmin,1.6rem)" : len === 4 ? "clamp(.8rem,2.8vmin,1.3rem)" : "clamp(.7rem,2.3vmin,1.1rem)");
+    el.style.setProperty("--d", (-Math.random() * 3).toFixed(2) + "s");
+    el.style.setProperty("--tilt", (Math.random() < .5 ? -1 : 1) * (1 + Math.random() * 2) + "deg");
+    el.innerHTML = `<div class="float"><div class="env"><span class="num">${text}</span></div><div class="ropes"></div><div class="basket"></div></div>`;
+    el.dataset.n = n;
+    el.addEventListener("click", () => tryAnswer(el));
+    sky.appendChild(el);
+    /* spread them over a loose grid so none starts on top of another */
+    const bw = el.offsetWidth || 90, bh = el.offsetHeight || 120;
+    const cw = W / cols, ch = Math.max(bh, (H * .78) / rows);
+    const col = i % cols, row = Math.floor(i / cols);
+    const b = {
+      el, n, w: bw, h: bh,
+      x: Math.max(4, Math.min(W - bw - 4, col * cw + (cw - bw) / 2 + R(-20, 20))),
+      y: Math.max(4, Math.min(H * .82 - bh, row * ch + R(4, 30))),
+      vx: (Math.random() - .5) * .5, vy: (Math.random() - .5) * .4
     };
-  </script>
+    if (REDUCED){ b.vx = 0; b.vy = 0; }
+    place(b); balloons.push(b);
+  });
+  cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+}
+function place(b){ b.el.style.transform = `translate(${b.x}px, ${b.y}px)`; }
+function tick(){
+  const W = sky.clientWidth, H = $("sky").clientHeight * .84;
+  for (const b of balloons){
+    if (b.gone) continue;
+    b.x += b.vx; b.y += b.vy;
+    if (b.x < 2 || b.x + b.w > W - 2){ b.vx *= -1; b.x = Math.max(2, Math.min(b.x, W - b.w - 2)); }
+    if (b.y < 2 || b.y + b.h > H){ b.vy *= -1; b.y = Math.max(2, Math.min(b.y, H - b.h)); }
+  }
+  /* balloons nudge each other apart instead of overlapping */
+  for (let i = 0; i < balloons.length; i++) for (let j = i + 1; j < balloons.length; j++){
+    const a = balloons[i], c = balloons[j]; if (a.gone || c.gone) continue;
+    const dx = (a.x + a.w / 2) - (c.x + c.w / 2), dy = (a.y + a.h / 2) - (c.y + c.h / 2), d = Math.hypot(dx, dy) || 1, min = (a.w + c.w) / 2;
+    if (d < min){ const k = (min - d) / d * .05; a.x += dx * k; a.y += dy * k; c.x -= dx * k; c.y -= dy * k; }
+  }
+  balloons.forEach((b) => { if (!b.gone) place(b); });
+  raf = requestAnimationFrame(tick);
+}
+
+/* ---------- answering ---------- */
+function tryAnswer(el){
+  if (busy || !cur || el.classList.contains("popped")) return;
+  const n = Number(el.dataset.n);
+  if (n === cur.a) right(el); else wrong(el);
+}
+function right(el){
+  busy = true;
+  const b = balloons.find((x) => x.el === el); if (b) b.gone = true;
+  el.classList.add("popped"); play("pop");
+  const pts = (misses ? 5 : 10) + Math.min(streak, 5) * 2;
+  if (!misses){ firstTries++; streak++; bestStreak = Math.max(bestStreak, streak); } else streak = 0;
+  score += pts;
+  $("score").textContent = score; $("streak").textContent = streak;
+  burst(el, pts);
+  setTimeout(() => play("right"), 120);
+  if (streak && streak % 5 === 0){ setTimeout(() => play("streak"), 420); const c = $("streakChip"); c.classList.remove("hot"); void c.offsetWidth; c.classList.add("hot"); }
+  const cheer = streak >= 5 ? `${streak} in a row!` : pick(["Yes!", "Nice!", "You got it!", "Great job!", "Super!"]);
+  chike("thumbs-up", `${cheer} ${cur.say}`, "good", 1700);
+  $("live").textContent = `Right! ${cur.say}`;
+  $("barFill").style.width = (qNum / TOTAL * 100) + "%";
+  setTimeout(nextQuestion, 1500);
+}
+function wrong(el){
+  misses++; streak = 0; $("streak").textContent = "0";
+  play("wrong");
+  el.classList.remove("wobble"); void el.offsetWidth; el.classList.add("wobble");
+  const x = document.createElement("div"); x.className = "x"; x.textContent = "✕"; el.appendChild(x); setTimeout(() => x.remove(), 1000);
+  if (misses === 2) chike("point", `Hint: ${cur.hint} Stuck? Press Show me how.`, "hint", 6000);
+  else if (misses === 3) showWork();
+  else if (misses > 3){
+    const good = balloons.find((b) => b.n === cur.a); if (good) good.el.classList.add("glow");
+    chike("point", "Look for the glowing balloon.", "hint", 4000);
+  } else chike("wave", "Not that one. Try again!", "", 1600);
+  $("live").textContent = "Not that one. Try again.";
+}
+/* ---------- Chike's chalkboard: the work for this question, step by step ----------
+   Opening it before answering counts like a miss (5 points, the streak stops), so it helps without being free. */
+function showWork(){
+  if (!cur || busy) return;
+  const w = cur.work || { steps: [cur.hint, cur.say + "."] };
+  if (!misses) misses = 1;
+  streak = 0; $("streak").textContent = "0";
+  if (cur.html) $("boardQ").innerHTML = cur.q; else $("boardQ").textContent = cur.q;
+  $("boardVis").innerHTML = w.vis || "";
+  $("boardSteps").innerHTML = w.steps.map((s, i) => `<li style="--i:${i}">${s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c])}</li>`).join("");
+  $("board").hidden = false;
+  clearTimeout(sayTimer); $("say").className = "say";               /* Chike points at the board instead of talking */
+  $("chikeImg").src = "../assets/characters/chike-pose-point.png";
+  $("live").textContent = "Chike shows the work: " + w.steps.join(" ");
+  $("boardClose").focus();
+}
+function hideWork(){ if ($("board").hidden) return; $("board").hidden = true; $("chikeImg").src = "../assets/characters/chike-pose-wave.png"; }
+$("showBtn").addEventListener("click", showWork);
+$("boardClose").addEventListener("click", () => { hideWork(); input.focus(); });
+
+function burst(el, pts){
+  const r = el.getBoundingClientRect(), s = $("sky").getBoundingClientRect();
+  const cx = r.left - s.left + r.width / 2, cy = r.top - s.top + r.height * .4;
+  const plus = document.createElement("div"); plus.className = "plus"; plus.textContent = "+" + pts;
+  plus.style.left = (cx - 20) + "px"; plus.style.top = (cy - 30) + "px"; $("sky").appendChild(plus); setTimeout(() => plus.remove(), 1000);
+  if (REDUCED) return;
+  const cols = ["#F5B921", "#17B3CE", "#BC3229", "#3A7A37", "#7A4A86", "#fff"];
+  for (let i = 0; i < 18; i++){
+    const p = document.createElement("div"); p.className = "bit";
+    const a = Math.random() * Math.PI * 2, d = 50 + Math.random() * 90;
+    p.style.left = cx + "px"; p.style.top = cy + "px"; p.style.background = pick(cols);
+    p.style.setProperty("--dx", Math.cos(a) * d + "px"); p.style.setProperty("--dy", Math.sin(a) * d + "px"); p.style.setProperty("--r", R(-360, 360) + "deg");
+    $("sky").appendChild(p); setTimeout(() => p.remove(), 850);
+  }
+}
+/* typing an answer pops the matching balloon, or wobbles the closest wrong one */
+$("answer-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const raw = input.value.replace(/[,\s]/g, ""); input.value = "";
+  if (raw === "" || !cur || busy) return;
+  const n = Number(raw); if (!Number.isFinite(n)) return;
+  const hit = balloons.find((b) => b.n === n && !b.gone);
+  if (hit) tryAnswer(hit.el);
+  else { misses++; streak = 0; $("streak").textContent = "0"; play("wrong"); chike("wave", `${fmt(n)} isn't on a balloon. Look again!`, "", 1800); }
+});
+/* Enter anywhere jumps into the answer box */
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || !$("start").hidden || !$("done").hidden) return;
+  if (document.activeElement === input || (document.activeElement && document.activeElement.tagName === "BUTTON")) return;
+  e.preventDefault(); input.focus();
+});
+
+/* ---------- Chike ---------- */
+function chike(pose, text, kind, ms){
+  $("chikeImg").src = "../assets/characters/chike-pose-" + pose + ".png";
+  const s = $("say"); s.textContent = text; s.className = "say on" + (kind ? " " + kind : "");
+  clearTimeout(sayTimer);
+  sayTimer = setTimeout(() => { s.className = "say"; $("chikeImg").src = "../assets/characters/chike-pose-wave.png"; }, ms || 2000);
+}
+
+/* ---------- the end of a round ---------- */
+function finish(){
+  busy = true; cancelAnimationFrame(raf); sky.innerHTML = "";
+  clearSave();                               /* a finished round has nothing to come back to */
+  $("barFill").style.width = "100%";
+  const stars = firstTries >= TOTAL * .9 ? 3 : firstTries >= TOTAL * .7 ? 2 : 1;
+  const prev = getBest(grade), isBest = score > prev;
+  if (isBest){ try { localStorage.setItem(bestKey(), String(score)); } catch (e) {} }
+  const star = (on) => `<svg viewBox="0 0 24 24" class="${on ? "" : "off"}" fill="#F5B921" stroke="#1E2226" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z"/></svg>`;
+  $("medals").innerHTML = star(true) + star(stars >= 2) + star(stars >= 3);
+  $("doneTitle").textContent = stars === 3 ? "Superstar!" : stars === 2 ? "Great round!" : "Round complete!";
+  $("doneText").textContent = (isBest ? "A new best score for " + grade.name + "! " : prev ? `Your best for ${grade.name} is ${prev}. ` : "") + (stars < 3 ? "Play again to earn more stars." : "Ready for the next grade up?");
+  $("fScore").textContent = score; $("fFirst").textContent = `${firstTries}/${TOTAL}`; $("fStreak").textContent = bestStreak;
+  $("done").hidden = false; play("done");
+  $("again").focus();
+}
+$("again").addEventListener("click", startRound);
+$("regrade").addEventListener("click", openGrades);
+$("gradeBtn").addEventListener("click", openGrades);
+function openGrades(){ busy = true; drawGrades(); $("done").hidden = true; $("start").hidden = false; const f = document.querySelector(".grade"); if (f) f.focus(); }
+
+/* ---------- sound button ---------- */
+const SPEAKER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/>';
+function drawSound(){
+  $("soundBtn").innerHTML = SPEAKER + (soundOn ? '<path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg> Sound on' : '<path d="m22 9-6 6"/><path d="m16 9 6 6"/></svg> Sound off');
+  $("soundBtn").setAttribute("aria-pressed", soundOn ? "true" : "false");
+}
+$("soundBtn").addEventListener("click", () => {
+  soundOn = !soundOn; drawSound();
+  try { localStorage.setItem("bpm-sound", soundOn ? "on" : "off"); } catch (e) {}
+  if (soundOn) play("pop");
+});
+
+drawSound();
+drawGrades();
+const firstGrade = loadSave() ? $("resumeBtn") : document.querySelector(".grade"); if (firstGrade) firstGrade.focus();
+window.addEventListener("resize", () => { if (cur && !busy) makeBalloons(balloons.filter((b) => !b.gone).map((b) => b.n)); });
+})();
+</script>
 </body>
 </html>
