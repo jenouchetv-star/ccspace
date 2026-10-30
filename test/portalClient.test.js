@@ -505,28 +505,26 @@ describe("the Gravity 4 invitation on the home page", () => {
   const promo = body("gravityFourPromoHTML");
   const home = body("viewHome");
 
-  it("invites people to join the mailing list and play, and says what else they get", () => {
+  it("invites people to join the mailing list and play, and sticks to the game", () => {
     expect(promo).toContain("Join free to play");
     expect(promo).toContain('data-act="open-mailing-list"');                    /* the same sign-up as the nav and footer */
     expect(promo).toContain("Subscribers only content");
     expect(promo).toContain("<h2 id=\"g4-title\">Play Gravity <em>4</em> with Chike!</h2>");   /* the 4 is in italics */
     expect(promo).toContain("A 3D chip-dropping game made just for newsletter subscribers. Play against Chike, or challenge a friend online. Then make your own game with AI!");
-    for (const perk of ["Exclusive content", "Free AI lessons for kids", "Downloadables", "Stories, videos and more"]) expect(promo).toContain(perk);
+    for (const perk of ["Exclusive content", "Free AI lessons for kids", "Downloadables", "Stories, videos and more"]) expect(promo).not.toContain(perk);   /* nothing unrelated to the game */
     expect(promo).toContain("data-member");                                      /* people already on the list: Already joined? Sign in */
     expect(promo).toContain("Already joined? Sign in");
     expect(promo).toContain("It’s free to subscribe! Unsubscribe at any time.</p>");
     expect(promo.indexOf("Kids, please ask a grown-up before you use AI.")).toBeGreaterThan(promo.indexOf("</picture>"));   /* the AI note sits under the picture */
   });
 
-  it("keeps its two buttons big and equal, and its icon boxes centred", () => {
+  it("keeps its two buttons big and equal", () => {
     const actions = promo.slice(promo.indexOf("g4promo__actions"), promo.indexOf("g4promo__fine"));
     expect(actions).not.toContain("btn--lg");
     expect(actions.split("btn--sm").length - 1).toBe(2);
     expect(html).toContain(".g4promo__actions{ display:flex; flex-wrap:nowrap;");   /* one row, even on a phone */
     expect(html).toContain("height:56px; min-height:56px;");                          /* the same height */
-    /* the perk icon box out-ranks the plain text rule for the line under each perk, so it stays a centred grid */
-    expect(html).toContain(".g4perks .g4perks__mark{");
-    expect(html).toContain(".g4perks div span{");
+    expect(html).not.toContain(".g4perks");                                          /* the perks list is gone, and its styles with it */
   });
 
   it("uses the cover picture, holds still for people who ask for less motion, and never uses another company's game name", () => {
