@@ -506,13 +506,14 @@ describe("the Gravity 4 invitation on the home page", () => {
   const home = body("viewHome");
 
   it("invites people to join the mailing list and play, and says what else they get", () => {
-    expect(promo).toContain("Subscribe and play");
+    expect(promo).toContain("Join free to play");
     expect(promo).toContain('data-act="open-mailing-list"');                    /* the same sign-up as the nav and footer */
     expect(promo).toContain("Subscribers only content");
     expect(promo).toContain("<h2 id=\"g4-title\">Play Gravity <em>4</em> with Chike!</h2>");   /* the 4 is in italics */
     expect(promo).toContain("A 3D chip-dropping game made just for newsletter subscribers. Play against Chike, or challenge a friend online. Then make your own game with AI!");
     for (const perk of ["Exclusive content", "Free AI lessons for kids", "Downloadables", "Stories, videos and more"]) expect(promo).toContain(perk);
-    expect(promo).toContain('href="#/newsletter"');                              /* people who already have a place in the archive */
+    expect(promo).toContain("data-member");                                      /* people already on the list: Already joined? Sign in */
+    expect(promo).toContain("Already joined? Sign in");
     expect(promo).toContain("It’s free to subscribe! Unsubscribe at any time.</p>");
     expect(promo.indexOf("Kids, please ask a grown-up before you use AI.")).toBeGreaterThan(promo.indexOf("</picture>"));   /* the AI note sits under the picture */
   });
@@ -554,5 +555,28 @@ describe("the bar at the top of the portal pages", () => {
     expect(bar).not.toContain("Sign out");
     expect(bar).not.toContain("portal-signout");
     expect(bar).not.toContain("<button");
+  });
+});
+
+describe("the portal's own sign-in box uses the 6-digit code", () => {
+  const page = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  it("asks for a code, then shows a box to type it in, and checks it with the portal", () => {
+    const req = page.split("async function portalRequest(")[1].split("\n}\n")[0];
+    expect(req).toContain("code: true");
+    expect(req).toContain('step: "code"');
+    const verify = page.split("async function portalVerifyCode(")[1].split("\n}\n")[0];
+    expect(verify).toContain('portalCall("verify_code", { email: g.email, code: code })');
+    expect(verify).toContain("portalUnlock(r,");
+    const gate = page.split("function portalGateHTML(){")[1].split("\nfunction ")[0];
+    expect(gate).toContain('data-act="portal-code"');
+    expect(gate).toContain('autocomplete="one-time-code"');
+    expect(gate).toContain("Already joined?</b> Enter your email to sign in.");
+  });
+  it("says what went wrong with a code in plain words", () => {
+    for (const s of ["wrong_code", "too_many_tries", "code_expired"]) {
+      expect(portalErrorState(s)).toBe(s);
+      expect(portalGateMessage(s).tone).toBe("assertive");
+    }
+    expect(portalGateMessage("sent", "a@b.co").text).toContain("6-digit code");
   });
 });

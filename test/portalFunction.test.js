@@ -124,12 +124,14 @@ describe("joining the mailing list from a form on the site (double opt-in)", () 
     expect(subscriber(id).status).toBe("pending");
   });
 
-  it("says the same thing, and sends nothing, when the address is already subscribed", async () => {
+  it("says the same thing when the address is already subscribed, and emails it a sign-in link, not a confirm link", async () => {
     const r = await join(MEMBER);
-    expect(r).toMatchObject({ ok: true, status: "consent_sent" });
-    expect(mail).toHaveLength(0);                                      // no email to a subscriber from a stranger's sign-up
-    expect(tables.portal_tokens).toHaveLength(0);
-    expect(tables.subscribers).toHaveLength(2);
+    expect(r).toMatchObject({ ok: true, status: "consent_sent" });     // the same answer as a new address: the form never reveals who is on the list
+    expect(mail).toHaveLength(1);
+    expect(JSON.stringify(mail[0])).toContain("already on our mailing list");
+    expect(tables.portal_tokens).toHaveLength(1);
+    expect(tables.portal_tokens[0].purpose).toBe("login");
+    expect(tables.subscribers).toHaveLength(2);                        // nobody added, nothing changed
   });
 
   it("asks a returning, unsubscribed address to confirm again before it counts", async () => {
@@ -437,5 +439,104 @@ describe("the newsletter senders", () => {
     expect(content.indexOf("sessionSubscriber(body.session)")).toBeGreaterThan(-1);
     expect(content.indexOf("sessionSubscriber(body.session)")).toBeLessThan(content.indexOf('from("portal_entries")'));
     expect(src.match(/from\("portal_entries"\)/g)).toHaveLength(1);
+  });
+});
+
+describe("the 6-digit code (the Gravity 4 Join modal asks for one)", () => {
+  const ask = (email) => call({ action: "request", email, consent: true, join: true, code: true, source: "game", next: "/newsletter/chikes-gravity-four" });
+  const lastCode = () => mail[mail.length - 1].html.match(/letter-spacing:\.3em;font-family:[^>]*>(\d{6})</)[1];
+  const typeIt = (email, code) => call({ action: "verify_code", email, code });
+
+  it("emails a subscriber a code with the same answer a newcomer gets, and the code signs them in to the game", async () => {
+    const r = await ask(MEMBER);
+    expect(r).toMatchObject({ ok: true, status: "consent_sent" });     // nothing on the page says they were already subscribed
+    expect(mail[0].subject).toMatch(/code/i);
+    expect(mail[0].html).toContain("already on our mailing list");
+    const v = await typeIt(MEMBER, lastCode());
+    expect(v).toMatchObject({ ok: true, purpose: "login", next: "/newsletter/chikes-gravity-four" });
+    expect(typeof v.session).toBe("string");
+    expect((await call({ action: "session", session: v.session })).ok).toBe(true);
+  });
+
+  it("joins a newcomer when they type the code: it proves the inbox is theirs, like the link", async () => {
+    expect(await ask(NEWBIE)).toMatchObject({ ok: true, status: "consent_sent" });
+    expect(mail[0].html).toContain("Yes, join the list");                // the link is still there too
+    const id = tables.subscribers.find((x) => x.data.email === NEWBIE).id;
+    expect(subscriber(id).status).toBe("pending");
+    expect(await typeIt(NEWBIE, lastCode())).toMatchObject({ ok: true, purpose: "subscribe" });
+    expect(subscriber(id).status).toBe("published");
+  });
+
+  it("works once, and spends the link from the same email", async () => {
+    await ask(MEMBER);
+    const code = lastCode(), link = lastToken();
+    expect((await typeIt(MEMBER, code)).ok).toBe(true);
+    expect(await typeIt(MEMBER, code)).toMatchObject({ ok: false, error: "code_expired" });
+    expect(await call({ action: "verify", token: link })).toMatchObject({ ok: false, error: "used" });
+  });
+
+  it("locks after 5 wrong tries, even if the right code comes next", async () => {
+    await ask(MEMBER);
+    const code = lastCode(), wrong = code === "000000" ? "111111" : "000000";
+    for (let i = 0; i < 4; i++) expect(await typeIt(MEMBER, wrong)).toMatchObject({ ok: false, error: "wrong_code" });
+    expect(await typeIt(MEMBER, wrong)).toMatchObject({ ok: false, error: "too_many_tries" });
+    expect(await typeIt(MEMBER, code)).toMatchObject({ ok: false, error: "code_expired" });
+  });
+
+  it("only takes the newest code, and only for the address it was sent to", async () => {
+    await ask(MEMBER);
+    const first = lastCode();
+    await ask(MEMBER);
+    const second = lastCode();
+    if (first !== second) expect(await typeIt(MEMBER, first)).toMatchObject({ ok: false });
+    expect(await typeIt(NEWBIE, second)).toMatchObject({ ok: false });
+    expect((await typeIt(MEMBER, second)).ok).toBe(true);
+  });
+
+  it("runs out after 15 minutes", async () => {
+    await ask(MEMBER);
+    const code = lastCode();
+    vi.setSystemTime(new Date(NOW.getTime() + 16 * 60_000));
+    expect(await typeIt(MEMBER, code)).toMatchObject({ ok: false, error: "code_expired" });
+  });
+
+  it("never stores the code itself, and keeps code rows out of the hourly request count", async () => {
+    await ask(MEMBER);
+    const code = lastCode();
+    expect(JSON.stringify(tables.portal_tokens)).not.toContain(code);
+    expect(tables.portal_tokens.filter((t) => t.email_hash.startsWith("code:"))).toHaveLength(1);
+    expect(tables.portal_tokens.filter((t) => !t.email_hash.startsWith("code:"))).toHaveLength(1);
+  });
+
+  it("is not sent unless the form asks for one", async () => {
+    await call({ action: "request", email: MEMBER, consent: true, join: true, next: "/newsletter" });
+    expect(mail[0].html).not.toMatch(/Your code/);
+    expect(tables.portal_tokens).toHaveLength(1);
+  });
+});
+
+describe("the 6-digit code under a flood of guesses", () => {
+  it("compares at most 5 guesses per code, even when they all arrive at once", async () => {
+    await call({ action: "request", email: MEMBER, consent: true, join: true, code: true, next: "/newsletter" });
+    const real = mail[0].html.match(/letter-spacing:\.3em;font-family:[^>]*>(\d{6})</)[1];
+    const guesses = Array.from({ length: 40 }, (_, i) => String((Number(real) + 1 + i) % 1_000_000).padStart(6, "0"));
+    guesses.push(real);                                                 // the right code, at the back of the queue
+    const out = await Promise.all(guesses.map((g) => call({ action: "verify_code", email: MEMBER, code: g })));
+    expect(out.filter((r) => r.ok)).toHaveLength(0);                    // 5 tries were used up before it got there
+    const row = tables.portal_tokens.find((t) => t.email_hash.startsWith("code:"));
+    expect(row.tries).toBe(5);
+  });
+});
+
+describe("a subscriber asking for a code with no consent (Welcome back)", () => {
+  it("gets a code that signs them in", async () => {
+    expect(await call({ action: "request", email: MEMBER, code: true, next: "/newsletter/chikes-gravity-four" })).toMatchObject({ ok: true, status: "sent" });
+    const code = mail[0].html.match(/letter-spacing:\.3em;font-family:[^>]*>(\d{6})</)[1];
+    expect(await call({ action: "verify_code", email: MEMBER, code })).toMatchObject({ ok: true, purpose: "login" });
+  });
+  it("adds nobody and sends nothing for an address that is not on the list", async () => {
+    expect(await call({ action: "request", email: NEWBIE, code: true, next: "/newsletter" })).toMatchObject({ ok: true, status: "needs_consent" });
+    expect(mail).toHaveLength(0);
+    expect(tables.subscribers.find((x) => x.data.email === NEWBIE)).toBeUndefined();
   });
 });

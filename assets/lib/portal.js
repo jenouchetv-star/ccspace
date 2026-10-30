@@ -160,8 +160,11 @@ export function portalGateMessage(state, email) {
   switch (state) {
     case "loading": return { tone: "polite", title: "Checking…", text: "One moment while we look that up." };
     case "verifying": return { tone: "polite", title: "Opening the Subscriber’s Portal…", text: "Checking your link." };
-    case "sent": return { tone: "polite", title: "Check your inbox", text: "We sent a sign-in link to" + who + ". Open it on this device or any other. It works once and expires in 30 minutes." };
-    case "consent_sent": return { tone: "polite", title: "One more tap to join", text: "We sent a confirmation link to" + who + ". Tap it to join the mailing list and unlock the Subscriber’s Portal. It expires in 30 minutes." };
+    case "sent": return { tone: "polite", title: "Check your inbox", text: "We sent a 6-digit code to" + who + ". Type it below to sign in. It works for 15 minutes." };
+    case "consent_sent": return { tone: "polite", title: "One more step to join", text: "We sent a 6-digit code to" + who + ". Type it below to join the mailing list and unlock the Subscriber’s Portal. It works for 15 minutes." };
+    case "wrong_code": return { tone: "assertive", title: "That code isn’t right", text: "Check the email and type the 6 numbers again." };
+    case "too_many_tries": return { tone: "assertive", title: "Too many tries", text: "That code is locked. Press Send a new code." };
+    case "code_expired": return { tone: "assertive", title: "That code has run out", text: "Codes work for 15 minutes. Press Send a new code." };
     case "needs_consent": return { tone: "polite", title: "You’re not on the list yet", text: "Join our mailing list to unlock the Subscriber’s Portal. We’ll email a link to confirm it’s really you." };
     case "invalid_email": return { tone: "assertive", title: "That email doesn’t look right", text: "Check it for typos – it should look like name@example.com." };
     case "expired": return { tone: "assertive", title: "That link has expired", text: "Links last 30 minutes and work once. Enter your email and we’ll send a fresh one." };
@@ -180,6 +183,6 @@ export function portalGateMessage(state, email) {
 /** The server answers expected problems as { ok:false, error }. Anything that
     is not one of the known codes is shown as a general error. */
 export function portalErrorState(code) {
-  const known = ["invalid_email", "expired", "used", "invalid", "not_subscribed", "rate_limited", "send_failed"];
+  const known = ["invalid_email", "expired", "used", "invalid", "not_subscribed", "rate_limited", "send_failed", "wrong_code", "too_many_tries", "code_expired"];
   return known.indexOf(code) >= 0 ? code : "error";
 }

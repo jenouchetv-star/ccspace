@@ -57,6 +57,31 @@ export function randomToken(bytes = 32): string {
   return b64url(crypto.getRandomValues(new Uint8Array(bytes)));
 }
 
+/* ---------------- the 6-digit code ---------------- */
+// A code is short enough to type, so it is guarded differently from a link: it lasts a few minutes, only the newest
+// one for an address works, it locks after a few wrong tries, and its stored hash is salted with the portal secret
+// so a copy of the table cannot be used to work the codes out.
+
+export const CODE_MINUTES = 15;
+export const CODE_TRIES = 5;
+
+/** Six random digits, every value equally likely (4,294,000,000 is a whole number of millions). */
+export function randomCode(): string {
+  const a = new Uint32Array(1);
+  do crypto.getRandomValues(a); while (a[0] >= 4_294_000_000);
+  return String(a[0] % 1_000_000).padStart(6, "0");
+}
+
+/** The digits someone typed ("123 456", "123-456"), or "" if it is not six of them. */
+export function cleanCode(v: unknown): string {
+  const d = String(v ?? "").replace(/\D/g, "");
+  return d.length === 6 ? d : "";
+}
+
+export function codeHash(secret: string, emailHash: string, code: string): Promise<string> {
+  return sha256Hex(secret + "|code|" + emailHash + "|" + code);
+}
+
 /* ---------------- the private link inside a newsletter ---------------- */
 
 async function hmacKey(secret: string, usages: KeyUsage[]): Promise<CryptoKey> {

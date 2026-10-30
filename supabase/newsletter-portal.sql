@@ -45,8 +45,11 @@ create table if not exists portal_tokens (
   next_path text not null default '/newsletter',
   created_at timestamptz not null default now(),
   expires_at timestamptz not null,
-  used_at timestamptz
+  used_at timestamptz,
+  tries int not null default 0
 );
+-- wrong guesses at a 6-digit code (the code locks after a few); added after the table first went live
+alter table portal_tokens add column if not exists tries int not null default 0;
 create index if not exists portal_tokens_email_idx on portal_tokens (email_hash, created_at);
 create index if not exists portal_tokens_ip_idx on portal_tokens (ip_hash, created_at);
 alter table portal_tokens enable row level security;

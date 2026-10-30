@@ -12,10 +12,15 @@
 //             Join boxes) send join:true. That is the double opt-in: the address
 //             is saved as "pending", a confirm link goes to it (valid 2 days),
 //             and only the person who owns the inbox can finish. An address that
-//             is already subscribed gets nothing extra, and the answer looks the
-//             same, so the form never reveals who is on the list.
+//             is already subscribed is sent a sign-in link instead (a new device,
+//             or someone who forgot they joined), and the answer looks the same,
+//             so the form never reveals who is on the list.
+//             A form can ask for a code too (code:true): the same email then
+//             carries six digits to type on the page (15 minutes, newest only,
+//             locked after 5 wrong tries).
 //   verify    the one-time link from that email. Single use, 30 minutes.
 //             Proves the person controls the inbox, and starts a session.
+//   verify_code  the same, with the email address and the six digits.
 //   exchange  the private key inside a newsletter's link (?k=...). Signed, so
 //             no table lookup is needed to trust it, and tied to one
 //             subscriber who must still be subscribed.
@@ -44,7 +49,11 @@
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
+  cleanCode,
   cleanSource,
+  CODE_MINUTES,
+  CODE_TRIES,
+  codeHash,
   inDays,
   inMinutes,
   isLive,
@@ -54,6 +63,7 @@ import {
   lookupSubscriber,
   normalizeEmail,
   overLimit,
+  randomCode,
   randomToken,
   readAccessKey,
   safeReturnPath,
@@ -83,8 +93,13 @@ function esc(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** The two emails this function sends. Plain, on-brand, one button. */
-function mailHtml(o: { heading: string; intro: string; button: string; url: string; note: string }) {
+/** The two emails this function sends. Plain, on-brand, one button; with a code, the code comes first. */
+function mailHtml(o: { heading: string; intro: string; button: string; url: string; note: string; code?: string }) {
+  const code = o.code
+    ? `<p style="margin:0 0 6px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5B6673;">Your code</p>
+<p style="margin:0 0 8px;font-size:36px;font-weight:800;letter-spacing:.3em;font-family:'Courier New',Courier,monospace;">${esc(o.code)}</p>
+<p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#5B6673;">Type it on the page where you asked for it. It works for ${CODE_MINUTES} minutes. Or tap the button instead:</p>`
+    : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#FAF4E6;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FAF4E6;"><tr><td align="center" style="padding:28px 16px;">
@@ -93,7 +108,7 @@ function mailHtml(o: { heading: string; intro: string; button: string; url: stri
 <p style="margin:0 0 10px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8A6D00;">Chike&rsquo;s Creative Space</p>
 <h1 style="margin:0 0 14px;font-size:26px;line-height:1.25;">${esc(o.heading)}</h1>
 <p style="margin:0 0 22px;font-size:16px;line-height:1.6;">${esc(o.intro)}</p>
-<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:999px;background:#F2C230;">
+${code}<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:999px;background:#F2C230;">
 <a href="${esc(o.url)}" style="display:inline-block;padding:14px 30px;font-size:15px;font-weight:800;color:#1E2226;text-decoration:none;border-radius:999px;">${esc(o.button)}</a>
 </td></tr></table>
 <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#5B6673;">${esc(o.note)}</p>
@@ -190,9 +205,10 @@ Deno.serve(async (req) => {
       const rows = await allSubscribers();
       const found = lookupSubscriber(rows, email);
 
-      // Someone already on the list asked to join again: say nothing different and send nothing,
-      // so a stranger cannot use the form to email a subscriber or to learn who is subscribed.
-      if (join && found.state === "active") return json({ ok: true, status: "consent_sent" });
+      // Someone already on the list used a Join form (a new device, or they forgot they had joined). The reply is
+      // the same as for a new address, so nobody can learn who is subscribed, and the email is the sign-in link the
+      // archive's own gate sends: it only does anything for whoever reads that inbox.
+      const rejoin = join && found.state === "active";
 
       let subscriberId = found.state === "none" ? "" : found.id;
       let purpose: "login" | "subscribe" = "login";
@@ -231,24 +247,49 @@ Deno.serve(async (req) => {
       });
       if (tokErr) throw new Error(tokErr.message);
 
+      // A form that asks for a code (body.code) gets one as well as the link: six digits to type on the same page.
+      // Only the newest code for an address works, so older ones are retired first. Code rows are kept apart from
+      // links ("code:" in front of the hashes), so they never count twice towards the hourly limits.
+      let code = "";
+      if (body.code === true) {
+        code = randomCode();
+        await db.from("portal_tokens").update({ used_at: new Date(now).toISOString() }).eq("email_hash", "code:" + emailHash).is("used_at", null);
+        const { error: codeErr } = await db.from("portal_tokens").insert({
+          token_hash: await codeHash(SECRET, emailHash, code),
+          purpose,
+          subscriber_id: subscriberId,
+          email_hash: "code:" + emailHash,
+          ip_hash: "code:" + ipHash,
+          next_path: next,
+          expires_at: inMinutes(now, CODE_MINUTES),
+          tries: 0,
+        });
+        if (codeErr) throw new Error(codeErr.message);
+      }
+
       const url = `${siteOrigin}${next}?v=${encodeURIComponent(token)}`;
       const sent = purpose === "login"
-        ? await sendMail(email, "Your link to the Subscriber’s Portal", mailHtml({
-            heading: "Here’s your way in",
-            intro: "Tap the button to open the Chike’s Creative Space Subscriber’s Portal. You’ll stay signed in on this device, so you won’t need to do this for every story.",
+        ? await sendMail(email, code ? "Your Chike’s Creative Space code" : "Your link to the Subscriber’s Portal", mailHtml({
+            heading: code ? "Here’s your code" : "Here’s your way in",
+            intro: (rejoin ? "You’re already on our mailing list, so there’s nothing to confirm. " : "")
+              + (code ? "Use this code to open the Chike’s Creative Space Subscriber’s Portal."
+                      : "Tap the button to open the Chike’s Creative Space Subscriber’s Portal.")
+              + " You’ll stay signed in on this device, so you won’t need to do this for every story.",
             button: "Open the Subscriber’s Portal",
             url,
+            code,
             note: `This link works once and expires in ${VERIFY_MINUTES} minutes. If you didn’t ask for it, you can ignore this email – nothing will happen.`,
           }))
         : await sendMail(email, "Please confirm you’d like to join our mailing list", mailHtml({
-            heading: "One tap to join the list",
+            heading: code ? "Your code to join the list" : "One tap to join the list",
             intro: "You asked to join the Chike’s Creative Space mailing list and unlock the Subscriber’s Portal. Confirm your email to finish – you’ll get one or two emails a month, and you can unsubscribe any time.",
             button: "Yes, join the list",
             url,
-            note: `This link works once and expires in ${lastsFor(minutes)}. If you didn’t ask to join, ignore this email and you won’t be subscribed – nobody gets added until the link is used.`,
+            code,
+            note: `This link works once and expires in ${lastsFor(minutes)}. If you didn’t ask to join, ignore this email and you won’t be subscribed – nobody gets added until the ${code ? "link or the code" : "link"} is used.`,
           }));
       if (!sent) return fail("send_failed");
-      return json({ ok: true, status: purpose === "login" ? "sent" : "consent_sent" });
+      return json({ ok: true, status: purpose === "login" && !rejoin ? "sent" : "consent_sent" });
     }
 
     /* ---------------- verify (the emailed link) ---------------- */
@@ -273,8 +314,61 @@ Deno.serve(async (req) => {
         if (!tok) return fail("invalid");
         return fail(tok.used_at ? "used" : "expired");
       }
+      return await finishVerify(claimed[0], stamp);
+    }
 
-      const { purpose, subscriber_id, next_path } = claimed[0];
+    /* ---------------- verify_code (the 6 digits from the email, typed on the page) ---------------- */
+    if (action === "verify_code") {
+      const email = normalizeEmail(body.email);
+      const code = cleanCode(body.code);
+      if (!isValidEmail(email) || !code) return fail("wrong_code");
+      const emailHash = await sha256Hex(email);
+      const stamp = new Date(now).toISOString();
+
+      // Only the newest code is ever live (older ones are retired when a new one is sent).
+      const { data: live } = await db
+        .from("portal_tokens")
+        .select("token_hash, tries")
+        .eq("email_hash", "code:" + emailHash)
+        .is("used_at", null)
+        .gt("expires_at", stamp);
+      const row = live && live.length ? live[live.length - 1] : null;
+      if (!row) return fail("code_expired");
+
+      // Every guess first claims its own try, BEFORE the code is compared: the update only lands while the counter
+      // still holds the value just read, so guesses sent at the same moment cannot share a try. That caps the
+      // comparisons at CODE_TRIES per code however many arrive at once (and codes themselves are rate limited).
+      const tried = Number(row.tries) || 0;
+      if (tried >= CODE_TRIES) return fail("too_many_tries");
+      const { data: turn } = await db
+        .from("portal_tokens")
+        .update({ tries: tried + 1 })
+        .eq("token_hash", row.token_hash)
+        .eq("tries", tried)
+        .is("used_at", null)
+        .select("token_hash");
+      if (!turn || !turn.length) return fail("wrong_code");             // another guess took this try: try again
+
+      if (row.token_hash !== await codeHash(SECRET, emailHash, code)) {
+        const locked = tried + 1 >= CODE_TRIES;
+        if (locked) await db.from("portal_tokens").update({ used_at: stamp }).eq("token_hash", row.token_hash);
+        return fail(locked ? "too_many_tries" : "wrong_code");
+      }
+
+      const { data: claimed, error: claimErr } = await db
+        .from("portal_tokens")
+        .update({ used_at: stamp })
+        .eq("token_hash", row.token_hash)
+        .is("used_at", null)
+        .select("purpose, subscriber_id, next_path");
+      if (claimErr) throw new Error(claimErr.message);
+      if (!claimed || !claimed.length) return fail("code_expired");
+      return await finishVerify(claimed[0], stamp);
+    }
+
+    /** A link or a code was good: finish the sign-up, or check the subscriber is still subscribed, then start a session. */
+    async function finishVerify(t: { purpose: string; subscriber_id: string; next_path: string }, stamp: string) {
+      const { purpose, subscriber_id, next_path } = t;
       const { data: sub } = await db.from("subscribers").select("id, data").eq("id", subscriber_id).maybeSingle();
       if (!sub) return fail("not_subscribed");
 
@@ -290,6 +384,8 @@ Deno.serve(async (req) => {
         await db.from("subscribers").update({ data: { ...sub.data, verifiedAt: stamp, updatedAt: stamp } }).eq("id", sub.id);
       }
 
+      // the link and the code came in one email: once either is used, the other is spent too
+      await db.from("portal_tokens").update({ used_at: stamp }).eq("subscriber_id", sub.id).is("used_at", null);
       const s = await startSession(sub.id);
       return json({ ok: true, ...s, email: String(sub.data.email ?? ""), purpose, next: next_path });
     }

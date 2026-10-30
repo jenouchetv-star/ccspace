@@ -1490,6 +1490,13 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
   font-size:.7rem; font-weight:700; color:var(--ink-soft); white-space:nowrap;
   background:rgba(255,251,243,.86); border-radius:7px; padding:4px 10px;
 }
+/* a subscribers-only game: the buttons sit low on the picture, under Chike's face, just above the note */
+.gameposter--low{ place-items:end center; }
+.gameposter--low .gameposter__inner{ gap:10px; padding-bottom:46px; }
+/* on a phone the picture is a little taller, to hold both buttons */
+@media (max-width:560px){ .gameposter--low{ aspect-ratio:4/3; } .gameposter--low .gameposter__inner{ padding-bottom:40px; } }
+/* a longer note wraps inside the poster instead of running off a phone's edge */
+.gameposter__note--wrap{ white-space:normal; width:max-content; max-width:calc(100% - 24px); text-align:center; }
 
 /* the full-window stage the game actually runs in */
 .gamestage{
@@ -1815,6 +1822,8 @@ body.is-admin .btn--lg:hover{ box-shadow:0 4px 14px rgba(20,34,44,.16); }
   background:var(--paper-card); border:var(--line); border-radius:var(--r-lg);
   box-shadow:10px 10px 0 rgba(0,0,0,.55); padding:clamp(20px,3vw,32px);
 }
+/* a short one-field box (the Gravity 4 Join / Welcome back / code boxes) */
+.modal--narrow{ width:min(520px,100%); }
 .modal__head{ display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-bottom:18px; }
 .modal__foot{ display:flex; gap:11px; flex-wrap:wrap; justify-content:flex-end; margin-top:24px; padding-top:18px; border-top:2px dashed rgba(30,40,46,.24); }
 /* A taller modal (the mobile filter sheet) pins its head and foot in
@@ -6414,20 +6423,35 @@ function shareModalHTML(url, title){
     + '<div class="modal__foot"><button type="button" class="btn btn--ghost" data-act="close-modal">Close</button></div>';
 }
 
-/** Shown in place of the newsletter form, in a modal, right after a
-    successful join - whether that form lived in a modal already (the nav
-    "Join our mailing list" popup) or inline on a page (the footer, the
-    articles page), so every entry point ends the same way. */
-function newsletterCheckEmailHTML(email){
+/** After any Join form (and "Already subscribed? Sign in"): the email carries a 6-digit code to type here. Someone new
+    becomes a subscriber by it (it proves the inbox is theirs); someone already subscribed is signed in by it. The same
+    box shows either way, so it never gives away who is already on the list. `game` (a subscribers-only game's name)
+    means the right code opens that game. */
+function newsletterCodeHTML(email, game){
   return '<div style="text-align:center;padding:6px 4px">'
     + '<div style="margin:0 auto 16px;width:56px;height:56px;border-radius:50%;background:var(--teal);color:#F2FBF9;display:flex;align-items:center;justify-content:center">' + ic("mail","i-lg") + '</div>'
     + '<h3 style="margin:0 0 8px;font-size:1.5rem">Check your email</h3>'
-    + '<p style="margin:0 0 8px">We sent a link to <b style="overflow-wrap:anywhere">' + E(email) + '</b>. Tap it to finish joining.</p>'
-    + '<p class="tiny mute" style="margin:0">The link works for 2 days. Not there? Look in spam or junk. If you did not ask to join, ignore it and nothing happens: nobody is added until the link is used.</p>'
-    + '<div class="modal__foot" style="justify-content:center;margin-top:20px">'
-    + '<button type="button" class="btn btn--cyan" data-act="close-modal">Got it</button>'
-    + '</div></div>';
+    + '<p style="margin:0 0 16px">We sent a 6-digit code to <b style="overflow-wrap:anywhere">' + E(email) + '</b>. ' + (game ? 'Type it here to play.' : 'Type it here to finish.') + '</p>'
+    + '<form data-act="newsletter-code" style="text-align:left">'
+    + '<input type="hidden" name="email" value="' + E(email) + '">'
+    + (game ? '<input type="hidden" name="go" value="1">' : "")
+    + '<div class="field"><label for="ml-code">Your code</label>'
+    + '<input class="inp" id="ml-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required placeholder="123456"'
+    + ' style="font-size:1.5rem;font-weight:800;letter-spacing:.3em;text-align:center"></div>'
+    + '<div class="modal__foot" style="justify-content:center">'
+    + '<button type="submit" class="btn btn--cyan">' + ic("lock-open") + (game ? ' Verify and play' : ' Verify') + '</button>'
+    + '</div></form>'
+    + '<p class="tiny mute" style="margin:14px 0 0">The code works for 15 minutes. Not there? Look in spam or junk. The email also has a button you can tap instead. '
+    + 'If you did not ask to join, ignore it and nothing happens: nobody is added until the code is used.</p>'
+    + '</div>';
 }
+/** What the code box says when the code did not work. */
+const CODE_ERRORS = {
+  wrong_code: "That code is not right. Check the email and try again.",
+  too_many_tries: "Too many tries. Close this box and press the button again for a new code.",
+  code_expired: "That code has run out. Close this box and press the button again for a new code.",
+  not_subscribed: "This email is not on our mailing list. Close this box and join again."
+};
 /** What the mailing-list forms say when the sign-up could not be started. */
 const JOIN_ERRORS = {
   invalid_email: "That does not look like an email address.",
@@ -6442,27 +6466,57 @@ function adultCheckHTML(id){
     + '<span>I confirm that I am a parent, guardian or educator aged 18 or over.</span></label>';
 }
 
-/** The newsletter signup, opened from the nav on any page. */
-function mailingListModal(){
+/** The newsletter signup, opened from the nav on any page. `next` is the Subscriber’s Portal page the confirm
+    email returns to (the Gravity 4 buttons send people straight back to the game); the portal function checks it too.
+    Opened for a subscribers-only game (`game` is its name), both ways in email a 6-digit code to type in the next box:
+    "Join free to play" joins someone new, and "Already subscribed? Get my code" (`member`) welcomes someone back,
+    so a subscriber never thinks they are signing up twice. Either way the server answers the same. */
+function mailingListModal(next, game, member){
+  const back = /^\/newsletter(\/[a-z0-9][a-z0-9-]{0,80})?$/i.test(String(next || "")) ? next : "";
+  const play = back && game ? String(game) : "";
+  const back2 = !!member;                               /* "Already joined? Sign in" */
   const bleed = "calc(-1 * clamp(20px,3vw,32px))";
   return '<div style="margin:' + bleed + ' ' + bleed + ' 22px;position:relative">'
-    + '<img class="skel" src="assets/hero/join-email.jpg" alt="A child’s hands typing on a keyboard beside a pencil on a wooden desk"'
-    + ' style="display:block;width:100%;height:200px;object-fit:cover;border-radius:var(--r-lg) var(--r-lg) 0 0" loading="lazy">'
+    + (play
+        /* for a game: the whole crew, the group shot from the Meet Chike page */
+        ? '<img class="skel" src="https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/uploads/media-library/1789240884060-Gemini_Generated_Image_tri3mjtri3mjtri3.jpg" alt="Chike, Zech, and their 6 uniquely creative friends"'
+          + ' style="display:block;width:100%;height:230px;object-fit:cover;object-position:center 35%;border-radius:var(--r-lg) var(--r-lg) 0 0" loading="lazy">'
+        : '<img class="skel" src="assets/hero/join-email.jpg" alt="A child’s hands typing on a keyboard beside a pencil on a wooden desk"'
+          + ' style="display:block;width:100%;height:200px;object-fit:cover;border-radius:var(--r-lg) var(--r-lg) 0 0" loading="lazy">')
     + '<button class="btn btn--paper btn--icon" data-act="close-modal" aria-label="Close" style="position:absolute;top:14px;right:14px;border-radius:var(--r-lg)">' + ic("x","i-lg") + '</button>'
     + '</div>'
-    + '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Join our mailing list</h3>'
-    + '<p class="tiny mute" style="margin:0 0 18px">It’s free to subscribe! Unsubscribe at any time. Parents, guardians and teachers get one to two emails a month with new creative activities, free printables and AI lessons for kids.</p>'
+    + (back2
+        ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Welcome back!</h3>'
+          + '<p class="tiny mute" style="margin:0 0 18px">Enter the email you subscribed with and we’ll send you a 6-digit code to '
+          + (play ? 'play ' + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.') + '</p>'
+      : play
+        ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Play ' + nameHTML(play) + '</h3>'
+          + '<p class="tiny mute" style="margin:0 0 18px">Join our free mailing list to play. We’ll email you a 6-digit code to confirm. '
+          + 'Parents, guardians and teachers get one to two emails a month, and you can unsubscribe at any time.</p>'
+        : '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Join our mailing list</h3>'
+          + '<p class="tiny mute" style="margin:0 0 18px">It’s free to subscribe! Unsubscribe at any time. Parents, guardians and teachers get one to two emails a month with new creative activities, free printables and AI lessons for kids.</p>')
     + '<form data-act="newsletter-submit">'
+    + (back ? '<input type="hidden" name="next" value="' + E(back) + '">' : "")
+    + (play ? '<input type="hidden" name="code" value="1"><input type="hidden" name="game" value="' + E(play) + '">' : "")
+    + (back2 ? '<input type="hidden" name="member" value="1">' : "")
     + '<div class="trap" aria-hidden="true">'
     + '<label for="ml-website">Leave this empty</label>'
     + '<input id="ml-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>'
     + '<div class="field"><label for="ml-email">Email address</label>'
     + '<input class="inp" id="ml-email" name="email" type="email" required placeholder="A grown-up’s email address"></div>'
-    + adultCheckHTML("ml-adult")
+    /* a subscriber said they were a grown-up when they joined: "Welcome back" does not ask again */
+    + (back2 ? "" : adultCheckHTML("ml-adult"))
     + '<div class="modal__foot">'
     + '<button type="button" class="btn btn--ghost" data-act="close-modal">Cancel</button>'
-    + '<button type="submit" class="btn btn--cyan">' + ic("mail") + ' Join</button>'
-    + '</div></form>';
+    + '<button type="submit" class="btn btn--cyan">' + ic("mail") + (back2 ? ' Send my code' : ' Join') + '</button>'
+    + '</div></form>'
+    + (back2 ? "" : signInLinkHTML(back, play));
+}
+/** "Already joined? Sign in" under every Join form: opens the Welcome back box, which emails a 6-digit code. */
+function signInLinkHTML(next, game){
+  return '<p class="tiny" style="margin:14px 0 0;text-align:center"><b>Already joined?</b> '
+    + '<button type="button" class="btn btn--sm btn--ghost" style="margin-left:6px" data-act="open-mailing-list" data-member'
+    + (next ? ' data-next="' + E(next) + '"' : "") + (game ? ' data-game="' + E(game) + '"' : "") + '>' + ic("log-in") + ' Sign in</button></p>';
 }
 
 /* One example, live now, so the feature can be seen without setting a date. */
@@ -8515,6 +8569,7 @@ function footer(){
     + '<button class="btn btn--sm btn--cyan" type="submit">' + ic("mail") + ' Join</button></div>'
     + adultCheckHTML("news-adult")
     + '</form>'
+    + signInLinkHTML("", "")
     + '<div><h4>Follow us</h4><div class="foot__social__links">'
     + '<a href="' + E(BRAND.youtube) + '" target="_blank" rel="noopener noreferrer">' + ic("youtube") + ' YouTube</a>'
     + '<a href="' + E(BRAND.instagram) + '" target="_blank" rel="noopener noreferrer">' + ic("instagram") + ' Instagram</a>'
@@ -9735,8 +9790,8 @@ function gravityFourPromoHTML(){
         + '<div><b>' + E(p.title) + '</b><span>' + E(p.text) + '</span></div></li>').join("")
     + '</ul>'
     + '<div class="g4promo__actions">'
-    + '<button type="button" class="btn btn--sun btn--sm" data-act="open-mailing-list">' + ic("mail") + ' Subscribe and play</button>'
-    + '<a class="btn btn--paper btn--sm" href="#/newsletter">' + ic("log-in") + ' Already subscribed? Play</a>'
+    + '<button type="button" class="btn btn--sun btn--sm" data-act="open-mailing-list" data-next="/newsletter/chikes-gravity-four" data-game="Chike’s Gravity 4">' + ic("lock") + ' Join free to play</button>'
+    + '<button type="button" class="btn btn--paper btn--sm" data-act="open-mailing-list" data-member data-next="/newsletter/chikes-gravity-four" data-game="Chike’s Gravity 4">' + ic("log-in") + ' Already joined? Sign in</button>'
     + '</div>'
     + '<p class="tiny mute g4promo__fine">It’s free to subscribe! Unsubscribe at any time.</p>'
     + '</div>'
@@ -10349,22 +10404,25 @@ function gamePoster(g){
 }
 
 /** The poster for a subscribers-only game. Its code is only ever handed out by the Subscriber’s Portal, to someone
-    signed in with a confirmed email, so this page never plays it. A subscriber goes straight to the game in the portal;
-    anyone else is sent to the same place, where the portal's own gate asks for their email and consent, adds them to
-    the mailing list once they confirm, and then opens the game. */
+    signed in with a confirmed email, so this page never plays it. A subscriber goes straight to the game in the portal.
+    Anyone else gets the site's own Join modal (it closes on a tap outside, and has the grown-up tick box), in one of
+    two wordings: "Join free to play" for someone new, "Already subscribed? Get my code" for someone on the list on a
+    new device. Both email a 6-digit code that opens the game here. */
 function membersPoster(g){
-  const to = "#/newsletter/" + encodeURIComponent(g.portalSlug || "");
+  const slug = encodeURIComponent(g.portalSlug || "");
+  const to = "#/newsletter/" + slug;
   const sub = portalIsSubscriber();
-  return '<div class="gameposter" style="--p1:' + E(g.p1 || "#D9C2E3") + ';--p2:' + E(g.p2 || "#7A4A86") + '">'
+  return '<div class="gameposter gameposter--low" style="--p1:' + E(g.p1 || "#D9C2E3") + ';--p2:' + E(g.p2 || "#7A4A86") + '">'
     + (g.cover && g.cover.src
         ? '<img class="gameposter__photo skel" src="' + E(g.cover.src) + '" alt="' + E(g.cover.alt || "") + '" loading="lazy">'
         : '<div class="plate" role="presentation"></div>')
     + '<div class="gameposter__inner">'
     + (sub
         ? '<a class="btn btn--lg btn--sun" href="' + E(to) + '">' + ic("play") + ' Play ' + nameHTML(g.title) + '</a>'
-        : '<a class="btn btn--lg btn--sun" href="' + E(to) + '">' + ic("lock") + ' Subscribe to play</a>')
+        : '<button type="button" class="btn btn--lg btn--sun" data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '">' + ic("lock") + ' Join free to play</button>'
+          + '<button type="button" class="btn btn--sm btn--paper" data-act="open-mailing-list" data-member data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '">' + ic("log-in") + ' Already joined? Sign in</button>')
     + '</div>'
-    + '<span class="gameposter__note">' + (sub ? "Opens in the Subscriber’s Portal." : "Free for mailing-list subscribers. Already subscribed? Press it and sign in with your email.") + '</span>'
+    + '<span class="gameposter__note gameposter__note--wrap">' + (sub ? "Opens in the Subscriber’s Portal." : "Free for mailing-list subscribers.") + '</span>'
     + '</div>';
 }
 
@@ -11140,6 +11198,7 @@ function viewGrownUps(sub){
       + '<input class="inp" name="email" type="email" required placeholder="A grown-up&#39;s email address" aria-label="Email address">'
       + '<button class="btn btn--cyan" type="submit">' + ic("mail") + ' Join</button></div>'
       + adultCheckHTML("art-adult") + '</form>'
+      + signInLinkHTML("", "")
       + '<p class="tiny mute" style="margin-top:12px">' + quEditable("newsletter-note", siteId, E(newsletterNote)) + '</p></div>';
   }
   else if (sub === "contact"){
@@ -11503,14 +11562,25 @@ function portalGateHTML(){
       + '<p class="pgate__text">' + E(msg.text) + '</p></div>';
   }
 
-  if (g.state === "sent" || g.state === "consent_sent"){
+  /* the email is on its way: type the 6-digit code from it (a new subscriber joins with it, a subscriber signs in with it) */
+  if (g.step === "code"){
+    const sentMsg = portalGateMessage(g.joining ? "consent_sent" : "sent", g.email);
+    const problem = msg.tone === "assertive";
     return '<div class="pgate__dialog" role="dialog" aria-modal="true" aria-labelledby="pg-title">'
       + head + '<div class="pgate__ok" aria-hidden="true">' + ic("mail-check", "i-lg") + '</div>'
-      + '<h2 id="pg-title" tabindex="-1" data-autofocus>' + E(msg.title) + '</h2>'
-      + '<p class="pgate__text">' + E(msg.text) + '</p>'
-      + '<p class="pgate__text pgate__text--small">Nothing yet? Check your spam folder.</p>'
+      + '<h2 id="pg-title" tabindex="-1">' + E(sentMsg.title) + '</h2>'
+      + '<p class="pgate__text">' + E(sentMsg.text) + '</p>'
+      + (problem ? '<div class="pgate__msg pgate__msg--bad" id="pg-msg">' + ic("triangle-alert") + '<div><b>' + E(msg.title) + '</b><span>' + E(msg.text) + '</span></div></div>' : '<div id="pg-msg"></div>')
+      + '<form class="pgate__form" data-act="portal-code" novalidate>'
+      + '<label class="pgate__label" for="pg-code">Your 6-digit code</label>'
+      + '<input class="pgate__input" id="pg-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456" required data-autofocus'
+      + ' style="font-size:1.6rem;font-weight:800;letter-spacing:.3em;text-align:center"' + (problem ? ' aria-invalid="true" aria-describedby="pg-msg"' : "") + '>'
+      + '<button class="btn btn--cyan btn--lg pgate__go" type="submit"' + (g.busy ? " disabled" : "") + '>'
+      + (g.busy ? '<span class="pgate__dots" aria-hidden="true"></span> Checking…' : ic("lock-open") + (g.joining ? " Verify and join" : " Verify and sign in"))
+      + '</button></form>'
+      + '<p class="pgate__text pgate__text--small">Nothing yet? Check your spam folder. The email also has a button you can tap instead.</p>'
       + '<div class="pgate__row">'
-      + '<button type="button" class="btn btn--cyan" data-act="portal-resend"' + (g.busy ? " disabled" : "") + '>' + ic("refresh-cw") + ' Send it again</button>'
+      + '<button type="button" class="btn btn--paper" data-act="portal-resend"' + (g.busy ? " disabled" : "") + '>' + ic("refresh-cw") + ' Send a new code</button>'
       + '<button type="button" class="btn btn--paper" data-act="portal-reset">Use a different email</button>'
       + '</div><div class="pgate__row">' + back + '</div></div>';
   }
@@ -11526,6 +11596,7 @@ function portalGateHTML(){
     + head
     + '<h2 id="pg-title">Join our mailing list</h2>'
     + '<p id="pg-desc" class="pgate__text">Members get first looks at new games, ebooks, stories, videos and photos, plus creative tips and kid-friendly AI lessons. It’s free, and you can leave any time.</p>'
+    + (consent ? "" : '<p class="pgate__text"><b>Already joined?</b> Enter your email to sign in.</p>')
     + note
     + (g.state === "error" ? '<button type="button" class="btn btn--paper" data-act="portal-retry" style="align-self:flex-start">' + ic("refresh-cw") + ' Try again</button>' : "")
     + '<form class="pgate__form" data-act="portal-submit" novalidate>'
@@ -11536,12 +11607,12 @@ function portalGateHTML(){
         ? '<label class="pgate__check"><input type="checkbox" name="consent"' + (g.consent ? " checked" : "") + '> <span>Yes, add me to the Chike’s Creative Space mailing list. I confirm that I am a parent, guardian or educator aged 18 or over, I agree to receive occasional emails, and I understand that I may unsubscribe at any time.</span></label>'
         : "")
     + '<button class="btn btn--cyan btn--lg pgate__go" type="submit"' + (g.busy ? " disabled" : "") + '>'
-    + (g.busy ? '<span class="pgate__dots" aria-hidden="true"></span> Working…' : (consent ? ic("mail-plus") + " Join and send my link" : ic("arrow-right") + " Continue"))
+    + (g.busy ? '<span class="pgate__dots" aria-hidden="true"></span> Working…' : (consent ? ic("mail-plus") + " Join and send my code" : ic("arrow-right") + " Continue"))
     + '</button>'
     + '</form>'
     + '<p class="pgate__text pgate__text--small">' + (consent
-        ? 'We’ll email a link to confirm it’s you. You join the list once you tap it.'
-        : 'We’ll email you a secure link. No password needed.') + '</p>'
+        ? 'We’ll email a 6-digit code to confirm it’s you. You join the list once you type it in.'
+        : 'We’ll email you a 6-digit code. No password needed.') + '</p>'
     + '<div class="pgate__row">' + back + '</div>'
     + '</div>';
 }
@@ -11633,10 +11704,23 @@ async function portalSubmit(form){
 async function portalRequest(email, consent){
   const g = PortalState.gate;
   portalSetGate({ busy: true });
-  const r = await portalCall("request", { email: email, consent: consent, next: portalNextPath() });
+  const r = await portalCall("request", { email: email, consent: consent, code: true, next: portalNextPath() });
   g.busy = false;
   if (r.ok && r.status === "needs_consent") return portalSetGate({ state: "needs_consent", step: "consent", consent: false });
-  if (r.ok) return portalSetGate({ state: r.status === "consent_sent" ? "consent_sent" : "sent" });
+  if (r.ok) return portalSetGate({ state: r.status === "consent_sent" ? "consent_sent" : "sent", step: "code", joining: r.status === "consent_sent" });
+  portalSetGate({ state: portalErrorState(r.error) });
+}
+
+/** The 6 digits from the email, typed into the gate: a right code signs a subscriber in (or finishes a new sign-up). */
+async function portalVerifyCode(form){
+  const g = PortalState.gate;
+  if (g.busy) return;
+  const code = String(form.elements.code.value || "").replace(/\D/g, "");
+  if (code.length !== 6) return portalSetGate({ state: "wrong_code" });
+  portalSetGate({ busy: true });
+  const r = await portalCall("verify_code", { email: g.email, code: code });
+  g.busy = false;
+  if (r.ok) return portalUnlock(r, r.purpose === "subscribe" ? "You’re on the list. Welcome!" : "Welcome back!");
   portalSetGate({ state: portalErrorState(r.error) });
 }
 
@@ -21748,6 +21832,10 @@ const LAUNCH_CHECKS = {
         auth: { persistSession:false, autoRefreshToken:false }
       });
       const { data, error } = await freshAnon.from("profiles").select("id").limit(1);
+      /* anonymous visitors have no permission on profiles at all (supabase/revoke-anon-leftovers.sql), so a flat refusal is the locked state */
+      if (error && (error.code === "42501" || /permission denied/i.test(error.message || ""))){
+        return { status:"needs_review", evidence:"profiles table refuses a fresh anonymous request outright (no permission), checked just now." };
+      }
       if (error){
         return { status:"needs_review", evidence:"Could not verify the profiles lockdown (" + error.message + ") - re-run once reachable." };
       }
@@ -22366,8 +22454,9 @@ const ACTIONS = {
   },
 
   /* ---- newsletter portal (see "NEWSLETTER PORTAL") ---- */
-  "portal-resend": () => { const g = PortalState.gate; if (g.email) portalRequest(g.email, g.step === "consent" && g.consent); },
-  "portal-reset": () => portalSetGate({ state: "idle", step: "email", busy: false, consent: false }),
+  /* a new code: someone joining already said yes, so the new one is sent the same way */
+  "portal-resend": () => { const g = PortalState.gate; if (g.email) portalRequest(g.email, !!g.joining || (g.step === "consent" && g.consent)); },
+  "portal-reset": () => portalSetGate({ state: "idle", step: "email", busy: false, consent: false, joining: false }),
   "portal-signout": () => { portalSignOut(); },
   "portal-retry": () => { PortalState.phase = "idle"; PortalState.gate.state = "idle"; rerender(); },
   "portal-cat": (el) => { AppState.portalCat = el.getAttribute("data-cat") || ""; rerender(); },
@@ -24053,9 +24142,11 @@ const ACTIONS = {
     closeMediaPicker();
     if (m && cb) cb(m);
   },
-  "open-mailing-list": () => {
+  "open-mailing-list": (el) => {
     AppState.navOpen = false;
-    openModal(mailingListModal());
+    const game = el && el.getAttribute("data-game");
+    const member = !!(el && el.hasAttribute("data-member"));
+    openModal(mailingListModal(el && el.getAttribute("data-next"), game, member), null, game || member ? "modal--narrow" : "");
     rootAssetPaths($("#modal-root"));
   },
   "open-book": (el) => {
@@ -24475,6 +24566,10 @@ async function handleSubmit(form, act){
     await portalSubmit(form);
     return;
   }
+  if (act === "portal-code"){
+    await portalVerifyCode(form);
+    return;
+  }
 
   if (act === "nl-form-submit"){
     if (AppState.admin.newsletterCompose.mode === "schedule") await nlSchedule(form);
@@ -24631,19 +24726,55 @@ async function handleSubmit(form, act){
     const email = String(form.elements["email"].value || "").trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast("That does not look like an email address.", "bad"); return; }
     if (isFakeEmail(email)){ toast("Please use a real email address, not a placeholder or test one.", "bad"); return; }
+    /* "Welcome back" (a subscriber getting a code) has no tick box: they said they were a grown-up when they joined */
+    const member = !!form.elements["member"];
     const adult = form.elements["adult"];
-    if (!adult || !adult.checked){ toast("Please confirm that you are an adult aged 18 or over to continue.", "bad"); return; }
+    if (!member && (!adult || !adult.checked)){ toast("Please confirm that you are an adult aged 18 or over to continue.", "bad"); return; }
     const stop = newsletterGate(form);
     if (stop){ toast(stop, "bad"); return; }
     /* Double opt-in: the address is NOT added here. The portal function saves it as "pending" and emails a confirm
        link; the person only becomes a subscriber when they open it. So nobody can sign someone else up. */
     const joinBtn = form.querySelector('[type="submit"]');
     if (joinBtn) joinBtn.disabled = true;
-    const sent = await portalCall("request", { email: email, consent: true, join: true, source: (AppState.route && AppState.route.name) || "", next: "/newsletter" });
+    const back = form.elements["next"] ? form.elements["next"].value : "";
+    /* every sign-up confirms with a 6-digit code typed on the page (the email has a button too) */
+    const game = form.elements["game"] ? form.elements["game"].value : "";
+    const sent = await portalCall("request", member
+      ? { email: email, code: true, next: back || "/newsletter" }      /* signing back in: no consent is sent, so nobody new is added */
+      : { email: email, consent: true, join: true, code: true, source: (AppState.route && AppState.route.name) || "", next: back || "/newsletter" });
     if (joinBtn) joinBtn.disabled = false;
     if (!sent || !sent.ok){ toast(JOIN_ERRORS[sent && sent.error] || "We could not reach the sign-up just now. Check your connection and try again.", "bad"); return; }
+    if (member && sent.status === "needs_consent"){
+      /* not on the list: offer the Join version, with the email already filled in */
+      openModal(mailingListModal(back, game, false), null, "modal--narrow");
+      rootAssetPaths($("#modal-root"));
+      const box = $("#ml-email"); if (box) box.value = email;
+      toast("That email is not on our mailing list yet. Tick the box and press Join to sign up. It’s free.", "");
+      return;
+    }
     form.reset();
-    openModal(newsletterCheckEmailHTML(email), null);
+    openModal(newsletterCodeHTML(email, game), null, "modal--narrow");
+    const codeBox = $("#ml-code"); if (codeBox) codeBox.focus();
+    return;
+  }
+
+  if (act === "newsletter-code"){
+    const email = String(form.elements["email"].value || "");
+    const code = String(form.elements["code"].value || "").replace(/\D/g, "");
+    if (code.length !== 6){ toast("Type the 6 numbers from the email.", "bad"); return; }
+    const btn = form.querySelector('[type="submit"]');
+    if (btn) btn.disabled = true;
+    const r = await portalCall("verify_code", { email: email, code: code });
+    if (btn) btn.disabled = false;
+    if (!r || !r.ok){ toast(CODE_ERRORS[r && r.error] || "We could not check the code just now. Check your connection and try again.", "bad"); return; }
+    /* signed in: keep the session like an emailed link would; from a game, open it in the portal, otherwise stay here
+       (the top bar now shows the Subscriber’s Portal link) */
+    portalSaveSession(r.session);
+    PortalState.phase = "idle";
+    closeModal();
+    toast(r.purpose === "subscribe" ? "You’re on the list. Welcome!" : "Welcome back!", "good");
+    if (form.elements["go"]) navigate("#" + (r.next || "/newsletter"));
+    else rerender();
     return;
   }
 

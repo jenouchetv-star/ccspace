@@ -20,13 +20,15 @@ describe("the mailing-list forms on the page", () => {
     expect(handler).not.toMatch(/status\s*:\s*["']published["']/);
   });
 
-  it("tell the person to check their email, not that they are already in", () => {
-    expect(handler).toContain("newsletterCheckEmailHTML(email)");
-    const modal = html.split("function newsletterCheckEmailHTML(")[1].split("\n}\n")[0];
+  it("ask for the 6-digit code from the email, not tell them they are already in", () => {
+    expect(handler).toContain("code: true");                          // every sign-up confirms with a code
+    expect(handler).toContain("openModal(newsletterCodeHTML(email, game)");
+    const modal = html.split("function newsletterCodeHTML(")[1].split("\n}\n")[0];
     expect(modal).toContain("Check your email");
-    expect(modal).toContain("Tap it to finish joining");
-    expect(modal).toContain("nobody is added until the link is used");
+    expect(modal).toContain("We sent a 6-digit code to");
+    expect(modal).toContain("nobody is added until the code is used");
     expect(modal).toContain("E(email)");                              // the address is escaped
+    expect(html).not.toContain("function newsletterCheckEmailHTML(");
     expect(html).not.toContain("function newsletterThankYouHTML(");
     expect(html).not.toContain("Thank you for joining us");
   });
@@ -40,9 +42,10 @@ describe("the mailing-list forms on the page", () => {
 });
 
 describe("the portal function", () => {
-  it("handles join sign-ups: pending first, a longer link, and silence for someone already subscribed", () => {
+  it("handles join sign-ups: pending first, a longer link, and a sign-in link (with the same answer) for someone already subscribed", () => {
     expect(portal).toContain("body.join === true");
-    expect(portal).toContain("if (join && found.state === \"active\") return json({ ok: true, status: \"consent_sent\" });");
+    expect(portal).toContain('const rejoin = join && found.state === "active";');
+    expect(portal).toContain('status: purpose === "login" && !rejoin ? "sent" : "consent_sent"');
     expect(portal).toContain("JOIN_CONFIRM_MINUTES");
     expect(portal).toContain('status: "pending"');
   });
