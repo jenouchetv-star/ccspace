@@ -17,182 +17,451 @@
             --paper-card: #FFFBF3;
             --paper-2: #E6F0F2;
             --ink: #1E2226;
-            --sun: #F2C230;
+            --sun: #F5B921;
             --sun-hot: #DD7A22;
             --leaf: #3A7A37;
             --leaf-deep: #2F6B2C;
+            --mint: #C9E7BC;
+            --butter: #FFE6A6;
             --berry: #BC3229;
             --cyan-deep: #0A5280;
+            /* the frame's backdrop follows the level's forest mood (set from the script) */
+            --mood: #C9E7BC;
+            --wood: #D59A57;
+            --wood-grain: rgba(122, 64, 22, .2);
         }
 
-        /* Basic body styling for centering and background */
+        /* ---------- The page: one screen, no scrolling ----------
+           The board's size is worked out by fitBoard() in the script from
+           whatever room the title, signs and buttons leave. */
+        html { height: 100%; }
         body {
             font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 100vh; /* Full viewport height */
-            background: var(--paper);
+            height: 100vh;
+            height: 100dvh;
+            margin: 0;
+            padding: 8px;
+            box-sizing: border-box;
+            overflow: hidden;
+            color: var(--ink);
+            background-color: var(--paper);
             background-image:
                 radial-gradient(circle at center, rgba(30,52,62,.09) 1px, transparent 1.2px),
-                linear-gradient(180deg, #E2EDEF 0%, #EEF4F3 26%, var(--paper) 66%, #FDF8EC 100%);
-            background-size: 7px 7px, 100% 100%;
-            color: var(--ink); /* Ink text color */
-            margin: 0;
-            padding: 20px;
-            box-sizing: border-box; /* Include padding in element's total width and height */
-            overflow-x: hidden; /* Prevent horizontal scroll */
+                radial-gradient(ellipse at 50% -20%, rgba(201,231,188,.95), transparent 62%),
+                linear-gradient(180deg, #E4F0DA 0%, var(--paper) 60%, #FDF8EC 100%);
+            background-size: 7px 7px, 100% 100%, 100% 100%;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        /* Main heading style */
-        h1 {
+        /* Title (the site's stage hides it, since its own bar names the game) */
+        body > h1 {
+            flex: none;
+            margin: 0 0 8px;
+            max-width: 100%;
+            text-align: center;
+            font-size: clamp(1.05rem, 3.6vh, 1.75rem);
+            line-height: 1.1;
             color: var(--ink);
-            font-weight: 800;
-            margin-bottom: 20px;
             text-shadow: 0 2px 0 rgba(255,255,255,.6);
         }
+        .mq-title-tag {
+            font-size: .66em;
+            font-weight: 700;
+            color: var(--leaf-deep);
+            letter-spacing: 0;
+        }
 
-        /* Game container styling */
-        #game-container {
-            background-color: var(--paper-card);
+        /* ---------- The storybook frame ---------- */
+        body.ccs-maze #game-container {
+            position: relative;
+            flex: none;
+            display: grid;
+            grid-template-areas: "hud" "board" "pad";
+            justify-items: center;
+            align-items: center;
+            gap: 8px !important;
+            padding: 10px !important;
+            max-width: 100%;
+            box-sizing: border-box;
+            background-color: var(--mood);
+            background-image: radial-gradient(circle, rgba(30,34,38,.10) 1px, transparent 1.4px);
+            background-size: 8px 8px;
             border: 3px solid var(--ink);
-            border-radius: 15px; /* Rounded corners */
-            padding: 25px;
-            box-shadow: 8px 8px 0 var(--ink); /* Flat brand shadow for depth */
+            border-radius: 20px;
+            box-shadow: 6px 6px 0 var(--ink);
+            transition: background-color .4s ease;
+        }
+
+        /* little leaf sprigs tucked on two corners of the frame */
+        #game-container::before,
+        #game-container::after,
+        .modal-content::before {
+            content: "";
+            position: absolute;
+            width: 46px;
+            height: 46px;
+            pointer-events: none;
+            z-index: 2;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cg stroke='%231E2226' stroke-width='3' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 58 C 20 42 30 30 52 8' fill='none'/%3E%3Cpath d='M22 42 C 9 41 5 30 9 21 C 20 22 27 31 22 42Z' fill='%233A7A37'/%3E%3Cpath d='M35 27 C 30 15 36 6 47 4 C 49 15 45 23 35 27Z' fill='%237FCB76'/%3E%3Cpath d='M31 35 C 41 30 51 32 57 40 C 49 47 39 45 31 35Z' fill='%232F6B2C'/%3E%3C/g%3E%3Ccircle cx='15' cy='52' r='4' fill='%23BC3229' stroke='%231E2226' stroke-width='2.5'/%3E%3C/svg%3E") center / contain no-repeat;
+        }
+        #game-container::before { top: -16px; left: -14px; }
+        #game-container::after { bottom: -14px; left: -12px; transform: scaleY(-1); }
+
+        /* ---------- Wooden signs: level and time ---------- */
+        body.ccs-maze #game-container #game-info {
+            grid-area: hud;
+            display: flex;
+            align-items: stretch;
+            justify-content: center;
+            gap: 10px;
+            width: auto;
+            max-width: none;
+            margin: 0 !important;
+            font-size: 1rem !important;
+            font-weight: 800;
+        }
+
+        .mq-sign {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 14px 4px 5px;
+            color: var(--ink);
+            background-color: var(--wood);
+            background-image:
+                repeating-linear-gradient(180deg, transparent 0 6px, var(--wood-grain) 6px 7px, transparent 7px 11px),
+                linear-gradient(180deg, #E5B375 0%, #C9893F 100%);
+            border: 3px solid var(--ink);
+            border-radius: 12px;
+            box-shadow: 4px 4px 0 var(--ink);
+            white-space: nowrap;
+        }
+
+        /* two nail heads on each plank */
+        .mq-sign::before,
+        .mq-sign::after {
+            content: "";
+            position: absolute;
+            top: 5px;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #6B3A16;
+            box-shadow: inset 1px 1px 0 rgba(255,255,255,.35);
+        }
+        .mq-sign::before { left: 5px; }
+        .mq-sign::after { right: 5px; }
+        .mq-level-sign::before { display: none; }
+
+        .mq-chike {
+            flex: none;
+            display: block;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 3px solid var(--ink);
+            background: var(--paper);
+            object-fit: cover;
+            object-position: 50% 30%;
+        }
+
+        .mq-level-text {
             display: flex;
             flex-direction: column;
-            align-items: center;
-            gap: 20px; /* Space between elements */
-            position: relative;
-            overflow: hidden; /* Ensure content stays within bounds */
+            align-items: flex-start;
+            line-height: 1.05;
         }
 
-        /* Game info (Level and Timer) styling */
-        #game-info {
-            display: flex;
-            justify-content: space-between;
-            width: 100%;
-            max-width: 800px; /* Max width to match fixed canvas size */
-            margin-bottom: 15px;
-            font-size: 1.2em;
-            font-weight: bold;
-            color: var(--ink);
-        }
-
-        /* Canvas styling */
-        canvas {
-            background-color: var(--paper-card); /* Maze surface */
-            display: block;
-            border: 5px solid var(--ink); /* Perimeter border */
-            border-radius: 8px; /* Slightly rounded canvas corners */
-            box-shadow: inset 0 0 10px rgba(20,40,60,0.15); /* Inner shadow for depth */
-            max-width: 100%; /* Make canvas responsive within its container */
-            height: auto; /* Maintain aspect ratio */
-        }
-
-        /* Controls container for arrow buttons */
-        #controls {
-            display: grid;
-            grid-template-areas:
-                ". up ."
-                "left down right"; /* Grid layout for arrow buttons */
-            gap: 10px; /* Space between buttons */
-            margin-top: 20px;
-        }
-
-        /* Styling for all control buttons */
-        .control-button {
-            background-color: var(--sun); /* Sun yellow */
-            color: var(--ink); /* Dark text */
+        .mq-level-num {
+            font-size: .64rem;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            background: var(--butter);
             border: 2px solid var(--ink);
-            border-radius: 10px;
-            padding: 15px 25px;
-            font-size: 1.5em;
-            font-weight: bold;
+            border-radius: 999px;
+            padding: 1px 7px;
+        }
+
+        #level-name {
+            margin-top: 3px;
+            font-size: clamp(.92rem, 2.4vh, 1.12rem);
+            font-weight: 800;
+        }
+
+        .mq-time-sign {
+            padding: 4px 16px;
+            gap: 6px;
+            font-size: clamp(.98rem, 2.5vh, 1.18rem);
+            font-variant-numeric: tabular-nums;
+        }
+        .mq-time-sign svg { flex: none; }
+
+        /* the explorer's face on the level sign is the button that opens the picker */
+        body.ccs-maze .mq-char-btn {
+            position: relative;
+            flex: none;
+            display: block;
+            margin: 0;
+            padding: 0;
+            min-height: 0;
+            border: 0;
+            border-radius: 50%;
+            box-shadow: none;
             cursor: pointer;
-            box-shadow: 4px 4px 0 var(--ink);
-            transition: all 0.1s ease; /* Smooth transitions for hover/active states */
-            min-width: 70px;
+            line-height: 0;
+            transition: transform .13s;
+        }
+        body.ccs-maze .mq-char-btn:hover { transform: scale(1.08) rotate(-4deg); }
+        body.ccs-maze .mq-char-btn:active { transform: scale(.95); }
+        .mq-char-badge {
+            position: absolute;
+            right: -5px;
+            bottom: -4px;
             display: flex;
             align-items: center;
             justify-content: center;
+            width: 17px;
+            height: 17px;
+            background: var(--sun);
+            border: 2px solid var(--ink);
+            border-radius: 50%;
         }
 
-        /* Active state for button press */
-        .control-button:active {
+        /* a short note beside the board (wide screens only) */
+        #mq-tip { display: none; grid-area: tip; }
+
+        /* ---------- The explorer picker ---------- */
+        .modal-content.mq-char-card { max-width: 560px; }
+        .mq-char-card h2 { margin-bottom: 14px; }
+        .mq-chars {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: clamp(6px, 1.6vw, 12px);
+            margin: 0 0 clamp(14px, 3vh, 22px);
+        }
+        .modal-content .mq-pick {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            min-width: 0;
+            min-height: 0;
+            padding: 5px 3px 6px;
+            font-size: clamp(.78rem, 2vh, .95rem);
+            font-weight: 800;
+            line-height: 1.1;
+            color: var(--ink);
+            border: 3px solid var(--ink);
+            border-radius: 14px;
+            box-shadow: 3px 3px 0 var(--ink);
+            letter-spacing: normal;
+            transition: transform .12s, box-shadow .12s;
+        }
+        .modal-content .mq-pick:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+        .modal-content .mq-pick[aria-pressed="true"] { box-shadow: 3px 3px 0 var(--ink), 0 0 0 4px var(--leaf); }
+        .mq-pick canvas {
+            display: block;
+            width: 100%;
+            max-width: 84px;
+            height: auto;
+            aspect-ratio: 1 / 1;
+            max-height: clamp(48px, 11vh, 84px);
+            object-fit: contain;
+            border-radius: 10px;
+            pointer-events: none;
+        }
+        .mq-pick b { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* ---------- The forest board ---------- */
+        #board {
+            grid-area: board;
+            line-height: 0;
+            background: #3A7A37;
+            border: 3px solid var(--ink);
+            border-radius: 14px;
+            box-shadow: 4px 4px 0 var(--ink);
+            overflow: hidden;
+        }
+
+        html body.ccs-maze #board #mazeCanvas {
+            display: block;
+            width: 300px;
+            height: 300px;
+            max-width: none !important;
+            max-height: none !important;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+            background: #8CC269;
+        }
+
+        /* ---------- Arrow pad, Hint and Sound ---------- */
+        #pad-area {
+            grid-area: pad;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        /* the arrow keys sit on a little wooden board */
+        body.ccs-maze #controls {
+            display: grid;
+            grid-template-areas:
+                ". up ."
+                "left down right";
+            gap: 6px !important;
+            margin: 0 !important;
+            padding: 6px 8px 8px 6px;
+            background-color: var(--wood);
+            background-image:
+                repeating-linear-gradient(180deg, transparent 0 6px, var(--wood-grain) 6px 7px, transparent 7px 11px),
+                linear-gradient(180deg, #E5B375 0%, #C9893F 100%);
+            border: 3px solid var(--ink);
+            border-radius: 16px;
+            box-shadow: 4px 4px 0 var(--ink);
+        }
+
+        /* leaf-green keys (game-skin.css sizes .control-button with !important, hence the selector) */
+        body.ccs-maze #controls .control-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 46px;
+            min-width: 0 !important;
+            height: 38px;
+            padding: 0 !important;
+            font-size: 1rem !important;
+            line-height: 1;
+            color: #FFF6EE;
+            background-color: var(--leaf);
+            background-image: linear-gradient(180deg, rgba(255,255,255,.16), transparent 55%);
+            border: 3px solid var(--ink) !important;
+            border-radius: 12px !important;
+            box-shadow: 3px 3px 0 var(--ink);
+            cursor: pointer;
+            touch-action: manipulation;
+            transition: transform .08s ease, box-shadow .08s ease, background-color .15s ease;
+        }
+        body.ccs-maze #controls .control-button:hover { background-color: var(--leaf-deep); }
+        body.ccs-maze #controls .control-button:active {
+            transform: translate(2px, 2px);
             box-shadow: 1px 1px 0 var(--ink);
-            transform: translate(3px, 3px); /* Push button down */
         }
 
-        /* Hover state for buttons */
-        .control-button:hover {
-            background-color: var(--sun-hot);
-        }
-
-        /* Grid area assignments for specific buttons */
         #up { grid-area: up; }
         #left { grid-area: left; }
         #down { grid-area: down; }
         #right { grid-area: right; }
 
-        /* Hint button styling */
-        #hint-button {
-            background-color: var(--leaf);
-            color: #FFF6EE;
-            border: 2px solid var(--ink);
-            border-radius: 10px;
-            padding: 15px 25px;
-            font-size: 1.2em;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 4px 4px 0 var(--ink);
-            transition: all 0.1s ease;
-            margin-top: 15px;
+        /* Hint (sun yellow, with a little lantern) and Sound, stacked beside the pad */
+        #hint-row {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: center;
+            gap: 10px;
         }
 
-        /* Hint button active state */
-        #hint-button:active {
-            box-shadow: 1px 1px 0 var(--ink);
-            transform: translate(3px, 3px);
-        }
-
-        /* Hint button hover state */
-        #hint-button:hover {
-            background-color: var(--leaf-deep);
-        }
-
-        /* Level Times Dropdown styling */
-        #level-times-dropdown-container {
-            margin-top: 20px;
-            width: 100%;
-            max-width: 800px;
-            text-align: center;
-        }
-
-        #level-times-dropdown {
-            padding: 10px 15px;
-            border-radius: 8px;
-            border: 2px solid var(--ink);
-            background-color: var(--paper-card);
+        body.ccs-maze #hint-row #hint-button,
+        .ccs-maze #hint-row .ccs-sound-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin: 0 !important;
+            min-height: 40px;
+            padding: 6px 16px !important;
+            font-size: .95rem !important;
+            font-weight: 800;
+            line-height: 1;
             color: var(--ink);
-            font-size: 1em;
+            border: 3px solid var(--ink) !important;
+            border-radius: 999px !important;
+            box-shadow: 4px 4px 0 var(--ink) !important;
             cursor: pointer;
-            outline: none;
-            appearance: none; /* Remove default dropdown arrow */
-            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%231E2226%22%20d%3D%22M287%2C197.973L159.027%2C69.999c-4.88-4.88-12.796-4.88-17.676%2C0L5.4%2C197.973c-4.88%2C4.88-4.88%2C12.796%2C0%2C17.676l17.676%2C17.676c4.88%2C4.88%2C12.796%2C4.88%2C17.676%2C0L149.64%2C126.31l111.6%2C111.6c4.88%2C4.88%2C12.796%2C4.88%2C17.676%2C0l17.676-17.676C291.88%2C210.769%2C291.88%2C202.853%2C287%2C197.973z%22%2F%3E%3C%2Fsvg%3E'); /* Custom arrow */
-            background-repeat: no-repeat;
-            background-position: right 10px top 50%;
-            background-size: 12px;
+            transition: transform .13s, box-shadow .13s;
+        }
+        body.ccs-maze #hint-row #hint-button { background-color: var(--sun); }
+        body.ccs-maze #hint-row #hint-button:hover,
+        .ccs-maze #hint-row .ccs-sound-btn:hover {
+            transform: translate(-2px, -2px) !important;
+            box-shadow: 6px 6px 0 var(--ink) !important;
+        }
+        body.ccs-maze #hint-row #hint-button:active,
+        .ccs-maze #hint-row .ccs-sound-btn:active {
+            transform: translate(2px, 2px) !important;
+            box-shadow: 1px 1px 0 var(--ink) !important;
+        }
+        .ccs-maze #hint-row .ccs-sound-btn[aria-pressed="false"] { opacity: .8; }
+        #hint-button svg { flex: none; }
+
+        /* ---------- Wide screens: the board on the left, signs and buttons beside it ---------- */
+        @media (min-aspect-ratio: 23/20) and (min-width: 560px) {
+            body.ccs-maze #game-container {
+                grid-template-areas: "board hud" "board tip" "board pad";
+                grid-template-columns: auto minmax(196px, auto);
+                grid-template-rows: auto minmax(0, 1fr) auto;
+                column-gap: 18px !important;
+                row-gap: 14px !important;
+                align-items: start;
+            }
+            body.ccs-maze #game-container #game-info {
+                flex-direction: column;
+                align-self: start;
+                justify-self: stretch;
+                gap: 12px;
+            }
+            .mq-time-sign { justify-content: center; }
+            #mq-tip {
+                display: block;
+                align-self: center;
+                justify-self: stretch;
+                max-width: 240px;
+                max-height: 100%;
+                overflow: hidden;
+            }
+            #mq-tip p {
+                margin: 0;
+                padding: 10px 12px;
+                font-size: .86rem;
+                font-weight: 600;
+                line-height: 1.35;
+                background: var(--paper-card);
+                border: 3px solid var(--ink);
+                border-radius: 14px;
+                box-shadow: 3px 3px 0 var(--ink);
+            }
+            #mq-tip b { display: block; margin-bottom: 3px; color: var(--leaf-deep); }
+            #pad-area {
+                flex-direction: column;
+                align-self: end;
+                gap: 16px;
+            }
+            #hint-row { flex-direction: row; }
+            body.ccs-maze #controls .control-button {
+                width: 54px;
+                height: 46px;
+                font-size: 1.15rem !important;
+            }
         }
 
-        #level-times-dropdown option {
-            background-color: var(--paper-card);
-            color: var(--ink);
+        /* short landscape screens (a phone on its side): smaller keys */
+        @media (min-aspect-ratio: 23/20) and (min-width: 560px) and (max-height: 480px) {
+            body > h1 { display: none; }
+            #mq-tip { display: none !important; }
+            body.ccs-maze #controls .control-button { width: 44px; height: 34px; }
+            #hint-row { flex-direction: column; }
+            .mq-chike { width: 28px; height: 28px; }
         }
 
-
-        /* Win Pop-up Modal styling */
+        /* ---------- Pop-up cards (win, wizard, leaderboard) ---------- */
         .modal {
             display: none; /* Hidden by default */
             position: fixed; /* Stay in place */
@@ -201,101 +470,120 @@
             top: 0;
             width: 100%; /* Full width */
             height: 100%; /* Full height */
-            background-color: rgba(0,0,0,0.6); /* Semi-transparent black overlay */
+            padding: 12px;
+            box-sizing: border-box;
+            background-color: rgba(30,34,38,0.6); /* Semi-transparent ink overlay */
             justify-content: center;
             align-items: center;
             animation: fadeIn 0.3s ease-out; /* Fade in animation for the overlay */
         }
 
-        /* Modal content styling */
         .modal-content {
             background-color: var(--paper-card);
+            background-image: radial-gradient(circle, rgba(30,34,38,.06) 1px, transparent 1.4px);
+            background-size: 8px 8px;
             border: 3px solid var(--ink);
             margin: auto;
-            padding: 40px;
-            border-radius: 20px; /* More rounded corners */
-            box-shadow: 0 15px 30px rgba(20,40,60,0.35); /* Deeper shadow */
+            padding: clamp(18px, 4vh, 36px) clamp(18px, 4vw, 36px);
+            border-radius: 22px;
+            box-shadow: 8px 8px 0 var(--ink);
             text-align: center;
             transform: scale(0.8); /* Initial scale for pop-in animation */
             opacity: 0; /* Initial opacity for pop-in animation */
             animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards; /* Pop-in animation */
             max-width: 500px;
-            width: 90%; /* Responsive width */
+            max-height: 100%;
+            overflow-y: auto;
+            box-sizing: border-box;
+            width: 100%;
             color: var(--ink);
             position: relative;
         }
+        .modal-content::before { top: 6px; left: 6px; width: 40px; height: 40px; }
 
-        /* Modal heading style */
         .modal-content h2 {
             color: var(--leaf-deep);
             font-weight: 800;
-            font-size: 2.5em;
-            margin-bottom: 15px;
+            font-size: clamp(1.5rem, 5vh, 2.3rem);
+            margin: 0 0 12px;
         }
 
-        /* Modal paragraph style */
         .modal-content p {
-            font-size: 1.3em;
-            margin-bottom: 25px;
+            font-size: clamp(1rem, 2.6vh, 1.25rem);
+            font-weight: 600;
+            margin: 0 0 20px;
         }
 
-        /* Modal button style */
         .modal-content button {
             background-color: var(--leaf);
             color: #FFF6EE;
-            border: 2px solid var(--ink);
-            border-radius: 12px;
-            padding: 18px 35px;
-            font-size: 1.6em;
-            font-weight: bold;
+            border: 3px solid var(--ink);
+            border-radius: 999px;
+            padding: 14px 30px;
+            font-size: clamp(1.1rem, 3vh, 1.45rem);
+            font-weight: 800;
             cursor: pointer;
             box-shadow: 5px 5px 0 var(--ink);
             transition: all 0.1s ease;
-            letter-spacing: 1px;
         }
-
-        /* Modal button active state */
         .modal-content button:active {
             box-shadow: 2px 2px 0 var(--ink);
             transform: translate(3px, 3px);
         }
+        .modal-content button:hover { background-color: var(--leaf-deep); }
 
-        /* Modal button hover state */
-        .modal-content button:hover {
-            background-color: var(--leaf-deep);
+        /* the other explorers' portraits sit in a round frame */
+        .mq-win-chike.is-portrait {
+            width: clamp(84px, 16vh, 124px);
+            height: clamp(84px, 16vh, 124px);
+            object-fit: cover;
+            object-position: 50% 30%;
+            border: 3px solid var(--ink);
+            border-radius: 50%;
+            background: var(--paper);
+            box-shadow: 4px 4px 0 var(--ink);
+            filter: none;
         }
 
-        /* Quiz option buttons - the blue "?" tiles pause the maze and ask
-           one multiple-choice question; a correct answer skips the ball
+        /* Chike cheering on the win card */
+        .mq-win-chike {
+            display: block;
+            height: clamp(84px, 17vh, 140px);
+            width: auto;
+            margin: 0 auto 6px;
+            filter: drop-shadow(3px 3px 0 rgba(30,34,38,.3));
+        }
+
+        /* Quiz option buttons - the lantern "?" posts pause the maze and ask
+           one multiple-choice question; a correct answer skips Chike
            ten cells ahead along the real solution path. */
         .modal-content .quiz-option {
             background-color: var(--paper);
             color: var(--ink);
             border: 2px solid var(--ink);
-            border-radius: 10px;
-            padding: 12px 16px;
-            font-size: 1.1em;
+            border-radius: 12px;
+            padding: 11px 16px;
+            font-size: 1.05em;
             font-weight: 700;
             cursor: pointer;
             transition: all 0.15s ease;
             width: 100%;
             text-align: center;
-            box-shadow: none;
+            box-shadow: 3px 3px 0 var(--ink);
             letter-spacing: normal;
         }
         .modal-content .quiz-option:hover:not(:disabled) { background-color: var(--sun); color: var(--ink); }
         .modal-content .quiz-option:disabled { cursor: default; opacity: 0.85; }
-        .modal-content .quiz-option.correct { background-color: var(--leaf); border-color: var(--leaf); color: #fff; }
-        .modal-content .quiz-option.wrong { background-color: var(--berry); border-color: var(--berry); color: #fff; }
+        .modal-content .quiz-option.correct { background-color: var(--leaf); border-color: var(--ink); color: #fff; }
+        .modal-content .quiz-option.wrong { background-color: var(--berry); border-color: var(--ink); color: #fff; }
 
-        /* The wizard quiz modal - his portrait to the left (a real cutout
-           now, no white box around him), his own words in a speech bubble
-           to the right, in a storybook serif so the maze's plain
-           sans-serif question text still reads clearly inside a bolded
-           line of his dialogue. */
+        /* The wizard quiz card - his portrait to the left, his own words in
+           a speech bubble to the right, on the same storybook paper as the
+           maze's frame. */
         .wizard-modal {
             max-width: 820px;
             text-align: left;
+            background-color: #FFF8E8;
         }
         .wizard-modal__layout {
             display: flex;
@@ -305,7 +593,7 @@
         .wizard-modal__portrait {
             flex: none;
             display: block;
-            width: 385px;
+            width: min(385px, 42vw);
             height: auto;
         }
         .wizard-modal__right {
@@ -318,11 +606,13 @@
             font-size: 1.5em;
             margin: 0 0 12px;
         }
+        .modal-content .wizard-modal__title { font-size: clamp(1.25rem, 3.6vh, 1.6rem); }
         .wizard-modal__bubble {
             position: relative;
             background: #FFFFFF;
             border: 3px solid var(--ink);
             border-radius: 16px;
+            box-shadow: 4px 4px 0 var(--ink);
             padding: 14px 18px;
             margin-bottom: 4px;
         }
@@ -344,14 +634,16 @@
             line-height: 1.4;
             margin: 0;
         }
+        .modal-content .wizard-modal__speech { font-size: clamp(.98rem, 2.4vh, 1.15rem); margin: 0; }
         .wizard-modal__speech strong {
             font-style: normal;
             color: var(--sun-hot);
         }
 
         @media (max-width: 560px) {
-            .wizard-modal__layout { flex-direction: column; align-items: center; text-align: center; }
-            .wizard-modal__portrait { height: 140px; width: auto; }
+            .modal-content::before { display: none; } /* no room beside the titles */
+            .wizard-modal__layout { flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+            .wizard-modal__portrait { height: clamp(96px, 20vh, 140px); width: auto; }
             .wizard-modal__title { text-align: center; }
             .wizard-modal__bubble::before, .wizard-modal__bubble::after { display: none; }
         }
@@ -364,29 +656,31 @@
         #leaderboard {
             list-style: none;
             padding: 0;
-            margin: 20px 0;
-            font-size: 1.1em;
+            margin: 12px 0 20px;
+            font-size: 1.05em;
             text-align: left;
         }
 
         #leaderboard li {
-            background-color: var(--paper-2); /* Alternate background for list items */
-            padding: 10px 15px;
-            margin-bottom: 8px;
-            border-radius: 8px;
+            background-color: var(--butter);
+            border: 2px solid var(--ink);
+            padding: 7px 14px;
+            margin-bottom: 6px;
+            border-radius: 12px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-weight: 700;
         }
 
         #leaderboard li span:first-child {
-            font-weight: bold;
-            color: var(--sun-hot);
+            font-weight: 800;
+            color: var(--leaf-deep);
         }
 
         #leaderboard li span:last-child {
             color: var(--ink);
+            font-variant-numeric: tabular-nums;
         }
 
         /* Keyframe animations */
@@ -400,93 +694,72 @@
             to { transform: scale(1); opacity: 1; }
         }
 
-        /* Responsive adjustments for smaller screens */
-        @media (max-width: 768px) {
-            body {
-                padding: 10px;
-            }
-
-            #game-container {
-                padding: 15px;
-            }
-
-            #game-info {
-                font-size: 1em;
-                flex-direction: column;
-                align-items: center;
-                gap: 5px;
-            }
-
-            canvas {
-                width: 100%; /* Make canvas fluid */
-                max-width: 800px; /* Cap max width */
-            }
-
-            .control-button {
-                padding: 10px 20px;
-                font-size: 1.2em;
-                min-width: 60px;
-            }
-
-            #controls {
-                gap: 8px;
-            }
-
-            #hint-button {
-                padding: 12px 20px;
-                font-size: 1em;
-            }
-
-            .modal-content {
-                padding: 25px;
-            }
-
-            .modal-content h2 {
-                font-size: 2em;
-            }
-
-            .modal-content p {
-                font-size: 1.1em;
-            }
-
-            .modal-content button {
-                padding: 15px 25px;
-                font-size: 1.4em;
-            }
-
-            #level-times-dropdown {
-                font-size: 0.9em;
-                padding: 8px 12px;
-            }
+        @media (prefers-reduced-motion: reduce) {
+            .modal, .modal-content { animation: none !important; }
+            .modal-content { opacity: 1; transform: none; }
+            body.ccs-maze #game-container { transition: none; }
         }
     </style>
     <link rel="stylesheet" href="game-skin.css">
 </head>
 <body class="ccs-game ccs-maze">
-    <h1>Maze Quest. Where questions determines your quest!</h1>
+    <h1><span class="mq-title-main">Maze Quest.</span> <span class="mq-title-tag">Where questions decide your quest!</span></h1>
 
     <div id="game-container">
+        <!-- wooden signs: which forest Chike is walking through, and the clock -->
         <div id="game-info">
-            <span>Level: <span id="level-display">1</span></span>
-            <span>Time: <span id="timer-display">00:00</span></span>
+            <div class="mq-sign mq-level-sign">
+                <!-- the explorer's face: tap it to pick a different character -->
+                <button type="button" id="char-button" class="mq-char-btn" style="background:transparent" aria-haspopup="dialog" aria-label="Choose your explorer. Now playing as Chike">
+                    <img id="char-face" class="mq-chike" src="../assets/characters/chike-thumb.jpg" alt="" width="36" height="36">
+                    <span class="mq-char-badge" aria-hidden="true"><svg viewBox="0 0 16 16" width="10" height="10"><path d="M3 6h9l-2.5-2.5M13 10H4l2.5 2.5" fill="none" stroke="#1E2226" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                </button>
+                <span class="mq-level-text">
+                    <span class="mq-level-num">Level <span id="level-display">1</span></span>
+                    <span id="level-name">Sunny Woods</span>
+                </span>
+            </div>
+            <div class="mq-sign mq-time-sign" aria-label="Time">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><circle cx="12" cy="13" r="8.5" fill="#FFFBF3" stroke="#1E2226" stroke-width="2.5"/><path d="M12 8.5V13l3 2" fill="none" stroke="#1E2226" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 2.5h5" stroke="#1E2226" stroke-width="2.5" stroke-linecap="round"/></svg>
+                <span id="timer-display">00:00</span>
+            </div>
         </div>
-        <canvas id="mazeCanvas"></canvas>
 
-        <div id="controls">
-            <button id="up" class="control-button" aria-label="Move Up">&#9650;</button>
-            <button id="left" class="control-button" aria-label="Move Left">&#9664;</button>
-            <button id="down" class="control-button" aria-label="Move Down">&#9660;</button>
-            <button id="right" class="control-button" aria-label="Move Right">&#9654;</button>
+        <!-- a little note beside the board on wide screens -->
+        <div id="mq-tip" aria-hidden="true">
+            <p><b>Help <span class="mq-char-name">Chike</span> reach the cabin!</b> Glowing lanterns ask a question. Get it right for a shortcut.</p>
         </div>
-        <button id="hint-button">Hint</button>
+
+        <div id="board"><canvas id="mazeCanvas" role="img" aria-label="A forest maze. Walk Chike from the tent to the cabin."></canvas></div>
+
+        <div id="pad-area">
+            <div id="controls">
+                <button id="up" class="control-button" aria-label="Move Up">&#9650;</button>
+                <button id="left" class="control-button" aria-label="Move Left">&#9664;</button>
+                <button id="down" class="control-button" aria-label="Move Down">&#9660;</button>
+                <button id="right" class="control-button" aria-label="Move Right">&#9654;</button>
+            </div>
+            <!-- the shared sound on/off button (game-sound.js) joins Hint here -->
+            <div id="hint-row"><button id="hint-button"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M9 3.5h6M12 3.5v2" stroke="#1E2226" stroke-width="2.2" stroke-linecap="round"/><rect x="6.5" y="5.5" width="11" height="14" rx="3.5" fill="#FFE6A6" stroke="#1E2226" stroke-width="2.2"/><path d="M12 9.5c1.6 1.4 1.6 3.6 0 5.5-1.6-1.9-1.6-4.1 0-5.5z" fill="#DD7A22"/><path d="M8.5 21h7" stroke="#1E2226" stroke-width="2.2" stroke-linecap="round"/></svg>Hint</button></div>
+        </div>
     </div>
 
     <!-- Win Pop-up Modal -->
     <div id="winModal" class="modal">
         <div class="modal-content">
+            <img id="win-face" class="mq-win-chike" src="../assets/characters/chike-pose-thumbs-up.png" alt="Chike giving a thumbs up">
             <h2 id="winPhrase"></h2>
             <p>You have completed this level in <span id="finalTime"></span></p>
             <button id="nextLevelBtn"></button>
+        </div>
+    </div>
+
+    <!-- Pick your explorer: the site's eight characters, as in Doodle Dash -->
+    <div id="charModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="charTitle">
+        <div class="modal-content mq-char-card">
+            <h2 id="charTitle">Pick your explorer</h2>
+            <div class="mq-chars" id="mq-chars"></div>
+            <button type="button" id="charDone">Let's go!</button>
         </div>
     </div>
 
@@ -521,10 +794,21 @@
         </div>
     </div>
 
+    <script src="game-sound.js"></script>
     <script>
         // Get canvas and its 2D rendering context
         const canvas = document.getElementById('mazeCanvas');
         const ctx = canvas.getContext('2d');
+
+        // --- Sound (the site's shared kit, game-sound.js; the game plays on silently without it) ---
+        const sfx = (name, opts) => { if (window.CCSSound) CCSSound.play(name, opts); };
+        let bumpedWall = false; // so pushing into a wall bumps once, not every frame
+        // True from the moment Chike reaches the cabin until the next maze
+        // starts: the win check then runs once and the game loop stops.
+        let levelComplete = false;
+        if (window.CCSSound) {
+            document.getElementById('hint-row').appendChild(CCSSound.button({ background: '#FFFBF3' }));
+        }
 
         // --- Game State Variables ---
         let currentLevel = 1; // Current game level
@@ -725,23 +1009,26 @@
         // --- Maze Generation (Recursive Backtracking Algorithm) ---
         function generateMaze() {
             // Set canvas dimensions based on the current level
+            // (The maze is still laid out on the same 800x800 field; the
+            // canvas element itself is now sized by fitBoard() and drawn
+            // through a scale, see "The forest" below.)
             const dims = levelDimensions[currentLevel];
-            canvas.width = dims.width;
-            canvas.height = dims.height;
+            const fieldWidth = dims.width;
+            const fieldHeight = dims.height;
 
             // Dynamically calculate cellSize to fit the maze within the canvas,
             // making mazes progressively denser and more complex for higher levels.
             // Increased multiplier for more cells/complexity per level.
             // This directly impacts the number of cells and thus the "straightness" of paths.
-            cellSize = Math.floor(Math.min(canvas.width, canvas.height) / (currentLevel * 10 + 30)); // Adjusted for higher density
+            cellSize = Math.floor(Math.min(fieldWidth, fieldHeight) / (currentLevel * 10 + 30)); // Adjusted for higher density
             // Ensure cellSize is at least the effective ball diameter plus a small buffer
             if (cellSize < BALL_DIAMETER_EFFECTIVE + 2) {
                 cellSize = BALL_DIAMETER_EFFECTIVE + 2;
             }
 
             // Calculate grid dimensions based on new cellSize
-            gridCols = Math.floor(canvas.width / cellSize);
-            gridRows = Math.floor(canvas.height / cellSize);
+            gridCols = Math.floor(fieldWidth / cellSize);
+            gridRows = Math.floor(fieldHeight / cellSize);
 
             // Initialize maze grid with all walls present
             maze = [];
@@ -755,6 +1042,10 @@
 
             // Initialize visitedPath grid for green tracing
             visitedPath = Array(gridRows).fill(0).map(() => Array(gridCols).fill(false));
+            // which way Chike was walking when he first stepped into each cell (for his footprints)
+            stepDir = Array(gridRows).fill(0).map(() => Array(gridCols).fill(null));
+            forestSeed = Math.floor(Math.random() * 2147483646) + 1; // this maze's trees, flowers and stones
+            trailDirty = true;
 
             // Recursive Backtracking algorithm implementation
             let stack = [];
@@ -930,147 +1221,702 @@
             ball.speed = Math.max(1, Math.floor(availableChannelWidth * 0.7)); // Speed remains consistent with channel size
         }
 
-        // --- Drawing Functions ---
+        // --- The forest: drawing ---
+        //
+        // The maze is laid out on an 800x800 field (cellSize 30). The canvas
+        // shows a slightly larger VIEW so there is a strip of forest around
+        // it for the camp tent (start) and the cabin (exit); everything is
+        // drawn through one scale, so the game's own coordinates (ball.x,
+        // ball.y, cells) are unchanged. The trees, hedges and flowers are
+        // painted once per maze to an offscreen canvas; each frame only
+        // copies that, then draws the trail, lanterns, a few critters, the
+        // hint arrow and Chike on top.
+        const VIEW = 860;          // canvas units across (and down)
+        const OFF = 40;            // where the maze's top-left corner sits in the view
+        const CHIKE_R = 11;        // about half the explorer's drawn width; the hitbox (ball.radius + BALL_MARGIN) is unchanged
+        const REDUCED_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-        // Draws the maze walls and visited path on the canvas
-        function drawMaze() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the entire canvas
+        // Eight forests, one per level, so the levels feel like a journey
+        // through the seasons. frame = the storybook frame's backdrop.
+        const LEVEL_THEMES = {
+            1: { name: 'Sunny Woods', frame: '#C9E7BC', ground: '#8CC269', speck: '#6FA552', trail: '#F2E2B4', trod: '#E3C98E', foot: '#9A6B34',
+                 hedge: '#4E9A3F', hedgeDark: '#1E3A22', hedgeLight: '#7CC35E', trees: ['#4E9A3F', '#3F8A3A', '#5DAA47'],
+                 decor: ['flower', 'flower', 'stone', 'tuft'], accents: ['#F8C0B9', '#FFFFFF', '#F5B921'], berries: null, critters: 'butterflies' },
+            2: { name: 'Berry Bramble', frame: '#D7EDC6', ground: '#7DB45A', speck: '#5F9A45', trail: '#EFD9A7', trod: '#DDC086', foot: '#8F6230',
+                 hedge: '#3F8A3A', hedgeDark: '#1B3520', hedgeLight: '#69B455', trees: ['#3F8A3A', '#4E9A3F', '#2F7A32'],
+                 decor: ['flower', 'tuft', 'stone', 'flower'], accents: ['#FFFFFF', '#F8C0B9', '#7A4A86'], berries: ['#BC3229', '#7A4A86'], critters: 'butterflies' },
+            3: { name: 'Mushroom Hollow', frame: '#C3DDB4', ground: '#5E8F4E', speck: '#4C7A3F', trail: '#E6D3A2', trod: '#D2B67F', foot: '#7E5428',
+                 hedge: '#2F6B2C', hedgeDark: '#122A14', hedgeLight: '#4F9744', trees: ['#2F6B2C', '#3A7A37', '#285E28'],
+                 decor: ['mushroom', 'mushroom', 'stone', 'fern'], accents: ['#BC3229', '#F5B921'], berries: null, critters: 'fireflies' },
+            4: { name: 'Golden Grove', frame: '#FFE6A6', ground: '#B8B25A', speck: '#9C9744', trail: '#F4E4B6', trod: '#E3C887', foot: '#8A5A26',
+                 hedge: '#8E9F2E', hedgeDark: '#33361A', hedgeLight: '#C6C24A', trees: ['#C9A227', '#8E9F2E', '#DDA032', '#A8A93A'],
+                 decor: ['leaf', 'leaf', 'acorn', 'mushroom'], accents: ['#F5B921', '#DD7A22', '#C9A227'], berries: null, critters: 'leaves' },
+            5: { name: 'Maple Lane', frame: '#F8D2A8', ground: '#C98A4A', speck: '#AE733A', trail: '#F3DEB6', trod: '#E0BE86', foot: '#7A4520',
+                 hedge: '#C8562A', hedgeDark: '#43190E', hedgeLight: '#EA8A3C', trees: ['#C8562A', '#DD7A22', '#BC3229', '#E2A034'],
+                 decor: ['leaf', 'leaf', 'pumpkin', 'stone'], accents: ['#DD7A22', '#BC3229', '#F5B921'], berries: null, critters: 'leaves' },
+            6: { name: 'Firefly Twilight', frame: '#D6D0EC', ground: '#3E4F6E', speck: '#33435F', trail: '#CFC7E3', trod: '#B6ACD0', foot: '#4B3F6E',
+                 hedge: '#2E5A55', hedgeDark: '#0C1A22', hedgeLight: '#3F7A6E', trees: ['#2E5A55', '#28504F', '#355F66'],
+                 decor: ['glowshroom', 'glowshroom', 'stone', 'fern'], accents: ['#8EE3F0', '#F5E27A'], berries: null, critters: 'fireflies', night: true },
+            7: { name: 'Snowy Pines', frame: '#E6F0F2', ground: '#DCE8EF', speck: '#C2D5E0', trail: '#FFFDF8', trod: '#E4E0D4', foot: '#7D93A6',
+                 hedge: '#2F6B4F', hedgeDark: '#11291F', hedgeLight: '#4F8F6E', trees: ['#2F6B4F', '#285E45', '#3A7A57'],
+                 decor: ['snowstone', 'pinecone', 'snowstone', 'berrytwig'], accents: ['#BC3229', '#FFFFFF'], berries: null, critters: 'snow', snow: true },
+            8: { name: "Wizard's Wood", frame: '#DCD3F2', ground: '#2E2A4E', speck: '#27234A', trail: '#DCD2F0', trod: '#C4B6E6', foot: '#4A3A7A',
+                 hedge: '#4A3F8A', hedgeDark: '#120F2A', hedgeLight: '#7A6CC4', trees: ['#4A3F8A', '#3B3478', '#2E6F7A'],
+                 decor: ['crystal', 'glowshroom', 'crystal', 'stone'], accents: ['#8EE3F0', '#F5B921', '#F8C0B9'], berries: ['#F5B921'], critters: 'sparkles', night: true }
+        };
+        function levelTheme() { return LEVEL_THEMES[currentLevel] || LEVEL_THEMES[1]; }
 
-            // Draw maze surface background - Changed to white
-            ctx.fillStyle = '#FFFBF3'; // White for the maze floor
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // a small seeded random number maker, so a maze's forest looks the
+        // same every time it is redrawn (after a resize, say)
+        function seededRandom(seed) {
+            let s = seed >>> 0;
+            return function () {
+                s = (s + 0x6D2B79F5) >>> 0;
+                let t = s;
+                t = Math.imul(t ^ (t >>> 15), t | 1);
+                t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+        }
 
-            // Draw the green visited path
-            ctx.fillStyle = '#7FCB76'; // Green color for visited cells
-            for (let r = 0; r < gridRows; r++) {
-                for (let c = 0; c < gridCols; c++) {
-                    if (visitedPath[r][c]) {
-                        ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+        let backing = 0;                 // the canvas's real pixel size (square)
+        let scaleK = 1;                  // real pixels per view unit
+        let forestSeed = 1;
+        let stepDir = [];                // per cell: {x, y} direction of Chike's first step in, for footprints
+        let trailDirty = true;           // the trail layer needs repainting
+        let walkPhase = 0;               // advances with every pixel Chike walks; drives his step bob
+        const forestCanvas = document.createElement('canvas');
+        const fctx = forestCanvas.getContext('2d');
+        const trailCanvas = document.createElement('canvas');
+        const tctx = trailCanvas.getContext('2d');
+
+
+        function setBacking(px) {
+            if (px === backing) return false;
+            backing = px;
+            scaleK = px / VIEW;
+            canvas.width = canvas.height = px;
+            forestCanvas.width = forestCanvas.height = px;
+            trailCanvas.width = trailCanvas.height = px;
+            return true;
+        }
+
+        // helpers for drawing in maze coordinates on any of the layers
+        function toMaze(g) { g.setTransform(scaleK, 0, 0, scaleK, OFF * scaleK, OFF * scaleK); }
+        function dot(g, x, y, r) { g.moveTo(x + r, y); g.arc(x, y, r, 0, Math.PI * 2); }
+        function roundRectPath(g, x, y, w, h, r) {
+            r = Math.min(r, w / 2, h / 2);
+            g.moveTo(x + r, y);
+            g.arcTo(x + w, y, x + w, y + h, r);
+            g.arcTo(x + w, y + h, x, y + h, r);
+            g.arcTo(x, y + h, x, y, r);
+            g.arcTo(x, y, x + w, y, r);
+            g.closePath();
+        }
+
+        // a round crown or hedge clump: dark outline, body, a lighter top-left
+        function drawClumps(g, list, dark, body, light, outline) {
+            g.fillStyle = dark; g.beginPath(); list.forEach(c => dot(g, c.x, c.y, c.r + outline)); g.fill();
+            g.fillStyle = body; g.beginPath(); list.forEach(c => dot(g, c.x, c.y, c.r)); g.fill();
+            g.fillStyle = light; g.beginPath(); list.forEach(c => dot(g, c.x - c.r * 0.3, c.y - c.r * 0.32, c.r * 0.5)); g.fill();
+        }
+
+        // ---- small decorations (maze units; all a few pixels across) ----
+        function drawDecor(g, type, x, y, rand, t) {
+            const pick = (arr) => arr[Math.floor(rand() * arr.length)];
+            g.lineWidth = 1.1;
+            g.strokeStyle = '#1E2226';
+            switch (type) {
+                case 'flower': {
+                    g.fillStyle = pick(t.accents);
+                    g.beginPath();
+                    for (let i = 0; i < 5; i++) { const a = i * Math.PI * 2 / 5; dot(g, x + Math.cos(a) * 1.9, y + Math.sin(a) * 1.9, 1.5); }
+                    g.fill(); g.stroke();
+                    g.fillStyle = '#F5B921'; g.beginPath(); dot(g, x, y, 1.1); g.fill();
+                    break;
+                }
+                case 'tuft': {
+                    g.strokeStyle = t.hedgeDark; g.lineWidth = 1.2; g.beginPath();
+                    g.moveTo(x - 2.5, y + 2); g.lineTo(x - 1.5, y - 2);
+                    g.moveTo(x, y + 2); g.lineTo(x, y - 3);
+                    g.moveTo(x + 2.5, y + 2); g.lineTo(x + 1.6, y - 2);
+                    g.stroke();
+                    break;
+                }
+                case 'stone':
+                case 'snowstone': {
+                    g.fillStyle = t.night ? '#8D8AA8' : '#A9A59C';
+                    g.beginPath(); g.ellipse(x, y, 3.2, 2.3, rand() * Math.PI, 0, Math.PI * 2); g.fill(); g.stroke();
+                    if (type === 'snowstone') { g.fillStyle = '#FFFFFF'; g.beginPath(); g.ellipse(x - 0.4, y - 1, 2.4, 1.2, 0, 0, Math.PI * 2); g.fill(); }
+                    break;
+                }
+                case 'mushroom':
+                case 'glowshroom': {
+                    const glow = type === 'glowshroom';
+                    if (glow) {
+                        const grd = g.createRadialGradient(x, y - 1, 0, x, y - 1, 7);
+                        grd.addColorStop(0, 'rgba(142,227,240,.55)'); grd.addColorStop(1, 'rgba(142,227,240,0)');
+                        g.fillStyle = grd; g.beginPath(); dot(g, x, y - 1, 7); g.fill();
                     }
+                    g.fillStyle = '#FFF6EE'; g.beginPath(); g.rect(x - 1, y - 0.5, 2, 3); g.fill(); g.stroke();
+                    g.fillStyle = glow ? '#8EE3F0' : '#BC3229';
+                    g.beginPath(); g.arc(x, y, 3.2, Math.PI, 0); g.closePath(); g.fill(); g.stroke();
+                    g.fillStyle = '#FFFFFF'; g.beginPath(); dot(g, x - 1.2, y - 1.3, 0.6); dot(g, x + 1.1, y - 1.7, 0.5); g.fill();
+                    break;
+                }
+                case 'fern': {
+                    g.strokeStyle = t.hedgeLight; g.lineWidth = 1.2; g.beginPath();
+                    g.moveTo(x, y + 3); g.lineTo(x, y - 3);
+                    for (let i = -2; i <= 2; i += 2) { g.moveTo(x, y + i); g.lineTo(x - 2.4, y + i - 1.4); g.moveTo(x, y + i); g.lineTo(x + 2.4, y + i - 1.4); }
+                    g.stroke();
+                    break;
+                }
+                case 'leaf': {
+                    g.fillStyle = pick(t.accents);
+                    g.save(); g.translate(x, y); g.rotate(rand() * Math.PI * 2);
+                    g.beginPath(); g.ellipse(0, 0, 3.2, 1.7, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+                    g.beginPath(); g.moveTo(-3, 0); g.lineTo(3, 0); g.lineWidth = 0.7; g.stroke();
+                    g.restore();
+                    break;
+                }
+                case 'acorn': {
+                    g.fillStyle = '#B9713A'; g.beginPath(); g.ellipse(x, y + 0.6, 1.9, 2.4, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+                    g.fillStyle = '#6B3A16'; g.beginPath(); g.arc(x, y - 0.4, 2.3, Math.PI, 0); g.closePath(); g.fill(); g.stroke();
+                    break;
+                }
+                case 'pumpkin': {
+                    g.fillStyle = '#DD7A22'; g.beginPath(); g.ellipse(x, y, 3.4, 2.6, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+                    g.beginPath(); g.moveTo(x, y - 2.4); g.lineTo(x, y + 2.4); g.lineWidth = 0.8; g.stroke();
+                    g.fillStyle = '#3A7A37'; g.fillRect(x - 0.6, y - 3.8, 1.2, 1.6);
+                    break;
+                }
+                case 'pinecone': {
+                    g.fillStyle = '#8A5A2B'; g.beginPath(); g.ellipse(x, y, 1.8, 2.8, 0.4, 0, Math.PI * 2); g.fill(); g.stroke();
+                    break;
+                }
+                case 'berrytwig': {
+                    g.strokeStyle = '#5A3A22'; g.lineWidth = 1; g.beginPath(); g.moveTo(x - 3, y + 2); g.lineTo(x + 3, y - 2); g.stroke();
+                    g.fillStyle = '#BC3229'; g.strokeStyle = '#1E2226'; g.lineWidth = 0.8;
+                    g.beginPath(); dot(g, x - 0.5, y, 1.2); dot(g, x + 1.6, y - 0.6, 1.1); g.fill(); g.stroke();
+                    break;
+                }
+                case 'crystal': {
+                    const grd = g.createRadialGradient(x, y, 0, x, y, 7);
+                    grd.addColorStop(0, 'rgba(248,192,185,.45)'); grd.addColorStop(1, 'rgba(248,192,185,0)');
+                    g.fillStyle = grd; g.beginPath(); dot(g, x, y, 7); g.fill();
+                    g.fillStyle = pick(['#8EE3F0', '#F8C0B9', '#C9B6F2']);
+                    g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x + 2.2, y); g.lineTo(x, y + 3); g.lineTo(x - 2.2, y); g.closePath(); g.fill(); g.stroke();
+                    break;
                 }
             }
+        }
 
-            // Draw the blue boost path - the ten cells a correct quiz
-            // answer just skipped the ball across.
-            if (boostPath.length) {
-                ctx.fillStyle = '#8FCBEC';
-                boostPath.forEach(cell => {
-                    ctx.fillRect(cell.col * cellSize, cell.row * cellSize, cellSize, cellSize);
+        // the camp tent above the way in, with a little "Start" sign
+        function drawTent(g, t) {
+            const x = cellSize / 2, base = -4;
+            g.fillStyle = t.trail; g.beginPath(); g.ellipse(x + 4, base - 1, 30, 9, 0, 0, Math.PI * 2); g.fill();
+            g.lineJoin = 'round'; g.lineCap = 'round';
+            g.strokeStyle = '#1E2226'; g.lineWidth = 2.4;
+            g.fillStyle = '#DD7A22';
+            g.beginPath(); g.moveTo(x - 17, base); g.lineTo(x, base - 29); g.lineTo(x + 17, base); g.closePath(); g.fill(); g.stroke();
+            g.fillStyle = '#F5B921';
+            g.beginPath(); g.moveTo(x, base - 29); g.lineTo(x + 17, base); g.lineTo(x + 7, base); g.closePath(); g.fill(); g.stroke();
+            g.fillStyle = '#5A2E14';
+            g.beginPath(); g.moveTo(x - 6, base); g.lineTo(x, base - 14); g.lineTo(x + 6, base); g.closePath(); g.fill(); g.stroke();
+            g.beginPath(); g.moveTo(x, base - 29); g.lineTo(x, base - 36); g.stroke();
+            g.fillStyle = '#BC3229'; g.beginPath(); g.moveTo(x, base - 36); g.lineTo(x + 8, base - 33.5); g.lineTo(x, base - 31); g.closePath(); g.fill(); g.lineWidth = 1.6; g.stroke();
+            woodSign(g, x + 44, base - 16, 'Start', 17);
+        }
+
+        // the cosy cabin past the way out, with its "Exit" sign
+        function drawCabin(g, t) {
+            const x = (gridCols - 1) * cellSize + cellSize / 2, top = gridRows * cellSize;
+            g.fillStyle = t.trail; g.fillRect(x - 8, top - 2, 16, 10);
+            g.beginPath(); g.ellipse(x, top + 24, 26, 13, 0, 0, Math.PI * 2); g.fill();
+            g.lineJoin = 'round'; g.strokeStyle = '#1E2226'; g.lineWidth = 2.4;
+            // chimney
+            g.fillStyle = '#8A8178'; g.fillRect(x + 8, top + 3, 5, 9); g.strokeRect(x + 8, top + 3, 5, 9);
+            // log walls
+            g.fillStyle = '#B9713A'; g.fillRect(x - 17, top + 16, 34, 20); g.strokeRect(x - 17, top + 16, 34, 20);
+            g.lineWidth = 1; g.beginPath();
+            for (let yy = top + 21; yy < top + 36; yy += 5) { g.moveTo(x - 17, yy); g.lineTo(x + 17, yy); }
+            g.stroke();
+            // roof
+            g.lineWidth = 2.4; g.fillStyle = '#BC3229';
+            g.beginPath(); g.moveTo(x - 21, top + 17); g.lineTo(x, top + 3); g.lineTo(x + 21, top + 17); g.closePath(); g.fill(); g.stroke();
+            // door and a lit window
+            g.fillStyle = '#5A2E14'; g.fillRect(x - 5, top + 24, 10, 12); g.strokeRect(x - 5, top + 24, 10, 12);
+            g.fillStyle = '#FFE6A6'; g.fillRect(x + 8, top + 21, 6, 6); g.lineWidth = 1.6; g.strokeRect(x + 8, top + 21, 6, 6);
+            woodSign(g, x - 50, top + 22, 'Exit', 20);
+        }
+
+        function woodSign(g, cx, cy, text, size) {
+            g.font = `800 ${size}px "Plus Jakarta Sans", "Segoe UI", sans-serif`;
+            const w = g.measureText(text).width + 14, h = size + 9;
+            g.fillStyle = '#5A3A22'; g.fillRect(cx - 1.5, cy + h / 2 - 2, 3, 9);
+            g.beginPath(); roundRectPath(g, cx - w / 2, cy - h / 2, w, h, 5);
+            g.fillStyle = '#E2AE6C'; g.fill(); g.strokeStyle = '#1E2226'; g.lineWidth = 2.4; g.stroke();
+            g.fillStyle = '#1E2226'; g.textAlign = 'center'; g.textBaseline = 'middle';
+            g.fillText(text, cx, cy + 1);
+        }
+
+        // Paints this maze's forest (everything that never moves) to forestCanvas
+        function buildForest() {
+            if (!maze.length || !backing) return;
+            const t = levelTheme();
+            const rand = seededRandom(forestSeed);
+            const g = fctx;
+            const W = gridCols * cellSize, H = gridRows * cellSize;
+
+            g.setTransform(1, 0, 0, 1, 0, 0);
+            g.clearRect(0, 0, backing, backing);
+            g.setTransform(scaleK, 0, 0, scaleK, 0, 0);
+
+            // forest floor, with a scatter of darker specks
+            g.fillStyle = t.ground; g.fillRect(0, 0, VIEW, VIEW);
+            g.fillStyle = t.speck; g.beginPath();
+            for (let i = 0; i < 260; i++) dot(g, rand() * VIEW, rand() * VIEW, 0.8 + rand() * 1.6);
+            g.fill();
+
+            toMaze(g);
+            // the trail floor between the hedges
+            g.fillStyle = t.trail;
+            g.beginPath(); roundRectPath(g, -3, -3, W + 6, H + 6, 8); g.fill();
+            g.fillStyle = t.trod; g.globalAlpha = 0.45; g.beginPath();
+            for (let i = 0; i < 420; i++) dot(g, rand() * W, rand() * H, 0.5 + rand() * 0.9);
+            g.fill(); g.globalAlpha = 1;
+
+            drawTent(g, t);
+            drawCabin(g, t);
+
+            // hedges: a chain of round clumps along every wall
+            const posts = new Map();
+            const clumps = [];
+            const post = (x, y) => {
+                const k = x + ',' + y;
+                if (!posts.has(k)) posts.set(k, { x, y, n: 0 });
+                posts.get(k).n++;
+            };
+            const segment = (x0, y0, x1, y1) => {
+                post(x0, y0); post(x1, y1);
+                for (const f of [0.25, 0.5, 0.75]) {
+                    const j = (rand() - 0.5) * 1.2;
+                    clumps.push({ x: x0 + (x1 - x0) * f + (y0 === y1 ? 0 : j), y: y0 + (y1 - y0) * f + (y0 === y1 ? j : 0), r: 4.4 + rand() * 0.9 });
+                }
+            };
+            for (let r = 0; r < gridRows; r++) {
+                for (let c = 0; c < gridCols; c++) {
+                    const cell = maze[r][c], x = c * cellSize, y = r * cellSize;
+                    if (cell.walls.top) segment(x, y, x + cellSize, y);
+                    if (cell.walls.left) segment(x, y, x, y + cellSize);
+                    if (c === gridCols - 1 && cell.walls.right) segment(x + cellSize, y, x + cellSize, y + cellSize);
+                    if (r === gridRows - 1 && cell.walls.bottom) segment(x, y + cellSize, x + cellSize, y + cellSize);
+                }
+            }
+            posts.forEach(p => clumps.push({ x: p.x, y: p.y, r: p.n >= 3 ? 6.2 : 5.2 + rand() * 0.5 }));
+            drawClumps(g, clumps, t.hedgeDark, t.hedge, t.hedgeLight, 2);
+
+            // a few berries (or snow tufts) on the hedges
+            if (t.berries) {
+                g.strokeStyle = '#1E2226'; g.lineWidth = 0.8;
+                clumps.forEach(c => {
+                    if (rand() > 0.12) return;
+                    g.fillStyle = t.berries[Math.floor(rand() * t.berries.length)];
+                    g.beginPath(); dot(g, c.x + 1.4, c.y + 0.6, 1.25); dot(g, c.x - 0.6, c.y + 1.8, 1.15); g.fill(); g.stroke();
                 });
             }
 
-            // Draw maze walls
-            ctx.strokeStyle = '#1E2226'; // Ink for walls
-            ctx.lineWidth = 4; // Thickness of the walls
-
+            // little flowers, mushrooms and stones tucked in at the foot of
+            // the hedges - never in the middle of the trail, never on a lantern
+            const quizCells = new Set(quizTiles.map(q => q.row + ',' + q.col));
             for (let r = 0; r < gridRows; r++) {
                 for (let c = 0; c < gridCols; c++) {
-                    let cell = maze[r][c];
-                    let x = cell.col * cellSize;
-                    let y = cell.row * cellSize;
-
-                    // Draw each wall if it exists for the current cell
-                    if (cell.walls.top) {
-                        ctx.beginPath();
-                        ctx.moveTo(x, y);
-                        ctx.lineTo(x + cellSize, y);
-                        ctx.stroke();
-                    }
-                    if (cell.walls.right) {
-                        ctx.beginPath();
-                        ctx.moveTo(x + cellSize, y);
-                        ctx.lineTo(x + cellSize, y + cellSize);
-                        ctx.stroke();
-                    }
-                    if (cell.walls.bottom) {
-                        ctx.beginPath();
-                        ctx.moveTo(x, y + cellSize);
-                        ctx.lineTo(x + cellSize, y + cellSize);
-                        ctx.stroke();
-                    }
-                    if (cell.walls.left) {
-                        ctx.beginPath();
-                        ctx.moveTo(x, y);
-                        ctx.lineTo(x, y + cellSize);
-                        ctx.stroke();
-                    }
+                    if (rand() > 0.16) continue;
+                    if ((r === 0 && c === 0) || (r === gridRows - 1 && c === gridCols - 1) || quizCells.has(r + ',' + c)) continue;
+                    const cell = maze[r][c];
+                    const sides = ['top', 'right', 'bottom', 'left'].filter(s => cell.walls[s]);
+                    if (!sides.length) continue;
+                    const side = sides[Math.floor(rand() * sides.length)];
+                    const along = cellSize * (0.3 + rand() * 0.4), inset = 7.5;
+                    const x0 = c * cellSize, y0 = r * cellSize;
+                    const pos = side === 'top' ? [x0 + along, y0 + inset]
+                        : side === 'bottom' ? [x0 + along, y0 + cellSize - inset]
+                        : side === 'left' ? [x0 + inset, y0 + along]
+                        : [x0 + cellSize - inset, y0 + along];
+                    drawDecor(g, t.decor[Math.floor(rand() * t.decor.length)], pos[0], pos[1], rand, t);
                 }
             }
 
-            // Draw "Start here" and "Exit" signs
-            ctx.fillStyle = '#DD7A22'; // Sun-hot for text
-            ctx.font = 'bold 20px "Plus Jakarta Sans"';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
+            // a thick band of trees all round, leaving room for the tent and the cabin
+            const trees = [];
+            const clearOf = (x, y) => !((y < 0 && x < 100 && x > -45) || (y > H && x > W - 120));
+            for (let x = -30; x <= W + 30; x += 21 + rand() * 6) {
+                for (const y of [-25 + rand() * 6, H + 25 - rand() * 6]) if (clearOf(x, y)) trees.push({ x, y, r: 13 + rand() * 5 });
+            }
+            for (let y = -8; y <= H + 8; y += 21 + rand() * 6) {
+                for (const x of [-25 + rand() * 6, W + 25 - rand() * 6]) if (clearOf(x, y)) trees.push({ x, y, r: 13 + rand() * 5 });
+            }
+            // each tree gets one of the forest's colours
+            t.trees.forEach((col, i) => {
+                const mine = trees.filter((_, k) => k % t.trees.length === i);
+                drawClumps(g, mine, t.hedgeDark, col, t.snow ? '#FFFFFF' : t.hedgeLight, 2.4);
+            });
+            if (t.snow) {
+                g.fillStyle = '#FFFFFF'; g.beginPath();
+                clumps.forEach(c => { if (rand() < 0.35) dot(g, c.x - c.r * 0.2, c.y - c.r * 0.45, c.r * 0.45); });
+                g.fill();
+            }
+            trailDirty = true;
+        }
 
-            // "Start here" sign positioning
-            ctx.fillText('Start here', maze[0][0].col * cellSize + cellSize / 2, maze[0][0].row * cellSize - 15);
+        // Repaints the trail Chike has walked: pressed-down trail with his
+        // footprints, and the bright magic path a correct answer jumped him along
+        function renderTrail() {
+            trailDirty = false;
+            const t = levelTheme();
+            const g = tctx;
+            g.setTransform(1, 0, 0, 1, 0, 0);
+            g.clearRect(0, 0, backing, backing);
+            if (!maze.length || !visitedPath.length) return;
+            toMaze(g);
+            const inset = 9;
+            const boosted = new Set(boostPath.map(b => b.row + ',' + b.col));
+            const cellRect = (r, c) => {
+                const w = maze[r][c].walls, x = c * cellSize, y = r * cellSize;
+                const x0 = x + (w.left ? inset : 0), y0 = y + (w.top ? inset : 0);
+                const x1 = x + cellSize - (w.right ? inset : 0), y1 = y + cellSize - (w.bottom ? inset : 0);
+                return [x0, y0, x1 - x0, y1 - y0];
+            };
+            g.fillStyle = t.trod;
+            g.beginPath();
+            for (let r = 0; r < gridRows; r++) for (let c = 0; c < gridCols; c++) {
+                if (visitedPath[r][c] && !boosted.has(r + ',' + c)) { const q = cellRect(r, c); g.rect(q[0], q[1], q[2], q[3]); }
+            }
+            g.fill();
+            if (boosted.size) {
+                g.fillStyle = '#B9E7F2';
+                g.beginPath();
+                boostPath.forEach(b => { const q = cellRect(b.row, b.col); g.rect(q[0], q[1], q[2], q[3]); });
+                g.fill();
+                g.fillStyle = '#FFFFFF';
+                g.beginPath();
+                boostPath.forEach(b => sparkPath(g, b.col * cellSize + cellSize / 2, b.row * cellSize + cellSize / 2, 3.2));
+                g.fill();
+            }
+            // footprints
+            g.fillStyle = t.foot;
+            g.globalAlpha = 0.55;
+            g.beginPath();
+            for (let r = 0; r < gridRows; r++) for (let c = 0; c < gridCols; c++) {
+                const d = stepDir[r] && stepDir[r][c];
+                if (!d || !visitedPath[r][c]) continue;
+                const cx = c * cellSize + cellSize / 2, cy = r * cellSize + cellSize / 2;
+                const a = Math.atan2(d.y, d.x);
+                const ux = Math.cos(a), uy = Math.sin(a), px = -uy, py = ux;
+                for (const s of [-1, 1]) {
+                    const fx = cx + px * 2.6 * s + ux * 2.4 * s, fy = cy + py * 2.6 * s + uy * 2.4 * s;
+                    g.moveTo(fx + ux * 2.4, fy + uy * 2.4);
+                    g.ellipse(fx, fy, 2.4, 1.4, a, 0, Math.PI * 2);
+                }
+            }
+            g.fill();
+            g.globalAlpha = 1;
+        }
 
-            // "Exit" sign positioning
-            ctx.fillText('Exit', maze[gridRows - 1][gridCols - 1].col * cellSize + cellSize / 2, maze[gridRows - 1][gridCols - 1].row * cellSize + cellSize + 15);
+        // a four-point twinkle
+        function sparkPath(g, x, y, s) {
+            g.moveTo(x, y - s);
+            g.quadraticCurveTo(x, y, x + s, y);
+            g.quadraticCurveTo(x, y, x, y + s);
+            g.quadraticCurveTo(x, y, x - s, y);
+            g.quadraticCurveTo(x, y, x, y - s);
+        }
 
-            // Quiz tiles - blue "?" while unanswered, then a permanent
-            // green checkmark or red X once the wizard has judged it, so a
-            // player can see at a glance which ones they already got right
-            // or wrong instead of the tile just vanishing.
+        // The "?" tiles: glowing lanterns until answered, then a green tick or a red cross
+        function drawLanterns(now) {
+            const g = ctx;
             quizTiles.forEach(tile => {
                 const cx = tile.col * cellSize + cellSize / 2;
                 const cy = tile.row * cellSize + cellSize / 2;
-                const r = Math.max(6, cellSize * 0.32);
-                let fillColor = '#0A5280', glyph = '?';
-                if (tile.answered) {
-                    fillColor = tile.correct ? '#3A7A37' : '#BC3229';
-                    glyph = tile.correct ? '✓' : '✗';
+                const r = Math.max(6, cellSize * 0.34);
+                g.lineJoin = 'round'; g.lineCap = 'round';
+                if (!tile.answered) {
+                    const pulse = REDUCED_MOTION ? 1 : 0.8 + 0.2 * Math.sin(now / 380 + tile.col * 1.7 + tile.row);
+                    const grd = g.createRadialGradient(cx, cy, r * 0.6, cx, cy, r * 2.3);
+                    grd.addColorStop(0, `rgba(255,214,90,${0.65 * pulse})`);
+                    grd.addColorStop(1, 'rgba(255,214,90,0)');
+                    g.fillStyle = grd; g.beginPath(); dot(g, cx, cy, r * 2.3); g.fill();
+                    // handle and cap
+                    g.strokeStyle = '#1E2226'; g.lineWidth = 2;
+                    g.beginPath(); g.arc(cx, cy - r - 1, 3.4, Math.PI, 0); g.stroke();
+                    g.fillStyle = '#1E2226'; g.fillRect(cx - 4.5, cy - r - 1.5, 9, 3);
+                    // glass
+                    g.fillStyle = '#FFE6A6'; g.strokeStyle = '#1E2226'; g.lineWidth = 2.2;
+                    g.beginPath(); dot(g, cx, cy, r); g.fill(); g.stroke();
+                    g.fillStyle = '#1E2226';
+                    g.font = `800 ${Math.max(10, Math.floor(cellSize * 0.5))}px "Plus Jakarta Sans", "Segoe UI", sans-serif`;
+                    g.textAlign = 'center'; g.textBaseline = 'middle';
+                    g.fillText('?', cx, cy + 1);
+                } else {
+                    g.fillStyle = tile.correct ? '#3A7A37' : '#BC3229';
+                    g.strokeStyle = '#1E2226'; g.lineWidth = 2.2;
+                    g.beginPath(); dot(g, cx, cy, r * 0.9); g.fill(); g.stroke();
+                    g.strokeStyle = '#FFFFFF'; g.lineWidth = 2.6;
+                    g.beginPath();
+                    if (tile.correct) { g.moveTo(cx - 4, cy + 0.5); g.lineTo(cx - 1, cy + 3.5); g.lineTo(cx + 4.5, cy - 3.5); }
+                    else { g.moveTo(cx - 3.5, cy - 3.5); g.lineTo(cx + 3.5, cy + 3.5); g.moveTo(cx + 3.5, cy - 3.5); g.lineTo(cx - 3.5, cy + 3.5); }
+                    g.stroke();
                 }
-                ctx.beginPath();
-                ctx.arc(cx, cy, r, 0, Math.PI * 2);
-                ctx.fillStyle = fillColor;
-                ctx.fill();
-                ctx.strokeStyle = '#1E2226';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-                ctx.fillStyle = '#FFFFFF';
-                ctx.font = 'bold ' + Math.max(10, Math.floor(cellSize * 0.4)) + 'px "Plus Jakarta Sans"';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(glyph, cx, cy);
             });
         }
 
-        // Draws the ball with shadow and animation
-        function drawBall() {
-            let currentBallY = ball.y; // Y position for drawing, adjusted for animations
-            if (!isMoving) {
-                // Apply wiggle effect when ball is idle
-                const time = (Date.now() - lastMoveTime) / WIGGLE_INTERVAL;
-                wiggleOffset = Math.sin(time * Math.PI * 2) * wiggleAmplitude;
-                currentBallY += wiggleOffset;
-            } else {
-                // Apply subtle bounce effect when ball is moving
-                const bounceFactor = Math.sin(Date.now() * 0.01) * 0.5; // Small sine wave for bounce
-                currentBallY += bounceFactor;
+        // Little moving things that make each forest feel alive: butterflies
+        // round the edge, fireflies, falling leaves or snow. Kept tiny and
+        // see-through so they never hide the trail; none with reduced motion.
+        function drawCritters(now) {
+            const t = levelTheme();
+            if (REDUCED_MOTION || !t.critters) return;
+            const g = ctx;
+            const rand = seededRandom(forestSeed ^ 0x5bd1e995);
+            const W = gridCols * cellSize, H = gridRows * cellSize;
+            if (t.critters === 'fireflies' || t.critters === 'sparkles') {
+                const n = t.critters === 'sparkles' ? 18 : 16;
+                for (let i = 0; i < n; i++) {
+                    const bx = rand() * W, by = rand() * H, p = rand() * 10;
+                    const x = bx + Math.sin(now / 1700 + p) * 14, y = by + Math.cos(now / 2100 + p * 1.3) * 10;
+                    const a = Math.max(0, Math.sin(now / 520 + p * 3));
+                    if (a < 0.05) continue;
+                    const col = t.critters === 'sparkles' ? (i % 2 ? '142,227,240' : '245,185,33') : '232,245,120';
+                    const grd = g.createRadialGradient(x, y, 0, x, y, 7);
+                    grd.addColorStop(0, `rgba(${col},${0.7 * a})`); grd.addColorStop(1, `rgba(${col},0)`);
+                    g.fillStyle = grd; g.beginPath(); dot(g, x, y, 7); g.fill();
+                    g.fillStyle = `rgba(255,255,230,${a})`; g.beginPath();
+                    if (t.critters === 'sparkles' && i % 3 === 0) sparkPath(g, x, y, 3.4 * a + 1); else dot(g, x, y, 1.6);
+                    g.fill();
+                }
+            } else if (t.critters === 'snow') {
+                g.fillStyle = 'rgba(255,255,255,.9)';
+                g.beginPath();
+                for (let i = 0; i < 46; i++) {
+                    const bx = rand() * VIEW - OFF, p = rand() * 10, sp = 14 + rand() * 18, r = 1.1 + rand() * 1.3;
+                    const y = ((rand() * VIEW + now / 1000 * sp) % VIEW) - OFF;
+                    dot(g, bx + Math.sin(now / 1400 + p) * 7, y, r);
+                }
+                g.fill();
+            } else if (t.critters === 'leaves') {
+                g.strokeStyle = 'rgba(30,34,38,.6)'; g.lineWidth = 0.8;
+                for (let i = 0; i < 9; i++) {
+                    const bx = rand() * VIEW - OFF, p = rand() * 10, sp = 10 + rand() * 12;
+                    const y = ((rand() * VIEW + now / 1000 * sp) % VIEW) - OFF;
+                    g.fillStyle = t.accents[i % t.accents.length];
+                    g.save(); g.translate(bx + Math.sin(now / 900 + p) * 12, y); g.rotate(now / 800 + p);
+                    g.beginPath(); g.ellipse(0, 0, 3.4, 1.8, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+                    g.restore();
+                }
+            } else if (t.critters === 'butterflies') {
+                // they flutter round the band of trees, outside the maze
+                const loop = 2 * (W + H + 50);
+                for (let i = 0; i < 3; i++) {
+                    let u = ((rand() + now / 26000 * (0.8 + i * 0.15)) % 1) * loop;
+                    let x, y;
+                    const e = -22;
+                    if (u < W + 25) { x = u; y = e; }
+                    else if ((u -= W + 25) < H + 25) { x = W - e; y = u; }
+                    else if ((u -= H + 25) < W + 25) { x = W - u; y = H - e; }
+                    else { u -= W + 25; x = e; y = H - u; }
+                    y += Math.sin(now / 300 + i) * 4;
+                    const flap = 0.35 + 0.65 * Math.abs(Math.sin(now / 90 + i * 2));
+                    g.save(); g.translate(x, y);
+                    g.fillStyle = i % 2 ? '#F8C0B9' : '#FFE6A6'; g.strokeStyle = '#1E2226'; g.lineWidth = 1;
+                    g.beginPath(); g.ellipse(-2.6 * flap, -1, 3 * flap, 2.6, -0.4, 0, Math.PI * 2); g.fill(); g.stroke();
+                    g.beginPath(); g.ellipse(2.6 * flap, -1, 3 * flap, 2.6, 0.4, 0, Math.PI * 2); g.fill(); g.stroke();
+                    g.fillStyle = '#1E2226'; g.fillRect(-0.6, -3, 1.2, 5.5);
+                    g.restore();
+                }
             }
-
-            // Draw ball shadow (ellipse below the ball)
-            ctx.beginPath();
-            ctx.ellipse(ball.x, currentBallY + ball.radius + 1, ball.radius * 0.9, ball.radius * 0.3, 0, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; // Semi-transparent black
-            ctx.fill();
-
-            // Draw the ball itself with a radial gradient for a dull sphere effect
-            let gradient = ctx.createRadialGradient(
-                ball.x - ball.radius * 0.3, currentBallY - ball.radius * 0.3, ball.radius * 0.1, // Inner circle for highlight
-                ball.x, currentBallY, ball.radius // Outer circle for main sphere
-            );
-            gradient.addColorStop(0, '#FDE28A'); // Sun highlight
-            gradient.addColorStop(1, '#F2C230'); // Sun for the ball
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(ball.x, currentBallY, ball.radius, 0, Math.PI * 2); // Draw a perfect circle
-            ctx.fill();
         }
 
-        // Draws the hint arrow next to the ball
+        // --- The explorers: the site's eight characters, as in Doodle Dash ---
+        // Same names, order, head art and shirt/trim/pants colours as
+        // games/Doodle-Dash.html (CHS there), so each one looks the same in
+        // every game. f names the art: assets/games/doodle-dash/<f>.webp for
+        // the walking figure and assets/characters/<f>-thumb.jpg for the sign.
+        const SPR_DIR = '../assets/games/doodle-dash/';
+        const CHS = [
+            { n: 'Chike', f: 'chike', shirt: '#5d8cbb', trim: '#f2c94c', tk: 'edge', pants: '#2f6bff' },
+            { n: 'Zech', f: 'zech', shirt: '#568eb2', trim: '#932526', tk: 'sleeves', pants: '#3b3f5c' },
+            { n: 'Mateo', f: 'mateo', shirt: '#e3792d', trim: '#1f9aa0', tk: 'collar', pants: '#f2c230' },
+            { n: 'Corey', f: 'corey', shirt: '#5a9b70', pants: '#222a44' },
+            { n: 'Kiyah', f: 'kylah', shirt: '#c29dc7', pants: '#4a3a8c' },
+            { n: 'Yuna', f: 'yuna', shirt: '#c42195', pants: '#ff7a9a' },
+            { n: 'Averi', f: 'averi', shirt: '#f3d032', trim: '#3d6fb8', tk: 'straps', pants: '#1fb8a0' },
+            { n: 'Stacey', f: 'stacey', shirt: '#d6423f', pants: '#2b6cb0' }
+        ];
+        const CHAR_KEY = 'mq-char';     // Maze Quest remembers the chosen explorer on this device
+        const HEADS = {};
+        let charIndex = 0;
+        let explorer = CHS[0];
+        let facing = 1;                  // 1 = looking right, -1 = looking left
+        CHS.forEach(c => {
+            const im = new Image();
+            im.onload = () => { paintPicks(); if (levelComplete && maze.length) drawScene(); };
+            im.src = SPR_DIR + c.f + '.webp';
+            HEADS[c.f] = im;
+        });
+
+        // the figure, in its own small units with the feet at 0,0 (the
+        // Doodle Dash body: pants, white shoes, a shirt with its trim, the
+        // head on top); step swings the legs, f < 0 turns the face left
+        function explorerFigure(g, c, f, step) {
+            g.lineWidth = 0.45; g.strokeStyle = '#2b1b25'; g.lineJoin = 'round';
+            const lA = Math.max(0, step) * 0.8, lB = Math.max(0, -step) * 0.8;
+            g.fillStyle = c.pants;
+            g.fillRect(-2.5, -2.7 - lA, 2.3, 2.7); g.fillRect(0.2, -2.7 - lB, 2.3, 2.7);
+            g.fillStyle = '#fff';
+            g.fillRect(-2.9, -0.9 - lA, 2.9, 0.9); g.fillRect(0.1, -0.9 - lB, 2.9, 0.9);
+            g.strokeRect(-2.9, -0.9 - lA, 2.9, 0.9); g.strokeRect(0.1, -0.9 - lB, 2.9, 0.9);
+            g.fillStyle = c.shirt;
+            g.beginPath(); roundRectPath(g, -3.3, -6.3, 6.6, 4.2, 1.3); g.fill();
+            if (c.trim) {
+                g.save(); g.clip(); g.fillStyle = c.trim;
+                if (c.tk === 'sleeves') { g.fillRect(-3.3, -6.3, 1.4, 4.2); g.fillRect(1.9, -6.3, 1.4, 4.2); }
+                else if (c.tk === 'collar') { g.fillRect(-3.3, -6.3, 6.6, 1.15); }
+                else if (c.tk === 'straps') { g.fillRect(-2.3, -6.3, 0.95, 4.2); g.fillRect(1.35, -6.3, 0.95, 4.2); }
+                else if (c.tk === 'edge') { g.fillRect(2.35, -6.3, 0.95, 4.2); }
+                g.restore();
+            }
+            g.stroke();
+            const im = HEADS[c.f], hh = 9.6;
+            if (im && im.complete && im.naturalWidth) {
+                const hw = Math.min(13, hh * im.naturalWidth / im.naturalHeight);
+                g.save(); if (f < 0) g.scale(-1, 1);
+                g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+                g.drawImage(im, -hw / 2, -5.7 - hh, hw, hh);
+                g.restore();
+            } else {
+                g.fillStyle = '#F5B921'; g.beginPath(); g.arc(0, -9.8, 4.2, 0, Math.PI * 2); g.fill(); g.stroke();
+            }
+        }
+
+        // The explorer on the trail: a sun-yellow ring at their feet so
+        // they are easy to spot, a step bob while walking, and the face
+        // turning the way they walk. Drawn ~26px tall over the unchanged
+        // 16px hitbox (ball.radius + BALL_MARGIN), feet just below its middle.
+        const FIGURE_SCALE = 1.7;
+        function drawWalker(now) {
+            const g = ctx;
+            let lift = 0, step = 0;
+            if (!REDUCED_MOTION) {
+                if (isMoving) {
+                    lift = Math.abs(Math.sin(walkPhase)) * 1.8;
+                    step = Math.sin(walkPhase);
+                } else {
+                    // a slow idle sway, as the ball's wiggle did
+                    const time = (Date.now() - lastMoveTime) / WIGGLE_INTERVAL;
+                    wiggleOffset = Math.sin(time * Math.PI * 2) * wiggleAmplitude;
+                    lift = wiggleOffset * 0.6;
+                }
+            }
+            const x = ball.x, feet = ball.y + 10;
+            g.fillStyle = 'rgba(245,185,33,.55)';
+            g.strokeStyle = '#1E2226'; g.lineWidth = 1.2;
+            g.beginPath(); g.ellipse(x, feet, 9.5, 3.6, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+            g.save();
+            g.translate(x, feet - lift);
+            g.scale(FIGURE_SCALE, FIGURE_SCALE);
+            explorerFigure(g, explorer, facing, step);
+            g.restore();
+        }
+
+        // ---- choosing an explorer ----
+        function paintPick(cv, c) {
+            const x = cv.getContext('2d');
+            x.setTransform(1, 0, 0, 1, 0, 0);
+            const grd = x.createLinearGradient(0, 0, 0, 160);
+            grd.addColorStop(0, '#C9E7BC'); grd.addColorStop(1, '#FFF3CF');
+            x.fillStyle = grd; x.fillRect(0, 0, 160, 160);
+            x.fillStyle = 'rgba(30,34,38,.15)'; x.beginPath(); x.ellipse(80, 148, 34, 6, 0, 0, Math.PI * 2); x.fill();
+            x.translate(80, 146); x.scale(8.6, 8.6);
+            explorerFigure(x, c, 1, 0);
+        }
+        function paintPicks() {
+            document.querySelectorAll('#mq-chars canvas').forEach(cv => paintPick(cv, CHS[+cv.parentElement.dataset.i]));
+        }
+
+        function setExplorer(i, byPlayer) {
+            charIndex = Math.max(0, Math.min(CHS.length - 1, i | 0));
+            explorer = CHS[charIndex];
+            const face = document.getElementById('char-face');
+            face.src = '../assets/characters/' + explorer.f + '-thumb.jpg';
+            document.getElementById('char-button').setAttribute('aria-label', 'Choose your explorer. Now playing as ' + explorer.n);
+            canvas.setAttribute('aria-label', 'A forest maze. Walk ' + explorer.n + ' from the tent to the cabin.');
+            document.querySelectorAll('.mq-char-name').forEach(el => { el.textContent = explorer.n; });
+            document.querySelectorAll('#mq-chars .mq-pick').forEach(b => {
+                const on = +b.dataset.i === charIndex;
+                b.setAttribute('aria-pressed', on ? 'true' : 'false');
+                b.style.background = on ? '#F5B921' : '#FFFBF3';
+            });
+            if (byPlayer) {
+                sfx('click');
+                try { localStorage.setItem(CHAR_KEY, explorer.f); } catch (e) {}
+            }
+            if (maze.length) drawScene();
+        }
+
+        // the picker card: open from the face on the level sign; the maze
+        // and its clock wait while it is open
+        let pickerOpen = false;
+        function openPicker() {
+            if (pickerOpen || quizActive || levelComplete) return;
+            pickerOpen = true;
+            for (let key in keys) keys[key] = false;
+            isMoving = false;
+            pauseTimerForQuiz();
+            sfx('click');
+            document.getElementById('charModal').style.display = 'flex';
+            const current = document.querySelector('#mq-chars .mq-pick[aria-pressed="true"]');
+            if (current) current.focus();
+        }
+        function closePicker() {
+            if (!pickerOpen) return;
+            pickerOpen = false;
+            document.getElementById('charModal').style.display = 'none';
+            if (!levelComplete && !quizActive) resumeTimerAfterQuiz();
+            lastMoveTime = Date.now();
+            document.getElementById('char-button').focus();
+        }
+
+        (function buildPicker() {
+            const wrap = document.getElementById('mq-chars');
+            CHS.forEach((c, i) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'mq-pick';
+                b.dataset.i = i;
+                b.style.background = '#FFFBF3'; // an inline background keeps game-skin.css's pill shape off it
+                b.setAttribute('aria-pressed', 'false');
+                b.setAttribute('aria-label', 'Play as ' + c.n);
+                const cv = document.createElement('canvas');
+                cv.width = cv.height = 160;
+                const n = document.createElement('b');
+                n.textContent = c.n;
+                b.append(cv, n);
+                b.addEventListener('click', () => { setExplorer(i, true); closePicker(); });
+                wrap.appendChild(b);
+            });
+            paintPicks();
+            document.getElementById('char-button').addEventListener('click', openPicker);
+            document.getElementById('charDone').addEventListener('click', () => { sfx('click'); closePicker(); });
+            const modal = document.getElementById('charModal');
+            modal.addEventListener('click', (e) => { if (e.target === modal) closePicker(); });
+            document.addEventListener('keydown', (e) => { if (pickerOpen && e.key === 'Escape') closePicker(); });
+            let saved = null;
+            try { saved = localStorage.getItem(CHAR_KEY); } catch (e) {}
+            const found = CHS.findIndex(c => c.f === saved);
+            setExplorer(found >= 0 ? found : 0, false);
+        })();
+
+        // Draws the hint arrow just in front of the explorer, pointing along the way to go
         function drawHintArrow() {
             // Only draw if hint is active and a path exists with at least one next step
             if (!hintActive || hintPath.length < 2) return;
@@ -1093,16 +1939,18 @@
             // Calculate the angle for the arrow to point from current to next cell
             let angle = Math.atan2(nextCellCenter.y - currentCellCenter.y, nextCellCenter.x - currentCellCenter.x);
 
-            // Apply bouncing offset for the arrow
-            hintArrowOffset = Math.sin(Date.now() * hintArrowSpeed) * hintArrowAmplitude;
+            // Apply bouncing offset for the arrow (still with reduced motion)
+            hintArrowOffset = REDUCED_MOTION ? 0 : Math.sin(Date.now() * hintArrowSpeed) * hintArrowAmplitude;
 
-            // Save canvas state, translate, and rotate for drawing the arrow
             ctx.save();
             ctx.translate(ball.x, ball.y + hintArrowOffset); // Translate to ball position + bounce
             ctx.rotate(angle); // Rotate to point in the correct direction
+            ctx.translate(CHIKE_R + 9, 0); // just clear of the explorer
 
-            // Draw a simple red arrow shape
-            ctx.fillStyle = '#C13B31'; // Changed to Red for the arrow
+            ctx.fillStyle = '#BC3229';
+            ctx.strokeStyle = '#1E2226';
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
             ctx.beginPath();
             ctx.moveTo(15, 0); // Arrow tip
             ctx.lineTo(0, -10); // Left wing
@@ -1112,8 +1960,61 @@
             ctx.lineTo(0, 5); // Right body
             ctx.lineTo(0, 10); // Right wing
             ctx.closePath(); // Close the path to form the arrow
-            ctx.fill(); // Fill the arrow with red
+            ctx.fill();
+            ctx.stroke();
             ctx.restore(); // Restore canvas state
+        }
+
+        // One frame: the painted forest, the trail, then everything that moves
+        function drawScene(now) {
+            if (!maze.length || !backing) return;
+            now = now || performance.now();
+            if (trailDirty) renderTrail();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.drawImage(forestCanvas, 0, 0);
+            ctx.drawImage(trailCanvas, 0, 0);
+            toMaze(ctx);
+            drawLanterns(now);
+            drawCritters(now);
+            if (hintActive) drawHintArrow();
+            drawWalker(now);
+        }
+
+        // Sizes the board to the room left on screen (title, signs and
+        // buttons first), so the whole game fits without scrolling, and
+        // gives the canvas enough real pixels to stay sharp.
+        const WIDE_LAYOUT = window.matchMedia('(min-aspect-ratio: 23/20) and (min-width: 560px)');
+        function fitBoard() {
+            const container = document.getElementById('game-container');
+            const board = document.getElementById('board');
+            const title = document.querySelector('body > h1');
+            const num = v => parseFloat(v) || 0;
+            canvas.style.width = canvas.style.height = '0px';
+            const bs = getComputedStyle(document.body), cs = getComputedStyle(container);
+            const vw = document.documentElement.clientWidth, vh = window.innerHeight;
+            let titleH = 0;
+            if (title && title.offsetParent !== null) {
+                const ts = getComputedStyle(title);
+                titleH = title.offsetHeight + num(ts.marginTop) + num(ts.marginBottom);
+            }
+            const padW = num(cs.paddingLeft) + num(cs.paddingRight), padH = num(cs.paddingTop) + num(cs.paddingBottom);
+            const chromeW = container.offsetWidth - container.clientWidth + padW;
+            const chromeH = container.offsetHeight - container.clientHeight + padH;
+            const boardRim = board.offsetWidth;          // its border, while the canvas is 0 wide
+            const shadow = 8;                            // the frame's hard shadow
+            let availW = vw - num(bs.paddingLeft) - num(bs.paddingRight) - chromeW - shadow;
+            let availH = vh - num(bs.paddingTop) - num(bs.paddingBottom) - titleH - chromeH - shadow;
+            if (WIDE_LAYOUT.matches) availW -= container.clientWidth - padW - boardRim;   // the signs and buttons beside the board
+            else availH -= container.clientHeight - padH - boardRim;                      // the signs above and the buttons below
+            const size = Math.max(140, Math.min(940, Math.floor(Math.min(availW, availH) - boardRim)));
+            canvas.style.width = canvas.style.height = size + 'px';
+            // the note beside the board only stays if the side column still fits beside it
+            const tip = document.getElementById('mq-tip');
+            tip.style.display = '';
+            if (WIDE_LAYOUT.matches && container.offsetHeight > size + boardRim + chromeH + 1) tip.style.display = 'none';
+            const dpr = Math.min(2, window.devicePixelRatio || 1);
+            if (setBacking(Math.round(size * dpr))) buildForest();
+            drawScene();
         }
 
         // --- Game Logic Functions ---
@@ -1251,20 +2152,48 @@
                 newCellRow = Math.max(0, Math.min(newCellRow, gridRows - 1));
 
                 // If the ball has entered a new cell, mark it as visited
+                let freshCell = false; // not walked before (sound and footprints only)
                 if (newCellCol !== currentCell.col || newCellRow !== currentCell.row) {
+                    freshCell = !visitedPath[newCellRow][newCellCol];
                     visitedPath[newCellRow][newCellCol] = true;
+                    if (freshCell) {
+                        stepDir[newCellRow][newCellCol] = { x: Math.sign(newCellCol - currentCell.col), y: Math.sign(newCellRow - currentCell.row) };
+                        trailDirty = true;
+                    }
                 }
 
                 // Apply movement only if allowed by collision detection
+                const beforeX = ball.x, beforeY = ball.y;
                 if (canMove(dx, 0)) { // Check horizontal movement
                     ball.x += dx;
                 }
                 if (canMove(0, dy)) { // Check vertical movement
                     ball.y += dy;
                 }
+                // The way in at the top stays open for the look of it, but
+                // Chike stops at his tent's door instead of walking off the map.
+                if (ball.y < 2) ball.y = 2;
+                walkPhase += Math.hypot(ball.x - beforeX, ball.y - beforeY) / 4.5; // the explorer's steps
+                if (ball.x !== beforeX) facing = ball.x < beforeX ? -1 : 1; // face the way they walk
+
+                // Sound: a soft footstep tick for each new cell Chike walks
+                // into (brighter on fresh ground than on trail already
+                // walked), and one gentle bump when he pushes into a hedge.
+                if (ball.x === beforeX && ball.y === beforeY) {
+                    if (!bumpedWall) sfx('bounce', { pitch: 0.8, volume: 0.45 });
+                    bumpedWall = true;
+                } else {
+                    bumpedWall = false;
+                    const nowCell = getBallCell();
+                    if (nowCell !== currentCell) {
+                        const fresh = freshCell && nowCell.col === newCellCol && nowCell.row === newCellRow;
+                        sfx('tick', { pitch: fresh ? 1 : 0.8, volume: 0.45 });
+                    }
+                }
             } else {
                 movingSinceMs = null;
                 speedMultiplier = 1;
+                bumpedWall = false;
             }
         }
 
@@ -1275,8 +2204,11 @@
 
             // Check if the ball is within the exit cell and has passed its vertical midpoint
             // This allows the ball to fully "exit" through the bottom opening.
+            if (levelComplete) return; // already finished: this runs once per maze
             if (ballCell.col === exitCell.col && ballCell.row === exitCell.row && ball.y > exitCell.row * cellSize + cellSize / 2) {
+                levelComplete = true; // gameLoop stops after this frame
                 stopGame(); // Stop game loop and timer
+                sfx(currentLevel < 8 ? 'level' : 'win'); // out of this maze, or out of the last one
                 levelTimes[currentLevel] = elapsedTime; // Store the elapsed time for the current level
                 showWinModal(); // Display the "You Win" pop-up or leaderboard
             }
@@ -1356,6 +2288,7 @@
             quizActive = true;
             tile.answered = true; // consumed the moment it triggers
             pauseTimerForQuiz();
+            sfx('coin'); // picked up a "?" tile
 
             const picked = QUIZ_QUESTIONS[Math.floor(Math.random() * QUIZ_QUESTIONS.length)];
             document.getElementById('quizWizardImg').src = '../assets/games/wizard-question.png';
@@ -1396,6 +2329,8 @@
                 lineWords = wizardLine(WIZARD_CORRECT_LINES).split(' ');
                 typewriterWords(feedback, lineWords);
                 applyQuizBoost(tile);
+                sfx('good');
+                setTimeout(() => sfx('whoosh'), 300); // the portal opening
             } else {
                 tile.correct = false;
                 buttons[chosenIndex].classList.add('wrong');
@@ -1405,6 +2340,7 @@
                 feedback.style.color = '#C13B31';
                 lineWords = wizardLine(WIZARD_WRONG_LINES).split(' ');
                 typewriterWords(feedback, lineWords);
+                sfx('bad', { volume: 0.7 });
             }
 
             // Long enough for every word to actually finish typing out at
@@ -1430,6 +2366,7 @@
                 boostPath.push(cell);
                 visitedPath[cell.row][cell.col] = true;
             });
+            trailDirty = true;
             const landing = steps.length ? steps[steps.length - 1] : startCell;
             ball.x = landing.col * cellSize + cellSize / 2;
             ball.y = landing.row * cellSize + cellSize / 2;
@@ -1521,6 +2458,7 @@
 
         // Event listener for the Hint button
         document.getElementById('hint-button').addEventListener('click', () => {
+            sfx('click');
             const startCell = getBallCell(); // Ball's current cell
             const endCell = maze[gridRows - 1][gridCols - 1]; // Maze exit cell
             hintPath = findShortestPath(startCell, endCell); // Find the shortest path
@@ -1575,10 +2513,18 @@
             } else { // If all levels are completed (Level 8)
                 nextLevelBtn.textContent = "View Leaderboard"; // Change button text
                 nextLevelBtn.onclick = () => {
+                    sfx('click');
                     winModal.style.display = 'none'; // Hide win modal
                     showLeaderboardModal(); // Show the leaderboard
                 };
             }
+
+            // the explorer cheering: Chike's thumbs-up pose, or the others' portraits
+            const winFace = document.getElementById('win-face');
+            const isChike = explorer.f === 'chike';
+            winFace.src = isChike ? '../assets/characters/chike-pose-thumbs-up.png' : '../assets/characters/' + explorer.f + '-thumb.jpg';
+            winFace.alt = isChike ? 'Chike giving a thumbs up' : explorer.n + ', smiling';
+            winFace.classList.toggle('is-portrait', !isChike);
 
             winModal.style.display = 'flex'; // Show the modal (using flex to center content)
         }
@@ -1620,19 +2566,18 @@
         // --- Game Loop ---
 
         // The main game animation loop
-        function gameLoop() {
-            if (!quizActive) {
+        function gameLoop(now) {
+            if (!quizActive && !pickerOpen) {
                 updateBallPosition(); // Update ball's position and check collisions
             }
-            drawMaze(); // Redraw the maze (including visited path)
-            drawBall(); // Redraw the ball
-            if (hintActive) {
-                drawHintArrow(); // Draw hint arrow if active
-            }
+            drawScene(now); // The forest, the trail, lanterns, hint arrow and Chike
             if (!quizActive) {
                 checkQuizTrigger(); // A "?" tile reached mid-move pauses everything
                 checkWinCondition(); // Check if the player has won
             }
+            // Out of the maze: the loop ends here (the win card takes over)
+            // instead of running on and re-finding the exit every frame.
+            if (levelComplete) return;
             animationFrameId = requestAnimationFrame(gameLoop); // Request next animation frame
         }
 
@@ -1693,13 +2638,23 @@
 
         // Starts a new game or restarts the current level
         function startGame() {
+            sfx('start'); // silent on the very first load: browsers allow sound only after a tap or key press
+            bumpedWall = false;
+            levelComplete = false;
+            walkPhase = 0;
             document.getElementById('level-display').textContent = currentLevel; // Update level display
+            // this level's forest: its name on the sign and its colour on the frame
+            const forest = levelTheme();
+            document.getElementById('level-name').textContent = forest.name;
+            document.getElementById('game-container').style.setProperty('--mood', forest.frame);
             elapsedTime = 0; // Reset timer
             document.getElementById('timer-display').textContent = '00:00'; // Reset timer display
             stopTimer(); // Clear any existing timer
             cancelAnimationFrame(animationFrameId); // Stop any ongoing animation loop
 
             generateMaze(); // Generate the maze for the current level (also places quiz tiles)
+            fitBoard(); // the sign's new name can change the room left for the board
+            buildForest(); // paint this maze's forest once
             startTimer(); // Start the game timer
             lastMoveTime = Date.now(); // Reset last move time for ball wiggle
             isMoving = false; // Ensure ball starts idle
@@ -1725,16 +2680,13 @@
         // Start the game when the entire window content has loaded
         window.onload = function () {
             startGame();
+            // the web font can change the signs' size once it arrives
+            if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitBoard);
         };
 
-        // Handle window resizing to ensure canvas responsiveness
-        window.addEventListener('resize', () => {
-            // Re-draw the maze and ball to adapt to potential canvas size changes
-            // The canvas's actual drawing dimensions are set by generateMaze()
-            // and its visual size is handled by CSS max-width: 100%.
-            drawMaze();
-            drawBall();
-        });
+        // Handle window resizing: the board is re-fitted to the screen (and
+        // the forest repainted at the new size if needed)
+        window.addEventListener('resize', fitBoard);
     </script>
 </body>
 </html>
