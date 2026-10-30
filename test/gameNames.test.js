@@ -2,35 +2,18 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 
-const blox = readFileSync(new URL("../games/drop-blox.html", import.meta.url), "utf8");
+/* games/drop-blox.html is Fruit Drop now (it was DropBlox); its own rules are tested in fruitDrop.test.js */
+const fruit = readFileSync(new URL("../games/drop-blox.html", import.meta.url), "utf8");
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
-describe("DropBlox's shapes", () => {
-  const shapes = new Function(blox.match(/const SHAPES = (\{[\s\S]*?\n\s*\});/)[1].replace(/^/, "return ") + ";")();
-  const cells = (s) => s.flat().reduce((a, b) => a + b, 0);
-
-  it("are all made of five blocks, so none is one of the seven classic four-block shapes", () => {
-    expect(Object.keys(shapes).length).toBeGreaterThanOrEqual(6);
-    for (const [k, s] of Object.entries(shapes)) expect(cells(s), "shape " + k).toBe(5);
+describe("Fruit Drop's name", () => {
+  it("is the game's own: no other company's game is named anywhere on the page", () => {
+    const low = fruit.toLowerCase();
+    for (const other of ["tetris", "candy crush", "puyo", "bejeweled"]) expect(low, other).not.toContain(other);
   });
 
-  it("are all different from each other", () => {
-    const norm = (s) => {
-      let m = s, out = [];
-      for (let i = 0; i < 4; i++) { m = m[0].map((_, c) => m.map((r) => r[c]).reverse()); out.push(JSON.stringify(m), JSON.stringify(m.map((r) => [...r].reverse()))); }
-      return out.sort()[0];
-    };
-    const seen = new Set(Object.values(shapes).map(norm));
-    expect(seen.size).toBe(Object.keys(shapes).length);
-  });
-
-  it("let a rainbow Master Brick carry every colour: one colour for each of its five blocks", () => {
-    expect(blox).toContain("const COLORS = ['#f00000', '#00f000', '#0000f0', '#f0f000', '#a000f0']");
-    expect(blox).toContain("const NEXT_BOX_SIZE = 5;");
-  });
-
-  it("does not use another game's name anywhere on the page", () => {
-    expect(blox.toLowerCase()).not.toContain("tetris");
+  it("calls its specials by its own names: striped fruit, wrapped fruit and the golden star", () => {
+    for (const t of ["striped fruit", "wrapped fruit", "golden star"]) expect(fruit.toLowerCase()).toContain(t);
   });
 });
 
