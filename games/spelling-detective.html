@@ -5,152 +5,483 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SPELLING DETECTIVE</title>
     <style>
+        /* --- Brand colours and sizes ---
+           The typeface (Plus Jakarta Sans) comes from game-skin.css.
+           game-skin.css also sizes .ccs-spell parts with !important, so the
+           rules below that must win start with body.ccs-spell (more specific). */
+        :root {
+            --ink: #1E2226;
+            --paper: #FAF4E6;
+            --card: #FFFBF3;
+            --sun: #F5B921;
+            --cyan: #17B3CE;
+            --deep: #0A5280;
+            --plum: #7A4A86;
+            --green: #3A7A37;
+            --red: #BC3229;
+            --orange: #DD7A22;
+            --butter: #FFE6A6;
+            --mint: #C9E7BC;
+            --sky: #B9E7F2;
+            --pink: #F8C0B9;
+            --mut: #5B6670;
+            --hard: 4px 4px 0 #1E2226;
+            /* a letter tile and a word box: as big as the window allows, never too small to tap */
+            --tile: clamp(40px, min(11.6vw, 10vh), 66px);
+            --box: clamp(34px, min(12.4vw, 10.6vh), 70px);
+        }
+
         /* --- General Styling & Background --- */
-        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
-        @import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
+        html, body { height: 100%; margin: 0; }
 
         body {
-            font-family: 'Fredoka One', cursive;
-            background: linear-gradient(to bottom, #EAF3F5, #FAF4E6);
-            color: #333;
+            font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(rgba(122, 74, 134, .13) 1.3px, transparent 1.7px) 0 0 / 16px 16px,
+                radial-gradient(circle at 10% 16%, rgba(255, 230, 166, .95), rgba(255, 230, 166, 0) 38%),
+                radial-gradient(circle at 92% 8%, rgba(185, 231, 242, .85), rgba(185, 231, 242, 0) 34%),
+                radial-gradient(circle at 88% 88%, rgba(248, 192, 185, .7), rgba(248, 192, 185, 0) 40%),
+                var(--paper);
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
+            height: 100vh;
+            height: 100dvh;
             margin: 0;
-            padding: 20px;
+            padding: 10px;
             box-sizing: border-box;
+            overflow: hidden;
         }
 
-        /* --- Main Game Container --- */
-        .game-container {
-            background-color: white;
-            border-radius: 25px;
-            padding: 40px 20px 20px 20px; /* Increased top padding */
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2), inset 0 0 10px rgba(0,0,0,0.1);
-            border: 12px solid #7A4A86; /* Bright Purple */
+        /* the detective's room: a big magnifying glass, question marks and a trail of footprints */
+        .bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+        .bg svg, .bg span { position: absolute; display: block; }
+        .bg .bg-glass { right: -50px; top: -40px; width: clamp(180px, 34vmin, 320px); opacity: .13; transform: rotate(-18deg); }
+        .bg .bg-steps { left: -10px; bottom: 6px; width: min(760px, 96vw); opacity: .11; }
+        .bg span { font-weight: 800; color: var(--plum); opacity: .13; line-height: 1; }
+        .bg .q1 { left: 4%; top: 6%; font-size: clamp(3rem, 12vmin, 7rem); transform: rotate(-14deg); }
+        .bg .q2 { right: 6%; bottom: 14%; font-size: clamp(2.4rem, 9vmin, 5rem); transform: rotate(12deg); color: var(--deep); }
+        .bg .q3 { left: 46%; top: 2%; font-size: clamp(1.8rem, 6vmin, 3.4rem); transform: rotate(8deg); color: var(--orange); }
+
+        /* --- Chike beside the case file --- */
+        .scene {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 18px;
             width: 100%;
-            max-width: 600px;
+            max-width: 900px;
+            max-height: 100%;
+        }
+
+        .chike {
+            flex: 0 0 clamp(150px, 20vw, 210px);
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            gap: 14px;
+            pointer-events: none;
+        }
+
+        .chike img {
+            display: block;
+            width: 100%;
+            max-width: clamp(100px, 26vh, 190px);
+            height: auto;
+            filter: drop-shadow(3px 3px 0 rgba(30, 34, 38, .3));
+        }
+
+        .chike img.hop { animation: hop .5s ease; }
+
+        .say {
+            position: relative;
+            width: 100%;
+            background: var(--card);
+            border: 3px solid var(--ink);
+            border-radius: 18px;
+            box-shadow: var(--hard);
+            padding: 10px 13px;
+            font-weight: 700;
+            font-size: clamp(.86rem, 2.3vh, 1.04rem);
+            line-height: 1.32;
+            text-align: left;
+        }
+
+        /* the bubble's tail points down at Chike */
+        .say::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            bottom: -10px;
+            width: 16px;
+            height: 16px;
+            background: inherit;
+            border-right: 3px solid var(--ink);
+            border-bottom: 3px solid var(--ink);
+            transform: translateX(-50%) rotate(45deg);
+        }
+
+        .say.good { background: #E1F3D6; }
+        .say.hint { background: #FFF1C4; }
+        .say.oops { background: #FDE6E1; }
+        .say.pop { animation: say-pop .35s cubic-bezier(.2, .9, .3, 1.4); }
+
+        /* --- Main Game Container: the case folder --- */
+        .game-container {
+            position: relative;
+            flex: 1 1 auto;
+            width: 100%;
+            max-width: 660px;
+            margin-top: 28px;
+            background:
+                radial-gradient(rgba(221, 122, 34, .2) 1.2px, transparent 1.6px) 0 0 / 12px 12px,
+                var(--butter);
+            border: 3px solid var(--ink);
+            border-radius: 6px 20px 20px 20px;
+            box-shadow: 6px 6px 0 var(--ink);
+            display: flex;
+            flex-direction: column;
+            gap: clamp(8px, 1.9vh, 14px);
             text-align: center;
         }
 
-        /* --- Definition Display --- */
-        .definition-display {
-            margin-bottom: 20px;
-            font-family: 'Fredoka One', cursive;
-            font-weight: 500; /* Changed to medium weight */
-            font-size: 1.4em;
-            color: #555;
-            min-height: 50px; /* Reserve space */
-            padding: 0 15px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        body.ccs-spell .game-container {
+            padding: clamp(18px, 3vh, 24px) clamp(12px, 2.4vw, 20px) clamp(12px, 2.2vh, 18px) !important;
+            border-width: 3px !important;
+            max-height: none !important;
         }
 
-        /* --- Word Display --- */
+        /* the folder's tab says which case this is */
+        .case-tab {
+            position: absolute;
+            left: 16px;
+            top: -30px;
+            height: 30px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0 14px;
+            background: var(--butter);
+            border: 3px solid var(--ink);
+            border-bottom: 0;
+            border-radius: 12px 12px 0 0;
+            font-weight: 800;
+            font-size: .82rem;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .case-tab svg { width: 16px; height: 16px; }
+
+        /* top right of the folder: cases solved, the grade (tap to change it) and sound */
+        .folder-top {
+            position: absolute;
+            right: 12px;
+            top: -19px;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .solved-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 11px 3px 6px;
+            background: var(--card);
+            border: 3px solid var(--ink);
+            border-radius: 999px;
+            box-shadow: 2px 2px 0 var(--ink);
+            font-weight: 800;
+            font-size: .8rem;
+            white-space: nowrap;
+            transform: rotate(-3deg);
+        }
+
+        .solved-chip svg { width: 18px; height: 18px; }
+        .solved-chip.bump { animation: bump .5s ease; }
+
+        #grade-button, .folder-top .ccs-sound-btn {
+            font: inherit;
+            font-weight: 800;
+            font-size: .8rem;
+            color: var(--ink);
+            cursor: pointer;
+            border: 3px solid var(--ink);
+            border-radius: 999px;
+            box-shadow: 2px 2px 0 var(--ink);
+            padding: 4px 12px 4px 8px;
+            min-height: 36px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+            transition: transform .13s cubic-bezier(.2, .9, .3, 1.4), box-shadow .13s;
+        }
+
+        .folder-top .ccs-sound-btn { padding: 4px; min-width: 36px; justify-content: center; }
+        #grade-button svg, .folder-top .ccs-sound-btn svg { width: 18px; height: 18px; }
+        #grade-button:hover, .folder-top .ccs-sound-btn:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--ink); }
+        #grade-button:active, .folder-top .ccs-sound-btn:active { transform: translate(1px, 1px); box-shadow: 0 0 0 var(--ink); }
+
+        /* --- Definition Display: the clue, pinned on a lined index card --- */
+        .clue-card {
+            position: relative;
+            background:
+                linear-gradient(180deg, transparent 30px, rgba(188, 50, 41, .4) 30px 32px, transparent 32px),
+                repeating-linear-gradient(180deg, transparent 0 25px, rgba(23, 179, 206, .2) 25px 27px),
+                var(--card);
+            border: 3px solid var(--ink);
+            border-radius: 12px;
+            box-shadow: var(--hard);
+            padding: 9px 16px 12px;
+            transform: rotate(-.8deg);
+        }
+
+        .clue-card .pin {
+            position: absolute;
+            top: -13px;
+            left: 22px;
+            width: 26px;
+            height: 26px;
+        }
+
+        .clue-label {
+            margin: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 800;
+            font-size: .74rem;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: var(--plum);
+        }
+
+        .clue-label svg { width: 16px; height: 16px; }
+
+        .definition-display {
+            font-weight: 800;
+            line-height: 1.25;
+            color: var(--ink);
+            padding: 0;
+        }
+
+        body.ccs-spell .definition-display {
+            font-size: clamp(1.02rem, min(3.1vh, 4.8vw), 1.5rem) !important;
+            min-height: 0 !important;
+            margin: 4px 0 0 !important;
+        }
+
+        /* --- Word Display: one box for each letter of the hidden word --- */
         .word-display {
             display: flex;
             justify-content: center;
-            gap: 10px;
-            margin-bottom: 25px;
-            height: 70px; /* Set a fixed height */
+            container-type: inline-size;
+        }
+
+        body.ccs-spell .word-display {
+            gap: clamp(4px, 1vw, 8px) !important;
+            margin: 2px 0 0 !important;
         }
 
         .letter-box {
-            width: 60px;
-            height: 60px;
-            background-color: #7A4A86;
-            border: 3px solid #333;
-            border-radius: 10px;
-            color: #F5B921; /* Yellow */
-            font-size: 2.8em;
-            font-weight: bold;
+            position: relative;
+            flex: 0 0 auto;
+            background: var(--card);
+            border: 3px solid var(--ink);
+            border-radius: 12px;
+            color: var(--ink);
+            font-weight: 800;
+            line-height: 1;
             display: flex;
             justify-content: center;
             align-items: center;
-            text-shadow: 2px 2px 2px #333;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            transition: transform 0.2s ease, background-color 0.2s;
+            box-shadow: inset 0 -5px 0 rgba(30, 34, 38, .08);
+        }
+
+        body.ccs-spell .letter-box {
+            width: var(--box) !important;
+            height: var(--box) !important;
+            font-size: calc(var(--box) * .6) !important;
+        }
+
+        /* long words (up to 10 letters): the boxes shrink so they always fit on one line */
+        @supports (width: 1cqi) {
+            body.ccs-spell .letter-box {
+                --fit: calc((100cqi - (var(--len, 6) - 1) * clamp(4px, 1vw, 8px)) / var(--len, 6));
+                width: min(var(--box), var(--fit)) !important;
+                height: min(var(--box), var(--fit)) !important;
+                font-size: calc(min(var(--box), var(--fit)) * .6) !important;
+                border-radius: min(12px, calc(var(--fit) * .25));
+            }
+        }
+
+        /* an empty box shows a little line to write on */
+        .letter-box:empty::after {
+            content: '';
+            position: absolute;
+            left: 24%;
+            right: 24%;
+            bottom: 20%;
+            height: 3px;
+            border-radius: 3px;
+            background: rgba(30, 34, 38, .25);
         }
 
         .letter-box.revealed {
-            transform: scale(1.1);
-            background-color: #F5B921;
-            color: #7A4A86;
+            background: var(--sun);
+            box-shadow: 3px 3px 0 var(--ink);
         }
 
-        /* --- Letter Pool --- */
+        /* a letter Chike gave as a clue */
+        .letter-box.clued { background: var(--sky); }
+        .letter-box.just { animation: box-pop .45s cubic-bezier(.2, .9, .3, 1.4); }
+
+        /* --- Letter Pool: the evidence tray --- */
         .letter-pool {
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
-            gap: 12px;
-            margin-top: 20px;
-            padding: 15px;
-            background: rgba(0,0,0,0.05);
-            border-radius: 15px;
-            min-height: 150px; /* Ensure space for two rows */
+            align-content: center;
+            background:
+                radial-gradient(rgba(23, 179, 206, .2) 1.2px, transparent 1.6px) 0 0 / 12px 12px,
+                var(--card);
+            border: 3px solid var(--ink);
+            border-radius: 18px;
+            box-shadow: inset 0 4px 0 rgba(30, 34, 38, .07);
+        }
+
+        body.ccs-spell .letter-pool {
+            min-height: 0 !important;
+            padding: clamp(8px, 1.6vh, 13px) 8px clamp(10px, 1.8vh, 14px) !important;
+            gap: clamp(7px, 1.2vh, 10px) !important;
+            margin: 0 !important;
         }
 
         .letter-button {
-            width: 55px;
-            height: 55px;
-            border-radius: 12px;
-            border: none;
-            color: white;
-            font-size: 2.2em;
-            font-family: 'Fredoka One', cursive;
+            position: relative;
+            padding: 0;
+            border: 3px solid var(--ink);
+            border-radius: 14px;
+            color: var(--ink);
+            font-weight: 800;
+            line-height: 1;
             cursor: pointer;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.4);
-            box-shadow: 0 6px 0px #555, 0 8px 15px rgba(0,0,0,0.3);
-            transition: all 0.1s ease-in-out;
-            position: relative; /* For the 'X' overlay */
-            overflow: hidden; /* Hide overflow from pseudo-elements */
+            box-shadow: var(--hard);
+            overflow: hidden;
+            transition: transform .13s cubic-bezier(.2, .9, .3, 1.4), box-shadow .13s, opacity .2s;
         }
 
-        .letter-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 0px #555, 0 10px 18px rgba(0,0,0,0.3);
+        body.ccs-spell .letter-button {
+            width: var(--tile) !important;
+            height: var(--tile) !important;
+            font-size: calc(var(--tile) * .56) !important;
         }
 
-        .letter-button:active {
-            transform: translateY(4px);
-            box-shadow: 0 2px 0px #555, 0 4px 8px rgba(0,0,0,0.4);
+        .letter-button:hover:not(:disabled) {
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0 var(--ink);
         }
 
+        .letter-button:active:not(:disabled) {
+            transform: translate(2px, 2px);
+            box-shadow: 1px 1px 0 var(--ink);
+        }
+
+        /* a used tile sinks into the tray */
         .letter-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: translateY(2px);
-            box-shadow: 0 4px 0px #555;
+            cursor: default;
+            transform: translate(3px, 3px);
+            box-shadow: none;
+            opacity: .42;
         }
 
-        /* 'X' overlay for incorrect guesses */
+        .letter-button.incorrect:disabled { opacity: .75; }
+
+        /* a red cross over incorrect guesses; the letter still shows underneath */
         .letter-button.incorrect::after {
-            content: 'X';
+            content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 2em;
-            font-weight: bold;
-            color: white;
-            background-color: rgba(193, 59, 49, 0.88);
-            border-radius: 12px;
-            animation: pop-in 0.3s ease-out;
+            inset: 8%;
+            background:
+                linear-gradient(45deg, transparent 43%, var(--red) 43% 57%, transparent 57%),
+                linear-gradient(-45deg, transparent 43%, var(--red) 43% 57%, transparent 57%);
+            animation: pop-in .3s ease-out;
         }
 
-        /* --- Wrong Guesses Tracker --- */
+        .letter-button.shake { animation: shake .42s ease; }
+
+        /* --- Under the tray: chances and the clue button --- */
+        .case-tools {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px 12px;
+            flex-wrap: wrap;
+        }
+
+        /* --- Wrong Guesses Tracker: one magnifying glass per chance --- */
         #wrong-guesses-tracker {
-            margin-top: 20px;
-            font-size: 1.5em;
-            color: #C13B31;
-            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: var(--ink);
+        }
+
+        body.ccs-spell #wrong-guesses-tracker {
+            margin: 0 !important;
+            font-size: .8rem !important;
+        }
+
+        .chances-label {
+            font-weight: 800;
+            font-size: .74rem;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        .chances-icons { display: flex; gap: 3px; }
+        .chances-icons svg { display: block; width: clamp(24px, 3.9vh, 32px); height: auto; transition: opacity .3s; }
+        .chances-icons svg.used { opacity: .2; }
+        .chances-icons svg.lose { animation: glass-lose .5s ease; }
+
+        #clue-button {
+            font: inherit;
+            font-weight: 800;
+            font-size: clamp(.9rem, 2.3vh, 1.05rem);
+            color: var(--ink);
+            cursor: pointer;
+            border: 3px solid var(--ink);
+            border-radius: 999px;
+            box-shadow: var(--hard);
+            padding: 7px 16px 7px 12px;
+            min-height: 46px;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            white-space: nowrap;
+            transition: transform .13s cubic-bezier(.2, .9, .3, 1.4), box-shadow .13s;
+        }
+
+        #clue-button svg { width: 24px; height: 24px; }
+        #clue-button:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--ink); }
+        #clue-button:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+        #clue-button:disabled { cursor: default; opacity: .5; box-shadow: none; transform: translate(3px, 3px); }
+
+        .sr {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            white-space: nowrap;
         }
 
         /* --- Modal for Messages --- */
@@ -158,206 +489,657 @@
             display: none;
             position: fixed;
             z-index: 100;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.6);
+            inset: 0;
+            padding: 14px;
+            background-color: rgba(30, 34, 38, .45);
+            -webkit-backdrop-filter: blur(3px);
+            backdrop-filter: blur(3px);
             justify-content: center;
             align-items: center;
         }
 
-        .modal-content {
-            background-color: white;
-            padding: 30px;
-            border-radius: 20px;
+        .modal .modal-content {
+            position: relative;
+            width: min(440px, 100%);
+            max-height: 100%;
+            overflow: auto;
+            background:
+                radial-gradient(rgba(245, 185, 33, .22) 1.2px, transparent 1.6px) 0 0 / 12px 12px,
+                var(--card);
+            padding: 18px 20px 20px;
+            border: 3px solid var(--ink);
+            border-radius: 24px;
+            box-shadow: 8px 8px 0 var(--ink);
             text-align: center;
-            font-size: 1.5em;
-            border: 10px solid #7A4A86;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.4);
-            animation: pop-in 0.4s ease-out;
-            max-width: 90%;
+            animation: pop-in .4s ease-out;
+        }
+
+        .modal-chike {
+            display: block;
+            width: clamp(70px, 15vh, 112px);
+            height: auto;
+            margin: 0 auto 4px;
+            filter: drop-shadow(3px 3px 0 rgba(30, 34, 38, .3));
+        }
+
+        .modal-case {
+            margin: 0;
+            font-weight: 800;
+            font-size: .78rem;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: var(--plum);
         }
 
         .modal-content h2 {
-            font-size: 1.8em;
-            margin-top: 0;
-            color: #3A7A37;
+            margin: 4px 0 6px;
+            font-size: clamp(1.6rem, 6.5vh, 2.6rem);
+            color: var(--ink);
+            overflow-wrap: anywhere;
+        }
+
+        #win-word {
+            display: inline-block;
+            letter-spacing: .1em;
+            padding: 0 .2em 0 .3em;
+            background: linear-gradient(180deg, transparent 58%, var(--sun) 58% 92%, transparent 92%);
         }
 
         .modal-content p {
-            font-family: 'Roboto', sans-serif;
-            font-size: 1.1em;
-            color: #555;
-            margin: 15px 0;
+            font-size: clamp(.95rem, 2.4vh, 1.1rem);
+            font-weight: 600;
+            color: #3B444C;
+            margin: 6px 0;
         }
+
+        .modal-content .lose-title { color: var(--red); font-size: clamp(1.5rem, 5vh, 2.1rem); }
+        .modal-note { color: var(--mut) !important; font-size: .9rem !important; }
+
+        /* the big red SOLVED! stamp */
+        .stamp {
+            position: absolute;
+            top: 14px;
+            right: 12px;
+            padding: 3px 10px;
+            border: 4px solid var(--red);
+            border-radius: 10px;
+            box-shadow: inset 0 0 0 2px var(--card), inset 0 0 0 4px var(--red);
+            background: rgba(255, 251, 243, .7);
+            color: var(--red);
+            font-weight: 800;
+            font-size: clamp(1.1rem, 3.6vh, 1.5rem);
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            transform: rotate(-14deg);
+        }
+
+        .stamp.slam { animation: stamp-slam .55s cubic-bezier(.2, 1.3, .4, 1) both; }
 
         #next-word-button {
-            background-color: #3A7A37;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            padding: 15px 30px;
-            font-family: 'Fredoka One', cursive;
-            font-size: 1.2em;
+            font: inherit;
+            font-weight: 800;
+            font-size: 1.12rem;
+            color: var(--ink);
             cursor: pointer;
-            margin-top: 20px;
-            box-shadow: 0 4px #2F6B2C;
-            transition: all 0.1s ease-in-out;
+            border: 3px solid var(--ink);
+            border-radius: 999px;
+            box-shadow: var(--hard);
+            padding: 11px 26px;
+            min-height: 50px;
+            margin-top: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform .13s cubic-bezier(.2, .9, .3, 1.4), box-shadow .13s;
         }
 
-        #next-word-button:hover {
-            background-color: #2F6B2C;
-            transform: translateY(-2px);
-            box-shadow: 0 6px #2F6B2C;
+        #next-word-button svg { width: 20px; height: 20px; }
+        #next-word-button:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--ink); }
+        #next-word-button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+
+        /* --- Pick your grade: the case files --- */
+        .over {
+            position: fixed;
+            inset: 0;
+            z-index: 120;
+            display: grid;
+            place-items: center;
+            padding: 14px;
+            overflow: auto;
+            background: rgba(30, 34, 38, .42);
+            -webkit-backdrop-filter: blur(3px);
+            backdrop-filter: blur(3px);
+        }
+
+        .over[hidden] { display: none; }
+
+        .sheet {
+            position: relative;
+            width: min(720px, 100%);
+            margin-top: 26px;
+            background:
+                radial-gradient(rgba(221, 122, 34, .2) 1.2px, transparent 1.6px) 0 0 / 12px 12px,
+                var(--butter);
+            border: 3px solid var(--ink);
+            border-radius: 6px 24px 24px 24px;
+            box-shadow: 8px 8px 0 var(--ink);
+            padding: clamp(14px, 3vh, 24px) clamp(14px, 3vw, 26px);
+            text-align: center;
+        }
+
+        .hello { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 8px; text-align: left; }
+        .hello img { width: clamp(62px, 13vh, 108px); height: auto; filter: drop-shadow(3px 3px 0 rgba(30, 34, 38, .3)); }
+        .sheet h1 { margin: 0; font-size: clamp(1.5rem, 5.2vh, 2.6rem); }
+        .sheet h1 b { color: var(--red); }
+        .lede { margin: 4px 0 0; font-weight: 600; color: #3B444C; font-size: clamp(.88rem, 2.2vh, 1.05rem); }
+
+        .resume {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px 12px;
+            flex-wrap: wrap;
+            text-align: left;
+            background: var(--card);
+            border: 3px solid var(--ink);
+            border-radius: 18px;
+            padding: 8px 10px 8px 16px;
+            margin-bottom: 10px;
+        }
+
+        .resume[hidden] { display: none; }
+        .resume b { display: block; font-size: 1.05rem; }
+        .resume span { font-size: .86rem; font-weight: 600; color: var(--mut); }
+
+        .big {
+            font: inherit;
+            font-weight: 800;
+            font-size: 1.05rem;
+            color: var(--ink);
+            cursor: pointer;
+            border: 3px solid var(--ink);
+            border-radius: 999px;
+            box-shadow: var(--hard);
+            padding: 9px 24px;
+            min-height: 48px;
+            transition: transform .13s cubic-bezier(.2, .9, .3, 1.4), box-shadow .13s;
+        }
+
+        .big:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--ink); }
+        .big:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+
+        .pickline { margin: 0 0 8px; text-align: left; font-weight: 800; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: #3B444C; }
+        .pickline:empty { display: none; }
+
+        .grades { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+        .grade {
+            position: relative;
+            font: inherit;
+            color: var(--ink);
+            cursor: pointer;
+            text-align: left;
+            border: 3px solid var(--ink);
+            border-radius: 16px;
+            box-shadow: var(--hard);
+            padding: 9px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-height: 86px;
+            transition: transform .13s cubic-bezier(.2, .9, .3, 1.4), box-shadow .13s;
+        }
+
+        .grade:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--ink); }
+        .grade:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+        .grade b { font-size: clamp(1.02rem, 2.9vh, 1.35rem); letter-spacing: -.02em; }
+        .grade span { font-size: .8rem; font-weight: 600; line-height: 1.3; }
+        .grade em { font-style: normal; font-size: .72rem; font-weight: 800; margin-top: auto; opacity: .8; }
+
+        /* the grade played last time wears a little stamp */
+        .grade.last::after {
+            content: 'Last time';
+            position: absolute;
+            top: -11px;
+            right: 8px;
+            padding: 1px 7px;
+            background: var(--card);
+            color: var(--red);
+            border: 2px solid var(--red);
+            border-radius: 6px;
+            font-weight: 800;
+            font-size: .64rem;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            transform: rotate(5deg);
+        }
+
+        .tiny { font-size: .8rem; color: #3B444C; font-weight: 600; margin: 12px 0 0; }
+
+        /* confetti when a case is solved */
+        .confetti { position: fixed; inset: 0; z-index: 101; overflow: hidden; pointer-events: none; }
+        .confetti i {
+            position: absolute;
+            top: -24px;
+            width: 11px;
+            height: 15px;
+            border: 2px solid var(--ink);
+            border-radius: 3px;
+            animation: confetti-fall 2s linear forwards;
         }
 
         @keyframes pop-in {
             from { transform: scale(0.5); opacity: 0; }
             to { transform: scale(1); opacity: 1; }
         }
+        @keyframes box-pop { 0% { transform: scale(.4); } 60% { transform: scale(1.18) rotate(-4deg); } 100% { transform: none; } }
+        @keyframes say-pop { 0% { transform: scale(.92); } 100% { transform: none; } }
+        @keyframes shake { 20% { transform: translate(3px, 3px) translateX(-6px) rotate(-4deg); } 40% { transform: translate(3px, 3px) translateX(6px) rotate(4deg); } 60% { transform: translate(3px, 3px) translateX(-4px); } 80% { transform: translate(3px, 3px) translateX(3px); } }
+        @keyframes glass-lose { 0% { transform: scale(1); opacity: 1; } 40% { transform: scale(1.35) rotate(-12deg); opacity: 1; } 100% { transform: none; } }
+        @keyframes hop { 40% { transform: translateY(-10px); } }
+        @keyframes bump { 50% { transform: rotate(-3deg) scale(1.2); } }
+        @keyframes stamp-slam { 0% { transform: rotate(-14deg) scale(2.6); opacity: 0; } 70% { transform: rotate(-14deg) scale(.92); opacity: 1; } 100% { transform: rotate(-14deg) scale(1); opacity: 1; } }
+        @keyframes confetti-fall { to { transform: translate(var(--x), 110vh) rotate(var(--r)); } }
+
+        /* --- Phones and narrow windows: Chike talks from above the folder --- */
+        @media (max-width: 719px) {
+            :root {
+                --tile: clamp(36px, min(11.6vw, 7.6vh), 60px);
+                --box: clamp(30px, min(12.4vw, 8.6vh), 60px);
+            }
+            .scene { flex-direction: column; align-items: stretch; gap: 6px; max-width: 560px; }
+            .chike { flex: 0 0 auto; flex-direction: row; align-items: center; gap: 14px; padding-right: 4px; }
+            .chike img { width: clamp(54px, 11vh, 84px); max-width: none; flex: 0 0 auto; }
+            .say { flex: 1 1 auto; font-size: clamp(.84rem, 2.2vh, .95rem); padding: 8px 11px; }
+            /* the tail points left at Chike */
+            .say::after {
+                left: -10px;
+                top: 50%;
+                bottom: auto;
+                border-right: 0;
+                border-left: 3px solid var(--ink);
+                transform: translateY(-50%) rotate(45deg);
+            }
+            .game-container { max-width: none; }
+            .case-tools { justify-content: center; }
+        }
+
+        @media (max-width: 640px) {
+            .grades { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+            .grade { min-height: 0; padding: 7px 10px; }
+            .grade span { font-size: .74rem; }
+            .hello { margin-bottom: 6px; }
+            .hello img { width: 56px; }
+            .sheet h1 { font-size: 1.45rem; }
+            .lede { font-size: .84rem; }
+            .resume { flex-wrap: nowrap; padding: 6px 8px 6px 12px; }
+            .resume b { font-size: .95rem; }
+            .resume span { font-size: .78rem; }
+            .resume .big { padding: 7px 16px; font-size: .95rem; min-height: 44px; flex: 0 0 auto; }
+            .tiny { display: none; }
+        }
+
+        /* the smallest phones: the grade button just says "K", "1", "2"... */
+        @media (max-width: 359px) {
+            .grade-word { display: none; }
+            .case-tab { letter-spacing: .04em; }
+        }
+
+        @media (max-width: 479px) {
+            .chances-label, .solved-word { display: none; }
+            .chances-icons svg { width: 24px; }
+            #clue-button { padding: 6px 13px 6px 9px; }
+            .case-tab { padding: 0 10px; left: 10px; }
+            .folder-top { right: 8px; gap: 5px; }
+            .solved-chip { padding-right: 9px; }
+        }
+
+        @media (max-height: 560px) {
+            .hello img { display: none; }
+        }
+
+        @media (max-height: 540px) {
+            .clue-label { display: none; }
+            .clue-card { padding-top: 10px; }
+            .chike img { max-width: clamp(70px, 22vh, 120px); }
+        }
+
+        @media (max-width: 719px) and (max-height: 540px) {
+            .chike img { width: 46px; }
+            .game-container { margin-top: 26px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .chike img.hop, .say.pop, .letter-box.just, .letter-button.shake,
+            .chances-icons svg.lose, .solved-chip.bump, .stamp.slam, .letter-button.incorrect::after,
+            .modal .modal-content { animation: none !important; }
+            .letter-button, #clue-button, #next-word-button, #grade-button, .ccs-sound-btn, .grade, .big, .chances-icons svg { transition: none; }
+        }
     </style>
     <link rel="stylesheet" href="game-skin.css">
+    <script src="game-sound.js"></script>
 </head>
 <body class="ccs-game ccs-spell">
 
-    <div class="game-container">
-        <div id="definition-display" class="definition-display"></div>
-
-        <div id="word-display" class="word-display"></div>
-
-        <div id="letter-pool" class="letter-pool"></div>
-
-        <div id="wrong-guesses-tracker">
-            Chances Left: <span id="wrong-guesses-count">0</span>
-        </div>
+    <!-- the detective's room -->
+    <div class="bg" aria-hidden="true">
+        <svg class="bg-glass" viewBox="0 0 100 100"><circle cx="40" cy="40" r="28" fill="none" stroke="#7A4A86" stroke-width="9"/><path d="m61 61 28 28" stroke="#7A4A86" stroke-width="13" stroke-linecap="round"/></svg>
+        <svg class="bg-steps" viewBox="0 0 760 110" fill="#1E2226">
+            <g transform="translate(40 76) rotate(78)"><ellipse cx="0" cy="-7" rx="8" ry="12"/><ellipse cx="0" cy="13" rx="6" ry="6.5"/></g>
+            <g transform="translate(118 50) rotate(74)"><ellipse cx="0" cy="-7" rx="8" ry="12"/><ellipse cx="0" cy="13" rx="6" ry="6.5"/></g>
+            <g transform="translate(200 72) rotate(82)"><ellipse cx="0" cy="-7" rx="8" ry="12"/><ellipse cx="0" cy="13" rx="6" ry="6.5"/></g>
+            <g transform="translate(282 44) rotate(70)"><ellipse cx="0" cy="-7" rx="8" ry="12"/><ellipse cx="0" cy="13" rx="6" ry="6.5"/></g>
+            <g transform="translate(366 64) rotate(84)"><ellipse cx="0" cy="-7" rx="8" ry="12"/><ellipse cx="0" cy="13" rx="6" ry="6.5"/></g>
+            <g transform="translate(450 36) rotate(68)"><ellipse cx="0" cy="-7" rx="8" ry="12"/><ellipse cx="0" cy="13" rx="6" ry="6.5"/></g>
+            <g transform="translate(534 54) rotate(80)"><ellipse cx="0" cy="-7" rx="8" ry="12"/><ellipse cx="0" cy="13" rx="6" ry="6.5"/></g>
+            <g transform="translate(618 28) rotate(66)"><ellipse cx="0" cy="-7" rx="8" ry="12"/><ellipse cx="0" cy="13" rx="6" ry="6.5"/></g>
+            <g transform="translate(702 44) rotate(78)"><ellipse cx="0" cy="-7" rx="8" ry="12"/><ellipse cx="0" cy="13" rx="6" ry="6.5"/></g>
+        </svg>
+        <span class="q1">?</span>
+        <span class="q2">?</span>
+        <span class="q3">?</span>
     </div>
+
+    <div class="scene">
+        <!-- Chike, the detective's sidekick, talks about each guess -->
+        <aside class="chike" aria-hidden="true">
+            <img id="chike-img" src="../assets/characters/chike-pose-wave.png" alt="" width="378" height="391">
+            <div id="say" class="say"></div>
+        </aside>
+
+        <main class="game-container">
+            <div class="case-tab"><svg viewBox="0 0 24 24" fill="none" stroke="#1E2226" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></svg><span>Case #<span id="case-number">1</span></span></div>
+            <div class="folder-top" id="folder-top">
+                <div class="solved-chip" id="solved-chip" title="Cases solved in this grade"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="#C9E7BC" stroke="#1E2226" stroke-width="2.4"/><path d="m7.8 12.4 3 3 5.4-6.2" fill="none" stroke="#1E2226" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="solved-count">0</span><span class="solved-word"> solved</span><span class="sr"> cases solved</span></div>
+                <button type="button" id="grade-button" style="background:#FFFBF3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg><span class="grade-word">Grade </span><span id="grade-name">1</span><span class="sr">, change grade</span></button>
+            </div>
+
+            <section class="clue-card" aria-label="The clue">
+                <svg class="pin" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="13" r="9.5" fill="#BC3229" stroke="#1E2226" stroke-width="3"/><circle cx="11" cy="10" r="2.8" fill="#F8C0B9"/></svg>
+                <p class="clue-label"><svg viewBox="0 0 24 24" fill="none" stroke="#7A4A86" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></svg>The clue</p>
+                <div id="definition-display" class="definition-display"></div>
+            </section>
+
+            <div id="word-display" class="word-display" role="img"></div>
+
+            <div id="letter-pool" class="letter-pool" role="group" aria-label="Letters to pick. You can also type a letter."></div>
+
+            <div class="case-tools">
+                <div id="wrong-guesses-tracker">
+                    <span class="chances-label" aria-hidden="true">Chances</span>
+                    <span id="chances-icons" class="chances-icons" aria-hidden="true"></span>
+                    <span class="sr">Chances Left: <span id="wrong-guesses-count">0</span></span>
+                </div>
+                <button type="button" id="clue-button" style="background:#B9E7F2"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m20 20 8 8" stroke="#1E2226" stroke-width="7" stroke-linecap="round"/><path d="m20 20 8 8" stroke="#7A4A86" stroke-width="3" stroke-linecap="round"/><circle cx="13" cy="13" r="9.5" fill="#FFFBF3" stroke="#1E2226" stroke-width="3"/><path d="M8.5 11a5 5 0 0 1 4-4" fill="none" stroke="#17B3CE" stroke-width="2.4" stroke-linecap="round"/></svg><span id="clue-text">Get a clue</span></button>
+            </div>
+        </main>
+    </div>
+    <p class="sr" id="live" aria-live="polite"></p>
 
     <div id="message-modal" class="modal">
         <div class="modal-content">
+            <img id="modal-chike" class="modal-chike" src="../assets/characters/chike-pose-thumbs-up.png" alt="" width="378" height="391">
             <div id="modal-win-content">
+                <div id="stamp" class="stamp" aria-hidden="true">Solved!</div>
+                <p class="modal-case">Case #<span id="modal-case">1</span> closed</p>
                 <h2 id="win-word"></h2>
                 <p id="win-definition"></p>
-                <button id="next-word-button">Next Word</button>
+                <button id="next-word-button" type="button" style="background:var(--sun)">Next Word <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
             </div>
             <div id="modal-lose-content" style="display:none;">
-                 <h2 style="color: #C13B31;">Out of Guesses!</h2>
+                 <h2 class="lose-title">Out of Guesses!</h2>
                  <p>The word was: <strong id="lose-word"></strong></p>
+                 <p class="modal-note">Chike has a new case ready for you...</p>
             </div>
+        </div>
+    </div>
+
+    <!-- pick your grade -->
+    <div class="over" id="start" role="dialog" aria-modal="true" aria-labelledby="start-title">
+        <div class="sheet">
+            <div class="case-tab"><svg viewBox="0 0 24 24" fill="none" stroke="#1E2226" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></svg><span>Case files</span></div>
+            <div class="hello">
+                <img src="../assets/characters/chike-pose-wave.png" alt="" width="378" height="391">
+                <div>
+                    <h1 id="start-title">Spelling <b>Detective</b></h1>
+                    <p class="lede">Pick your grade, then read each clue and spell the word!</p>
+                </div>
+            </div>
+            <div class="resume" id="resume" hidden>
+                <div><b id="resume-title">Keep going</b><span id="resume-text"></span></div>
+                <button type="button" class="big" id="resume-button" style="background:var(--sun)">Continue</button>
+            </div>
+            <p class="pickline" id="pickline"></p>
+            <div class="grades" id="grades"></div>
+            <p class="tiny">Tap a letter tile, or type it on the keyboard.</p>
         </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // --- Game Variables ---
-            const wordData = [
-                { word: 'apple', definition: 'A yummy red fruit that grows on trees.' },
-                { word: 'ball', definition: 'A round toy you can throw and catch.' },
-                { word: 'cake', definition: 'A sweet treat we eat on birthdays.' },
-                { word: 'duck', definition: 'A bird that swims and quacks.' },
-                { word: 'frog', definition: 'A small green animal that hops.' },
-                { word: 'grape', definition: 'A small, round, purple fruit.' },
-                { word: 'house', definition: 'Where you live with your family.' },
-                { word: 'juice', definition: 'A yummy drink made from fruit.' },
-                { word: 'kite', definition: 'A toy that flies high in the sky.' },
-                { word: 'lion', definition: 'A big, wild cat that roars.' },
-                { word: 'moon', definition: 'The big circle that shines in the night sky.' },
-                { word: 'nest', definition: 'A bird\'s cozy home in a tree.' },
-                { word: 'orange', definition: 'A round, orange fruit.' },
-                { word: 'pear', definition: 'A sweet, green fruit.' },
-                { word: 'queen', definition: 'A princess who rules a kingdom.' },
-                { word: 'rain', definition: 'Water that falls from the clouds.' },
-                { word: 'star', definition: 'A bright, twinkling light in the night sky.' },
-                { word: 'tree', definition: 'A big, tall plant with green leaves.' },
-                { word: 'uncle', definition: 'The brother of your mom or dad.' },
-                { word: 'vase', definition: 'A jar for holding pretty flowers.' },
-                { word: 'water', definition: 'What you drink to stay healthy.' },
-                { word: 'yoyo', definition: 'A toy that goes up and down on a string.' },
-                { word: 'zebra', definition: 'A black and white striped animal.' },
-                { word: 'boat', definition: 'Something that floats on water.' },
-                { word: 'chair', definition: 'A comfy seat for one person.' },
-                { word: 'door', definition: 'What you open to go into a room.' },
-                { word: 'earth', definition: 'The planet we all live on.' },
-                { word: 'flower', definition: 'The colorful, pretty part of a plant.' },
-                { word: 'grass', definition: 'The green stuff that covers the ground.' },
-                { word: 'happy', definition: 'How you feel when you smile.' },
-                { word: 'island', definition: 'A piece of land in the big ocean.' },
-                { word: 'jelly', definition: 'A sweet, wiggly food.' },
-                { word: 'leaf', definition: 'The green part of a tree.' },
-                { word: 'magic', definition: 'A special power that makes amazing things happen.' },
-                { word: 'pizza', definition: 'A yummy round food with cheese and sauce.' },
-                { word: 'cloud', definition: 'The fluffy white things in the sky.' },
-                { word: 'dream', definition: 'A story you see when you are asleep.' },
-                { word: 'field', definition: 'A big, open place to run and play.' },
-                { word: 'glove', definition: 'Something you wear on your hands.' },
-                { word: 'heart', definition: 'The part of you that feels love.' },
-                { word: 'igloo', definition: 'A cozy little house made of snow.' },
-                { word: 'jacket', definition: 'What you wear when it\'s cold outside.' },
-                { word: 'key', definition: 'A tool you use to open a lock.' },
-                { word: 'light', definition: 'What makes the room bright so you can see.' },
-                { word: 'mouse', definition: 'A tiny animal that squeaks.' },
-                { word: 'night', definition: 'When the moon and stars come out.' },
-                { word: 'ocean', definition: 'A big place where dolphins swim.' },
-                { word: 'puppy', definition: 'A cute, little baby dog.' },
-                { word: 'quiet', definition: 'When there is no sound.' },
-                { word: 'river', definition: 'A long stream of water.' },
-                { word: 'snake', definition: 'A long animal that slithers on the ground.' },
-                { word: 'table', definition: 'Where you sit to eat your food.' },
-                { word: 'watch', definition: 'Something you wear to tell the time.' },
-                { word: 'beach', definition: 'A sandy place next to the ocean.' },
-                { word: 'bread', definition: 'What you use to make a sandwich.' },
-                { word: 'candy', definition: 'A sweet treat like a lollipop.' },
-                { word: 'clock', definition: 'It tells you what time it is.' },
-                { word: 'dance', definition: 'When you move your body to music.' },
-                { word: 'family', definition: 'The people who love you, like mommy and daddy.' },
-                { word: 'garden', definition: 'Where flowers and vegetables grow.' },
-                { word: 'horse', definition: 'A big animal you can ride.' },
-                { word: 'image', definition: 'A picture of something.' },
-                { word: 'jump', definition: 'When you go up and down with your legs.' },
-                { word: 'king', definition: 'A man who rules a kingdom.' },
-                { word: 'lemon', definition: 'A sour, yellow fruit.' },
-                { word: 'music', definition: 'Fun sounds that make you want to dance.' },
-                { word: 'paper', definition: 'What you use to draw pictures on.' },
-                { word: 'pencil', definition: 'A tool you use for writing and drawing.' },
-                { word: 'phone', definition: 'What you use to talk to people far away.' },
-                { word: 'photo', definition: 'A picture you take with a camera.' },
-                { word: 'plane', definition: 'A machine that flies in the sky.' },
-                { word: 'plant', definition: 'Something that grows from the ground, like a flower.' },
-                { word: 'plate', definition: 'What you eat your food from.' },
-                { word: 'play', definition: 'Having fun with toys and friends.' },
-                { word: 'prize', definition: 'Something special you win in a game.' },
-                { word: 'robot', definition: 'A machine that can move and do jobs.' },
-                { word: 'rocket', definition: 'A spaceship that flies to the moon.' },
-                { word: 'room', definition: 'A part of your house, like your bedroom.' },
-                { word: 'rose', definition: 'A beautiful flower that is often red.' },
-                { word: 'school', definition: 'Where you go to learn and play.' },
-                { word: 'shirt', definition: 'A piece of clothing you wear on top.' },
-                { word: 'shoe', definition: 'Something you wear on your feet.' },
-                { word: 'sing', definition: 'Making music with your voice.' },
-                { word: 'sleep', definition: 'What you do in your bed at night.' },
-                { word: 'smile', definition: 'What you do with your mouth when you are happy.' },
-                { word: 'snack', definition: 'A small meal you eat between breakfast and lunch.' },
-                { word: 'snow', definition: 'The cold, white stuff that falls in winter.' },
-                { word: 'soap', definition: 'What you use to get clean in the bath.' },
-                { word: 'song', definition: 'A story you sing with music.' },
-                { word: 'soup', definition: 'A warm, liquid food you eat with a spoon.' },
-                { word: 'space', definition: 'The big, dark place where the stars and planets are.' },
-                { word: 'speak', definition: 'Using your voice to talk.' },
-                { word: 'spoon', definition: 'What you use to eat soup or ice cream.' },
-                { word: 'sport', definition: 'A fun game like soccer or baseball.' },
-                { word: 'spring', definition: 'The season when flowers start to grow.' },
-                { word: 'square', definition: 'A shape with four equal sides.' },
-                { word: 'stamp', definition: 'A little sticker you put on a letter.' },
-                { word: 'stand', definition: 'When you are up on your feet.' },
-                { word: 'start', definition: 'To begin something new.' },
-                { word: 'stay', definition: 'To not move from a place.' }
+            // Each grade has its own words. decoys: how many wrong letters are mixed into the
+            // tray, which is also the number of chances (you are out of guesses once every
+            // wrong letter has been picked, as before).
+            const GRADES = [
+                { id: 'k', name: 'Kindergarten', short: 'K', bg: '#FFE6A6', about: 'Short words like cat, sun and dog', decoys: 3, words: [
+                    { word: 'cat', definition: 'A furry pet that says meow.' },
+                    { word: 'dog', definition: 'A furry pet that barks and wags its tail.' },
+                    { word: 'sun', definition: 'The big, bright light in the sky in the daytime.' },
+                    { word: 'hat', definition: 'You wear it on your head.' },
+                    { word: 'bus', definition: 'A big yellow ride that takes kids to school.' },
+                    { word: 'pig', definition: 'A pink farm animal that says oink.' },
+                    { word: 'bed', definition: 'Where you sleep at night.' },
+                    { word: 'cup', definition: 'You drink from it.' },
+                    { word: 'fox', definition: 'An orange animal with a big, fluffy tail.' },
+                    { word: 'hen', definition: 'A mother chicken that lays eggs.' },
+                    { word: 'map', definition: 'A picture that shows you the way.' },
+                    { word: 'box', definition: 'You can put your toys inside it.' },
+                    { word: 'bug', definition: 'A tiny animal, like an ant or a ladybug.' },
+                    { word: 'jam', definition: 'A sweet, sticky spread made from fruit.' },
+                    { word: 'net', definition: 'You use it to catch fish or butterflies.' },
+                    { word: 'pen', definition: 'You use it to write with ink.' },
+                    { word: 'van', definition: 'A car with lots of room inside.' },
+                    { word: 'web', definition: 'A spider makes this out of silk.' },
+                    { word: 'mop', definition: 'You use it to clean the floor.' },
+                    { word: 'rug', definition: 'A soft mat that goes on the floor.' },
+                    { word: 'fan', definition: 'It blows cool air on a hot day.' },
+                    { word: 'bat', definition: 'You hit a ball with it.' },
+                    { word: 'cub', definition: 'A baby bear or a baby lion.' },
+                    { word: 'pot', definition: 'You cook soup in it.' },
+                    { word: 'sit', definition: 'What you do on a chair.' },
+                    { word: 'run', definition: 'Moving your legs very fast.' }
+                ]},
+                { id: '1', name: '1st grade', short: '1', bg: '#B9E7F2', about: 'Words like ship, frog and milk', decoys: 3, words: [
+                    { word: 'ball', definition: 'A round toy you can throw and catch.' },
+                    { word: 'cake', definition: 'A sweet treat we eat on birthdays.' },
+                    { word: 'duck', definition: 'A bird that swims and quacks.' },
+                    { word: 'frog', definition: 'A small green animal that hops.' },
+                    { word: 'nest', definition: 'A bird\'s cozy home in a tree.' },
+                    { word: 'star', definition: 'A bright, twinkling light in the night sky.' },
+                    { word: 'tree', definition: 'A big, tall plant with green leaves.' },
+                    { word: 'door', definition: 'What you open to go into a room.' },
+                    { word: 'key', definition: 'A tool you use to open a lock.' },
+                    { word: 'jump', definition: 'When you go up and down with your legs.' },
+                    { word: 'king', definition: 'A man who rules a kingdom.' },
+                    { word: 'play', definition: 'Having fun with toys and friends.' },
+                    { word: 'sing', definition: 'Making music with your voice.' },
+                    { word: 'snow', definition: 'The cold, white stuff that falls in winter.' },
+                    { word: 'song', definition: 'A story you sing with music.' },
+                    { word: 'stay', definition: 'To not move from a place.' },
+                    { word: 'ship', definition: 'A very big boat that sails on the sea.' },
+                    { word: 'milk', definition: 'A white drink that comes from cows.' },
+                    { word: 'fish', definition: 'An animal that swims and lives in water.' },
+                    { word: 'bell', definition: 'It rings: ding, dong!' },
+                    { word: 'sock', definition: 'You wear it on your foot, inside your shoe.' },
+                    { word: 'crab', definition: 'A sea animal that walks sideways.' },
+                    { word: 'drum', definition: 'You tap it to make a boom, boom sound.' },
+                    { word: 'flag', definition: 'A cloth with colors that waves in the wind.' },
+                    { word: 'swim', definition: 'How you move your arms and legs in the water.' }
+                ]},
+                { id: '2', name: '2nd grade', short: '2', bg: '#C9E7BC', about: 'Words like rain, boat and snake', decoys: 4, words: [
+                    { word: 'grape', definition: 'A small, round, purple fruit.' },
+                    { word: 'house', definition: 'Where you live with your family.' },
+                    { word: 'juice', definition: 'A yummy drink made from fruit.' },
+                    { word: 'kite', definition: 'A toy that flies high in the sky.' },
+                    { word: 'lion', definition: 'A big, wild cat that roars.' },
+                    { word: 'moon', definition: 'The big circle that shines in the night sky.' },
+                    { word: 'pear', definition: 'A sweet, green fruit.' },
+                    { word: 'queen', definition: 'A princess who rules a kingdom.' },
+                    { word: 'rain', definition: 'Water that falls from the clouds.' },
+                    { word: 'vase', definition: 'A jar for holding pretty flowers.' },
+                    { word: 'yoyo', definition: 'A toy that goes up and down on a string.' },
+                    { word: 'boat', definition: 'Something that floats on water.' },
+                    { word: 'grass', definition: 'The green stuff that covers the ground.' },
+                    { word: 'leaf', definition: 'The green part of a tree.' },
+                    { word: 'cloud', definition: 'The fluffy white things in the sky.' },
+                    { word: 'dream', definition: 'A story you see when you are asleep.' },
+                    { word: 'field', definition: 'A big, open place to run and play.' },
+                    { word: 'glove', definition: 'Something you wear on your hands.' },
+                    { word: 'heart', definition: 'The part of you that feels love.' },
+                    { word: 'igloo', definition: 'A cozy little house made of snow.' },
+                    { word: 'light', definition: 'What makes the room bright so you can see.' },
+                    { word: 'mouse', definition: 'A tiny animal that squeaks.' },
+                    { word: 'night', definition: 'When the moon and stars come out.' },
+                    { word: 'snake', definition: 'A long animal that slithers on the ground.' },
+                    { word: 'beach', definition: 'A sandy place next to the ocean.' },
+                    { word: 'bread', definition: 'What you use to make a sandwich.' },
+                    { word: 'clock', definition: 'It tells you what time it is.' },
+                    { word: 'phone', definition: 'What you use to talk to people far away.' },
+                    { word: 'plane', definition: 'A machine that flies in the sky.' },
+                    { word: 'plant', definition: 'Something that grows from the ground, like a flower.' },
+                    { word: 'plate', definition: 'What you eat your food from.' },
+                    { word: 'prize', definition: 'Something special you win in a game.' },
+                    { word: 'room', definition: 'A part of your house, like your bedroom.' },
+                    { word: 'rose', definition: 'A beautiful flower that is often red.' },
+                    { word: 'shoe', definition: 'Something you wear on your feet.' },
+                    { word: 'sleep', definition: 'What you do in your bed at night.' },
+                    { word: 'smile', definition: 'What you do with your mouth when you are happy.' },
+                    { word: 'snack', definition: 'A small meal you eat between breakfast and lunch.' },
+                    { word: 'soap', definition: 'What you use to get clean in the bath.' },
+                    { word: 'soup', definition: 'A warm, liquid food you eat with a spoon.' },
+                    { word: 'spoon', definition: 'What you use to eat soup or ice cream.' },
+                    { word: 'stamp', definition: 'A little sticker you put on a letter.' },
+                    { word: 'stand', definition: 'When you are up on your feet.' },
+                    { word: 'start', definition: 'To begin something new.' },
+                    { word: 'train', definition: 'It rides along tracks and goes choo choo.' }
+                ]},
+                { id: '3', name: '3rd grade', short: '3', bg: '#F8C0B9', about: 'Words like planet and garden', decoys: 5, words: [
+                    { word: 'apple', definition: 'A yummy red fruit that grows on trees.' },
+                    { word: 'orange', definition: 'A round, orange fruit.' },
+                    { word: 'uncle', definition: 'The brother of your mom or dad.' },
+                    { word: 'water', definition: 'What you drink to stay healthy.' },
+                    { word: 'zebra', definition: 'A black and white striped animal.' },
+                    { word: 'chair', definition: 'A comfy seat for one person.' },
+                    { word: 'earth', definition: 'The planet we all live on.' },
+                    { word: 'flower', definition: 'The colorful, pretty part of a plant.' },
+                    { word: 'happy', definition: 'How you feel when you smile.' },
+                    { word: 'island', definition: 'A piece of land in the big ocean.' },
+                    { word: 'jelly', definition: 'A sweet, wiggly food.' },
+                    { word: 'magic', definition: 'A special power that makes amazing things happen.' },
+                    { word: 'pizza', definition: 'A yummy round food with cheese and sauce.' },
+                    { word: 'jacket', definition: 'What you wear when it\'s cold outside.' },
+                    { word: 'ocean', definition: 'A big place where dolphins swim.' },
+                    { word: 'puppy', definition: 'A cute, little baby dog.' },
+                    { word: 'quiet', definition: 'When there is no sound.' },
+                    { word: 'river', definition: 'A long stream of water.' },
+                    { word: 'table', definition: 'Where you sit to eat your food.' },
+                    { word: 'watch', definition: 'Something you wear to tell the time.' },
+                    { word: 'candy', definition: 'A sweet treat like a lollipop.' },
+                    { word: 'dance', definition: 'When you move your body to music.' },
+                    { word: 'family', definition: 'The people who love you, like mommy and daddy.' },
+                    { word: 'garden', definition: 'Where flowers and vegetables grow.' },
+                    { word: 'horse', definition: 'A big animal you can ride.' },
+                    { word: 'image', definition: 'A picture of something.' },
+                    { word: 'lemon', definition: 'A sour, yellow fruit.' },
+                    { word: 'music', definition: 'Fun sounds that make you want to dance.' },
+                    { word: 'paper', definition: 'What you use to draw pictures on.' },
+                    { word: 'pencil', definition: 'A tool you use for writing and drawing.' },
+                    { word: 'photo', definition: 'A picture you take with a camera.' },
+                    { word: 'robot', definition: 'A machine that can move and do jobs.' },
+                    { word: 'rocket', definition: 'A spaceship that flies to the moon.' },
+                    { word: 'school', definition: 'Where you go to learn and play.' },
+                    { word: 'shirt', definition: 'A piece of clothing you wear on top.' },
+                    { word: 'space', definition: 'The big, dark place where the stars and planets are.' },
+                    { word: 'speak', definition: 'Using your voice to talk.' },
+                    { word: 'sport', definition: 'A fun game like soccer or baseball.' },
+                    { word: 'spring', definition: 'The season when flowers start to grow.' },
+                    { word: 'square', definition: 'A shape with four equal sides.' },
+                    { word: 'planet', definition: 'A giant ball in space, like Earth or Mars.' },
+                    { word: 'bridge', definition: 'It helps you cross over a river or a road.' },
+                    { word: 'castle', definition: 'A big stone home where kings and queens live.' }
+                ]},
+                { id: '4', name: '4th grade', short: '4', bg: '#D9C2E3', about: 'Big words like volcano and library', decoys: 6, words: [
+                    { word: 'library', definition: 'A place full of books you can borrow.' },
+                    { word: 'volcano', definition: 'A mountain that can spill out hot, melted rock.' },
+                    { word: 'compass', definition: 'A tool with a needle that always points north.' },
+                    { word: 'festival', definition: 'A big, happy party with music and food for a whole town.' },
+                    { word: 'journey', definition: 'A long trip from one place to another.' },
+                    { word: 'rainbow', definition: 'Colorful stripes in the sky after the rain.' },
+                    { word: 'dolphin', definition: 'A smart, friendly sea animal that loves to jump and play.' },
+                    { word: 'kitchen', definition: 'The room where food is cooked.' },
+                    { word: 'dinosaur', definition: 'A giant animal that lived long, long ago.' },
+                    { word: 'mountain', definition: 'A very tall hill that reaches up to the clouds.' },
+                    { word: 'blanket', definition: 'A soft, warm cover for your bed.' },
+                    { word: 'pumpkin', definition: 'A big orange vegetable that grows on a vine.' },
+                    { word: 'treasure', definition: 'Gold and jewels hidden in a chest.' },
+                    { word: 'penguin', definition: 'A black and white bird that swims but cannot fly.' },
+                    { word: 'sandwich', definition: 'Two slices of bread with yummy food in between.' },
+                    { word: 'lantern', definition: 'A light you can carry around.' },
+                    { word: 'whistle', definition: 'You blow into it to make a loud, high sound.' },
+                    { word: 'puzzle', definition: 'A game where you fit the pieces together.' },
+                    { word: 'helmet', definition: 'A hard hat that keeps your head safe.' },
+                    { word: 'museum', definition: 'A building where you can see art and special old things.' },
+                    { word: 'thunder', definition: 'The loud boom you hear in a storm.' },
+                    { word: 'balloon', definition: 'A colorful bag of air that can float up high.' },
+                    { word: 'harvest', definition: 'When farmers pick the food they grew.' }
+                ]},
+                { id: '5', name: '5th grade', short: '5', bg: '#FFD9C2', about: 'Super words like telescope', decoys: 6, words: [
+                    { word: 'adventure', definition: 'An exciting trip where something new happens.' },
+                    { word: 'telescope', definition: 'A tool that makes faraway stars look close.' },
+                    { word: 'invention', definition: 'Something new that someone thinks up and builds.' },
+                    { word: 'character', definition: 'A person or animal in a story.' },
+                    { word: 'celebrate', definition: 'To have fun on a special day, like a birthday.' },
+                    { word: 'astronaut', definition: 'A person who travels into space.' },
+                    { word: 'butterfly', definition: 'An insect with big, colorful wings.' },
+                    { word: 'dictionary', definition: 'A book that tells you what words mean.' },
+                    { word: 'discovery', definition: 'Finding something for the very first time.' },
+                    { word: 'community', definition: 'The people who live, work and play together in a place.' },
+                    { word: 'imagine', definition: 'To make a picture in your mind.' },
+                    { word: 'scientist', definition: 'A person who asks questions and does experiments to learn.' },
+                    { word: 'microscope', definition: 'A tool that makes tiny things look big.' },
+                    { word: 'habitat', definition: 'The natural home of an animal or a plant.' },
+                    { word: 'skeleton', definition: 'All the bones inside your body.' },
+                    { word: 'orchestra', definition: 'A big group of musicians playing together.' },
+                    { word: 'vegetable', definition: 'A plant we eat, like a carrot or peas.' },
+                    { word: 'calendar', definition: 'A chart that shows the days, weeks and months.' },
+                    { word: 'umbrella', definition: 'It keeps you dry when it rains.' },
+                    { word: 'triangle', definition: 'A shape with three sides.' },
+                    { word: 'chocolate', definition: 'A sweet brown treat made from cocoa beans.' },
+                    { word: 'kindness', definition: 'Being friendly, helpful and caring.' },
+                    { word: 'friendship', definition: 'What you share with your friends.' },
+                    { word: 'curious', definition: 'Wanting to know more about something.' }
+                ]}
             ];
             const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+            const GRADE_KEY = 'sd-grade';       // the grade picked last time
+            const SOLVED_KEY = 'sd-solved';     // cases solved, per grade: { "k": 3, "2": 10 }
 
+            let grade = null;
+            let wordData = [];
+            let recentWords = [];      // so a word does not come straight back
             let currentWordData = {};
             let guessedWord = [];
             let wrongLettersCount = 0;
             let totalWrongLettersInPool = 0;
+            let caseNumber = 0;        // cases opened since the grade was picked
+            let solvedCount = 0;       // cases cracked in this grade
+            let clueUsed = false;      // one free clue per case
+            let cluedLetters = [];     // letters Chike gave away (shown in sky blue)
+            let gameOver = false;
+            let inCase = false;        // a case is open behind the grade picker
+            let poseTimer = 0, winTimer = 0, clueTimer = 0, restartTimer = 0;
+            const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
             // --- DOM Elements ---
             const wordDisplay = document.getElementById('word-display');
@@ -371,43 +1153,205 @@
             const loseWordEl = document.getElementById('lose-word');
             const nextWordButton = document.getElementById('next-word-button');
             const wrongGuessesCountSpan = document.getElementById('wrong-guesses-count');
+            const chancesIcons = document.getElementById('chances-icons');
+            const clueButton = document.getElementById('clue-button');
+            const clueText = document.getElementById('clue-text');
+            const chikeImg = document.getElementById('chike-img');
+            const sayEl = document.getElementById('say');
+            const liveEl = document.getElementById('live');
+            const caseNumberEl = document.getElementById('case-number');
+            const modalCaseEl = document.getElementById('modal-case');
+            const solvedCountEl = document.getElementById('solved-count');
+            const solvedChip = document.getElementById('solved-chip');
+            const modalChike = document.getElementById('modal-chike');
+            const stampEl = document.getElementById('stamp');
+            const gradeButton = document.getElementById('grade-button');
+            const gradeNameEl = document.getElementById('grade-name');
+            const startEl = document.getElementById('start');
+            const gradesEl = document.getElementById('grades');
+            const resumeEl = document.getElementById('resume');
+            const resumeTitle = document.getElementById('resume-title');
+            const resumeText = document.getElementById('resume-text');
+            const resumeButton = document.getElementById('resume-button');
+            const picklineEl = document.getElementById('pickline');
+
+            // --- Sound: the shared kit (games/game-sound.js); on unless the player turned it off ---
+            const sound = (name, opts) => { if (window.CCSSound) window.CCSSound.play(name, opts); };
+            if (window.CCSSound) document.getElementById('folder-top').appendChild(window.CCSSound.button({ compact: true }));
+
+            // --- Saved on this device: the last grade, and cases solved per grade ---
+            function loadSolved() {
+                try { return JSON.parse(localStorage.getItem(SOLVED_KEY) || '{}') || {}; } catch (e) { return {}; }
+            }
+            function saveSolved(map) {
+                try { localStorage.setItem(SOLVED_KEY, JSON.stringify(map)); } catch (e) {}
+            }
+            function savedGrade() {
+                let id = null;
+                try { id = localStorage.getItem(GRADE_KEY); } catch (e) {}
+                return GRADES.find(g => g.id === id) || null;
+            }
+
+            // --- Chike, the detective's sidekick ---
+            const POSES = ['wave', 'point', 'thumbs-up', 'arms-crossed', 'point-up'];
+            const poseSrc = (pose) => '../assets/characters/chike-pose-' + pose + '.png';
+            POSES.forEach((pose) => { const img = new Image(); img.src = poseSrc(pose); });   // no flicker on the first swap
+
+            const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+            const big = (letter) => letter.toUpperCase();
+            // "an S", "a T": letters whose names start with a vowel sound take "an"
+            const an = (letter) => ('aefhilmnorsx'.includes(letter) ? 'an ' : 'a ') + big(letter);
+            const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five'];
+
+            // Chike strikes a pose and says something; srExtra is only read out to screen readers
+            function chike(pose, text, kind = '', srExtra = '') {
+                chikeImg.src = poseSrc(pose);
+                sayEl.textContent = text;
+                sayEl.className = 'say' + (kind ? ' ' + kind : '');
+                if (!REDUCED) {
+                    void sayEl.offsetWidth;            // restart the little pop
+                    sayEl.classList.add('pop');
+                    if (pose === 'thumbs-up') {
+                        chikeImg.classList.remove('hop');
+                        void chikeImg.offsetWidth;
+                        chikeImg.classList.add('hop');
+                    }
+                }
+                liveEl.textContent = text + srExtra;
+                // after a reaction, Chike goes back to pointing at the case
+                clearTimeout(poseTimer);
+                if (pose !== 'point' && pose !== 'wave') {
+                    poseTimer = setTimeout(() => { if (!gameOver) chikeImg.src = poseSrc('point'); }, 2600);
+                }
+            }
+
+            // --- Pick your grade ---
+            function openPicker() {
+                const solved = loadSolved();
+                const last = grade || savedGrade();
+                resumeEl.hidden = !last;
+                if (last) {
+                    const n = solved[last.id] || 0;
+                    resumeTitle.textContent = 'Keep going: ' + last.name;
+                    resumeText.textContent = grade && inCase ? 'Back to case #' + caseNumber : n + ' case' + (n === 1 ? '' : 's') + ' solved';
+                    picklineEl.textContent = 'Or pick a grade:';
+                } else {
+                    picklineEl.textContent = '';
+                }
+                gradesEl.innerHTML = GRADES.map((g, i) => {
+                    const n = solved[g.id] || 0;
+                    const isLast = last && last.id === g.id;
+                    return '<button type="button" class="grade' + (isLast ? ' last' : '') + '" data-i="' + i + '" style="background:' + g.bg + '">' +
+                        '<b>' + g.name + '</b><span>' + g.about + '</span>' +
+                        (n ? '<em>' + n + ' solved</em>' : '') +
+                        (isLast ? '<span class="sr"> (last time)</span>' : '') + '</button>';
+                }).join('');
+                startEl.hidden = false;
+                (last ? resumeButton : gradesEl.querySelector('.grade')).focus();
+            }
+
+            function chooseGrade(g) {
+                grade = g;
+                wordData = g.words;
+                recentWords = [];
+                caseNumber = 0;
+                solvedCount = loadSolved()[g.id] || 0;
+                solvedCountEl.textContent = solvedCount;
+                gradeNameEl.textContent = g.short;
+                try { localStorage.setItem(GRADE_KEY, g.id); } catch (e) {}
+                startEl.hidden = true;
+                sound('click');
+                startGame();
+            }
+
+            function closePicker() {
+                startEl.hidden = true;
+                gradeButton.focus();
+            }
+
+            gradesEl.addEventListener('click', (e) => {
+                const card = e.target.closest('.grade');
+                if (card) chooseGrade(GRADES[Number(card.dataset.i)]);
+            });
+
+            // Keep going: back to the open case, or start the grade from last time
+            resumeButton.addEventListener('click', () => {
+                if (grade && inCase) { sound('click'); closePicker(); }
+                else chooseGrade(grade || savedGrade());
+            });
+
+            gradeButton.addEventListener('click', () => { sound('click'); openPicker(); });
 
             // --- Game Functions ---
             function startGame() {
+                clearTimeout(winTimer);
+                clearTimeout(clueTimer);
+                clearTimeout(restartTimer);
+
                 // Reset game state
                 wrongLettersCount = 0;
                 totalWrongLettersInPool = 0;
+                clueUsed = false;
+                cluedLetters = [];
+                gameOver = false;
+                inCase = true;
+                caseNumber++;
 
-                // Select a new word
-                currentWordData = wordData[Math.floor(Math.random() * wordData.length)];
+                // Select a new word (not one of the last few)
+                const fresh = wordData.filter(w => !recentWords.includes(w.word));
+                currentWordData = fresh[Math.floor(Math.random() * fresh.length)];
+                recentWords.push(currentWordData.word);
+                if (recentWords.length > Math.min(6, wordData.length - 1)) recentWords.shift();
                 guessedWord = Array(currentWordData.word.length).fill('');
 
                 // Update UI
+                caseNumberEl.textContent = caseNumber;
+                modalCaseEl.textContent = caseNumber;
                 definitionDisplay.textContent = currentWordData.definition;
                 renderWordDisplay();
                 renderLetterPool();
+                clueButton.disabled = false;
+                clueText.textContent = 'Get a clue';
 
                 // Hide modal
                 messageModal.style.display = 'none';
+                sound('start');
+
+                if (caseNumber === 1) {
+                    chike('wave', 'Hi, detective! Read the clue together, then pick the letters that spell the word.');
+                } else {
+                    chike('point', pick([
+                        'New case! Read the clue together. What word is hiding?',
+                        'Another mystery! Read the clue, then pick the letters.',
+                        'Case open! Which word fits this clue?',
+                        'Ready, detective? Read the clue and start spelling!'
+                    ]));
+                }
             }
 
-            function renderWordDisplay() {
+            // fresh: the boxes that were just filled in, so only they pop
+            function renderWordDisplay(fresh = []) {
                 wordDisplay.innerHTML = '';
+                wordDisplay.style.setProperty('--len', currentWordData.word.length);
                 for (let i = 0; i < currentWordData.word.length; i++) {
                     const letterBox = document.createElement('div');
                     letterBox.classList.add('letter-box');
                     letterBox.textContent = guessedWord[i] || '';
                     if (guessedWord[i]) {
                         letterBox.classList.add('revealed');
+                        if (cluedLetters.includes(guessedWord[i])) letterBox.classList.add('clued');
+                        if (fresh.includes(i) && !REDUCED) letterBox.classList.add('just');
                     }
                     wordDisplay.appendChild(letterBox);
                 }
+                wordDisplay.setAttribute('aria-label', 'The hidden word has ' + currentWordData.word.length + ' letters: ' +
+                    guessedWord.map((l) => l || 'blank').join(', '));
             }
 
             function renderLetterPool() {
                 letterPool.innerHTML = '';
-                const poolSize = Math.max(9, Math.min(11, currentWordData.word.length + 5));
                 const uniqueLetters = [...new Set(currentWordData.word)];
+                const poolSize = uniqueLetters.length + grade.decoys;
 
                 while (uniqueLetters.length < poolSize) {
                     const randomLetter = alphabet[Math.floor(Math.random() * alphabet.length)];
@@ -423,9 +1367,10 @@
                 }
 
                 totalWrongLettersInPool = 0;
-                const colors = ['#3A7A37', '#0C7387', '#C9931A', '#C1631A', '#7A4A86', '#A63A6B'];
+                const colors = ['#F5B921', '#17B3CE', '#F8C0B9', '#C9E7BC', '#DD7A22', '#B9E7F2', '#D9C2E3'];
                 uniqueLetters.forEach((letter, index) => {
                     const button = document.createElement('button');
+                    button.type = 'button';
                     button.classList.add('letter-button');
                     button.textContent = letter;
                     button.style.backgroundColor = colors[index % colors.length];
@@ -439,9 +1384,51 @@
 
                 // Update the chances counter
                 wrongGuessesCountSpan.textContent = totalWrongLettersInPool;
+                renderChances(false);
+            }
+
+            // one magnifying glass per chance; the used ones fade from the right
+            function renderChances(justLost) {
+                const left = totalWrongLettersInPool - wrongLettersCount;
+                let html = '';
+                for (let i = 0; i < totalWrongLettersInPool; i++) {
+                    const cls = i >= left ? (i === left && justLost && !REDUCED ? 'used lose' : 'used') : '';
+                    html += '<svg class="' + cls + '" viewBox="0 0 32 32"><path d="m20 20 8 8" stroke="#1E2226" stroke-width="7" stroke-linecap="round"/>' +
+                        '<path d="m20 20 8 8" stroke="#7A4A86" stroke-width="3" stroke-linecap="round"/>' +
+                        '<circle cx="13" cy="13" r="9.5" fill="#B9E7F2" stroke="#1E2226" stroke-width="3"/>' +
+                        '<path d="M8.5 11a5 5 0 0 1 4-4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>';
+                }
+                chancesIcons.innerHTML = html;
+            }
+
+            // fills in every box that holds this letter; returns which boxes changed
+            function revealLetter(letter) {
+                const fresh = [];
+                for (let i = 0; i < currentWordData.word.length; i++) {
+                    if (currentWordData.word[i] === letter) {
+                        guessedWord[i] = letter;
+                        fresh.push(i);
+                    }
+                }
+                return fresh;
+            }
+
+            // the "good" chime climbs a little higher as more of the word is filled in
+            function rightSound() {
+                const filled = guessedWord.filter(Boolean).length / guessedWord.length;
+                sound('good', { pitch: 0.85 + filled * 0.45 });
+            }
+
+            function shake(el) {
+                if (REDUCED) return;
+                el.classList.remove('shake');
+                void el.offsetWidth;
+                el.classList.add('shake');
             }
 
             function handleGuess(letter, button = null) {
+                if (gameOver || !inCase) return;
+
                 if (!button) {
                     const buttons = document.querySelectorAll('.letter-button');
                     button = Array.from(buttons).find(btn => btn.textContent === letter && !btn.disabled);
@@ -452,20 +1439,64 @@
                 button.disabled = true;
 
                 if (currentWordData.word.includes(letter)) {
-                    for (let i = 0; i < currentWordData.word.length; i++) {
-                        if (currentWordData.word[i] === letter) {
-                            guessedWord[i] = letter;
+                    const fresh = revealLetter(letter);
+                    renderWordDisplay(fresh);
+                    rightSound();
+                    if (guessedWord.includes('')) {
+                        let text = fresh.length > 1
+                            ? 'Yes! There are ' + NUMBER_WORDS[Math.min(fresh.length, 5)] + ' ' + big(letter) + '\'s in this word!'
+                            : pick(['Yes! There\'s ' + an(letter) + ' in this word.', 'Good eye! The ' + big(letter) + ' fits.', 'Super sleuthing! ' + big(letter) + ' is in there.']);
+                        if (new Set(guessedWord.map((l, i) => l ? '' : currentWordData.word[i]).filter(Boolean)).size === 1) {
+                            text += ' One more letter to go!';
                         }
+                        chike('thumbs-up', text, 'good');
                     }
-                    renderWordDisplay();
                     checkGameState();
                 } else {
                     button.classList.add('incorrect');
+                    shake(button);
                     wrongLettersCount++;
                     // Update the chances counter display
                     wrongGuessesCountSpan.textContent = totalWrongLettersInPool - wrongLettersCount;
+                    renderChances(true);
+                    const left = totalWrongLettersInPool - wrongLettersCount;
+                    if (left > 0) {
+                        sound('bad');
+                        chike('arms-crossed', pick([
+                            'Hmm, no ' + big(letter) + ' in this word. Try another!',
+                            'Not ' + big(letter) + '. Keep looking, detective!',
+                            'No ' + big(letter) + ' here. You\'ve got this!'
+                        ]) + (left === 1 ? ' One chance left!' : ''), 'oops', ' Chances left: ' + left + '.');
+                    }
                     checkGameState();
+                    // two wrong letters: Chike steps in with the free clue
+                    if (!gameOver && wrongLettersCount === 2 && !clueUsed) {
+                        clueTimer = setTimeout(() => giveClue(true), 1500);
+                    }
                 }
+            }
+
+            // Chike's clue: free, one per case. It fills in the first empty box.
+            // It is never used up on the very last letter, so the child always finishes the word.
+            function giveClue(auto) {
+                clearTimeout(clueTimer);
+                if (gameOver || clueUsed || !inCase) return;
+                const missing = new Set(currentWordData.word.split('').filter((l, i) => !guessedWord[i]));
+                if (missing.size < 2) {
+                    if (!auto) chike('thumbs-up', 'Just one letter left. You can find it, detective!', 'good');
+                    return;
+                }
+                const letter = currentWordData.word[guessedWord.indexOf('')];
+                clueUsed = true;
+                cluedLetters.push(letter);
+                const button = Array.from(document.querySelectorAll('.letter-button')).find(btn => btn.textContent === letter && !btn.disabled);
+                if (button) button.disabled = true;
+                renderWordDisplay(revealLetter(letter));
+                clueButton.disabled = true;
+                clueText.textContent = 'Clue used';
+                sound('coin');
+                chike('point-up', (auto ? 'Tricky one! ' : '') + 'Here\'s a clue: I found ' + an(letter) + ' for you!', 'hint');
+                checkGameState();
             }
 
             function checkGameState() {
@@ -477,33 +1508,90 @@
             }
 
             function endGame(isWin) {
+                gameOver = true;
+                clearTimeout(clueTimer);
+                clueButton.disabled = true;
                 winContent.style.display = 'none';
                 loseContent.style.display = 'none';
 
                 if (isWin) {
+                    solvedCount++;
+                    solvedCountEl.textContent = solvedCount;
+                    const solved = loadSolved();
+                    solved[grade.id] = solvedCount;
+                    saveSolved(solved);
+                    if (!REDUCED) { solvedChip.classList.remove('bump'); void solvedChip.offsetWidth; solvedChip.classList.add('bump'); }
                     winWordEl.textContent = currentWordData.word.toUpperCase();
                     winDefinitionEl.textContent = currentWordData.definition;
                     winContent.style.display = 'block';
+                    modalChike.src = poseSrc('thumbs-up');
+                    chike('thumbs-up', pick(['Case solved! You spelled ' + currentWordData.word.toUpperCase() + '!', 'You cracked it! The word is ' + currentWordData.word.toUpperCase() + '!']), 'good');
+                    // a moment to see the last letter land, then the stamp
+                    winTimer = setTimeout(() => {
+                        messageModal.style.display = 'flex';
+                        stampEl.classList.remove('slam');
+                        if (!REDUCED) { void stampEl.offsetWidth; stampEl.classList.add('slam'); }
+                        sound('win');
+                        confetti();
+                        nextWordButton.focus();
+                    }, REDUCED ? 250 : 650);
                 } else {
                     loseWordEl.textContent = currentWordData.word.toUpperCase();
                     loseContent.style.display = 'block';
-                    setTimeout(startGame, 3000); // Auto-restart on lose
+                    modalChike.src = poseSrc('wave');
+                    sound('lose');
+                    chike('wave', 'That one was tricky! The word was ' + currentWordData.word.toUpperCase() + '. A new case is coming!', 'oops');
+                    messageModal.style.display = 'flex';
+                    restartTimer = setTimeout(startGame, 3000); // Auto-restart on lose
                 }
-                messageModal.style.display = 'flex';
+            }
+
+            function confetti() {
+                if (REDUCED) return;
+                const layer = document.createElement('div');
+                layer.className = 'confetti';
+                layer.setAttribute('aria-hidden', 'true');
+                const colors = ['#F5B921', '#17B3CE', '#F8C0B9', '#C9E7BC', '#DD7A22', '#7A4A86', '#B9E7F2', '#BC3229'];
+                for (let i = 0; i < 46; i++) {
+                    const piece = document.createElement('i');
+                    piece.style.left = (Math.random() * 100) + '%';
+                    piece.style.background = pick(colors);
+                    piece.style.setProperty('--x', (Math.random() * 160 - 80) + 'px');
+                    piece.style.setProperty('--r', (Math.random() * 720 - 360) + 'deg');
+                    piece.style.animationDuration = (1.6 + Math.random() * 1.2) + 's';
+                    piece.style.animationDelay = (Math.random() * 0.4) + 's';
+                    if (i % 3 === 0) piece.style.borderRadius = '50%';
+                    layer.appendChild(piece);
+                }
+                document.body.appendChild(layer);
+                setTimeout(() => layer.remove(), 3400);
             }
 
             // --- Event Listeners ---
-            nextWordButton.addEventListener('click', startGame);
+            nextWordButton.addEventListener('click', () => {
+                startGame();
+                const firstTile = letterPool.querySelector('.letter-button');
+                if (firstTile) firstTile.focus();
+            });
 
-            // Keyboard input listener
+            clueButton.addEventListener('click', () => giveClue(false));
+
+            // Keyboard input listener: typing a letter picks that tile
             window.addEventListener('keydown', (e) => {
-                if (e.key.match(/^[a-z]$/i)) {
+                if (!startEl.hidden) {                                // the grade picker is open
+                    if (e.key === 'Escape' && inCase) closePicker();
+                    return;
+                }
+                if (e.ctrlKey || e.metaKey || e.altKey) return;      // leave shortcuts like Ctrl+R alone
+                if (messageModal.style.display === 'flex') return;   // the case is closed
+                if (e.key && e.key.match(/^[a-z]$/i)) {
                     handleGuess(e.key.toLowerCase());
                 }
             });
 
-            // --- Initial Game Start ---
-            startGame();
+            // --- Initial Game Start: pick a grade first ---
+            chike('wave', 'Hi, detective! Pick your grade to open your first case.');
+            openPicker();
         });
     </script>
 </body>

@@ -115,6 +115,11 @@
         .tally-op { opacity: 0.7; flex: none; }
         .tally-total { flex: none; color: #fde68a; }
 
+        /* Reset Match and the shared Sound on/off button sit side by side;
+           the row carries the gap the Reset button used to carry alone. */
+        #hockey-controls #reserve-button { margin-bottom: 0 !important; }
+        #hockey-controls .ccs-sound-btn { min-height: 38px; padding: 6px 14px; font-size: 0.85rem; }
+
     </style>
     <link rel="stylesheet" href="game-skin.css">
 </head>
@@ -156,10 +161,12 @@
         <!-- Game Screen -->
         <div id="game-screen" class="hidden flex flex-col items-center">
 
-            <!-- Reset Match Button -->
+            <!-- Reset Match Button, and the Sound on/off button (added by game-sound.js below) -->
+            <div id="hockey-controls" class="flex items-center justify-center gap-3 mb-2">
             <button id="reserve-button" class="px-6 py-2 mb-4 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold rounded-full shadow-lg transition duration-200 uppercase tracking-wider">
                 Reset Match
             </button>
+            </div>
 
             <!-- Scoreboard -->
             <div id="scoreboard" class="flex justify-between w-full mb-2 font-mono text-3xl font-bold text-white bg-gray-900/50 p-3 rounded-lg shadow-inner border border-gray-700">
@@ -209,6 +216,7 @@
     </div>
 
 
+    <script src="game-sound.js"></script>
     <script>
         // --- Game Setup and Constants ---
         const canvas = document.getElementById('gameCanvas');
@@ -318,6 +326,15 @@
             else if (e.key === 'ArrowLeft') keysPressed.left = false;
             else if (e.key === 'ArrowRight') keysPressed.right = false;
         });
+
+        // --- Sound (the shared kit in game-sound.js; one on/off switch for every game) ---
+        // The kit spaces out repeats of the same sound, so five pucks
+        // rattling around never turn into a buzz.
+        function sfx(name, opts) { if (window.CCSSound) CCSSound.play(name, opts); }
+        function puckSpeed(p) { return Math.sqrt(p.velocityX * p.velocityX + p.velocityY * p.velocityY); }
+        document.getElementById('hockey-controls').appendChild(
+            window.CCSSound ? CCSSound.button() : document.createComment('no sound kit')
+        );
 
         // --- Game Objects ---
         class HockeyObject {
@@ -458,6 +475,7 @@
                 currentDifficulty = button.dataset.difficulty;
                 aiConfig = aiSpeedMap[currentDifficulty];
 
+                sfx('start');
                 difficultySelectionScreen.classList.add('hidden');
                 gameScreen.classList.remove('hidden');
 
@@ -596,9 +614,11 @@
             if (puck.y - PUCK_RADIUS < 0) {
                 puck.y = PUCK_RADIUS;
                 puck.velocityY *= -1;
+                wallSound(puck);
             } else if (puck.y + PUCK_RADIUS > GAME_HEIGHT) {
                 puck.y = GAME_HEIGHT - PUCK_RADIUS;
                 puck.velocityY *= -1;
+                wallSound(puck);
             }
 
             // Goal detection (Left/Right)
@@ -618,6 +638,7 @@
                         puck.x = GAME_WIDTH - PUCK_RADIUS;
                     }
                     puck.velocityX *= -1;
+                    wallSound(puck);
                 }
             }
             return null;
@@ -644,7 +665,17 @@
 
                 puck.velocityX = newSpeed * Math.cos(angle) * 1.5;
                 puck.velocityY = newSpeed * Math.sin(angle) * 1.5;
+
+                // A springy knock, higher the harder the puck was hit.
+                sfx('bounce', { pitch: 0.8 + Math.min(1, newSpeed / MAX_PUCK_SPEED) * 0.5, volume: 0.7 });
             }
+        }
+
+        /** A soft knock off the side rails - only for a puck moving at a
+            real pace, so slow drifters stay quiet. */
+        function wallSound(puck) {
+            const speed = puckSpeed(puck);
+            if (speed > 3) sfx('thud', { pitch: 1.6 + Math.min(1, speed / MAX_PUCK_SPEED) * 0.6, volume: 0.35 });
         }
 
         /** Equal-mass elastic collision between two pucks (every puck is
@@ -671,6 +702,7 @@
             // equal masses mean a full exchange, no mass-weighting needed.
             const relVel = (b.velocityX - a.velocityX) * nx + (b.velocityY - a.velocityY) * ny;
             if (relVel >= 0) return; // already moving apart
+            if (relVel < -2) sfx('tick', { pitch: 0.7, volume: 0.6 });
             a.velocityX += relVel * nx;
             a.velocityY += relVel * ny;
             b.velocityX -= relVel * nx;
@@ -691,6 +723,8 @@
             // Populate modal content
             let titleText = message;
             let titleColor, messageText;
+
+            sfx(message.includes("WIN") ? 'win' : 'lose');
 
             if (message.includes("WIN")) {
                 titleColor = "text-green-400";
@@ -788,12 +822,15 @@
                             appendTally(aiTally, p.value);
                             aiTallyDisplay.innerHTML = renderTallyChips(aiTally);
                             gameMessage.textContent = "Goal for AI! +" + p.value;
+                            sfx('bad', { volume: 0.5 });
                         } else {
                             playerScore += p.value;
                             playerScoreDisplay.textContent = playerScore;
                             appendTally(playerTally, p.value);
                             playerTallyDisplay.innerHTML = renderTallyChips(playerTally);
                             gameMessage.textContent = "Goal for Player! +" + p.value;
+                            // a brighter chime for a bigger number
+                            sfx(p.value >= 7 ? 'good' : 'coin', { pitch: 0.85 + p.value * 0.05 });
                         }
                         checkWinCondition();
                         pucks.splice(i, 1);
@@ -900,6 +937,7 @@
 
         // UI Interaction: Reserve Button (Resets scores and puck position)
         reserveButton.addEventListener('click', () => {
+            sfx('click');
             gameModal.classList.add('hidden');
             gameMessage.textContent = "Match Reset! Click to serve.";
             initGame(); // initGame resets scores and sets up paddles/puck
@@ -907,6 +945,7 @@
 
         // UI Interaction: Modal Restart Button
         modalRestartButton.addEventListener('click', () => {
+            sfx('start');
             gameModal.classList.add('hidden');
             initGame();
         });

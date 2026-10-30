@@ -91,6 +91,12 @@ button.sq{width:46px;padding:0;border-radius:14px}
 .score .vs{font-weight:800;color:var(--mut)}
 .pad{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
 .pad .drop{min-width:150px}
+/* the Sound on/off button (the sound kit below) is a square like its neighbours; these set the kit's own plain look aside */
+.pad button.ccs-sound-btn{min-height:46px;padding:0;box-shadow:var(--hard);opacity:1}
+.pad button.ccs-sound-btn:hover{box-shadow:6px 6px 0 var(--ink)}
+.pad button.ccs-sound-btn:active{box-shadow:1px 1px 0 var(--ink)}
+.pad button.ccs-sound-btn[aria-pressed=false]{color:var(--mut)}
+.pad button.ccs-sound-btn svg{width:1.3em;height:1.3em}
 
 /* ---- menus ---- */
 .scrim{position:fixed;inset:0;z-index:5;display:grid;place-items:center;padding:16px;background:rgba(30,34,38,.34);
@@ -137,6 +143,143 @@ button.sq{width:46px;padding:0;border-radius:14px}
 @media (max-height:520px){ .brand small{display:none} .sheet{padding:14px} .mode{padding:8px 12px;margin-bottom:8px} }
 @media (prefers-reduced-motion:reduce){ button{transition:none} .dots::after{animation:none;content:"..."} }
 </style>
+<script>
+/* ============================================================
+   A COPY of the site's shared sound kit, games/game-sound.js.
+   This page is not served as a file: the portal shows it from the
+   database in a sealed frame (srcdoc), where a script tag pointing
+   at the kit would not load, so the kit's code is copied in here.
+   Keep it in step with games/game-sound.js.
+   One difference: a sealed frame cannot keep settings, so this copy
+   does not save the on/off choice. Sound starts on, and the button
+   turns it off for this visit.
+
+   CCSSound.play("good");                 // a named sound (see SOUNDS)
+   CCSSound.play("tick", { pitch: 1.5 }); // optional pitch (1 = normal) and volume (1 = normal)
+   el.appendChild(CCSSound.button());     // the standard on/off button
+   Browsers only allow sound after the player's first click, tap or
+   key press; the kit waits for that.
+   ============================================================ */
+(function(){
+  "use strict";
+  var on = true;
+  var ctx = null, master = null, unlocked = false;
+  var lastAt = {};                       /* name -> time it last played, so fast repeats stay gentle */
+  var buttons = [];
+
+  function audio(){
+    if (!ctx){
+      var A = window.AudioContext || window.webkitAudioContext;
+      if (!A) return null;
+      ctx = new A();
+      /* one master volume and a limiter, so sounds that pile up never clip */
+      var comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -14; comp.ratio.value = 8;
+      master = ctx.createGain(); master.gain.value = 0.5;
+      master.connect(comp); comp.connect(ctx.destination);
+    }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  function unlock(){ unlocked = true; if (on) audio(); }
+  ["pointerdown", "keydown", "touchstart"].forEach(function(t){ window.addEventListener(t, unlock, { capture: true, passive: true }); });
+
+  /* a single note: frequency, start (s from now), length (s), wave, volume, optional slide to another frequency */
+  function tone(f, start, dur, type, vol, slideTo){
+    var c = audio(); if (!c) return;
+    var o = c.createOscillator(), g = c.createGain(), t = c.currentTime + start;
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(f, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol || 0.15, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.03);
+  }
+  /* a short burst of noise (pops, whooshes, thuds) */
+  function noise(start, dur, vol, freq, type){
+    var c = audio(); if (!c) return;
+    var len = Math.max(1, Math.floor(c.sampleRate * dur)), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    var s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime + start;
+    f.type = type || "highpass"; f.frequency.value = freq || 900; g.gain.value = vol || 0.3;
+    s.buffer = buf; s.connect(f); f.connect(g); g.connect(master); s.start(t);
+  }
+  var notes = function(list, gap, len, type, vol, p){ list.forEach(function(f, i){ tone(f * p, i * gap, len, type, vol); }); };
+
+  /* the sound set: short, bright and friendly. p = pitch multiplier, v = volume multiplier */
+  var SOUNDS = {
+    click:  function(p, v){ tone(1200 * p, 0, 0.04, "square", 0.05 * v); },
+    tick:   function(p, v){ tone(1800 * p, 0, 0.03, "triangle", 0.06 * v); },
+    pop:    function(p, v){ noise(0, 0.08, 0.35 * v); tone(700 * p, 0, 0.12, "triangle", 0.13 * v, 180 * p); },
+    flip:   function(p, v){ noise(0, 0.06, 0.18 * v, 2200); tone(520 * p, 0, 0.06, "triangle", 0.06 * v, 760 * p); },
+    place:  function(p, v){ tone(330 * p, 0, 0.09, "triangle", 0.14 * v); noise(0, 0.05, 0.12 * v, 400, "lowpass"); },
+    thud:   function(p, v){ tone(140 * p, 0, 0.16, "sine", 0.22 * v, 70 * p); noise(0, 0.07, 0.15 * v, 300, "lowpass"); },
+    bounce: function(p, v){ tone(300 * p, 0, 0.14, "sine", 0.14 * v, 620 * p); },
+    whoosh: function(p, v){ noise(0, 0.28, 0.22 * v, 700, "bandpass"); },
+    laser:  function(p, v){ tone(1400 * p, 0, 0.16, "square", 0.05 * v, 300 * p); },
+    boom:   function(p, v){ noise(0, 0.45, 0.4 * v, 500, "lowpass"); tone(90 * p, 0, 0.4, "sine", 0.22 * v, 40 * p); },
+    coin:   function(p, v){ tone(988 * p, 0, 0.08, "square", 0.07 * v); tone(1319 * p, 0.07, 0.22, "square", 0.07 * v); },
+    good:   function(p, v){ notes([784, 988, 1319], 0.08, 0.16, "triangle", 0.15 * v, p); },
+    match:  function(p, v){ notes([659, 880, 1109, 1319], 0.06, 0.16, "triangle", 0.13 * v, p); },
+    bad:    function(p, v){ tone(240 * p, 0, 0.24, "sine", 0.14 * v, 150 * p); },
+    level:  function(p, v){ notes([523, 659, 784, 1047, 1319], 0.07, 0.18, "square", 0.06 * v, p); },
+    win:    function(p, v){ notes([523, 659, 784, 1047, 784, 1047, 1319], 0.12, 0.22, "triangle", 0.15 * v, p); },
+    lose:   function(p, v){ notes([392, 349, 311, 262], 0.18, 0.3, "sine", 0.13 * v, p); },
+    start:  function(p, v){ notes([440, 660, 880], 0.09, 0.14, "square", 0.06 * v, p); }
+  };
+  /* the least time between two plays of the same sound, so a burst (pegs, bounces, ticks) never turns into a buzz */
+  var GAP = { tick: 35, click: 30, bounce: 45, place: 40, flip: 40, thud: 50, laser: 40, pop: 30 };
+
+  function play(name, opts){
+    if (!on || !unlocked || !SOUNDS[name]) return;
+    var now = (window.performance && performance.now()) || Date.now();
+    if (GAP[name] && lastAt[name] && now - lastAt[name] < GAP[name]) return;
+    lastAt[name] = now;
+    opts = opts || {};
+    try { SOUNDS[name](opts.pitch || 1, opts.volume == null ? 1 : opts.volume); } catch (e) {}
+  }
+
+  /* ---------- the standard on/off button ---------- */
+  var ICON_ON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>';
+  var ICON_OFF = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/></svg>';
+  function paint(b){
+    b.innerHTML = (on ? ICON_ON : ICON_OFF) + (b.dataset.compact ? "" : "<span>" + (on ? "Sound on" : "Sound off") + "</span>");
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    b.setAttribute("aria-label", "Sound");
+    b.title = on ? "Turn sound off" : "Turn sound on";
+  }
+  function setOn(v){
+    on = !!v;
+    if (!on && master && ctx){ master.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.03); setTimeout(function(){ if (!on && master) master.gain.value = 0.5; }, 300); }
+    buttons.forEach(paint);
+    if (on){ unlock(); play("click"); }
+  }
+  /* opts.compact: icon only (for tight top bars). The button carries an inline background so the shared skin's
+     pill rule does not restyle it; style it further with the class "ccs-sound-btn". */
+  function button(opts){
+    opts = opts || {};
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "ccs-sound-btn" + (opts.className ? " " + opts.className : "");
+    if (opts.compact) b.dataset.compact = "1";
+    b.style.background = opts.background || "#FFFBF3";
+    b.addEventListener("click", function(){ setOn(!on); });
+    buttons.push(b); paint(b);
+    return b;
+  }
+
+  /* a plain look for the button, used unless a game styles .ccs-sound-btn itself */
+  var css = document.createElement("style");
+  css.textContent = ".ccs-sound-btn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-weight:800;font-size:.9rem;color:#1E2226;"
+    + "border:3px solid #1E2226;border-radius:999px;box-shadow:3px 3px 0 #1E2226;padding:6px 14px;min-height:40px;cursor:pointer;line-height:1}"
+    + ".ccs-sound-btn[data-compact]{padding:6px;min-width:40px;justify-content:center}"
+    + ".ccs-sound-btn[aria-pressed=false]{opacity:.85}";
+  (document.head || document.documentElement).appendChild(css);
+
+  window.CCSSound = { play: play, isOn: function(){ return on; }, setOn: setOn, button: button, names: Object.keys(SOUNDS) };
+})();
+</script>
 </head>
 <body>
 
@@ -343,6 +486,16 @@ const G = { mode: "ai", level: "easy", board: newBoard(), turn: P1, moves: [], o
 const later = (fn, ms) => { const t = setTimeout(fn, ms); G.timers.push(t); return t; };
 const clearTimers = () => { G.timers.forEach(clearTimeout); G.timers = []; };
 
+/* sound effects, from the sound kit copied in at the top of the page. Each screen plays what it shows; nothing about sound
+   is sent to the other player. */
+const sfx = (name, opts) => { if (window.CCSSound) CCSSound.play(name, opts); };
+let tickAt = 0;
+const sfxTick = () => { const now = performance.now(); if (now - tickAt > 70){ tickAt = now; sfx("tick", { volume: 0.5 }); } };
+/* moves the column selector, with a soft tick when it really moves (or a click for a column picked outright) */
+function moveSel(c, sound){ const was = G.sel; select(c); if (G.sel !== was){ if (sound === "click") sfx("click"); else sfxTick(); } }
+/* a win this screen cheers for: mine, or anyone's when two share one screen */
+const cheers = (p) => G.mode === "local" || (G.mode === "ai" ? p === P1 : p === G.me);
+
 /* said to screen readers only; note() is the visible message */
 function say(text){ $("live").textContent = ""; setTimeout(() => { $("live").textContent = text; }, 30); }
 let noteTimer = 0;
@@ -493,17 +646,20 @@ function dropChip(c, r, p, done){
   scene.add(chip);
   chips[r][c] = chip;
   let y = from.y, vy = 0, bounces = 0, t = 0;
+  /* the chip lands with a thud, a little higher the higher the row, and its small bounces click softly */
+  const land = (n) => { const pitch = 0.92 + r * 0.06; if (!n){ sfx("thud", { pitch }); sfx("place", { pitch, volume: 0.6 }); } else sfx("place", { pitch: pitch * 1.15, volume: 0.35 / n }); };
   falling.push((dt) => {
     if (REDUCED){
       t += dt;
       const k = Math.min(1, t / 0.16);
       chip.position.y = from.y + (to.y - from.y) * k;
-      if (k >= 1){ chip.position.y = to.y; if (done) done(); return true; }
+      if (k >= 1){ chip.position.y = to.y; land(0); if (done) done(); return true; }
       return false;
     }
     vy -= 34 * dt; y += vy * dt;
     if (y <= to.y){
       y = to.y;
+      land(bounces);
       if (Math.abs(vy) > 1.6 && bounces < 3){ vy = -vy * 0.4; bounces++; }
       else { chip.position.y = to.y; if (done) done(); return true; }
     }
@@ -541,6 +697,7 @@ function drawWinLine(cells){
 }
 function glow(cells, p){
   drawWinLine(cells);
+  if (cheers(p)) sfx("good");                                    /* four in a row! */
   cells.forEach(([r, c]) => {
     const chip = chips[r][c];
     if (!chip) return;
@@ -606,7 +763,7 @@ function wirePointer(){
   const el = renderer.domElement;
   el.addEventListener("pointermove", (e) => {
     if (e.pointerType !== "mouse" || (e.buttons & 1)) return;
-    const c = colAt(e); if (c >= 0 && c !== G.sel) select(c);
+    const c = colAt(e); if (c >= 0 && c !== G.sel) moveSel(c);
   });
   el.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
   controls.addEventListener("start", () => { G.userMoved = true; });
@@ -616,26 +773,26 @@ function wirePointer(){
     const c = colAt(e); if (c < 0) return;
     /* a mouse click drops; on a touch screen the first tap picks the column and the next one drops */
     if (e.pointerType === "mouse" || c === G.sel) { select(c); tryDrop(); }
-    else select(c);
+    else moveSel(c, "click");
   });
 }
 window.addEventListener("keydown", (e) => {
   if (anyModal() || $("hudBot").hidden) return;
   if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
-  if (e.key === "ArrowLeft"){ select(G.sel - 1); e.preventDefault(); }
-  else if (e.key === "ArrowRight"){ select(G.sel + 1); e.preventDefault(); }
+  if (e.key === "ArrowLeft"){ moveSel(G.sel - 1); e.preventDefault(); }
+  else if (e.key === "ArrowRight"){ moveSel(G.sel + 1); e.preventDefault(); }
   else if (e.key === "ArrowDown" || ((e.key === "Enter" || e.key === " ") && e.target === renderer.domElement)){ tryDrop(); e.preventDefault(); }
-  else if (e.key >= "1" && e.key <= "7"){ select(parseInt(e.key, 10) - 1); }
+  else if (e.key >= "1" && e.key <= "7"){ moveSel(parseInt(e.key, 10) - 1, "click"); }
 });
 
 /* ---------------- playing ---------------- */
 function tryDrop(){
   if (G.over) return;
   if (!canIPlay()){
-    if (!G.thinking && G.mode === "online") note("It’s your friend’s turn.");
+    if (!G.thinking && G.mode === "online"){ note("It’s your friend’s turn."); sfx("bad", { volume: 0.35 }); }
     return;
   }
-  if (rowFor(G.board, G.sel) < 0){ note("That column is full. Pick another one.", true); return; }
+  if (rowFor(G.board, G.sel) < 0){ note("That column is full. Pick another one.", true); sfx("bad", { volume: 0.45 }); return; }
   const col = G.sel;
   play(col, G.turn);
   if (G.mode === "online") netSend({ t: "move", col, n: G.moves.length - 1 });
@@ -708,6 +865,10 @@ function endRound(winner){
     $("winSub").textContent = "Four in a row.";
   }
   say($("tWin").textContent);
+  /* the round's result: a winning tune for a win this screen cheers for, a soft one when Chike or the friend far away wins */
+  if (!winner) sfx("match", { pitch: 0.9, volume: 0.6 });
+  else if (cheers(winner)) sfx("win");
+  else sfx("lose", { volume: 0.5 });
   /* shown in the top bar, not over the board, so everyone can see the finished board and the green line */
   MODALS.forEach((m) => { $(m).hidden = m !== "mWin"; });
   paintGhost();
@@ -726,6 +887,7 @@ function startRound(){
 }
 function startMatch(mode, me){
   G.mode = mode; G.me = me || P1; G.scores = [0, 0]; G.round = 0;
+  sfx(mode === "online" ? "good" : "start");                    /* online, the match starts when the friend joins: a cheer for that */
   closeModals(); $("hudBot").hidden = false;
   startRound();
   if (mode === "ai") homeView();
@@ -751,7 +913,9 @@ function showModal(id, focusId){
   setTimeout(() => { const f = $(focusId); if (f) f.focus(); }, 30);
 }
 
-$("lvEasy").onclick = () => { G.level = "easy"; $("lvEasy").setAttribute("aria-pressed", "true"); $("lvSmart").setAttribute("aria-pressed", "false"); };
+/* menu buttons click; starting a match or a new round plays its own sound */
+["lvEasy", "lvSmart", "mOnline", "oBack", "oHost", "oJoin", "bCancel", "bCopy", "wMenu", "bMenu", "bCam"].forEach((id) => $(id).addEventListener("click", () => sfx("click")));
+$("lvEasy").onclick = () => { G.level = "easy";$("lvEasy").setAttribute("aria-pressed", "true"); $("lvSmart").setAttribute("aria-pressed", "false"); };
 $("lvSmart").onclick = () => { G.level = "smart"; $("lvSmart").setAttribute("aria-pressed", "true"); $("lvEasy").setAttribute("aria-pressed", "false"); };
 $("mAi").onclick = () => startMatch("ai");
 $("mLocal").onclick = () => startMatch("local");
@@ -760,13 +924,16 @@ $("oBack").onclick = () => showModal("mMenu", "mOnline");
 $("wAgain").onclick = () => {
   G.round++;
   if (G.mode === "online") netSend({ t: "again", round: G.round });
+  sfx("start");
   closeModals(); startRound();
 };
 $("wMenu").onclick = toMenu;
 $("bMenu").onclick = toMenu;
 $("bCam").onclick = () => { G.userMoved = false; homeView(); };
-$("bLeft").onclick = () => select(G.sel - 1);
-$("bRight").onclick = () => select(G.sel + 1);
+/* the Sound on/off button sits beside Reset the view, a square like it */
+if (window.CCSSound) $("bCam").after(CCSSound.button({ compact: true, className: "sq" }));
+$("bLeft").onclick = () => moveSel(G.sel - 1);
+$("bRight").onclick = () => moveSel(G.sel + 1);
 $("bDrop").onclick = tryDrop;
 $("oCode").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6); });
 $("oCode").addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); $("oJoin").click(); } });
@@ -846,6 +1013,7 @@ function friendLeft(){
   clearTimers(); G.over = true;
   closeModals(); $("hudBot").hidden = true; $("turn").hidden = true;
   $("oErr").textContent = "Your friend left the match.";
+  sfx("bad", { volume: 0.45 });
   showModal("mOnlineMenu", "oHost");
   say("Your friend left the match.");
 }
@@ -887,7 +1055,7 @@ function netOn(m){
     }
     case "again":
       if (G.mode === "online" && G.over && m.round === G.round + 1){
-        G.round = m.round; closeModals(); startRound(); note("Your friend started a new round.");
+        G.round = m.round; sfx("start"); closeModals(); startRound(); note("Your friend started a new round.");
       }
       break;
     case "bye": friendLeft(); break;
@@ -961,7 +1129,7 @@ window.__g4 = { G, NET, play, startMatch, select, tryDrop };
 </script>
 </body>
 </html>
-$g4code$, 'bytes', 56519))
+$g4code$, 'bytes', 67794))
 on conflict (id) do update set data = excluded.data, updated_at = now();
 
 insert into portal_entries (id, data)

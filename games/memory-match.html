@@ -124,6 +124,29 @@
 
         .chip-total { opacity: .55; }
 
+        /* The shared sound on/off button (game-sound.js), sized like the
+           readout chips beside it. game-sound.js adds its own plain look
+           later in the page, hence the extra specificity. */
+        body.ccs-memory .game-info .ccs-sound-btn {
+            min-height: 0;
+            min-width: 0;
+            align-self: stretch;
+            padding: 0 .6em;
+            font-size: clamp(.8rem, 2.3vh, 1.05rem);
+            border: 3px solid var(--ink);
+            box-shadow: var(--hard);
+            color: var(--ink);
+        }
+
+        body.ccs-memory .game-info .ccs-sound-btn svg {
+            width: 1.15em;
+            height: 1.15em;
+        }
+
+        body.ccs-memory .game-info .ccs-sound-btn[aria-pressed="false"] {
+            opacity: .7;
+        }
+
         /* ---------- Board ---------- */
         .card-grid {
             display: grid;
@@ -562,6 +585,7 @@
             .chip { font-size: 12px; gap: .35em; }
             body.ccs-memory .game-info .chip { padding: 3px 9px 3px 3px !important; }
             .chip-label { font-size: .66em; padding: .12em .45em; }
+            body.ccs-memory .game-info .ccs-sound-btn { font-size: 12px; }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -635,8 +659,12 @@
         </div>
     </div>
 
+    <script src="game-sound.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // The site's shared sound kit (game-sound.js); the game plays on silently without it
+            const sfx = (name, opts) => { if (window.CCSSound) CCSSound.play(name, opts); };
+
             const cardGrid = document.getElementById('card-grid');
             const timerDisplay = document.getElementById('timer-display');
             const bestTimeDisplay = document.getElementById('best-time-display');
@@ -651,6 +679,11 @@
             const startGameBtn = document.getElementById('start-game-btn');
             const replayBtn = document.getElementById('replay-btn');
             const startFan = document.getElementById('start-fan');
+
+            // Sound on/off sits at the end of the readout chips, before "Play again"
+            if (window.CCSSound) {
+                replayBtn.before(CCSSound.button({ compact: true, background: '#FFFBF3' }));
+            }
 
             const REDUCED_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -928,6 +961,7 @@
                 cardWrapper.classList.add('flipped');
                 labelCard(cardWrapper);
                 flippedCards.push(cardWrapper);
+                sfx('flip');
 
                 if (flippedCards.length === 1) {
                     return;
@@ -949,13 +983,19 @@
                     labelCard(card2);
                     matchedPairs++;
                     matchCountDisplay.textContent = matchedPairs;
+                    // in time with the bounce; each pair found rings a little higher
+                    const pairPitch = 1 + (matchedPairs - 1) * 0.04;
+                    setTimeout(() => sfx('match', { pitch: pairPitch }), REDUCED_MOTION ? 0 : 300);
                     checkWinCondition();
                     resetTurn();
                 } else {
                     card1.classList.add('mismatched');
                     card2.classList.add('mismatched');
+                    // a soft "nope" with the head-shake
+                    setTimeout(() => sfx('bad', { volume: 0.6 }), REDUCED_MOTION ? 0 : 300);
 
                     setTimeout(() => {
+                        sfx('flip', { pitch: 0.85, volume: 0.7 });
                         card1.classList.remove('flipped', 'mismatched');
                         card2.classList.remove('flipped', 'mismatched');
                         labelCard(card1);
@@ -996,6 +1036,7 @@
                 finalBestDisplay.textContent = bestTimeDisplay.textContent;
                 newBestNote.hidden = bestTimeDisplay.textContent !== finalTime;
                 winModal.classList.add('show');
+                sfx('win');
                 // wait a frame so the card is visible before it can take focus
                 requestAnimationFrame(() => playAgainBtn.focus());
                 if (REDUCED_MOTION) return;
@@ -1023,18 +1064,21 @@
             };
 
             startGameBtn.addEventListener('click', () => {
+                sfx('start');
                 hideStartModal();
                 initGame();
                 focusFirstCard();
             });
 
             playAgainBtn.addEventListener('click', () => {
+                sfx('start');
                 hideWinModal();
                 initGame();
                 focusFirstCard();
             });
 
             replayBtn.addEventListener('click', () => {
+                sfx('start');
                 hideWinModal();
                 initGame();
                 focusFirstCard();

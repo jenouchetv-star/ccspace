@@ -46,6 +46,13 @@ body{position:fixed;inset:0;font-weight:600;-webkit-tap-highlight-color:transpar
 /* our own chevron, so it sits exactly 8px in from the right edge of the pill */
 #hud select{-webkit-appearance:none;appearance:none;padding-right:34px!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231E2226' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;background-size:18px 18px}
 #hud select{font:inherit;font-weight:800;color:var(--ink);background-color:var(--card);border:3px solid var(--ink);border-radius:999px;box-shadow:2px 2px 0 var(--ink);cursor:pointer}
+/* the shared Sound on/off button (game-sound.js) sits with the other icon buttons. It carries an inline background, so the
+   game skin's pill rule passes it by: give it the same outline, shadow and lift here */
+#hud .ccs-sound-btn{color:var(--ink);border:3px solid var(--ink);border-radius:999px;box-shadow:var(--hard);opacity:1;justify-content:center;transition:transform .13s cubic-bezier(.2,.9,.3,1.4),box-shadow .13s}
+#hud .ccs-sound-btn:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--ink)}
+#hud .ccs-sound-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+#hud .ccs-sound-btn svg{width:1.15em;height:1.15em}
+#hud .ccs-sound-btn[aria-pressed=false]{color:var(--mut)}
 #turn i,.room i{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.85);background:#fff}
 .room{background:var(--plum)!important;color:#fff;cursor:pointer}
 .room b{letter-spacing:.06em}
@@ -213,6 +220,7 @@ button.danger{background:#fff;color:#a02020}
 @media (prefers-reduced-motion:reduce){ #toast,.rc{transition:none} .tools .nudge:not(:disabled){animation:none} }
 </style>
 <script src="../assets/vendor/three.min.js"></script>
+<script src="game-sound.js"></script>
 </head>
 <body class="ccs-road">
 
@@ -602,6 +610,13 @@ const inGrid = (r, c) => r >= 0 && r < SIZE && c >= 0 && c < SIZE;
 const buildable = (r, c) => inGrid(r, c) && (terrain[r][c] === G.GRASS || terrain[r][c] === G.RIVER);
 const isHill = (r, c) => inGrid(r, c) && terrain[r][c] === G.ROCK;                                   /* a rock: only a tunnel can go under it. Trees are protected: nothing goes through a tree. */
 const isHome = (r, c) => r === HOME_CELL.r && c === HOME_CELL.c;
+
+/* sound effects from the site's shared kit (game-sound.js; the game plays on silently without it). Each screen plays what it
+   shows, a friend's road and car a little softer; nothing about sound is sent to a friend */
+const sfx = (name, opts) => { if (window.CCSSound) CCSSound.play(name, opts); };
+let badAt = 0;
+const sfxBad = () => { const now = performance.now(); if (now - badAt > 700){ badAt = now; sfx("bad", { volume:.5 }); } };   /* soft, and never twice in a row while a card is turned */
+const PLACE_PITCH = { BRIDGE:1.25, TUNNEL:.8, RAMP:1.45 };
 
 /* a square can hold two roads when a bridge crosses over the first one */
 const layerAt = (tile, heading) => (tile.over && tile.over.edges[(heading + 2) % 4]) ? tile.over : tile;
@@ -1643,6 +1658,8 @@ function stepCar(p, dt){
   an.t += dt;
   const u = clamp(an.t / a.dur, 0, 1);
   let moved = 0, air = null;
+  const soft = p.id !== me;                                           /* my friend's car sounds a little quieter than mine */
+  if (a.k === "jump" && !a.sfx){ a.sfx = true; sfx("whoosh", { volume:soft ? .45 : .9 }); sfx("bounce", { pitch:1.1, volume:soft ? .4 : .8 }); }   /* up and over */
   if (a.k === "move"){
     const s = ease(u) * a.len;
     let j = 1; while (j < a.cum.length - 1 && a.cum[j] < s) j++;
@@ -1650,6 +1667,9 @@ function stepCar(p, dt){
     const nx = lerp(a.pts[j - 1][0], a.pts[j][0], f), nz = lerp(a.pts[j - 1][1], a.pts[j][1], f);
     moved = Math.hypot(nx - p.x, nz - p.z);
     p.x = nx; p.z = nz; p.yaw = lerp(a.yaws[j - 1], a.yaws[j], f);
+    /* a gentle tick each time the car rolls onto the next square (never faster than a few a second) */
+    const sq = Math.round(nx) + "," + Math.round(nz), now = performance.now();
+    if (sq !== p.sq){ if (p.sq && now - (p.tickAt || 0) > 160){ p.tickAt = now; sfx("tick", { pitch:soft ? .8 : 1, volume:soft ? .35 : .7 }); } p.sq = sq; }
   } else if (a.k === "jump"){
     const nx = lerp(a.from[0], a.to[0], u), nz = lerp(a.from[1], a.to[1], u);
     moved = Math.hypot(nx - p.x, nz - p.z); p.x = nx; p.z = nz; p.yaw = a.yaw;
@@ -1664,6 +1684,7 @@ function stepCar(p, dt){
   car.userData.wheels.forEach(w => { w.rotation.z -= spin; });
   if (u >= 1){
     if (a.k === "spin") p.yaw = a.to;
+    if (a.k === "jump"){ p.sq = Math.round(p.x) + "," + Math.round(p.z); sfx("thud", { volume:soft ? .3 : .6 }); }   /* a soft landing */
     an.i++; an.t = 0;
     if (an.i >= an.acts.length){ p.anim = null; driving--; onStopped(p); }
   }
@@ -1671,6 +1692,7 @@ function stepCar(p, dt){
 function onStopped(p){
   const t = grid[p.pos.r][p.pos.c];
   if (t && t.type === T.HOME && !p.arrived){ p.arrived = true; if (p.willWin) arrive(p); }
+  else if (phase === "play") sfx("coin", p.id === me ? null : { pitch:.85, volume:.4 });   /* the car has driven onto its new road */
   afterDrive();
 }
 
@@ -1795,11 +1817,12 @@ function placePend(){
 function turnPending(dir){
   if (!pending || !hand[selected]) return;
   hand[selected].rotation = (hand[selected].rotation + dir + 4) % 4;
+  sfx("click", { pitch:1.25 });
   renderHand(); refreshGhost();
   const card = hand[selected];
   if (!canPlace(pending.r, pending.c, card)){ const why = whyNot(pending.r, pending.c, card); if (why) toast(why, "bad"); }
 }
-function cancelPending(){ if (!pending) return; pending = null; refreshGhost(); }
+function cancelPending(){ if (!pending) return; pending = null; sfx("click", { pitch:.75 }); refreshGhost(); }
 function confirmPending(){
   if (!pending) return;
   const { r, c } = pending; pending = null;
@@ -1814,6 +1837,7 @@ function pickSquare(r, c){
   if (pending && pending.r === r && pending.c === c){ confirmPending(); return; }
   if (![0, 1, 2, 3].some(rot => canPlace(r, c, { type:card.type, rotation:rot }))){ const why = whyNot(r, c, card); if (why) toast(why, "bad"); return; }
   pending = { r, c }; cursor = { r, c };
+  sfx("click");
   refreshGhost();
   toast(canPlace(r, c, card) ? "Turn it with the arrows if you need to, then tap Place." : whyNot(r, c, card) + " Try turning it.", canPlace(r, c, card) ? "" : "bad");
 }
@@ -1915,7 +1939,7 @@ function renderHand(){
   updateTools();
   fitView(); syncTip();
 }
-function rotateCard(i, dir){ if (!hand[i]) return; hand[i].rotation = (hand[i].rotation + (dir || 1) + 4) % 4; renderHand(); refreshGhost(); }
+function rotateCard(i, dir){ if (!hand[i]) return; hand[i].rotation = (hand[i].rotation + (dir || 1) + 4) % 4; sfx("click", { pitch:1.25 }); renderHand(); refreshGhost(); }
 /* what the selected card is for */
 function syncTip(){
   const el = $("#tip"), card = phase === "play" && selected >= 0 ? hand[selected] : null;
@@ -1927,6 +1951,7 @@ function syncTip(){
 function chooseCard(i){
   if (phase !== "play" || moving()) return;
   selected = selected === i ? -1 : i; pending = null;
+  sfx("click", { pitch:selected >= 0 ? 1 : .8 });
   renderHand(); refreshGhost();
   if (selected >= 0){
     if (!cursor){ const m = firstMarker(); if (m){ cursor = m; refreshGhost(); } }
@@ -1943,6 +1968,7 @@ function firstMarker(){
    ===================================================================== */
 function toast(msg, kind){
   const el = $("#toast"); el.textContent = msg; el.className = "show" + (kind ? " " + kind : "");
+  if (kind === "bad") sfxBad();                                      /* a card that cannot go there, a stuck car, a request turned down */
   clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 3800);
 }
 function updateHud(){
@@ -2011,6 +2037,7 @@ function newGame(cfg){
 function startNew(){
   const cfg = { diff:difficulty, random:mapRandom, seed:mapRandom ? randomSeed() : SET_SEED[difficulty] };
   if (online() && MP.ch){ gen++; mpSend({ t:"cfg", g:gen, diff:cfg.diff, random:cfg.random, seed:cfg.seed }); }
+  if (phase !== "intro") sfx("start");
   newGame(cfg);
 }
 
@@ -2025,14 +2052,14 @@ function afterDrive(){
 function maybeOut(){
   if (phase !== "play" || moving()) return;
   if (hand.length || deck.length) return;
-  if (!online()){ phase = "lost"; setTimeout(() => { if (phase === "lost") $("#lose").hidden = false; }, 700); return; }
+  if (!online()){ phase = "lost"; setTimeout(() => { if (phase === "lost"){ $("#lose").hidden = false; sfx("lose", { volume:.75 }); } }, 700); return; }
   if (decided) return;                                               /* a car already has its road home */
   if (!outFlag[me]){ outFlag[me] = true; mpSend({ t:"out", g:gen, who:me }); }
   bothOut();
 }
 function bothOut(){
   if (phase !== "play" || !outFlag[1] || !outFlag[2]) return;
-  phase = "lost"; updateHud(); setTimeout(() => { if (phase === "lost") $("#lose").hidden = false; }, 700);
+  phase = "lost"; updateHud(); setTimeout(() => { if (phase === "lost"){ $("#lose").hidden = false; sfx("lose", { volume:.75 }); } }, 700);
 }
 
 function snapshot(){
@@ -2048,6 +2075,7 @@ function doPlace(who, r, c, type, rotation, extra){
   else { if (type === T.BRIDGE) tile.h = .13; grid[r][c] = tile; layRoad(r, c, tile); }
   history.push(entry);
   if (who === me){ placed++; if (type === T.BRIDGE) bridgesUsed++; } else placedOther++;
+  sfx("place", { pitch:PLACE_PITCH[type] || 1, volume:who === me ? 1 : .55 });   /* bridges, tunnels and ramps each land with their own note */
   turnNo++;
   lastAct = { t:"place", who };
   if (who === me) selected = -1;                                     /* a friend's road never lets go of the card I am aiming. The view stays where the player left it: only the top controls, the mouse or a new game move it */
@@ -2108,6 +2136,7 @@ function undoLast(){
   if (!canUndo()){ toast(online() ? "You can only take your card back before your friend builds." : "Nothing to undo yet.", ""); return; }
   if (online() && !MP.host){ ask("undo", { tn:turnNo }); return; }
   const e = history.pop(); revert(e, true);
+  sfx("flip", { pitch:.8 });
   if (online()) mpSend({ t:"undo", g:gen, tn:turnNo, who:me });
   renderHand(); updateHud(); refreshGhost(); refreshMarkers();
   toast("Card taken back. Try a different way.", "");
@@ -2118,6 +2147,7 @@ function dealHand(){
   if (phase !== "play" || moving() || !canBuild()) return;
   hand.forEach(c => deck.splice(Math.floor(Math.random() * (deck.length + 1)), 0, { type:c.type, rotation:0 }));
   hand = []; selected = -1; pending = null; refill(); swaps++;
+  sfx("flip"); setTimeout(() => sfx("flip", { pitch:1.2 }), 90);
   toast("A whole new hand!", "good");
   renderHand(); updateHud(); refreshGhost(); refreshMarkers();
 }
@@ -2127,6 +2157,7 @@ let confettiOn = false;
 function arrive(p){
   if (winner) return;
   winner = p.id; phase = "won";
+  if (!online() || p.id === me) sfx("win"); else sfx("lose", { volume:.55 });   /* home! (or, softly, my friend got there first) */
   houseLight = 1; warm.intensity = 0;
   const hs = homeGroup && homeGroup.userData.sign; if (hs) hs.scale.set(.9, .36, 1);
   startConfetti();
@@ -2237,11 +2268,12 @@ async function leaveRoom(){
 }
 /* both players always play the same island: whoever starts a game sends the three numbers that build it */
 function startOnlineAsHost(){
+  const fresh = !online();                                           /* the friend's hello and their request for the island can both start this: one cheer is enough */
   mode = "online"; me = 1; gen = Math.max(gen, 0) + 1;
   const cfg = { diff:difficulty, random:mapRandom, seed:mapRandom ? randomSeed() : SET_SEED[difficulty] };
   mpSend({ t:"cfg", g:gen, diff:cfg.diff, random:cfg.random, seed:cfg.seed });
   phase = "play"; $("#intro").hidden = true; $("#room").hidden = true;
-  newGame(cfg); toast("Your friend joined! Build at the same time. The first car home wins.", "good");
+  newGame(cfg); if (fresh) sfx("good"); toast("Your friend joined! Build at the same time. The first car home wins.", "good");
 }
 function onCfg(p){
   const newer = p.g > gen || (p.g === gen && p.i < MP.id && p.seed !== seed);   /* if both start a game at once, the same one wins on both screens */
@@ -2249,7 +2281,8 @@ function onCfg(p){
   gen = p.g; mode = "online"; me = MP.host ? 1 : 2;
   phase = "play"; $("#intro").hidden = true; $("#room").hidden = true;
   newGame({ diff:p.diff, random:p.random, seed:p.seed });
-  if (MP.cfgWait){ MP.cfgWait(); MP.cfgWait = null; toast("You joined the game! Build at the same time. The first car home wins.", "good"); }
+  if (MP.cfgWait){ MP.cfgWait(); MP.cfgWait = null; sfx("good"); toast("You joined the game! Build at the same time. The first car home wins.", "good"); }
+  else sfx("start");                                                 /* my friend started a new game for us both */
 }
 function onMsg(p){
   if (!p || p.i === MP.id) return;
@@ -2341,8 +2374,9 @@ function applyRemote(p){
     if (mine) settle();
     if (!e || p.tn + 1 !== turnNo || e.who !== p.who) return;
     history.pop(); revert(e, mine);
+    if (mine) sfx("flip", { pitch:.8 });
     renderHand(); updateHud(); refreshGhost(); refreshMarkers();
-    toast(mine ? "Card taken back. Try a different way." : "Your friend took back their card.", "");
+    toast(mine ?"Card taken back. Try a different way." : "Your friend took back their card.", "");
   }
 }
 function roomUi(){
@@ -2500,6 +2534,9 @@ $("#ctl").addEventListener("change", () => setMenu(false));
 ["bReset", "bHelp", "bFollow"].forEach(id => $("#" + id).addEventListener("click", () => setMenu(false)));
 document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => setMenu(false)));
 
+/* the shared Sound on/off button (game-sound.js) sits after How to play, with the other icon buttons; on narrow screens it folds into Settings with them */
+if (window.CCSSound) $("#bHelp").after(CCSSound.button({ compact:true, className:"ic", background:"buttonface" }));   /* the same face as the buttons beside it */
+
 /* buttons */
 $("#diff").addEventListener("change", e => { difficulty = e.target.value; phase = phase === "intro" ? "intro" : "play"; startNew(); });
 document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
@@ -2513,7 +2550,7 @@ $("#bRotR").addEventListener("click", () => rotateView(1));
 $("#bFollow").addEventListener("click", () => { cam.follow = true; resetZoom(); });
 $("#bReset").addEventListener("click", () => { phase = "play"; startNew(); });
 $("#bHelp").addEventListener("click", () => { $("#intro").hidden = false; });
-$("#bPlay").addEventListener("click", () => { $("#intro").hidden = true; if (phase === "intro") phase = "play"; refocus(false); refreshMarkers(); updateHud(); toast("Pick a card, then click a square next to the car.", ""); });
+$("#bPlay").addEventListener("click", () => { $("#intro").hidden = true; if (phase === "intro") phase = "play"; sfx("start"); refocus(false); refreshMarkers(); updateHud(); toast("Pick a card, then click a square next to the car.", ""); });
 $("#bAgain").addEventListener("click", () => { phase = "play"; startNew(); });
 $("#bRetry").addEventListener("click", () => { phase = "play"; startNew(); });
 $("#bHarder").addEventListener("click", () => { difficulty = difficulty === "easy" ? "medium" : "hard"; phase = "play"; startNew(); });

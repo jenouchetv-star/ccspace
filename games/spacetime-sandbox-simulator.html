@@ -46,6 +46,23 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: rgba(156, 163, 175, 0.8);
         }
+        /* The shared Sound on/off button (game-sound.js), dressed to match the
+           dark header controls beside it instead of the kit's cream pill. */
+        .sound-slot .ccs-sound-btn[data-compact] {
+            min-height: 0;
+            min-width: 0;
+            padding: 5px;
+            border: 0;
+            border-radius: 0.25rem;
+            box-shadow: none;
+            color: #d1d5db;
+            transition: background-color 0.15s;
+        }
+        .sound-slot .ccs-sound-btn svg { width: 14px; height: 14px; }
+        .sound-slot .ccs-sound-btn:hover { background-color: #374151 !important; color: #fff; }
+        /* the phone copy sits beside the round Help button and matches it */
+        #sound-slot-phone .ccs-sound-btn { width: 40px; height: 40px; justify-content: center; border-radius: 9999px; border: 1px solid #1f2937; }
+        #sound-slot-phone .ccs-sound-btn svg { width: 16px; height: 16px; }
     </style>
 </head>
 <body class="relative">
@@ -98,6 +115,7 @@
                 <i id="pause-icon" class="fa-solid fa-pause"></i>
                 <span id="pause-text">Pause</span>
             </button>
+            <span id="sound-slot" class="sound-slot hidden sm:flex items-center"></span>
         </div>
     </header>
 
@@ -316,6 +334,8 @@
 
     <!-- Controls / Action Overlay (Bottom Center/Right) -->
     <div class="absolute bottom-4 right-4 flex items-center gap-3 pointer-events-auto z-10">
+        <!-- Sound on/off for phones, where the header's controls run off screen -->
+        <span id="sound-slot-phone" class="sound-slot flex sm:hidden"></span>
         <!-- Help Toggle Icon -->
         <button id="btn-help" class="w-10 h-10 bg-gray-900 hover:bg-gray-855 border border-gray-800 hover:border-gray-700 rounded-full flex items-center justify-center shadow-lg transition-all text-gray-300 hover:text-white" title="View Simulation Help">
             <i class="fa-solid fa-question text-sm"></i>
@@ -379,6 +399,8 @@
         </div>
     </div>
 
+    <!-- Shared game sounds (one on/off switch for every game on the site) -->
+    <script src="game-sound.js"></script>
     <!-- Interactive script -->
     <script>
         // --- CELESTIAL DATA WITH GEOLOGICAL CORE LAYERS & SEMI-REALISTIC EXPANSIVE SCALING ---
@@ -1420,6 +1442,7 @@
 
                 // Instantiate concentric interior layer shells
                 createInternalLayers(id, mesh);
+                sfx('pop', { volume: 0.5, pitch: 0.8 });
                 document.getElementById('slice-btn-text').innerText = "Restore Full Body";
                 showToast(`${body.name} sliced open. Switch to 'Moons & Structure' tab to inspect internal geological layers!`);
             } else {
@@ -1428,6 +1451,7 @@
                 mesh.geometry = new THREE.SphereGeometry(body.baseRadius, 32, 32);
                 mesh.material.side = THREE.FrontSide;
                 mesh.material.needsUpdate = true;
+                sfx('place', { volume: 0.6 });
                 
                 document.getElementById('slice-btn-text').innerText = "Slice Inside View";
                 showToast(`${body.name} restored to solid sphere.`);
@@ -1691,6 +1715,26 @@
 
         // --- USER INTERFACE HANDLERS ---
         function setupUI() {
+            // Sound: the standard on/off button in the header, a soft click for
+            // the buttons, a tick for switches and the speed slider. Picking a
+            // planet, slicing and dragging have their own sounds (sfx calls above).
+            if (window.CCSSound) {
+                document.getElementById('sound-slot').appendChild(CCSSound.button({ compact: true, background: '#1f2937' }));
+                document.getElementById('sound-slot-phone').appendChild(CCSSound.button({ compact: true, background: '#111827' }));
+            }
+            document.addEventListener('click', (e) => {
+                const b = e.target.closest && e.target.closest('button');
+                if (!b || b.closest('#nav-planet-grid') || b.classList.contains('ccs-sound-btn') || b.id === 'btn-start-exploring') return;
+                sfx('click', { volume: 0.7 });
+            });
+            ['toggle-grid', 'toggle-orbits', 'toggle-labels', 'toggle-scaled'].forEach(id => {
+                document.getElementById(id).addEventListener('change', (e) => sfx('tick', { pitch: e.target.checked ? 1 : 0.8, volume: 0.7 }));
+            });
+            document.getElementById('orbital-speed-slider').addEventListener('input', (e) => {
+                sfx('tick', { pitch: 0.6 + parseFloat(e.target.value) * 0.2, volume: 0.5 });
+            });
+            document.getElementById('btn-start-exploring').addEventListener('click', () => sfx('start', { volume: 0.6 }));
+
             const navGrid = document.getElementById('nav-planet-grid');
             const orderList = ['sun', 'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'asteroids', 'kuiper'];
             
@@ -1747,6 +1791,7 @@
                         createOrbitLine(key, body.semiMajorAxis);
                     }
                 }
+                sfx('whoosh', { volume: 0.6 });
                 showToast("System returned to coordinate equilibrium.");
             });
 
@@ -1871,6 +1916,7 @@
         }
 
         function selectCelestialBody(id) {
+            sfx('flip', { volume: 0.6 });
             currentlySelected = id;
             trackedBodyId = id;
             
@@ -1952,6 +1998,9 @@
             }, 3500);
         }
 
+        /** Plays one of the shared kit's sounds, if the kit loaded. */
+        function sfx(name, opts) { if (window.CCSSound) CCSSound.play(name, opts); }
+
         // --- MOUSE RAYCASTING & INTERACTION ---
         function onPointerDown(event) {
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -1979,6 +2028,7 @@
                     if (bodyId !== 'sun') {
                         isDragging = true;
                         draggedBodyId = bodyId;
+                        sfx('pop', { volume: 0.35, pitch: 0.7 });
                         controls.enabled = false; // block orbital camera during dragging
                         showToast(`Relocating orbital boundaries of ${CELESTIAL_BODIES[bodyId].name}...`);
                     }
@@ -2020,6 +2070,7 @@
             if (isDragging) {
                 isDragging = false;
                 draggedBodyId = null;
+                sfx('whoosh', { volume: 0.7 });
                 controls.enabled = true;
                 showToast("System stabilized. New coordinate geodesic path locked.");
             }

@@ -150,6 +150,22 @@
             font-weight: 700;
         }
 
+        /* The shared sound on/off button (game-sound.js), dressed like the
+           side panels. game-sound.js adds its own plain look later in the
+           page, hence the extra specificity. */
+        .ccs-blox .right-panel .ccs-sound-btn {
+            margin-top: 12px;
+            min-height: 36px;
+            padding: 6px 12px;
+            font-size: .8rem;
+            color: #A9E4EE;
+            border: 2px solid #35545F;
+            border-radius: 999px;
+            box-shadow: none;
+        }
+        .ccs-blox .right-panel .ccs-sound-btn:hover { border-color: #A9E4EE; }
+        .ccs-blox .right-panel .ccs-sound-btn[aria-pressed="false"] { color: #9AAAB0; }
+
         /* Overlay Messages (Start, Game Over, Pause) */
         .hidden {
             display: none !important;
@@ -231,6 +247,10 @@
             .left-panel { order: 2; }
             .right-panel { order: 1; }
             .controls-info { display: none; }
+
+            /* in the narrow row beside NEXT the sound button is just its icon */
+            .ccs-blox .right-panel .ccs-sound-btn { margin-top: 0; padding: 6px; min-width: 40px; justify-content: center; }
+            .ccs-blox .right-panel .ccs-sound-btn span { display: none; }
         }
     </style>
     <link rel="stylesheet" href="game-skin.css">
@@ -281,8 +301,12 @@
         </div>
     </div>
 
+    <script src="game-sound.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // --- Sound (the site's shared kit, game-sound.js; the game plays on silently without it) ---
+            const sfx = (name, opts) => { if (window.CCSSound) CCSSound.play(name, opts); };
+
             // --- DOM Elements ---
             const canvas = document.getElementById('playfield');
             const context = canvas.getContext('2d');
@@ -346,12 +370,21 @@
                 startButton.addEventListener('click', startGame);
                 restartButton.addEventListener('click', startGame);
                 document.addEventListener('keydown', handleKeyPress);
+
+                // Sound on/off under the NEXT box
+                if (window.CCSSound) {
+                    const soundBtn = CCSSound.button({ background: '#22343D' });
+                    // a mouse click leaves no focus on it, so Space stays the hard-drop key
+                    soundBtn.addEventListener('mousedown', (e) => e.preventDefault());
+                    document.querySelector('.right-panel').appendChild(soundBtn);
+                }
             }
 
             function startGame() {
                 if (isAnimating) return;
                 if (!gameStarted) gameStarted = true;
                 if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                sfx('start');
 
                 grid = createEmptyGrid();
                 level = 1;
@@ -554,8 +587,11 @@
             function movePiece(dx, dy) {
                 if (isPaused || isGameOver || isAnimating) return;
                 const newPiece = { ...currentPiece, x: currentPiece.x + dx, y: currentPiece.y + dy };
-                if (isValid(newPiece)) currentPiece = newPiece;
-                else if (dy > 0) lockPiece();
+                if (isValid(newPiece)) {
+                    currentPiece = newPiece;
+                    if (dx) sfx('tick', { volume: 0.6 });   // a soft tick for each step sideways
+                }
+                else if (dy > 0) { sfx('place'); lockPiece(); }
             }
             function rotatePiece() {
                 if (isPaused || isGameOver || isAnimating) return;
@@ -577,11 +613,15 @@
                     if(!isValid(newPiece)) newPiece.x -= kickOffset * 2;
                 }
 
-                if (isValid(newPiece)) currentPiece = newPiece;
+                if (isValid(newPiece)) {
+                    currentPiece = newPiece;
+                    sfx('tick', { pitch: 1.25, volume: 0.6 });   // rotating ticks a little higher than moving
+                }
             }
             function hardDrop() {
                 if (isPaused || isGameOver || isAnimating) return;
                 while(isValid({ ...currentPiece, y: currentPiece.y + 1 })) currentPiece.y++;
+                sfx('thud');
                 lockPiece();
             }
             function isValid(piece) {
@@ -613,11 +653,19 @@
             async function handleLineClears() {
                 isAnimating = true;
                 let cleared;
+                let chain = 0;   // clears set off by blocks falling after an earlier clear (sound only)
                 do {
                     const { blocksToClear, linesFound, lineColors } = findMatchingLines();
                     cleared = linesFound > 0;
                     if (cleared) {
                         totalLinesCleared += linesFound;
+
+                        // Sound: one line pops and chimes; two or more ring the
+                        // bigger match chime; a chain reaction rings higher each time.
+                        const clearPitch = Math.min(1.6, 1 + chain * 0.12 + Math.max(0, linesFound - 2) * 0.06);
+                        sfx('pop', { pitch: clearPitch, volume: 0.8 });
+                        sfx(linesFound >= 2 ? 'match' : 'good', { pitch: clearPitch });
+                        chain++;
 
                         // A line in the master brick's current target
                         // colour counts double, and hands the target on
@@ -626,6 +674,7 @@
                         if (bonusLines > 0) {
                             totalLinesCleared += bonusLines;
                             reshuffleMasterBrick();
+                            setTimeout(() => sfx('coin'), 260);   // the Master Brick bonus
                         }
 
                         const clearStartTime = performance.now();
@@ -725,17 +774,20 @@
                 if (newLevel > level) {
                     level = newLevel;
                     fallInterval = Math.max(100, 1000 - (level - 1) * 50);
+                    sfx('level');
                 }
             }
             function togglePause() {
                 if (!gameStarted || isGameOver || isAnimating) return;
                 isPaused = !isPaused;
+                sfx('click');
                 pauseMessage.classList.toggle('hidden', !isPaused);
                 if (!isPaused) lastTime = performance.now();
             }
             function showGameOver() {
                 cancelAnimationFrame(animationFrameId);
                 gameOverMessage.classList.remove('hidden');
+                sfx('lose');
             }
             function handleKeyPress(event) {
                 if (!gameStarted || isGameOver) {
