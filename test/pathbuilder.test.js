@@ -446,7 +446,37 @@ describe("a stuck car can turn around", () => {
     expect(page).toContain("if (!doReverse(p.who)) return;");
   });
   it("is explained in How to Play", () => {
-    expect(page).toContain("Turn around drives the car back to a spot where you can build again");
+    expect(page).toContain("If the road ends, Go back takes you back along your road to a spot where you can build again.");
+  });
+});
+
+describe("the road starts at the house and goes to the car (what our beta testers asked for)", () => {
+  it("puts each player's house at the start, with a driveway that opens onto the island, and the car on the far driveway", () => {
+    expect(page).toContain("grid[players[1].start.r][players[1].start.c] = house(1);");
+    expect(page).toContain("type:T.HOUSE, rotation:2");
+    expect(page).toContain("p.x = HOME_CELL.c + (online() ? (p.id === 2 ? .17 : -.17) : 0); p.z = HOME_CELL.r;");
+    expect(page).toContain("function buildHouse(p){");
+    expect(page).toContain("function buildCarSpot(){");
+  });
+  it("grows the road's end straight away as cards are placed, and only drives the car once the road reaches it", () => {
+    const launch = page.split("function launchDrives(placer){")[1].split("\n}\n")[0];
+    expect(launch).toContain("q.pos = { r:end.r, c:end.c }; q.heading = x.path.heading;");
+    expect(launch).toContain("if (q.willWin){ if (startFinale(q)) any = true; else arrive(q); }");
+    expect(launch).not.toContain("startDrive(");
+  });
+  it("drives the car home along the shortest road to its own house, never through a friend's house", () => {
+    const f = page.split("function homeRoute(p){")[1].split("\nfunction ")[0];
+    expect(f).toContain("start = { r:HOME_CELL.r, c:HOME_CELL.c, h:4 }");
+    expect(f).toContain("never through a friend's house");
+    expect(page).toContain("rt.type === T.RAMP && rt.rotation === (d + 2) % 4");    // it can jump back over a gap the road jumped
+    expect(page).toContain("if (p.finale && !p.arrived){ p.arrived = true; p.finale = false; if (p.willWin) arrive(p); }");
+  });
+  it("never lets a road run into a house", () => {
+    expect(page).toContain("if (nt && nt.type !== T.HOUSE && openEdge(nt, (d + 2) % 4)) options.push({ d, r:nr, c:nc });");
+    expect(page).toContain("tile.type === T.HOME || tile.type === T.HOUSE || tile.type === T.BRIDGE");
+  });
+  it("says so in How to Play", () => {
+    expect(page).toContain("Build a road from your house, one card at a time, all the way to the car");
   });
 });
 

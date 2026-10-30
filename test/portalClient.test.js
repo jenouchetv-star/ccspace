@@ -594,3 +594,12 @@ describe("long posts as cards", () => {
     expect(body("portalEntryHTML")).toContain("portalSections(sanitizeHTML(e.body))");
   });
 });
+
+describe("the email that goes with an entry", () => {
+  it("makes **two stars** around a name bold, after the words are made safe", () => {
+    const f = body("portalEmailParagraphs");
+    expect(f).toContain('"<strong>$1</strong>"');
+    expect(f).toContain(String.raw`/\*\*([^*\n]+?)\*\*/g`);
+    expect(f.indexOf("E(p)")).toBeLessThan(f.indexOf("<strong>"));
+  });
+});
