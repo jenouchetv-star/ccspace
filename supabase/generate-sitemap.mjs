@@ -48,7 +48,7 @@ const STATIC = [
 // map in index.html - keep both in sync if either changes.
 const DYNAMIC = [
   { table: "activities",  path: r => "/activity/" + r.id },
-  { table: "games",       path: r => "/play/" + r.id },
+  { table: "games",       path: r => "/play/" + r.id, skip: r => r.kind === "members" },   // subscribers-only games stay out, like the rest of the members' content
   { table: "videos",      path: r => "/watch/" + r.id },
   { table: "stories",     path: r => "/stories/" + r.id },
   { table: "characters",  path: r => "/characters/" + r.slug },
@@ -77,7 +77,7 @@ async function main(){
 
   for (const d of DYNAMIC){
     const records = await fetchTable(d.table);
-    records.filter(r => r.status === "published").forEach(r => {
+    records.filter(r => r.status === "published" && !(d.skip && d.skip(r))).forEach(r => {
       entries.push(urlEntry(BASE + d.path(r), isoDate(r.updatedAt || r.createdAt), "monthly", "0.6"));
     });
   }

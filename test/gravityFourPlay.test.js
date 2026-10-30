@@ -45,6 +45,9 @@ describe("Gravity 4 on the Play page", () => {
     expect(existsSync(new URL("../assets/games/gravity-four.jpg", import.meta.url))).toBe(true);
     expect(existsSync(new URL("../assets/games/gravity-four-thumb.jpg", import.meta.url))).toBe(true);
     expect(readFileSync(new URL("../sitemap.xml", import.meta.url), "utf8")).not.toContain("gravity-four");
+    const gen = readFileSync(new URL("../supabase/generate-sitemap.mjs", import.meta.url), "utf8");
+    expect(gen).toContain('skip: r => r.kind === "members"');               // the hourly sitemap job leaves it out too
+    expect(gen).toContain("!(d.skip && d.skip(r))");
   });
 });
 
