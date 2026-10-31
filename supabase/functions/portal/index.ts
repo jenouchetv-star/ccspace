@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
           }))
         : await sendMail(email, "Please confirm you’d like to join our mailing list", mailHtml({
             heading: code ? "Your code to join the list" : "One tap to join the list",
-            intro: "You asked to join the Chike’s Creative Space mailing list and unlock the Subscriber’s Portal. Confirm your email to finish – you’ll get one or two emails a month, and you can unsubscribe any time.",
+            intro: "You asked to join the Chike’s Creative Space mailing list and unlock the Subscriber’s Portal. Confirm your email to finish – you can unsubscribe any time.",
             button: "Yes, join the list",
             url,
             code,
