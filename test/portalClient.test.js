@@ -369,7 +369,14 @@ describe("how the site wires the portal in", () => {
     expect(box).toContain('rel="noopener noreferrer"');
     /* the grown-up message comes first, on every prompt box, before the steps */
     expect(box).toContain("Ask a grown-up first!");
-    expect(box).toContain("not affiliated with, endorsed by, or sponsored by Google Gemini or any other AI platform");
+    expect(box).toContain("not affiliated with, endorsed by, or sponsored by Google Gemini, Anthropic’s Claude or any other AI platform");
+    // Gemini or Claude, everywhere in the box: the heading, the grown-up note, the steps, a button each, and the file note
+    expect(box).toContain('E(e.aiPromptTitle || "Make your own with AI")');   // the heading says AI; the box below names Gemini and Claude
+    expect(box).toContain("Then use Gemini or Claude together, on the grown-up’s account.");
+    expect(box).toContain("Open <b>Gemini</b> or <b>Claude</b> and paste the words in the box.");
+    expect(box).toContain('href="https://claude.ai/new" target="_blank" rel="noopener noreferrer">\' + ic("external-link") + \' Open Claude</a>');
+    expect(box.indexOf("Open Gemini</a>")).toBeLessThan(box.indexOf("Open Claude</a>"));
+    expect(box).toContain("If Gemini or Claude gives you a file, a grown-up can help you save it");
     expect(box).toContain("any website that can collect information");
     expect(box).toContain('role="note"');
     expect(box.indexOf("pprompt__ask")).toBeLessThan(box.indexOf("pprompt__steps"));

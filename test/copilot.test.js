@@ -115,7 +115,7 @@ describe("what kind of Subscriber’s Portal entry a request is for", () => {
     expect(user).toContain("Do not invent characters or a plot.");
     // any small project, not only a game, described in parts the way the Gravity 4 prompt is
     expect(user).toContain("a game, a calculator, a mini laptop, a digital pet");
-    expect(user).toContain("project (what the child will ask Gemini to build, as an object with: name (2 to 4 words), isGame (true or false)");
+    expect(user).toContain("project (what the child will ask AI to build, as an object with: name (2 to 4 words), isGame (true or false)");
     // a game always has a goal with a number and something that ends it, so it has a clear end
     expect(user).toContain("goal (for a game only: one sentence saying exactly what the player must do to win, with a number to reach");
     expect(user).toContain("limit (for a game only: one sentence saying what ends the game if the player has not won yet, with a number");
@@ -125,9 +125,11 @@ describe("what kind of Subscriber’s Portal entry a request is for", () => {
     expect(user).toContain("checks (4 to 6 yes-or-no questions the child asks about what AI built, to catch mistakes and made-up parts");
     expect(user).not.toContain("steps (a list");
     // the text explains, the checks are the only list, the prompt is only in the project: nothing said twice
-    expect(user).toContain("why a short prompt makes AI guess or make things up");
+    expect(user).toContain("when a prompt leaves out details, AI has to guess and may make things up, so a detailed prompt works better");
     expect(user).toContain("it never gives steps, never quotes the prompt, never describes this project's buttons, colors or features, and never mentions permission");
     expect(user).toContain("It must work on its own in the browser and never talk to Gemini or any other AI.");
+    expect(user).toContain("In the text, just say AI: never name Gemini, Claude or any other AI tool");   // the Make your own box names them
+    expect(user).toContain("project (what the child will ask AI to build,");
     expect(user).toContain("Do not write the grown-up permission rule anywhere: the page always shows it in its own box beside the prompt.");
     expect(html).toContain("<b>Ask a grown-up first!</b> Before you use AI, or any website that can collect information about you, ask a grown-up for permission.");
     expect(user).toContain("body (two or three short paragraphs");
