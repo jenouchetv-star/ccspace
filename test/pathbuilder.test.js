@@ -476,7 +476,7 @@ describe("the road starts at the house and goes to the car (what our beta tester
     expect(page).toContain("tile.type === T.HOME || tile.type === T.HOUSE || tile.type === T.BRIDGE");
   });
   it("says so in How to Play", () => {
-    expect(page).toContain("Build a road from your house, one card at a time, all the way to the car");
+    expect(page).toContain("Build the shortest distance from your house to the car before the cards run out.");
   });
 });
 

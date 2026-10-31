@@ -11,9 +11,20 @@ export const PORTAL_LAYOUTS = [
   { id: "game", label: "Game", icon: "gamepad-2", hint: "Play it on the page", category: "New games" },
   { id: "ebook", label: "Ebook", icon: "book-open", hint: "Interactive, free to read", category: "New books" },
   { id: "gallery", label: "Photos", icon: "images", hint: "A grid of pictures", category: "Photos" },
+  { id: "activity", label: "Activity", icon: "scissors", hint: "Something to make or do", category: "Activities" },
+  { id: "lesson", label: "AI Lesson", icon: "bot", hint: "Learn and build with AI", category: "AI lessons" },
 ];
 
-export const PORTAL_CATEGORIES = ["Stories", "Videos", "New games", "New books", "Photos", "Creative tips", "AI for kids", "Behind the scenes", "Updates"];
+export const PORTAL_CATEGORIES = ["Stories", "Videos", "New games", "New books", "Photos", "Activities", "AI lessons", "Creative tips", "AI for kids", "Behind the scenes", "Updates"];
+
+/** The steps box under an entry: How to play for a game, What to do for an activity, Step by step for an AI lesson. */
+export function portalStepsFor(e) {
+  const layout = (e && e.layout) || "article";
+  const raw = layout === "game" ? e.howToPlay : layout === "activity" || layout === "lesson" ? e.steps : null;
+  const steps = (Array.isArray(raw) ? raw : String(raw || "").split("\n")).map((x) => String(x).trim()).filter(Boolean);
+  if (!steps.length) return null;
+  return { title: layout === "game" ? "How to play" : layout === "activity" ? "What to do" : "Step by step", steps };
+}
 
 /** A quick check before anything is sent. The server does its own, stricter one. */
 export function portalEmailOk(v) {
@@ -101,10 +112,11 @@ export function portalParseGallery(lines) {
     everything under it becomes its own card, so a long post reads as separate boxes. Text before the first
     heading stays above the cards. Fewer than two headings: the text is returned as it was. */
 export function portalSections(html) {
-  const s = String(html || "");
+  const s = String(html || "").replace(/<p>(\s|&nbsp;|<br>)*<\/p>/g, "").replace(/(<\/h[23]>)(\s|<br>)+/g, "$1");
   const parts = s.split(/(?=<h2>)/);
   const secs = parts.filter((p) => p.startsWith("<h2>"));
-  if (secs.length < 2) return s;
+  // a short post is one card of its own, so its words never sit loose on the page
+  if (secs.length < 2) return s.replace(/<[^>]*>|&nbsp;|\s/g, "") ? '<section class="panel psec">' + s + "</section>" : "";
   const lead = parts[0].startsWith("<h2>") ? "" : parts[0];
   return lead + '<div class="psecs">' + secs.map((p) => '<section class="panel psec">' + p + "</section>").join("") + "</div>";
 }
@@ -146,6 +158,8 @@ export function portalValidate(e, others) {
   if (!blank(e.buttonUrl) && !portalLinkUrl(e.buttonUrl)) err("buttonUrl", "Use a full https:// address, a page on this site like /play, or a mailto: link.");
   const layout = e.layout || "article";
   if (layout === "article" && blank(e.body)) err("body", "An article needs its text.");
+  if (layout === "activity" && blank(e.body) && !portalStepsFor(e)) err("body", "An activity needs its text or its steps.");
+  if (layout === "lesson" && blank(e.body) && !portalStepsFor(e)) err("body", "An AI lesson needs its text or its steps.");
   if (layout === "video") {
     if (blank(e.videoUrl)) err("videoUrl", "A video entry needs a YouTube or Vimeo link.");
     else if (!portalVideoEmbed(e.videoUrl)) err("videoUrl", "Only YouTube and Vimeo links can be embedded.");

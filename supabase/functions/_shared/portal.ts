@@ -167,7 +167,7 @@ export function lookupSubscriber(rows: SubscriberRow[], email: string): Subscrib
 
 /* ---------------- what a subscriber is allowed to see ---------------- */
 
-export const LAYOUTS = ["article", "video", "game", "ebook", "gallery"] as const;
+export const LAYOUTS = ["article", "video", "game", "ebook", "gallery", "activity", "lesson"] as const;
 
 const INDEX_FIELDS = ["id", "slug", "title", "description", "cover", "category", "publishedAt", "layout"];
 

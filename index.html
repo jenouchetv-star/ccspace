@@ -3292,13 +3292,17 @@ body.portal-locked{ overflow:hidden; }
 .pmedia iframe{ width:100%; height:100%; border:0; display:block; }
 .prow{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:22px; }
 .prow--hero{ margin:6px 0 26px; }
+.pactions{ margin-top:30px; }
 .pprice{ font-size:1rem; }
 .psub{ font-size:1.3rem; margin:0 0 12px; }
 .pbody{ font-size:1.08rem; line-height:1.7; margin-top:8px; }
 .pbody img{ max-width:100%; height:auto; border-radius:var(--r); }
 /* a long post: each big heading and what follows it is its own card, one under the other */
 .psecs{ display:grid; grid-template-columns:1fr; gap:clamp(20px,2.6vw,28px); margin-top:26px; }
+.pbody > .psec{ margin-top:26px; }
+.pbody > .psec p:not(:first-child){ margin-top:1.6em; }
 .psec h2{ font-size:clamp(1.3rem,2.4vw,1.6rem); margin:0 0 14px; }
+.psec h3{ margin:0 0 12px; }
 .psec ul{ padding-left:1.2em; margin:0 0 14px; }
 .psec li + li{ margin-top:6px; }
 .psec p{ margin:0 0 14px; }
@@ -11774,7 +11778,7 @@ async function portalVerifyCode(form){
 
 /* ---------------- the pages ---------------- */
 
-const PORTAL_LAYOUT_ICON = { article: "newspaper", video: "clapperboard", game: "gamepad-2", ebook: "book-open", gallery: "images" };
+const PORTAL_LAYOUT_ICON = { article: "newspaper", video: "clapperboard", game: "gamepad-2", ebook: "book-open", gallery: "images", activity: "scissors", lesson: "bot" };
 
 /** What an unverified visitor sees behind the gate: empty shapes only. */
 function portalDecoy(){
@@ -11924,7 +11928,14 @@ function portalExtraButton(e){
   const href = portalLinkUrl(e.buttonUrl);
   if (!href || !String(e.buttonLabel || "").trim()) return "";
   const out = /^https:/i.test(href);
-  return '<div class="prow prow--hero"><a class="btn btn--cyan btn--lg" href="' + E(href) + '"' + (out ? ' target="_blank" rel="noopener noreferrer"' : "") + '>' + E(e.buttonLabel) + '</a></div>';
+  return '<a class="btn btn--cyan" href="' + E(href) + '"' + (out ? ' target="_blank" rel="noopener noreferrer"' : "") + '>' + E(e.buttonLabel) + '</a>';
+}
+
+/* the entry's own button, Share this and All entries: one row under the post, clear of the card above it */
+function portalActionsRow(e, shareBtn){
+  return '<div class="prow pactions no-print">' + portalExtraButton(e)
+    + (e.layout === "game" ? "" : shareBtn)
+    + '<a class="btn btn--ghost" href="#/newsletter">' + ic("arrow-left") + ' All entries</a></div>';
 }
 
 /** "Word to know": a kid-friendly definition card (the word, how to say it, what it means, and a try-it line). */
@@ -11958,10 +11969,10 @@ function videoLearnedHTML(v){
 
 /** "How to play": the steps for a game, one per line, in a box under the Play button. */
 function portalHowToHTML(e){
-  const steps = (Array.isArray(e.howToPlay) ? e.howToPlay : String(e.howToPlay || "").split("\n")).map(x => String(x).trim()).filter(Boolean);
-  if (!steps.length) return "";
-  return '<div class="panel panel--flat" style="margin:0 0 26px"><h3>' + ic("list-checks", "i-lg") + ' How to play</h3>'
-    + '<ol class="steps">' + steps.map(x => '<li>' + E(x) + '</li>').join("") + '</ol></div>';
+  const box = portalStepsFor(e);
+  if (!box) return "";
+  return '<div class="panel panel--flat" style="margin:0 0 26px"><h3>' + ic("list-checks", "i-lg") + ' ' + E(box.title) + '</h3>'
+    + '<ol class="steps">' + box.steps.map(x => '<li>' + E(x) + '</li>').join("") + '</ol></div>';
 }
 
 /** "Make your own": a short prompt kids and parents can copy into Gemini, with a Copy button. */
@@ -12005,8 +12016,10 @@ function portalEntryHTML(e, others, bar){
     + '<div class="tagrow" style="margin-bottom:14px"><span class="chip chip--ink">' + ic(PORTAL_LAYOUT_ICON[e.layout] || "newspaper") + ' ' + E(e.category || "") + '</span>'
     + '<time class="chip chip--ghost" datetime="' + E(e.publishedAt || "") + '">' + E(portalDate(e.publishedAt)) + '</time></div>';
   const shareBtn = '<button class="btn btn--paper" type="button" data-act="share" data-url="' + E(url) + '" data-title="' + E(e.title) + '">' + ic("share-2") + ' Share this</button>';
-  /* an article with a cover opens like the site's other pages (Meet Chike): words on the left, the taped picture on the right */
-  if (e.layout === "article" && e.cover && e.cover.src){
+  /* a story, activity or AI lesson: the word card, the text, then its steps */
+  const storyLike = e.layout === "article" || e.layout === "activity" || e.layout === "lesson";
+  /* one with a cover opens like the site's other pages (Meet Chike): words on the left, the taped picture on the right */
+  if (storyLike && e.cover && e.cover.src){
     const words = String(e.title || "").trim().split(/\s+/), cut = words.length >= 4 ? words.length - 2 : words.length;
     const title = nameHTML(words.slice(0, cut).join(" ")) + (cut < words.length ? ' <span class="hl">' + nameHTML(words.slice(cut).join(" ")) + '</span>' : "");
     return bar
@@ -12015,8 +12028,7 @@ function portalEntryHTML(e, others, bar){
       + '<div class="row no-print" style="margin-top:22px">' + shareBtn + '</div></div>'
       + '<div class="pagehead__aside"><div class="taped">' + portalCoverImg(e) + '</div></div></div></div></section>'
       + '<section class="section"><div class="shell" style="max-width:860px">'
-      + text + portalPromptHTML(e) + portalExtraButton(e)
-      + '<div class="prow no-print" style="margin-top:30px">' + shareBtn + '<a class="btn btn--ghost" href="#/newsletter">' + ic("arrow-left") + ' All entries</a></div>'
+      + portalWordHTML(e) + text + portalHowToHTML(e) + portalPromptHTML(e) + portalActionsRow(e, shareBtn)
       + (others.length ? '<div class="divider"></div><span class="eyebrow">More from the archive</span><div class="grid g-3" style="margin-top:14px">' + others.map(portalCard).join("") + '</div>' : "")
       + '</div></section>';
   }
@@ -12025,12 +12037,10 @@ function portalEntryHTML(e, others, bar){
     + crumb
     + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem)">' + nameHTML(e.title) + '</h1>'
     + '<p class="lede">' + E(e.description) + '</p>'
-    + (e.textFirst === "before" ? text + media + portalHowToHTML(e) + portalWordHTML(e) : media + portalHowToHTML(e) + portalWordHTML(e) + text)
+    + (storyLike ? media + portalWordHTML(e) + text + portalHowToHTML(e)
+      : e.textFirst === "before" ? text + media + portalHowToHTML(e) + portalWordHTML(e) : media + portalHowToHTML(e) + portalWordHTML(e) + text)
     + portalPromptHTML(e)
-    + portalExtraButton(e)
-    + '<div class="prow no-print" style="margin-top:30px">'
-    + (e.layout === "game" ? "" : shareBtn)
-    + '<a class="btn btn--ghost" href="#/newsletter">' + ic("arrow-left") + ' All entries</a></div>'
+    + portalActionsRow(e, shareBtn)
     + (others.length ? '<div class="divider"></div><span class="eyebrow">More from the archive</span><div class="grid g-3" style="margin-top:14px">' + others.map(portalCard).join("") + '</div>' : "")
     + '</div></section>';
 }
@@ -12223,6 +12233,7 @@ function writerShow(task, text){
     if (!d){ WriterState.result = null; writerOut(sorry); return; }
     WriterState.result = { task: task, data: d };
     writerOut('<div class="pai__result">' + writerRow("Title", d.title) + writerRow("Short description", d.description) + writerRow("Text", d.body)
+      + (d.steps && d.steps.length ? writerRow("Steps", d.steps.join("\n")) : "") + writerRow("Prompt for Gemini", d.aiPrompt)
       + writerRow("Email subject", d.emailSubject) + writerRow("Email preview", d.emailPreview) + writerRow("Email message", d.emailMessage) + writerRow("Email button", d.emailButton)
       + '<div class="pai__acts"><button type="button" class="admin-btn admin-btn--primary" data-act="writer-apply" data-what="all">' + ic("check") + ' Use this draft</button>'
       + '<button type="button" class="admin-btn" data-act="writer-apply" data-what="empty">Fill only the empty boxes</button>' + again + '</div></div>');
@@ -12274,6 +12285,8 @@ function writerApply(form, what, i){
     writerSet(form, "title", d.title, only); writerSet(form, "description", d.description, only); writerSet(form, "body", d.body, only);
     writerSet(form, "email.subject", d.emailSubject, only); writerSet(form, "email.preview", d.emailPreview, only);
     writerSet(form, "email.message", d.emailMessage, only); writerSet(form, "email.button", d.emailButton, only);
+    if (d.steps && d.steps.length) writerSet(form, "steps", d.steps.join("\n"), only);
+    writerSet(form, "aiPrompt", d.aiPrompt, only);
   } else if (r.task === "titles"){
     writerSet(form, "title", d[i]);
   } else if (r.task === "email"){
@@ -12399,6 +12412,7 @@ function portalStartOptions(layout){
   if (layout === "video") return pub("videos").map(v => ({ title: v.title, kind: "Episode" }));
   if (layout === "ebook") return BOOKS.map(b => ({ title: (db.find("stories", b.id) || b).title, kind: "Book" }));
   if (layout === "gallery") return pub("activities").filter(a => a.image && a.image.src).map(a => ({ title: a.title, kind: "Activity" }));
+  if (layout === "activity") return pub("activities").map(a => ({ title: a.title, kind: "Activity" }));
   return pub("stories").map(s => ({ title: s.title, kind: "Story" })).concat(pub("activities").map(a => ({ title: a.title, kind: "Activity" })), pub("articles").map(a => ({ title: a.title, kind: "Article" })));
 }
 function portalStartPaint(form){
@@ -12536,6 +12550,8 @@ function cpCardHTML(m){
     body = '<p class="cp-note">' + (d.sourceLabel ? "Built from " + E(d.sourceLabel) + ". " : "") + 'It is saved as a draft. When you publish it in the editor, the email is prepared for you to review.</p>'
       + '<div class="cp-f"><label>Type<select data-cpm="' + id + '" data-cpf="layout">' + PORTAL_LAYOUTS.map(l => '<option value="' + l.id + '"' + (l.id === d.layout ? " selected" : "") + '>' + E(l.label) + '</option>').join("") + '</select></label></div>'
       + field("Title", "title", d.title) + field("Short description", "description", d.description, "area") + field("Text (blank line between paragraphs)", "body", d.body, "area")
+      + (d.layout === "activity" || d.layout === "lesson" ? field(d.layout === "activity" ? "What to do (one step per line)" : "Step by step (one step per line)", "steps", d.steps || "", "area") : "")
+      + (d.layout === "lesson" ? field("Prompt kids can copy into Gemini", "aiPrompt", d.aiPrompt || "", "area") : "")
       + '<label class="cp-check-row"><input type="checkbox" data-cpm="' + id + '" data-cpf="emailOn"' + (d.emailOn ? " checked" : "") + '> Prepare an email about it when I publish</label>'
       + field("Email subject", "emailSubject", d.emailSubject) + field("Email preview line", "emailPreview", d.emailPreview) + field("Email message", "emailMessage", d.emailMessage, "area") + field("Email button says", "emailButton", d.emailButton);
     acts = saved ? '<button type="button" class="admin-btn admin-btn--primary" data-act="copilot-open" data-id="' + id + '">' + ic("pencil") + ' Open it to publish</button>'
@@ -12724,12 +12740,15 @@ async function cpPortal(intent, userText){
     else if (found.col === "stories" && findBook(found.id)){ layout = "ebook"; source.bookId = found.id; const b = findBook(found.id); cover = (b.cover && b.cover.src) ? b.cover : (storyCoverFromPages(rec) || cover); }
     else { const img = rec.image || rec.cover || rec.thumb; if (img && img.src) cover = img; }
   }
+  /* no video, game or book decided it: the request's own words do ("an AI lesson", "an activity") */
+  if (layout === "article") layout = intent.layout || (found && found.col === "activities" ? "activity" : "article");
   const idea = userText.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
-  cpPush({ role: "note", text: "Writing the entry and its email\u2026" });
-  const text = await cpAsk(WriterLib.taskMessages("draft", { brand: BRAND, who: cpWho(), items: WriterLib.siteItems(db.get()), entry: { layout: layout, title: seed.split(". ")[0] }, idea: idea + (seed ? " Source: " + seed : "") }), { json: true, maxTokens: 1100 });
+  const kind = (PORTAL_LAYOUTS.find(l => l.id === layout) || PORTAL_LAYOUTS[0]).label;
+  cpPush({ role: "note", text: "Writing the " + (layout === "article" ? "entry" : kind) + " and its email\u2026" });
+  const text = await cpAsk(WriterLib.taskMessages("draft", { brand: BRAND, who: cpWho(), items: WriterLib.siteItems(db.get()), entry: { layout: layout, title: seed.split(". ")[0] }, idea: idea + (seed ? " Source: " + seed : "") }), { json: true, maxTokens: 1400 });
   const d = WriterLib.parseDraft(text);
   if (!d){ cpPush({ role: "assistant", text: "That didn\u2019t come out right. Try again, with a little more about what the entry should say." }); return; }
-  cpPush({ role: "card", card: { type: "portal", state: "draft", data: { layout: layout, title: realTitle || d.title || "", description: d.description, body: d.body, emailOn: true,
+  cpPush({ role: "card", card: { type: "portal", state: "draft", data: { layout: layout, title: realTitle || d.title || "", description: d.description, body: d.body, steps: d.steps.join("\n"), aiPrompt: d.aiPrompt, emailOn: true,
     emailSubject: d.emailSubject, emailPreview: d.emailPreview, emailMessage: d.emailMessage, emailButton: d.emailButton, source: source, cover: cover, sourceLabel: label } } });
 }
 
@@ -12795,6 +12814,7 @@ function copilotEdit(el){
     return;
   }
   m.card.data[el.getAttribute("data-cpf")] = el.type === "checkbox" ? el.checked : el.value;
+  if (el.getAttribute("data-cpf") === "layout") copilotRender();   // an activity or AI lesson shows its steps box
 }
 
 async function copilotSave(id){
@@ -12836,6 +12856,8 @@ async function copilotSave(id){
         cover: d.cover && d.cover.src ? { src: d.cover.src, alt: d.cover.alt || d.title } : { src: "", alt: "" }, body: WriterLib.paragraphsToHtml(d.body),
         videoUrl: lay.id === "video" ? (src.videoUrl || "") : "", gameId: lay.id === "game" ? (src.gameId || "") : "", gamePath: lay.id === "game" ? (src.gamePath || "") : "",
         gameMode: src.gamePath ? "embed" : "launch", bookId: lay.id === "ebook" ? (src.bookId || "") : "",
+        steps: lay.id === "activity" || lay.id === "lesson" ? String(d.steps || "").split("\n").map(s => s.trim()).filter(Boolean) : [],
+        aiPrompt: String(d.aiPrompt || "").trim(),
         email: { on: !!d.emailOn, subject: d.emailSubject, preview: d.emailPreview, message: d.emailMessage, button: d.emailButton }, status: "draft" }));
       c.savedId = rec.id;
     }
@@ -14155,6 +14177,7 @@ const FIELDS = {
     { key:"bookId", label:"Which book?", type:"select", wide:true, layouts:["ebook"], options:() => [{ value:"", label:"Choose a book..." }].concat(BOOKS.map(b => ({ value:b.id, label:(db.find("stories", b.id) || b).title }))), help:"Your interactive books. Readers open it here, free." },
     { key:"bookMode", label:"Show the book", type:"select", layouts:["ebook"], options:() => [{ value:"launch", label:"With a Read button" },{ value:"embed", label:"Right on the page" }] },
     { key:"gallery", label:"Photos", type:"photos", wide:true, layouts:["gallery"] },
+    { key:"steps", label:"Steps (one step per line)", type:"lines", wide:true, layouts:["activity", "lesson"], placeholder:"Fold the paper in half\nDraw your character on one side", help:"Shown in a numbered box under the text: “What to do” for an activity, “Step by step” for an AI lesson. Leave empty to hide it." },
     { key:"aiPrompt", label:"Prompt kids can copy into Gemini (optional)", type:"textarea", wide:true, placeholder:"Make me a game I can play in my browser! ...", help:"Short, simple words (for ages 6 to 8). The page shows it in a box with a Copy prompt button and an Open Gemini link." },
     { key:"vocabWord", label:"Word to know", type:"text", wide:true, more:true, placeholder:"gravity", help:"A one-word definition card shown above the How to play box. Fill in all four boxes for the best card." },
     { key:"vocabSay", label:"How to say it", type:"text", more:true, placeholder:"GRAV-ih-tee \u00b7 noun" },
@@ -14200,7 +14223,7 @@ const BLANKS = {
   amazonProducts: () => ({ title:"", category:"materials", why:"", forActivities:[], priceBand:"$", url:"https://www.amazon.com/s?k=", linkType:"search-placeholder", cover:"", status:"draft", featured:false, ours:false }),
   collections:() => ({ title:"", slug:"", blurb:"", icon:"layers", items:[], status:"draft", featured:false }),
   mediaAssets:() => ({ path:"", folder:"", alt:"", usage:"", kind:"illustration", status:"draft", sizeBytes:0 }),
-  portalEntries: () => ({ coverStill:"", vocabWord:"", vocabSay:"", vocabMeaning:"", vocabExample:"", howToPlay:[], aiPrompt:"", aiPromptTitle:"", aiPromptTip:"", gameId:"", privateGameId:"", privateGameKb:0, bookId:"", bookMode:"launch", bookPath:"", email:{ on:true, subject:"", preview:"", message:"", button:"" }, buttonLabel:"", buttonUrl:"", textFirst:"after", title:"", slug:"", description:"", category:"Updates", layout:"article", publishedAt:nowISO().slice(0, 10), cover:{src:"",alt:""}, body:"", videoUrl:"", gameMode:"embed", gameLabel:"", gamePath:"", gallery:[], adminNote:"", status:"draft" }),
+  portalEntries: () => ({ coverStill:"", vocabWord:"", vocabSay:"", vocabMeaning:"", vocabExample:"", howToPlay:[], steps:[],aiPrompt:"", aiPromptTitle:"", aiPromptTip:"", gameId:"", privateGameId:"", privateGameKb:0, bookId:"", bookMode:"launch", bookPath:"", email:{ on:true, subject:"", preview:"", message:"", button:"" }, buttonLabel:"", buttonUrl:"", textFirst:"after", title:"", slug:"", description:"", category:"Updates", layout:"article", publishedAt:nowISO().slice(0, 10), cover:{src:"",alt:""}, body:"", videoUrl:"", gameMode:"embed", gameLabel:"", gamePath:"", gallery:[], adminNote:"", status:"draft" }),
   issues:     () => ({ title:"", area:"platform", severity:"normal", state:"open", detail:"", status:"published" })
 };
 

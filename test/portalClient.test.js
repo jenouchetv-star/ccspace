@@ -5,7 +5,7 @@ import { readFileSync, existsSync } from "node:fs";
 import {
   PORTAL_LAYOUTS, portalEntryUrl, portalReadQuery, portalVideoEmbed, portalSafeUrl, portalParseGallery, portalFormatGallery,
   portalSlug, portalLinkUrl, portalBookPath, portalValidate, portalGateMessage, portalErrorState, portalEmailOk, PORTAL_CATEGORIES,
-  portalSections,
+  portalSections, portalStepsFor,
 } from "../assets/lib/portal.js";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -151,8 +151,12 @@ describe("what an entry needs before it can be published", () => {
   const base = { title: "T", description: "D", category: "Stories", publishedAt: "2026-10-01", cover: { src: "a.jpg", alt: "alt" }, layout: "article", body: "<p>Hi</p>" };
   const errors = (e, others) => portalValidate(e, others).filter((v) => v.level === "error").map((v) => v.field);
 
-  it("accepts a complete entry in each of the five layouts", () => {
-    expect(PORTAL_LAYOUTS.map((l) => l.id)).toEqual(["article", "video", "game", "ebook", "gallery"]);
+  it("accepts a complete entry in each of the seven layouts", () => {
+    expect(PORTAL_LAYOUTS.map((l) => l.id)).toEqual(["article", "video", "game", "ebook", "gallery", "activity", "lesson"]);
+    expect(errors({ ...base, layout: "activity" })).toEqual([]);
+    expect(errors({ ...base, layout: "lesson", body: "", steps: ["Open Gemini with a grown-up"] })).toEqual([]);
+    expect(errors({ ...base, layout: "activity", body: "" })).toEqual(["body"]);
+    expect(errors({ ...base, layout: "lesson", body: "" })).toEqual(["body"]);
     expect(errors(base)).toEqual([]);
     expect(errors({ ...base, layout: "video", body: "", videoUrl: "https://youtu.be/dQw4w9WgXcQ" })).toEqual([]);
     expect(errors({ ...base, layout: "game", body: "", gamePath: "games/new.html" })).toEqual([]);
@@ -329,8 +333,9 @@ describe("how the site wires the portal in", () => {
     expect(game).toContain("btn btn--paper btn--sm");                      /* the Share beside it, same size */
     expect(game).not.toContain("btn--lg");
     const how = body("portalHowToHTML");
-    expect(how).toContain('if (!steps.length) return ""');
-    expect(how).toContain("How to play");
+    expect(how).toContain('if (!box) return ""');
+    expect(portalStepsFor({ layout: "game", howToPlay: [] })).toBe(null);
+    expect(portalStepsFor({ layout: "game", howToPlay: ["Go"] }).title).toBe("How to play");
     expect(how).toContain('class="panel panel--flat"');                     /* the same panel as a game's Play page */
     expect(how).toContain('<ol class="steps">');
     expect(how).toContain("E(x)");                                          /* steps are shown as text, never as markup */
@@ -381,7 +386,7 @@ describe("how the site wires the portal in", () => {
   it("has one Share button on an entry: at the bottom, or next to Play on a game", () => {
     const page = body("portalEntryHTML");
     expect((page.match(/data-act="share"/g) || []).length).toBe(1);
-    expect(page).toContain('(e.layout === "game" ? "" :');                  /* no second one at the bottom of a game */
+    expect(body("portalActionsRow")).toContain('(e.layout === "game" ? "" : shareBtn)');   /* no second one at the bottom of a game */
     const game = body("portalGameHTML");
     expect(game).toContain('data-act="share"');
     expect(game).toContain("portalEntryUrl(location.origin, e)");           /* the plain address, never a private link */
@@ -482,6 +487,13 @@ describe("how the site wires the portal in", () => {
     expect(body("portalExtraButton")).toContain("portalLinkUrl(e.buttonUrl)");
     expect(body("portalEntryHTML")).toContain('e.textFirst === "before" ? text + media + portalHowToHTML(e) + portalWordHTML(e) : media + portalHowToHTML(e) + portalWordHTML(e) + text');
   });
+  it("puts the extra button, Share this and All entries in one row, with a gap above it", () => {
+    expect(body("portalActionsRow")).toContain('\'<div class="prow pactions no-print">\' + portalExtraButton(e)');
+    expect(body("portalExtraButton")).not.toContain("<div");
+    expect(body("portalEntryHTML").split("portalActionsRow(e, shareBtn)").length - 1).toBe(2);
+    expect(body("portalEntryHTML")).not.toContain("+ portalExtraButton(e)");
+    expect(html).toContain(".pactions{ margin-top:30px; }");
+  });
 
   it("puts each subscriber's private key in newsletters", () => {
     expect(body("emailShell")).toContain("/newsletter?k=__ACCESS_KEY__");
@@ -576,15 +588,40 @@ describe("the portal's own sign-in box uses the 6-digit code", () => {
   });
 });
 
+describe("Activity and AI Lesson entries", () => {
+  it("are tiles of their own, with their own icon and category", () => {
+    const tile = (id) => PORTAL_LAYOUTS.find((l) => l.id === id);
+    expect(tile("activity")).toMatchObject({ label: "Activity", icon: "scissors", category: "Activities" });
+    expect(tile("lesson")).toMatchObject({ label: "AI Lesson", icon: "bot", category: "AI lessons" });
+    expect(PORTAL_CATEGORIES).toEqual(expect.arrayContaining(["Activities", "AI lessons"]));
+    expect(html).toContain('activity: "scissors", lesson: "bot" };');
+  });
+  it("show their steps in a numbered box with a heading that fits", () => {
+    expect(portalStepsFor({ layout: "activity", steps: ["Fold", " ", "Draw"] })).toEqual({ title: "What to do", steps: ["Fold", "Draw"] });
+    expect(portalStepsFor({ layout: "lesson", steps: "Open Gemini\nPaste the prompt" })).toEqual({ title: "Step by step", steps: ["Open Gemini", "Paste the prompt"] });
+    expect(portalStepsFor({ layout: "game", howToPlay: ["Drop a chip"] })).toEqual({ title: "How to play", steps: ["Drop a chip"] });
+    expect(portalStepsFor({ layout: "article", steps: ["x"], howToPlay: ["y"] })).toBe(null);
+    expect(html).toContain('{ key:"steps", label:"Steps (one step per line)", type:"lines", wide:true, layouts:["activity", "lesson"]');
+  });
+  it("open like a story: the word card, the text, then the steps", () => {
+    const page = body("portalEntryHTML");
+    expect(page).toContain('const storyLike = e.layout === "article" || e.layout === "activity" || e.layout === "lesson";');
+    expect(page).toContain("portalWordHTML(e) + text + portalHowToHTML(e) + portalPromptHTML(e) + portalActionsRow(e, shareBtn)");
+    expect(page).toContain("(storyLike ? media + portalWordHTML(e) + text + portalHowToHTML(e)");
+  });
+});
+
 describe("long posts as cards", () => {
   it("puts each big heading and what follows it in its own card, with the opening text above", () => {
     const out = portalSections("<p>Intro</p><h2>One</h2><p>a</p><h2>Two</h2><ul><li>b</li></ul>");
     expect(out).toBe('<p>Intro</p><div class="psecs"><section class="panel psec"><h2>One</h2><p>a</p></section>'
       + '<section class="panel psec"><h2>Two</h2><ul><li>b</li></ul></section></div>');
   });
-  it("leaves short posts alone", () => {
-    expect(portalSections("<p>Hi</p><h2>Only one</h2><p>x</p>")).toBe("<p>Hi</p><h2>Only one</h2><p>x</p>");
+  it("puts a short post in one card, without its empty lines", () => {
+    expect(portalSections("<p>Hi</p><h2>Only one</h2><p>x</p>")).toBe('<section class="panel psec"><p>Hi</p><h2>Only one</h2><p>x</p></section>');
+    expect(portalSections("<p></p><h3>News</h3><br>Hello&nbsp;<p></p><p>More</p>")).toBe('<section class="panel psec"><h3>News</h3>Hello&nbsp;<p>More</p></section>');
     expect(portalSections("")).toBe("");
+    expect(portalSections("<p></p><p>&nbsp;</p>")).toBe("");
   });
   it("is used on the cleaned text of every entry page", () => {
     expect(body("portalEntryHTML")).toContain("portalSections(sanitizeHTML(e.body))");

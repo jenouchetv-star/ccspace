@@ -255,7 +255,7 @@ export function systemPrompt(brand, digest, detail, who) {
   ].filter(Boolean).join("\n\n");
 }
 
-const LAYOUT_WORDS = { article: "a story or update", video: "a video", game: "a new game", ebook: "a new interactive ebook (a picture book kids read for free on the site)", gallery: "a photo gallery" };
+const LAYOUT_WORDS = { article: "a story or update", video: "a video", game: "a new game", ebook: "a new interactive ebook (a picture book kids read for free on the site)", gallery: "a photo gallery", activity: "an activity kids can make or do at home", lesson: "an AI lesson that teaches kids to learn and build with AI, with a grown-up" };
 
 function entryNotes(ctx) {
   const e = ctx.entry || {};
@@ -270,14 +270,24 @@ function entryNotes(ctx) {
 
 const JSON_NOTE = " Reply with one JSON object only and nothing else.";
 
+/** What each kind of entry must be, so a request for a lesson is not answered with a story. */
+const DRAFT_BRIEF = {
+  lesson: "This is an AI LESSON, not a story: it teaches kids aged 6 to 10 one simple idea about AI (for example what AI is, how to give AI clear instructions, how to check an AI's answer, or how to stay safe and kind online), then lets them try it. If the writer did not name the idea, choose ONE of these and name it in the title, like \"How to Give AI Clear Instructions\". The steps and the prompt must practice that same idea. Speak to the child directly and explain the idea in plain words with an everyday example. Say they should always use AI with a grown-up. Do not invent characters or a plot.",
+  activity: "This is an ACTIVITY, not a story: something kids make or do at home with simple materials. Say what they will make, what they need, and what they will learn. Do not invent characters or a plot.",
+};
+
 /** The messages for one job. `ctx` = { brand, items, entry:{layout,title,description,body}, idea, field, fieldText, system } */
 export function taskMessages(task, ctx) {
   const query = [ctx.idea, ctx.entry && ctx.entry.title, ctx.entry && ctx.entry.description, ctx.fieldText].filter(Boolean).join(" ");
   const sys = ctx.system || systemPrompt(ctx.brand, siteDigest(ctx.items), relevantItems(ctx.items, query, 6), ctx.who);
   const notes = entryNotes(ctx);
+  const layout = (ctx.entry && ctx.entry.layout) || "article";
   const user = {
-    draft: "Write a new Subscriber’s Portal entry and the email that announces it.\n" + notes
-      + "\nReturn JSON with these keys: title (under 8 words), description (one or two sentences for a card), body (three or four short paragraphs separated by a blank line), emailSubject (under 8 words), emailPreview (one line), emailMessage (two short paragraphs for the email, ending with an invitation to take a look), emailButton (2 to 3 words)." + JSON_NOTE,
+    draft: "Write a new Subscriber’s Portal entry and the email that announces it.\n" + notes + (DRAFT_BRIEF[layout] ? "\n" + DRAFT_BRIEF[layout] : "")
+      + "\nReturn JSON with these keys: title (under 8 words), description (one or two sentences for a card), body (three or four short paragraphs separated by a blank line)"
+      + (layout === "activity" || layout === "lesson" ? ", steps (a list of 4 to 6 short steps a child can follow, each under 15 words)" : "")
+      + (layout === "lesson" ? ", aiPrompt (a short, simple prompt of one to three sentences that a child can copy into Gemini with a grown-up to try the lesson)" : "")
+      + ", emailSubject (under 8 words), emailPreview (one line), emailMessage (two short paragraphs for the email, ending with an invitation to take a look), emailButton (2 to 3 words)." + JSON_NOTE,
     titles: "Give me six different title ideas for this entry.\n" + notes + "\nReturn JSON like {\"titles\": [\"...\"]}. Each under 8 words." + JSON_NOTE,
     description: "Write the short description for this entry: one or two sentences that make someone want to open it.\n" + notes + "\nReply with only the sentences.",
     email: "Write the email that goes with this entry.\n" + notes + "\nReturn JSON with keys subject (under 8 words), preview (one line), message (two short paragraphs separated by a blank line, ending with an invitation to take a look), button (2 to 3 words)." + JSON_NOTE,
@@ -352,8 +362,12 @@ export function parseDraft(text) {
     title: str(j.title), description: str(j.description), body: str(j.body),
     emailSubject: str(j.emailSubject || j.subject), emailPreview: str(j.emailPreview || j.preview),
     emailMessage: str(j.emailMessage || j.message), emailButton: str(j.emailButton || j.button),
+    aiPrompt: str(j.aiPrompt || j.prompt),
   };
-  return Object.keys(out).some((k) => out[k]) ? out : null;
+  if (!Object.keys(out).some((k) => out[k])) return null;
+  const steps = Array.isArray(j.steps) ? j.steps : String(j.steps || "").split("\n");
+  out.steps = steps.map((s) => String(s && typeof s === "object" ? s.text || s.step || "" : s == null ? "" : s).replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "").trim()).filter(Boolean);
+  return out;
 }
 
 export function parseTitles(text) {
@@ -406,11 +420,13 @@ export function subjectIdeas(layout, title) {
     video: ["Come and watch " + t, "New episode: " + t, t + " is ready to watch"],
     ebook: ["New book: " + t, "Peek inside " + t, t + " is ready to read"],
     gallery: ["Photos: " + t, "Take a look: " + t, t],
+    activity: ["Try this: " + t, "New activity: " + t, "Let's make " + t],
+    lesson: ["New AI lesson: " + t, "Learn with AI: " + t, t],
     article: [t, "New: " + t, "Have you seen this? " + t],
   };
   return by[layout] || by.article;
 }
 
 export function buttonIdeas(layout) {
-  return ({ game: ["Come and play", "Take a look"], video: ["Come and watch", "Take a look"], ebook: ["Open the book", "Take a peek"], gallery: ["See the photos", "Take a look"], article: ["Take a look", "Come and read"] })[layout] || ["Take a look", "Come and see"];
+  return ({ game: ["Come and play", "Take a look"], video: ["Come and watch", "Take a look"], ebook: ["Open the book", "Take a peek"], gallery: ["See the photos", "Take a look"], activity: ["Let's make it", "Take a look"], lesson: ["Start the lesson", "Take a look"], article: ["Take a look", "Come and read"] })[layout] || ["Take a look", "Come and see"];
 }

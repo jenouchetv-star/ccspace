@@ -52,6 +52,18 @@ export function findItemInText(items, text) {
   return best ? best.item : null;
 }
 
+/** The kind of Subscriber’s Portal entry a request asks for, from its own words: "lesson" for an AI
+    lesson, "activity" for something to make or do, "article" for a story. null when it does not say,
+    so a pasted video, game or book can decide instead. */
+export function portalLayoutFor(text) {
+  const t = String(text || "").replace(/\b(?:subscriber|member|newsletter)s?['’]?s? (?:portal|archive|corner|area)\b/gi, " ");
+  const AI = "(?:AI|A\\.I\\.|artificial intelligence|Gemini|ChatGPT|chat ?bots?|prompts?|machine learning)";
+  if (new RegExp("\\b" + AI + "[- ]lessons?\\b|\\b(?:lessons?|teach|teaches|teaching|learn|learning)\\b[^.?\\n]{0,50}\\b" + AI + "\\b|\\b(?:use|uses|using|with)\\s+" + AI + "\\b", "i").test(t)) return "lesson";
+  if (/\bactivit(?:y|ies)\b|\bcrafts?\b|\bDIY\b|\bhands[- ]on\b|\bprintables?\b|\bworksheets?\b|\bsomething (?:to|kids can) (?:make|build|do)\b/i.test(t)) return "activity";
+  if (/\bstor(?:y|ies)\b/i.test(t)) return "article";
+  return null;
+}
+
 /** The first thing the Copilot does with a message: decide which job it is. `items` (the site's
     contents) lets it recognize "make the Doodle Dash summary friendlier". */
 export function chooseIntent(text, expecting, items) {
@@ -60,7 +72,9 @@ export function chooseIntent(text, expecting, items) {
   if (html) return { kind: "game", html };
   const ids = findYoutubeIds(t);
   /* content for the members-only Subscriber’s Portal: it may name a video link or something already on the site */
-  if (expecting === "portal" || PORTAL_RE.test(t)) return { kind: "portal", request: t, youtubeIds: ids.slice(0, 1), item: items ? findItemInText(items, t) : null };
+  /* an AI lesson lives only in the portal, so asking for one is a portal job even when the portal is not named */
+  const aiLesson = !/\?\s*$/.test(t) && !/\b(?:newsletter|email)\b/i.test(t) && /\b(?:write|draft|make|create|add|put together|prepare|build|plan)\b[^.?\n]{0,40}\b(?:AI|A\.I\.)[- ]lessons?\b/i.test(t);
+  if (expecting === "portal" || PORTAL_RE.test(t) || aiLesson) return { kind: "portal", request: t, layout: portalLayoutFor(t), youtubeIds: ids.slice(0, 1), item: items ? findItemInText(items, t) : null };
   if (ids.length) return { kind: "youtube", ids: ids.slice(0, 5), extra: ids.length - Math.min(ids.length, 5) };
   if (/\b(?:alt text|alt tags?|image tags?|image descriptions?|picture descriptions?|describe (?:(?:all|the|my|our) )*(?:images|pictures|photos))\b/i.test(t)) return { kind: "alt" };
   if (/\b(?:suggest|add|write|fill in|generate|missing|need)\b[^.?\n]{0,30}\btags\b|\btags (?:for|are missing)\b/i.test(t)) return { kind: "tags" };

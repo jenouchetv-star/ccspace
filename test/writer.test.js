@@ -179,7 +179,11 @@ describe("reading answers back", () => {
 
   it("reads a full draft, accepting the email keys under either name", () => {
     const d = parseDraft(JSON.stringify({ title: "A Title", description: "D", body: ["P1", "P2"], subject: "S", preview: "P", message: "M", emailButton: "Take a look" }));
-    expect(d).toEqual({ title: "A Title", description: "D", body: "P1\n\nP2", emailSubject: "S", emailPreview: "P", emailMessage: "M", emailButton: "Take a look" });
+    expect(d).toEqual({ title: "A Title", description: "D", body: "P1\n\nP2", emailSubject: "S", emailPreview: "P", emailMessage: "M", emailButton: "Take a look", aiPrompt: "", steps: [] });
+    const lesson = parseDraft(JSON.stringify({ title: "T", steps: ["1. Open Gemini with a grown-up", "- Ask it a question", { text: "Check the answer" }, ""], aiPrompt: "Tell me a joke about a cat." }));
+    expect(lesson.steps).toEqual(["Open Gemini with a grown-up", "Ask it a question", "Check the answer"]);
+    expect(lesson.aiPrompt).toBe("Tell me a joke about a cat.");
+    expect(parseDraft('{"title":"T","steps":"Fold it\\n2) Draw"}').steps).toEqual(["Fold it", "Draw"]);
     expect(parseDraft("{}")).toBeNull();
     expect(parseDraft("nothing")).toBeNull();
   });

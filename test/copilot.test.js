@@ -7,6 +7,7 @@ import {
   findYoutubeIds, extractHtml, chooseIntent, analyzeGameHtml, gameDigest, gameSlug, MAX_GAME_BYTES,
   copilotSystem, chatMessages, episodeMessages, parseEpisode, gameMessages, parseGame, newsletterMessages, parseNewsletter,
   storyMessages, parseStory, storyPagesFrom, whereLabel, quickFixes, planFix, FIXABLE, recordFacts, fixMessages, parseFix, findItemInText, pickField, TEXT_FIELDS, altTargets, altMessages, parseAlt, tagTargets, existingTags, tagMessages, parseTags,
+  portalLayoutFor,
 } from "../assets/lib/copilot.js";
 import { siteItems, systemPrompt, whoLine, taskMessages } from "../assets/lib/writer.js";
 import { portalValidate } from "../assets/lib/portal.js";
@@ -58,6 +59,71 @@ describe("what the admin gave us", () => {
     const r = chooseIntent(many);
     expect(r.ids).toHaveLength(5);
     expect(r.extra).toBe(3);
+  });
+});
+
+describe("what kind of Subscriber’s Portal entry a request is for", () => {
+  const ask = (t) => chooseIntent(t, "", []);
+  it("makes an AI lesson when asked for one, however it is worded", () => {
+    for (const t of [
+      "Create an \"AI lesson\" for kids and add it to the Subscriber's portal.",
+      "Create an AI lesson for kids and add it to the Subscriber’s portal",
+      "write an AI lesson about giving clear instructions",
+      "Make an A.I. lesson for the members area",
+      "Add a lesson about AI to the subscriber portal",
+      "put together a lesson on how to use Gemini for the newsletter portal",
+      "Create a portal entry that teaches kids how to use AI safely",
+      "create an ai-lesson for 2nd graders",
+    ]) {
+      const r = ask(t);
+      expect(r.kind, t).toBe("portal");
+      expect(r.layout, t).toBe("lesson");
+    }
+  });
+  it("makes an activity when asked for an activity or a craft", () => {
+    for (const t of [
+      "Create an activity for the Subscriber's portal about paper rockets",
+      "add a fall craft to the subscriber portal",
+      "Post a DIY project in the members area: a cardboard marble run",
+      "Put a printable worksheet in the newsletter portal",
+    ]) {
+      const r = ask(t);
+      expect(r.kind, t).toBe("portal");
+      expect(r.layout, t).toBe("activity");
+    }
+  });
+  it("makes a story when asked for a story, and lets a video or the site decide when the words do not say", () => {
+    expect(ask("Write a story about Zech for the subscriber portal").layout).toBe("article");
+    expect(ask("Add a portal post about our new Halloween games").layout).toBe(null);
+    expect(ask("put https://youtu.be/dQw4w9WgXcQ in the subscriber portal")).toMatchObject({ kind: "portal", layout: null, youtubeIds: ["dQw4w9WgXcQ"] });
+    expect(portalLayoutFor("Teach kids to code a game with AI")).toBe("lesson");     // a lesson about AI, not a game
+    expect(portalLayoutFor("an activity where kids use AI")).toBe("lesson");
+    expect(portalLayoutFor("a math lesson")).toBe(null);                            // a lesson, but not about AI
+  });
+  it("leaves questions and other jobs alone", () => {
+    expect(ask("What AI lesson should we make next?").kind).toBe("chat");
+    expect(ask("write a story about a robot").kind).toBe("story");
+    expect(ask("write a newsletter about the AI lesson").kind).toBe("newsletter");
+  });
+  it("asks the model for a lesson, not a story, with steps and a prompt to copy", () => {
+    const user = taskMessages("draft", { items: [], entry: { layout: "lesson" }, idea: "an AI lesson for kids" })[1].content;
+    expect(user).toContain("This is an AI LESSON, not a story");
+    expect(user).toContain("Do not invent characters or a plot.");
+    expect(user).toContain("steps (a list of 4 to 6 short steps");
+    expect(user).toContain("aiPrompt (a short, simple prompt");
+    const act = taskMessages("draft", { items: [], entry: { layout: "activity" } })[1].content;
+    expect(act).toContain("This is an ACTIVITY, not a story");
+    expect(act).not.toContain("aiPrompt");
+    const story = taskMessages("draft", { items: [], entry: { layout: "article" } })[1].content;
+    expect(story).not.toContain("steps (");
+  });
+  it("uses the request's kind in the Copilot, and saves the steps and prompt with the entry", () => {
+    const p = body("cpPortal");
+    expect(p).toContain('if (layout === "article") layout = intent.layout || (found && found.col === "activities" ? "activity" : "article");');
+    expect(p).toContain("steps: d.steps.join(\"\\n\"), aiPrompt: d.aiPrompt");
+    const save = body("copilotSave");
+    expect(save).toContain('steps: lay.id === "activity" || lay.id === "lesson" ?');
+    expect(body("copilotEdit")).toContain('if (el.getAttribute("data-cpf") === "layout") copilotRender();');
   });
 });
 
