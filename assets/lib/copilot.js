@@ -64,6 +64,19 @@ export function portalLayoutFor(text) {
   return null;
 }
 
+/** What the Copilot asks once the admin has picked the kind of entry, so the request carries what that kind needs. */
+export function portalAsk(layout) {
+  return ({
+    article: "What is the story or update about?",
+    video: "Paste the YouTube or Vimeo link, and add a note about it if you like.",
+    game: "Which game? Name one already on the site, and say what to tell subscribers about it.",
+    ebook: "Which book? Name one of our ebooks, and say what to tell subscribers about it.",
+    gallery: "What are the photos of? You add the pictures in the editor afterwards.",
+    activity: "What will kids make or do, and what do they need?",
+    lesson: "What should kids build with AI (a game, a calculator, a digital pet...), and what should they learn?",
+  })[layout] || "What is it about?";
+}
+
 /** The first thing the Copilot does with a message: decide which job it is. `items` (the site's
     contents) lets it recognize "make the Doodle Dash summary friendlier". */
 export function chooseIntent(text, expecting, items) {

@@ -7,7 +7,7 @@ import {
   findYoutubeIds, extractHtml, chooseIntent, analyzeGameHtml, gameDigest, gameSlug, MAX_GAME_BYTES,
   copilotSystem, chatMessages, episodeMessages, parseEpisode, gameMessages, parseGame, newsletterMessages, parseNewsletter,
   storyMessages, parseStory, storyPagesFrom, whereLabel, quickFixes, planFix, FIXABLE, recordFacts, fixMessages, parseFix, findItemInText, pickField, TEXT_FIELDS, altTargets, altMessages, parseAlt, tagTargets, existingTags, tagMessages, parseTags,
-  portalLayoutFor,
+  portalLayoutFor, portalAsk,
 } from "../assets/lib/copilot.js";
 import { siteItems, systemPrompt, whoLine, taskMessages } from "../assets/lib/writer.js";
 import { portalValidate } from "../assets/lib/portal.js";
@@ -113,13 +113,25 @@ describe("what kind of Subscriber’s Portal entry a request is for", () => {
     const user = taskMessages("draft", { items: [], entry: { layout: "lesson" }, idea: "an AI lesson for kids" })[1].content;
     expect(user).toContain("This is an AI LESSON, not a story");
     expect(user).toContain("Do not invent characters or a plot.");
-    expect(user).toContain("steps (a list of 4 to 6 short steps");
-    expect(user).toContain("aiPrompt (two to four short, simple sentences a child copies into Gemini to make a tiny game");   // the prompt box says "save it as game.html and play"
-    expect(user).toContain("It must start with \\\"Make me a simple game I can play in my browser.\\\"".replace(/\\"/g, '"'));
-    expect(user).toContain("Never a drawing, a story or a question");
+    // any small project, not only a game, described in parts the way the Gravity 4 prompt is
+    expect(user).toContain("a game, a calculator, a mini laptop, a digital pet");
+    expect(user).toContain("project (what the child will ask Gemini to build, as an object with: name (2 to 4 words), isGame (true or false)");
+    expect(user).toContain("does (2 to 4 short lines: for a game, the goal and how to win; otherwise, what it does)");
+    expect(user).toContain("so the AI does not have to guess");
+    // the list is questions that catch what AI got wrong, not the same steps again
+    expect(user).toContain("checks (4 to 6 yes-or-no questions the child asks about what AI built, to catch mistakes and made-up parts");
+    expect(user).not.toContain("steps (a list");
+    // the text explains, the checks are the only list, the prompt is only in the project: nothing said twice
+    expect(user).toContain("why a short prompt makes AI guess or make things up");
+    expect(user).toContain("it never gives steps, never quotes the prompt, never describes this project's buttons, colors or features, and never mentions permission");
+    expect(user).toContain("It must work on its own in the browser and never talk to Gemini or any other AI.");
+    expect(user).toContain("Do not write the grown-up permission rule anywhere: the page always shows it in its own box beside the prompt.");
+    expect(html).toContain("<b>Ask a grown-up first!</b> Before you use AI, or any website that can collect information about you, ask a grown-up for permission.");
+    expect(user).toContain("body (two or three short paragraphs");
     const act = taskMessages("draft", { items: [], entry: { layout: "activity" } })[1].content;
     expect(act).toContain("This is an ACTIVITY, not a story");
-    expect(act).not.toContain("aiPrompt");
+    expect(act).toContain("steps (a list of 4 to 6 short steps");
+    expect(act).not.toContain("project (");
     const story = taskMessages("draft", { items: [], entry: { layout: "article" } })[1].content;
     expect(story).not.toContain("steps (");
   });
@@ -130,6 +142,27 @@ describe("what kind of Subscriber’s Portal entry a request is for", () => {
     const save = body("copilotSave");
     expect(save).toContain('steps: lay.id === "activity" || lay.id === "lesson" ?');
     expect(body("copilotEdit")).toContain('if (el.getAttribute("data-cpf") === "layout") copilotRender();');
+  });
+});
+
+describe("picking the kind of portal entry before writing the request", () => {
+  it("shows the editor's kinds after Add to the Subscriber's Portal, and asks what the picked kind needs", () => {
+    expect(body("copilotChip")).toContain('cpPush({ role: "assistant", pick: "portal", text: "What are you adding? Pick one, then tell me about it.');
+    expect(body("cpMsgHTML")).toContain("PORTAL_LAYOUTS.map(l => '<button type=\"button\" role=\"radio\" class=\"cp-chip\" data-act=\"copilot-pick-layout\"");
+    expect(portalAsk("lesson")).toContain("What should kids build with AI");
+    expect(portalAsk("video")).toContain("Paste the YouTube or Vimeo link");
+    expect(portalAsk("activity")).toBe("What will kids make or do, and what do they need?");
+    expect(body("copilotPickLayout")).toContain("CopilotState.portalLayout = layout;");
+    expect(body("copilotPickLayout")).toContain("if (last && last.askFor === id) last.text = CopilotLib.portalAsk(layout);");   // picking again changes the question
+  });
+  it("uses the picked kind over any guess from the words, once, and then locks the choice", () => {
+    const send = body("copilotSend");
+    expect(send).toContain('CopilotState.expect = ""; CopilotState.portalLayout = "";');
+    expect(send).toContain("CopilotState.msgs.forEach(m => { if (m.pick) m.locked = true; });");
+    expect(send).toContain('if (picked && intent.kind === "portal") intent.picked = picked;');
+    expect(body("cpPortal")).toContain("if (intent.picked) layout = intent.picked;");
+    expect(html).toContain('"copilot-pick-layout": (el) => copilotPickLayout(el.getAttribute("data-id"), el.getAttribute("data-layout")),');
+    expect(html).toContain('.cp-types .cp-chip[aria-checked="true"]{');
   });
 });
 

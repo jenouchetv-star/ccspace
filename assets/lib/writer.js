@@ -272,7 +272,7 @@ const JSON_NOTE = " Reply with one JSON object only and nothing else.";
 
 /** What each kind of entry must be, so a request for a lesson is not answered with a story. */
 const DRAFT_BRIEF = {
-  lesson: "This is an AI LESSON, not a story: it teaches kids aged 6 to 10 one simple idea about AI (for example what AI is, how to give AI clear instructions, how to check an AI's answer, or how to stay safe and kind online), then lets them try it. Teach exactly the topic the writer asks for (if they ask for a coding lesson, the child uses AI to make a tiny program or game). Only if the writer names no topic, choose ONE of the examples above and name it in the title, like \"How to Give AI Clear Instructions\". The steps and the prompt must practice that same idea. Name only the AI tools the writer names; if they name none, use Gemini. Speak to the child directly and explain the idea in plain words with an everyday example. Always include this safety rule in the text and as the first step: get a parent's permission before using AI or any app or website that could collect personal information, and never type your name, address, school or photos into it. Follow any other instruction the writer gives. Do not invent characters or a plot.",
+  lesson: "This is an AI LESSON, not a story: it teaches kids aged 6 to 10 one simple idea about AI (for example what AI is, how to give AI clear instructions, how to check an AI's answer, or how to stay safe and kind online), then lets them try it by asking Gemini to build one small project that runs in the browser: a game, a calculator, a mini laptop, a digital pet, a drawing pad, a quiz, a timer and so on. Build exactly what the writer asks for; only if they name nothing, choose one. Teach exactly the topic the writer asks for; only if they name no topic, choose ONE of the examples above and name it in the title, like \"How to Give AI Clear Instructions\". Name only the AI tools the writer names; if they name none, use Gemini. Speak to the child directly in plain words with an everyday example. Each part has its own job and nothing is said twice: the text EXPLAINS the idea, why a short prompt makes AI guess or make things up, and what each part of a good prompt is for (what it is, what it does, how to use it, how it looks, what not to add), in two or three short paragraphs; it never gives steps, never quotes the prompt, never describes this project's buttons, colors or features, and never mentions permission. The project is the only place with the prompt. The checks are the only list. Do not write the grown-up permission rule anywhere: the page always shows it in its own box beside the prompt. Follow any other instruction the writer gives. Do not invent characters or a plot.",
   activity: "This is an ACTIVITY, not a story: something kids make or do at home with simple materials. Say what they will make, what they need, and what they will learn. Do not invent characters or a plot.",
 };
 
@@ -284,9 +284,10 @@ export function taskMessages(task, ctx) {
   const layout = (ctx.entry && ctx.entry.layout) || "article";
   const user = {
     draft: "Write a new Subscriber’s Portal entry and the email that announces it.\n" + notes + (DRAFT_BRIEF[layout] ? "\n" + DRAFT_BRIEF[layout] : "")
-      + "\nReturn JSON with these keys: title (under 8 words), description (one or two sentences for a card), body (three or four short paragraphs separated by a blank line)"
-      + (layout === "activity" || layout === "lesson" ? ", steps (a list of 4 to 6 short steps a child can follow, each under 15 words)" : "")
-      + (layout === "lesson" ? ", aiPrompt (two to four short, simple sentences a child copies into Gemini to make a tiny game they can play in the browser. It must start with \"Make me a simple game I can play in my browser.\" and the game must practice the lesson's idea. Never a drawing, a story or a question)" : "")
+      + "\nReturn JSON with these keys: title (under 8 words), description (one or two sentences for a card), body (" + (layout === "lesson" ? "two or three" : "three or four") + " short paragraphs separated by a blank line)"
+      + (layout === "activity" ? ", steps (a list of 4 to 6 short steps a child can follow, each under 15 words)" : "")
+      + (layout === "lesson" ? ", project (what the child will ask Gemini to build, as an object with: name (2 to 4 words), isGame (true or false), what (a few words saying exactly what it is, in your own words), does (2 to 4 short lines: for a game, the goal and how to win; otherwise, what it does), use (2 to 4 short lines: the buttons, keys or clicks and what happens), looks (3 to 5 short lines: what is on the screen, the colors, what moves), avoid (1 or 2 things it must not have, like sounds or scary things)). It must work on its own in the browser and never talk to Gemini or any other AI. Every line is a short sentence a 7-year-old can read. Be specific: name the shapes, colors, keys and numbers, so the AI does not have to guess"
+        + ", checks (4 to 6 yes-or-no questions the child asks about what AI built, to catch mistakes and made-up parts, each one testing a different line of the project, written for this project only)" : "")
       + ", emailSubject (under 8 words), emailPreview (one line), emailMessage (two short paragraphs for the email, ending with an invitation to take a look), emailButton (2 to 3 words)." + JSON_NOTE,
     titles: "Give me six different title ideas for this entry.\n" + notes + "\nReturn JSON like {\"titles\": [\"...\"]}. Each under 8 words." + JSON_NOTE,
     description: "Write the short description for this entry: one or two sentences that make someone want to open it.\n" + notes + "\nReply with only the sentences.",
@@ -355,6 +356,30 @@ export function parseJson(text) {
   try { return JSON.parse(t.slice(a, b + 1)); } catch (_e) { return null; }
 }
 
+const promptLines = (v) => (Array.isArray(v) ? v : String(v == null ? "" : v).split(/\n|(?<=[.!])\s+(?=[A-Z])/))
+  .map((x) => String(x && typeof x === "object" ? x.text || "" : x == null ? "" : x).replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "").trim()).filter(Boolean);
+
+/** The Gemini prompt for an AI lesson's project (a game, a calculator, a digital pet...), laid out like the
+    Gravity 4 prompt that works: what it is, what it does (How to win, for a game), how to use it (How to
+    play), how it looks, and what to leave out, one short line each, so the AI has nothing to guess. The
+    model only fills in the parts; the layout is always the same. "" if it gave none. */
+export function projectPrompt(p) {
+  const g = p || {};
+  const game = g.isGame === true || g.isGame === "true" || (g.isGame == null && (g.win || g.play) != null);
+  const name = str(g.name).replace(/[!.]+$/, "");
+  const what = str(g.what).replace(/^(?:an?|the)\s+/i, "").replace(/[.!]+$/, "");
+  const does = promptLines(g.does || g.win), use = promptLines(g.use || g.play), looks = promptLines(g.looks), avoid = promptLines(g.avoid);
+  if (!what && !does.length && !use.length) return "";
+  const list = (xs) => xs.map((x) => "• " + x).join("\n");
+  return [
+    (name ? (game ? "🎮 " : "✨ ") + name + "!\n" : "") + "Make a fun " + (what || (game ? "game" : "app")) + " in one HTML file that I can " + (game ? "play" : "use") + " in my browser.",
+    does.length ? (game ? "🌟 How to win:\n" : "🌟 What it does:\n") + list(does) : "",
+    use.length ? (game ? "🕹️ How to play:\n" : "👆 How to use it:\n") + list(use) : "",
+    "🎨 How it looks:\n" + list(looks.concat([game ? "Big buttons that work on phones, tablets and computers, so I can start, see my score and play again." : "Big buttons that work on phones, tablets and computers."])),
+    "🚫 Please don't add:\n" + list(avoid.length ? avoid : ["Sounds or music."]),
+  ].filter(Boolean).join("\n\n");
+}
+
 export function parseDraft(text) {
   const j = parseJson(text);
   if (!j) return null;
@@ -362,11 +387,18 @@ export function parseDraft(text) {
     title: str(j.title), description: str(j.description), body: str(j.body),
     emailSubject: str(j.emailSubject || j.subject), emailPreview: str(j.emailPreview || j.preview),
     emailMessage: str(j.emailMessage || j.message), emailButton: str(j.emailButton || j.button),
-    aiPrompt: str(j.aiPrompt || j.prompt),
+    aiPrompt: [j.project, j.game].some((p) => p && typeof p === "object") ? projectPrompt(j.project || j.game) : str(j.aiPrompt || j.prompt),
   };
   if (!Object.keys(out).some((k) => out[k])) return null;
-  const steps = Array.isArray(j.steps) ? j.steps : String(j.steps || "").split("\n");
-  out.steps = steps.map((s) => String(s && typeof s === "object" ? s.text || s.step || "" : s == null ? "" : s).replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "").trim()).filter(Boolean);
+  const list = j.checks || j.steps;   // an AI lesson's list is its checks; an activity's is its steps
+  const steps = Array.isArray(list) ? list : String(list || "").split("\n");
+  out.steps = steps.map((s) => String(s && typeof s === "object" ? s.text || s.step || "" : s == null ? "" : s))
+    .flatMap((s) => (j.checks ? s.split(/(?<=\?)\s+(?=[A-Z])/) : [s]))   // several questions on one line become one each
+    .map((s) => s.replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "").trim()).filter(Boolean);
+  // an AI lesson's text explains; the project's parts live only in the prompt, so a paragraph that repeats one goes
+  if (out.aiPrompt && [j.project, j.game].some((p) => p && typeof p === "object")) {
+    out.body = out.body.split(/\n\s*\n/).filter((para) => !/^\s*(?:what it does|how to use it|how it looks|what it looks like|how to win|how to play|avoid|please don't add|don't add)\s*:/i.test(para)).join("\n\n");
+  }
   return out;
 }
 

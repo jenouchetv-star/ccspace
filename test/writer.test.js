@@ -7,6 +7,7 @@ import {
   ollamaUrl, chatModels, pickModel, listModels, chat, siteItems, siteDigest, relevantItems, systemPrompt,
   taskMessages, suggestMessages, parseJson, parseDraft, parseTitles, parseEmail, cleanText, paragraphsToHtml,
   cleanSuggestion, recordFacts, subjectIdeas, buttonIdeas, DEFAULT_OLLAMA, NUM_CTX, warm, leanSystem, visionModels, pickVision, pullModel,
+  projectPrompt,
 } from "../assets/lib/writer.js";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -184,6 +185,45 @@ describe("reading answers back", () => {
     expect(lesson.steps).toEqual(["Open Gemini with a grown-up", "Ask it a question", "Check the answer"]);
     expect(lesson.aiPrompt).toBe("Tell me a joke about a cat.");
     expect(parseDraft('{"title":"T","steps":"Fold it\\n2) Draw"}').steps).toEqual(["Fold it", "Draw"]);
+  });
+
+  it("lays out an AI lesson's game prompt like the Gravity 4 prompt, from the parts the model fills in", () => {
+    const d = parseDraft(JSON.stringify({ title: "T", game: { name: "Robot Key Hunt!", what: "a maze game where a robot finds a key",
+      win: ["Find the gold key.", "1. Reach the door before the timer ends."], play: "Use the arrow keys to move the robot. Bump a wall and you stop.",
+      looks: ["A green maze on a white background.", "A small blue robot."], avoid: [] } }));
+    expect(d.aiPrompt).toBe([
+      "🎮 Robot Key Hunt!\nMake a fun maze game where a robot finds a key in one HTML file that I can play in my browser.",
+      "🌟 How to win:\n• Find the gold key.\n• Reach the door before the timer ends.",
+      "🕹️ How to play:\n• Use the arrow keys to move the robot.\n• Bump a wall and you stop.",
+      "🎨 How it looks:\n• A green maze on a white background.\n• A small blue robot.\n• Big buttons that work on phones, tablets and computers, so I can start, see my score and play again.",
+      "🚫 Please don't add:\n• Sounds or music.",
+    ].join("\n\n"));
+    expect(projectPrompt({})).toBe("");
+  });
+
+  it("lays out a project that is not a game (a calculator, a digital pet) with What it does and How to use it", () => {
+    const d = parseDraft(JSON.stringify({ title: "T", checks: ["Does the 7 button show 7?", "Does 2 + 2 show 4?"], project: { name: "My Big Calculator", isGame: false,
+      what: "calculator with big number buttons", does: ["It adds and takes away numbers."], use: ["Click a number, then + or -, then =."],
+      looks: ["Big round orange buttons."], avoid: ["Sounds."] } }));
+    expect(d.aiPrompt).toBe([
+      "✨ My Big Calculator!\nMake a fun calculator with big number buttons in one HTML file that I can use in my browser.",
+      "🌟 What it does:\n• It adds and takes away numbers.",
+      "👆 How to use it:\n• Click a number, then + or -, then =.",
+      "🎨 How it looks:\n• Big round orange buttons.\n• Big buttons that work on phones, tablets and computers.",
+      "🚫 Please don't add:\n• Sounds.",
+    ].join("\n\n"));
+    expect(d.steps).toEqual(["Does the 7 button show 7?", "Does 2 + 2 show 4?"]);   // a lesson's checks fill its list
+  });
+
+  it("keeps an AI lesson from saying things twice: one check per line, and no text that repeats the prompt", () => {
+    const d = parseDraft(JSON.stringify({ title: "T", checks: ["Is the screen green? Are the keys white? Does typing show?"],
+      body: "AI guesses when a prompt is short.\n\nWhat it does: The laptop shows what you type.\n\nHow to use it: Click the keys.\n\nSo say exactly what you want.",
+      project: { name: "Mini Laptop", isGame: false, what: "mini laptop", does: ["Shows what I type."], use: "Click a key. Ask 'Is it on?' to check." } }));
+    expect(d.steps).toEqual(["Is the screen green?", "Are the keys white?", "Does typing show?"]);
+    expect(d.body).toBe("AI guesses when a prompt is short.\n\nSo say exactly what you want.");
+    expect(d.aiPrompt).toContain("• Click a key.\n• Ask 'Is it on?' to check.");   // a question inside a line stays whole
+    // an activity's steps and text are left as they are
+    expect(parseDraft(JSON.stringify({ title: "T", body: "What it does: x", steps: ["Is it? Yes"] }))).toMatchObject({ body: "What it does: x", steps: ["Is it? Yes"] });
     expect(parseDraft("{}")).toBeNull();
     expect(parseDraft("nothing")).toBeNull();
   });

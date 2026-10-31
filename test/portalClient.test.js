@@ -601,7 +601,7 @@ describe("Activity and AI Lesson entries", () => {
   });
   it("show their steps in a numbered box with a heading that fits", () => {
     expect(portalStepsFor({ layout: "activity", steps: ["Fold", " ", "Draw"] })).toEqual({ title: "What to do", steps: ["Fold", "Draw"] });
-    expect(portalStepsFor({ layout: "lesson", steps: "Open Gemini\nPaste the prompt" })).toEqual({ title: "Step by step", steps: ["Open Gemini", "Paste the prompt"] });
+    expect(portalStepsFor({ layout: "lesson", steps: "Open Gemini\nPaste the prompt" })).toEqual({ title: "Check what AI made", steps: ["Open Gemini", "Paste the prompt"] });
     expect(portalStepsFor({ layout: "game", howToPlay: ["Drop a chip"] })).toEqual({ title: "How to play", steps: ["Drop a chip"] });
     expect(portalStepsFor({ layout: "article", steps: ["x"], howToPlay: ["y"] })).toBe(null);
     expect(html).toContain('{ key:"steps", label:"Steps (one step per line)", type:"lines", wide:true, layouts:["activity", "lesson"]');

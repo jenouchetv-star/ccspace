@@ -17,13 +17,14 @@ export const PORTAL_LAYOUTS = [
 
 export const PORTAL_CATEGORIES = ["Stories", "Videos", "New games", "New books", "Photos", "Activities", "AI lessons", "Creative tips", "AI for kids", "Behind the scenes", "Updates"];
 
-/** The steps box under an entry: How to play for a game, What to do for an activity, Step by step for an AI lesson. */
+/** The steps box under an entry: How to play for a game, What to do for an activity, and for an AI lesson
+    the questions that catch what AI got wrong or made up. */
 export function portalStepsFor(e) {
   const layout = (e && e.layout) || "article";
   const raw = layout === "game" ? e.howToPlay : layout === "activity" || layout === "lesson" ? e.steps : null;
   const steps = (Array.isArray(raw) ? raw : String(raw || "").split("\n")).map((x) => String(x).trim()).filter(Boolean);
   if (!steps.length) return null;
-  return { title: layout === "game" ? "How to play" : layout === "activity" ? "What to do" : "Step by step", steps };
+  return { title: layout === "game" ? "How to play" : layout === "activity" ? "What to do" : "Check what AI made", steps };
 }
 
 /** A quick check before anything is sent. The server does its own, stricter one. */

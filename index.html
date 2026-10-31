@@ -3455,6 +3455,12 @@ body.cp-dragging #app{ transition:none !important; pointer-events:none; }
 .cp-chip{ display:inline-flex; align-items:center; gap:7px; font:inherit; font-size:.85rem; font-weight:700; padding:8px 12px; border-radius:999px; cursor:pointer;
   background:var(--admin-surface); color:var(--admin-ink); border:1px solid var(--admin-border-strong); }
 .cp-chip:hover{ border-color:#5B3FA8; color:#472F88; }
+.cp-types{ margin-top:10px; }
+.cp-types .cp-chip{ font-size:.8rem; padding:6px 11px; }
+.cp-types .cp-chip[aria-checked="true"]{ background:#472F88; border-color:#472F88; color:#fff; }
+.cp-types .cp-chip:disabled{ cursor:default; }
+.cp-types .cp-chip:disabled:not([aria-checked="true"]){ opacity:.45; }
+.cp-chip:focus-visible{ outline:2px solid #5B3FA8; outline-offset:2px; }
 .cp-composer{ flex:none; display:flex; gap:8px; align-items:flex-end; padding:12px 16px 16px; border-top:1px solid var(--admin-border); background:var(--admin-surface); }
 .cp-composer textarea{ flex:1; resize:none; font:inherit; font-size:.92rem; padding:9px 12px; border:1px solid var(--admin-border-strong); border-radius:10px; min-height:44px; max-height:140px; background:#fff; color:var(--admin-ink); }
 .cp-composer textarea:focus-visible{ outline:3px solid var(--admin-accent); outline-offset:1px; }
@@ -12008,7 +12014,7 @@ function portalPromptHTML(e){
     + '</div>'
     + '<div class="pprompt__text" id="pprompt-text" tabindex="0" role="group" aria-label="The prompt to copy">' + E(text) + '</div>'
     + '</div>'
-    + '<p class="pprompt__note">If Gemini gives you a file, a grown-up can help you save it as <b>game.html</b> and open it to play.</p>'
+    + '<p class="pprompt__note">If Gemini gives you a file, a grown-up can help you save it with a name ending in <b>.html</b>, like <b>game.html</b>, and open it in your browser.</p>'
     + '<p class="pprompt__legal">Chike\u2019s Creative Space is not affiliated with, endorsed by, or sponsored by Google Gemini or any other AI platform.</p>'
     + '</section>';
 }
@@ -12217,7 +12223,7 @@ async function writerRun(task, form){
   try {
     text = await WriterLib.chat({
       base: WriterState.base, model: WriterState.model, messages: messages, json: asJson, signal: WriterState.ctl.signal,
-      temperature: task === "improve" ? 0.4 : 0.7, maxTokens: task === "draft" ? 1100 : 700,
+      temperature: task === "improve" ? 0.4 : 0.7, maxTokens: task === "draft" ? 1800 : 700,
       onToken: (_p, all) => { const live = document.getElementById("pai-live"); if (live) live.textContent = asJson ? "Writing... " + all.length + " characters" : all; }
     });
   } catch(err){
@@ -12472,7 +12478,7 @@ function portalStartFill(form, picked){
    The deciding parts (what is this? what is wrong with this code?) are in
    assets/lib/copilot.js and tested; the writing transport is writer.js.
    ============================================================ */
-const CopilotState = { skipSetup: false, open: false, msgs: [], busy: false, ctl: null, draft: "", expect: "", seq: 0 };
+const CopilotState = { skipSetup: false, open: false, msgs: [], busy: false, ctl: null, draft: "", expect: "", portalLayout: "", seq: 0 };
 const GAME_HTML_CACHE = {};
 
 /** A members-only game's code: admins read it straight from the locked table; members get it with the entry. */
@@ -12559,7 +12565,7 @@ function cpCardHTML(m){
     body = '<p class="cp-note">' + (d.sourceLabel ? "Built from " + E(d.sourceLabel) + ". " : "") + 'It is saved as a draft. When you publish it in the editor, the email is prepared for you to review.</p>'
       + '<div class="cp-f"><label>Type<select data-cpm="' + id + '" data-cpf="layout">' + PORTAL_LAYOUTS.map(l => '<option value="' + l.id + '"' + (l.id === d.layout ? " selected" : "") + '>' + E(l.label) + '</option>').join("") + '</select></label></div>'
       + field("Title", "title", d.title) + field("Short description", "description", d.description, "area") + field("Text (blank line between paragraphs)", "body", d.body, "area")
-      + (d.layout === "activity" || d.layout === "lesson" ? field(d.layout === "activity" ? "What to do (one step per line)" : "Step by step (one step per line)", "steps", d.steps || "", "area") : "")
+      + (d.layout === "activity" || d.layout === "lesson" ? field(d.layout === "activity" ? "What to do (one step per line)" : "Check what AI made (one question per line)", "steps", d.steps || "", "area") : "")
       + (d.layout === "lesson" ? field("Prompt kids can copy into Gemini", "aiPrompt", d.aiPrompt || "", "area") : "")
       + '<label class="cp-check-row"><input type="checkbox" data-cpm="' + id + '" data-cpf="emailOn"' + (d.emailOn ? " checked" : "") + '> Prepare an email about it when I publish</label>'
       + field("Email subject", "emailSubject", d.emailSubject) + field("Email preview line", "emailPreview", d.emailPreview) + field("Email message", "emailMessage", d.emailMessage, "area") + field("Email button says", "emailButton", d.emailButton);
@@ -12619,6 +12625,8 @@ function cpMsgHTML(m){
   if (m.role === "note") return '<div class="cp-msg cp-msg--note">' + E(m.text) + '</div>';
   if (m.role === "card") return cpCardHTML(m);
   return '<div class="cp-msg cp-msg--ai"' + (m.streaming ? ' data-cp-live="' + E(m.id) + '"' : "") + '>' + (m.html || E(m.text))
+    /* the kind of Subscriber’s Portal entry, picked before the request: the same choices as the editor */
+    + (m.pick === "portal" ? '<div class="cp-chips cp-types" role="radiogroup" aria-label="What are you adding?">' + PORTAL_LAYOUTS.map(l => '<button type="button" role="radio" class="cp-chip" data-act="copilot-pick-layout" data-id="' + E(m.id) + '" data-layout="' + l.id + '" aria-checked="' + (m.picked === l.id) + '"' + (m.locked ? " disabled" : "") + '>' + ic(l.icon) + ' ' + E(l.label) + '</button>').join("") + '</div>' : "")
     + (m.copy ? '<div class="cp-acts" style="margin-top:8px"><button type="button" class="admin-btn admin-btn--sm" data-act="copilot-copy" data-id="' + E(m.id) + '">' + ic("copy") + ' Copy</button></div>' : "") + '</div>';
 }
 
@@ -12694,11 +12702,13 @@ async function cpAsk(messages, opts){
 async function copilotSend(raw){
   const text = String(raw || "").trim();
   if (!text || CopilotState.busy) return;
-  const expecting = CopilotState.expect;
-  CopilotState.expect = ""; CopilotState.draft = "";
+  const expecting = CopilotState.expect, picked = CopilotState.portalLayout;
+  CopilotState.expect = ""; CopilotState.portalLayout = ""; CopilotState.draft = "";
+  CopilotState.msgs.forEach(m => { if (m.pick) m.locked = true; });      // the choice is made once the request is sent
   /* copilotRender() reads the box back into the draft, so empty the box itself or the sent text comes straight back */
   const sentBox = document.getElementById("cp-input"); if (sentBox) sentBox.value = "";
   const intent = CopilotLib.chooseIntent(text, expecting, WriterLib.siteItems(db.get(), { drafts: true }));
+  if (picked && intent.kind === "portal") intent.picked = picked;       // a kind picked in the chat beats any guess from the words
   cpPush(intent.kind === "game" ? { role: "user", text: "", code: Math.round(intent.html.length / 1024) + " KB" } : { role: "user", text: text });
   CopilotState.busy = true; copilotRender();
   try {
@@ -12753,11 +12763,12 @@ async function cpPortal(intent, userText){
     else { const img = rec.image || rec.cover || rec.thumb; if (img && img.src) cover = img; }
   }
   /* no video, game or book decided it: the request's own words do ("an AI lesson", "an activity") */
-  if (layout === "article") layout = intent.layout || (found && found.col === "activities" ? "activity" : "article");
+  if (intent.picked) layout = intent.picked;
+  else if (layout === "article") layout = intent.layout || (found && found.col === "activities" ? "activity" : "article");
   const idea = userText.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
   const kind = (PORTAL_LAYOUTS.find(l => l.id === layout) || PORTAL_LAYOUTS[0]).label;
   cpPush({ role: "note", text: "Writing the " + (layout === "article" ? "entry" : kind) + " and its email\u2026" });
-  const text = await cpAsk(WriterLib.taskMessages("draft", { brand: BRAND, who: cpWho(), items: WriterLib.siteItems(db.get()), entry: { layout: layout, title: seed.split(". ")[0] }, idea: idea + (seed ? " Source: " + seed : "") }), { json: true, maxTokens: 1400 });
+  const text = await cpAsk(WriterLib.taskMessages("draft", { brand: BRAND, who: cpWho(), items: WriterLib.siteItems(db.get()), entry: { layout: layout, title: seed.split(". ")[0] }, idea: idea + (seed ? " Source: " + seed : "") }), { json: true, maxTokens: 1800 });
   const d = WriterLib.parseDraft(text);
   if (!d){ cpPush({ role: "assistant", text: "That didn\u2019t come out right. Try again, with a little more about what the entry should say." }); return; }
   cpPush({ role: "card", card: { type: "portal", state: "draft", data: { layout: layout, title: realTitle || d.title || "", description: d.description, body: d.body, steps: d.steps.join("\n"), aiPrompt: d.aiPrompt, emailOn: true,
@@ -13534,13 +13545,26 @@ async function copilotApplyUpdate(id){
   toast(d.status === "published" ? "Updated the live page." : "Saved the change.");
 }
 
+/** A kind of entry picked in the chat: it is kept for the next request and asks what that kind needs. */
+function copilotPickLayout(id, layout){
+  const m = cpFind(id);
+  if (!m || m.locked || !PORTAL_LAYOUTS.some(l => l.id === layout)) return;
+  m.picked = layout;
+  CopilotState.portalLayout = layout; CopilotState.expect = "portal";
+  const last = CopilotState.msgs[CopilotState.msgs.length - 1];
+  if (last && last.askFor === id) last.text = CopilotLib.portalAsk(layout);       // picked again: a new question, not another one
+  else cpPush({ role: "assistant", askFor: id, text: CopilotLib.portalAsk(layout) });
+  copilotRender();
+  const i = document.getElementById("cp-input"); if (i) i.focus();
+}
+
 function copilotChip(chip){
   const ai = t => cpPush({ role: "assistant", text: t });
   if (chip === "youtube") ai("Paste a YouTube link (or a few, one per line) and I’ll draft the episode page. You can add a note too, like “this is a behind-the-scenes episode”.");
   else if (chip === "game") ai("Paste the game’s code here. I’ll check it, write the listing and rules, and add it as a draft you can try before it goes live.");
   else if (chip === "newsletter"){ CopilotState.expect = "newsletter"; ai("What is the newsletter about? A sentence is plenty, like “tell everyone about Doodle Dash”."); }
   else if (chip === "story"){ CopilotState.expect = "story"; ai("What is the story about? For example: “Zech and Mateo build a lighthouse out of recycled boxes”."); }
-  else if (chip === "portal"){ CopilotState.expect = "portal"; ai("What is it for? Describe it, or paste a YouTube link, or name a game, book or episode already on the site. I\u2019ll write the archive entry and the email that goes with it."); }
+  else if (chip === "portal"){ CopilotState.expect = "portal"; CopilotState.portalLayout = ""; cpPush({ role: "assistant", pick: "portal", text: "What are you adding? Pick one, then tell me about it. I\u2019ll write the entry and the email that goes with it. You can also just type." }); }
   else if (chip === "revise") ai("Tell me what to change and where, like \u201Cmake the Doodle Dash summary friendlier\u201D or \u201Cshorten the description of Mateo and the Floating Train\u201D. Or paste any text with an instruction, and I\u2019ll rewrite it for you.");
   else if (chip === "alt"){ copilotSend("Write alt text for the images that are missing it"); return; }
   else if (chip === "tags"){ copilotSend("Suggest tags for the activities that have none"); return; }
@@ -14189,7 +14213,7 @@ const FIELDS = {
     { key:"bookId", label:"Which book?", type:"select", wide:true, layouts:["ebook"], options:() => [{ value:"", label:"Choose a book..." }].concat(BOOKS.map(b => ({ value:b.id, label:(db.find("stories", b.id) || b).title }))), help:"Your interactive books. Readers open it here, free." },
     { key:"bookMode", label:"Show the book", type:"select", layouts:["ebook"], options:() => [{ value:"launch", label:"With a Read button" },{ value:"embed", label:"Right on the page" }] },
     { key:"gallery", label:"Photos", type:"photos", wide:true, layouts:["gallery"] },
-    { key:"steps", label:"Steps (one step per line)", type:"lines", wide:true, layouts:["activity", "lesson"], placeholder:"Fold the paper in half\nDraw your character on one side", help:"Shown in a numbered box under the text: “What to do” for an activity, “Step by step” for an AI lesson. Leave empty to hide it." },
+    { key:"steps", label:"Steps (one step per line)", type:"lines", wide:true, layouts:["activity", "lesson"], placeholder:"Fold the paper in half\nDraw your character on one side", help:"Shown in a numbered box under the text: “What to do” for an activity; for an AI lesson, “Check what AI made”: yes-or-no questions that catch what AI got wrong or made up. Leave empty to hide it." },
     { key:"aiPrompt", label:"Prompt kids can copy into Gemini (optional)", type:"textarea", wide:true, placeholder:"Make me a game I can play in my browser! ...", help:"Short, simple words (for ages 6 to 8). The page shows it in a box with a Copy prompt button and an Open Gemini link." },
     { key:"vocabWord", label:"Word to know", type:"text", wide:true, more:true, placeholder:"gravity", help:"A one-word definition card shown above the How to play box. Fill in all four boxes for the best card." },
     { key:"vocabSay", label:"How to say it", type:"text", more:true, placeholder:"GRAV-ih-tee \u00b7 noun" },
@@ -22646,6 +22670,7 @@ const ACTIONS = {
     if (CopilotState.open){ const i = document.getElementById("cp-input"); if (i) i.focus(); if (WriterState.status === "idle") writerConnect().then(copilotRender); }
   },
   "copilot-chip": (el) => copilotChip(el.getAttribute("data-chip")),
+  "copilot-pick-layout": (el) => copilotPickLayout(el.getAttribute("data-id"), el.getAttribute("data-layout")),
   "copilot-save": (el) => { copilotSave(el.getAttribute("data-id")); },
   "copilot-apply": (el) => { const id = el.getAttribute("data-id"), m = cpFind(id); if (m && m.card) (m.card.type === "batch" ? copilotApplyBatch(id) : m.card.type === "fix" ? copilotApplyFix(id) : copilotApplyUpdate(id)); },
   "copilot-copy": (el) => { const m = cpFind(el.getAttribute("data-id")); if (m && navigator.clipboard) navigator.clipboard.writeText(m.text).then(() => toast("Copied."), () => toast("Couldn\u2019t copy. Select the text and copy it.", "bad")); },
@@ -22656,7 +22681,7 @@ const ACTIONS = {
   "copilot-play": (el) => { const m = cpFind(el.getAttribute("data-id")); if (m && m.card && m.card.savedId) openGameStage(m.card.savedId); },
   "copilot-dismiss": (el) => { CopilotState.msgs = CopilotState.msgs.filter(m => m.id !== el.getAttribute("data-id")); copilotRender(); },
   "copilot-stop": () => { if (CopilotState.ctl) CopilotState.ctl.abort(); },
-  "copilot-clear": () => { if (CopilotState.ctl) CopilotState.ctl.abort(); CopilotState.msgs = []; CopilotState.expect = ""; copilotRender(); },
+  "copilot-clear": () => { if (CopilotState.ctl) CopilotState.ctl.abort(); CopilotState.msgs = []; CopilotState.expect = ""; CopilotState.portalLayout = ""; copilotRender(); },
   "ollama-setup": (el) => { if (el && el.closest && el.closest(".cp-panel")){ CopilotState.skipSetup = false; copilotRender(); } else ollamaWizardOpen(); },
   "copilot-skip-setup": () => { CopilotState.skipSetup = true; copilotRender(); },
   "ollama-check": () => { OllamaSetup.shown = ""; ollamaWizardRefresh(); },
