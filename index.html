@@ -3290,6 +3290,18 @@ body.portal-locked{ overflow:hidden; }
 .pmedia--book-cover img{ border:var(--line); border-radius:var(--r); box-shadow:var(--hard); }
 .pmedia--game{ aspect-ratio:4/3; max-height:78vh; }
 .pmedia iframe{ width:100%; height:100%; border:0; display:block; }
+.pexample{ margin:0 0 26px; }
+.pexample > .eyebrow{ display:flex; align-items:center; gap:6px; margin:0 0 10px; }
+.pexample > .eyebrow svg{ width:16px; height:16px; }
+.pmedia--example{ position:relative; aspect-ratio:4/3; margin-bottom:10px; background:linear-gradient(180deg, #D7EAF5 0%, #E6F0F2 40%, #FAF4E6 100%); }
+.pexample__full{ position:absolute; right:12px; bottom:12px; z-index:2; display:grid; place-items:center; width:44px; height:44px; padding:0; border:3px solid var(--ink); border-radius:12px;
+  background:var(--sun); color:var(--ink); box-shadow:0 4px 0 var(--ink); cursor:pointer; transition:transform .08s, box-shadow .08s; }
+.pexample__full:hover{ transform:translateY(-2px); box-shadow:0 6px 0 var(--ink); }
+.pexample__full:active{ transform:translateY(3px); box-shadow:0 1px 0 var(--ink); }
+.pexample__full:focus-visible{ outline:3px solid var(--cyan); outline-offset:3px; }
+.pexample__full svg{ width:20px; height:20px; }
+.pexample__note{ margin:0; }
+@media (max-width:620px){ .pmedia--example{ aspect-ratio:9/16; } }
 .prow{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:22px; }
 .prow--hero{ margin:6px 0 26px; }
 .pactions{ margin-top:30px; }
@@ -3349,7 +3361,17 @@ body.portal-locked{ overflow:hidden; }
 .pprompt__actions{ position:absolute; top:12px; right:12px; z-index:1; display:flex; gap:10px; justify-content:flex-end; }
 /* the prompt reads like a screen: light words on a dark box */
 .pprompt__text{ background:#1E2226; color:#F5F1E6; border:3px dashed #8B96A3; border-radius:var(--r); padding:16px 18px; font-size:1.08rem; line-height:1.65; white-space:pre-wrap; user-select:text; -webkit-user-select:text; }
-.pprompt__text::selection{ background:#F5B921; color:#1E2226; }
+.pprompt__text::selection, .pprompt__text ::selection{ background:#F5B921; color:#1E2226; }
+.pprompt__more{ margin-top:14px; padding-top:10px; border-top:1px dashed rgba(174,184,194,.45); font-size:.84em; line-height:1.55; color:#AEB8C2; white-space:normal; }
+.pprompt__more summary{ cursor:pointer; list-style:none; display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+.pprompt__more summary::-webkit-details-marker{ display:none; }
+.pprompt__more summary svg{ width:14px; height:14px; align-self:center; transition:transform .15s; }
+.pprompt__more[open] summary svg{ transform:rotate(45deg); }
+.pprompt__more summary u{ color:#F5F1E6; font-weight:700; }
+.pprompt__more summary:focus-visible{ outline:2px solid #F5B921; outline-offset:3px; border-radius:4px; }
+.pprompt__more .pprompt__hide, .pprompt__more[open] .pprompt__show{ display:none; }
+.pprompt__more[open] .pprompt__hide{ display:inline; }
+.pprompt__extra{ display:block; margin-top:10px; white-space:pre-wrap; }
 .pprompt__text:focus-visible{ outline:3px solid #F5B921; outline-offset:3px; }
 /* the buttons sit in the box's top-right corner, so the words start below them and never run underneath */
 .pprompt__box .pprompt__text{ padding-top:78px; }
@@ -11999,6 +12021,7 @@ function portalHowToHTML(e){
 function portalPromptHTML(e){
   const text = String(e.aiPrompt || "").trim();
   if (!text) return "";
+  const extras = promptExtras(text, portalEntryUrl(SITE_ORIGIN, e));   // always the live site's address, even in a preview
   return '<section class="pprompt" aria-labelledby="pprompt-h">'
     + '<span class="eyebrow">Make your own</span>'
     + '<h2 id="pprompt-h">' + E(e.aiPromptTitle || "Make your own with AI") + '</h2>'
@@ -12018,11 +12041,37 @@ function portalPromptHTML(e){
     + '<a class="btn btn--paper btn--sm" href="https://gemini.google.com/app" target="_blank" rel="noopener noreferrer">' + ic("external-link") + ' Open Gemini</a>'
     + '<a class="btn btn--paper btn--sm" href="https://claude.ai/new" target="_blank" rel="noopener noreferrer">' + ic("external-link") + ' Open Claude</a>'
     + '</div>'
-    + '<div class="pprompt__text" id="pprompt-text" tabindex="0" role="group" aria-label="The prompt to copy">' + E(text) + '</div>'
+    /* the site's style and footer end every copied prompt; on the page they are folded under one line anyone can open */
+    + '<div class="pprompt__text" id="pprompt-text" tabindex="0" role="group" aria-label="The prompt to copy"><span class="pprompt__main">' + E(text) + '</span>'
+    + (extras ? '<details class="pprompt__more"><summary>' + ic("plus") + ' Copy prompt also adds our style and a footer that links back to this lesson. <u class="pprompt__show">Show it</u><u class="pprompt__hide">Hide it</u></summary>'
+      + '<span class="pprompt__extra">' + E(extras) + '</span></details>' : "") + '</div>'
     + '</div>'
     + '<p class="pprompt__note">If Gemini or Claude gives you a file, a grown-up can help you save it with a name ending in <b>.html</b>, like <b>game.html</b>, and open it in your browser.</p>'
     + '<p class="pprompt__legal">Chike\u2019s Creative Space is not affiliated with, endorsed by, or sponsored by Google Gemini, Anthropic’s Claude or any other AI platform.</p>'
     + '</section>';
+}
+
+/* An AI lesson's example of what its prompt makes: at the top of the lesson, running in a sealed frame. Its code
+   is members-only like a portal game: it comes with the entry for subscribers, and an admin's view reads it. */
+const PORTAL_EXAMPLE_HTML = {};
+function portalExampleHTML(e){
+  if (e.layout !== "lesson" || !e.privateGameId) return "";
+  const html = e.gameHtml || PORTAL_EXAMPLE_HTML[e.privateGameId] || "";
+  if (!html) setTimeout(portalFillExamples, 0);
+  return '<section class="pexample" aria-label="An example of what this prompt makes"><span class="eyebrow">' + ic("sparkles") + ' What this prompt can make</span>'
+    + '<div class="pmedia pmedia--example"><iframe ' + (html ? 'srcdoc="' + E(html) + '"' : 'data-private-example="' + E(e.privateGameId) + '"')
+    + ' title="' + E("Example: " + e.title) + '" sandbox="allow-scripts allow-popups" allow="fullscreen; clipboard-write"></iframe>'
+    /* full screen, in the box's bottom-right corner */
+    + '<button type="button" class="pexample__full" data-act="portal-play-private" data-title="' + E(e.title) + '" aria-label="Open the example full screen" title="Full screen">' + ic("maximize-2") + '</button></div>'
+    + '<p class="tiny pexample__note">An example made with AI from the prompt below. Yours may look a little different.</p></section>';
+}
+/** An admin's view of a lesson reads its example's code once, then shows it in the frame left for it. */
+async function portalFillExamples(){
+  for (const f of document.querySelectorAll("iframe[data-private-example]")){
+    const id = f.getAttribute("data-private-example");
+    if (!(id in PORTAL_EXAMPLE_HTML)) PORTAL_EXAMPLE_HTML[id] = (await loadPortalGameHtml(id)) || "";
+    if (PORTAL_EXAMPLE_HTML[id] && f.isConnected){ f.removeAttribute("data-private-example"); f.srcdoc = PORTAL_EXAMPLE_HTML[id]; }
+  }
 }
 
 function portalEntryHTML(e, others, bar){
@@ -12035,6 +12084,8 @@ function portalEntryHTML(e, others, bar){
   const text = e.body ? '<div class="pbody">' + portalSections(sanitizeHTML(e.body)) + '</div>' : "";
   const crumb = '<div class="crumb"><a href="#/newsletter">Subscriber’s Portal</a>' + ic("chevron-right") + '<span>' + E(e.category || "") + '</span></div>'
     + '<div class="tagrow" style="margin-bottom:14px"><span class="chip chip--ink">' + ic(PORTAL_LAYOUT_ICON[e.layout] || "newspaper") + ' ' + E(e.category || "") + '</span>'
+    /* a game or story with a Make your own with AI prompt is an AI lesson too */
+    + (e.layout !== "lesson" && String(e.aiPrompt || "").trim() ? '<span class="chip chip--ink">' + ic(PORTAL_LAYOUT_ICON.lesson) + ' AI Lesson</span>' : "")
     + '<time class="chip chip--ghost" datetime="' + E(e.publishedAt || "") + '">' + E(portalDate(e.publishedAt)) + '</time></div>';
   const shareBtn = '<button class="btn btn--paper" type="button" data-act="share" data-url="' + E(url) + '" data-title="' + E(e.title) + '">' + ic("share-2") + ' Share this</button>';
   /* a story, activity or AI lesson: the word card, the text, then its steps */
@@ -12049,7 +12100,7 @@ function portalEntryHTML(e, others, bar){
       + '<div class="row no-print" style="margin-top:22px">' + shareBtn + '</div></div>'
       + '<div class="pagehead__aside"><div class="taped">' + portalCoverImg(e) + '</div></div></div></div></section>'
       + '<section class="section"><div class="shell" style="max-width:860px">'
-      + portalWordHTML(e) + text + portalHowToHTML(e) + portalPromptHTML(e) + portalActionsRow(e, shareBtn)
+      + portalExampleHTML(e) + portalWordHTML(e) + text + portalHowToHTML(e) + portalPromptHTML(e) + portalActionsRow(e, shareBtn)
       + (others.length ? '<div class="divider"></div><span class="eyebrow">More from the archive</span><div class="grid g-3" style="margin-top:14px">' + others.map(portalCard).join("") + '</div>' : "")
       + '</div></section>';
   }
@@ -12058,7 +12109,7 @@ function portalEntryHTML(e, others, bar){
     + crumb
     + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem)">' + nameHTML(e.title) + '</h1>'
     + '<p class="lede">' + E(e.description) + '</p>'
-    + (storyLike ? media + portalWordHTML(e) + text + portalHowToHTML(e)
+    + (storyLike ? (portalExampleHTML(e) || media) + portalWordHTML(e) + text + portalHowToHTML(e)
       : e.textFirst === "before" ? text + media + portalHowToHTML(e) + portalWordHTML(e) : media + portalHowToHTML(e) + portalWordHTML(e) + text)
     + portalPromptHTML(e)
     + portalActionsRow(e, shareBtn)
@@ -12568,7 +12619,8 @@ function cpCardHTML(m){
     acts = saved ? '<button type="button" class="admin-btn admin-btn--primary" data-act="copilot-open" data-id="' + id + '">' + ic("layers") + ' Open in the story builder</button>'
       : '<button type="button" class="admin-btn admin-btn--primary" data-act="copilot-save" data-id="' + id + '">' + ic("check") + ' Make the story draft</button>';
   } else if (c.type === "portal"){
-    body = '<p class="cp-note">' + (d.sourceLabel ? "Built from " + E(d.sourceLabel) + ". " : "") + 'It is saved as a draft. When you publish it in the editor, the email is prepared for you to review.</p>'
+    body = '<p class="cp-note">' + (d.sourceLabel ? "Built from " + E(d.sourceLabel) + ". " : "")
+      + (d.updateId ? (d.updateLive ? "Saving it changes the live entry subscribers see." : "Saving it updates the draft you already saved, not a new copy.") : "It is saved as a draft. When you publish it in the editor, the email is prepared for you to review.") + '</p>'
       + '<div class="cp-f"><label>Type<select data-cpm="' + id + '" data-cpf="layout">' + PORTAL_LAYOUTS.map(l => '<option value="' + l.id + '"' + (l.id === d.layout ? " selected" : "") + '>' + E(l.label) + '</option>').join("") + '</select></label></div>'
       + field("Title", "title", d.title) + field("Short description", "description", d.description, "area") + field("Text (blank line between paragraphs)", "body", d.body, "area")
       + (d.layout === "activity" || d.layout === "lesson" ? field(d.layout === "activity" ? "What to do (one step per line)" : "Check what AI made (one question per line)", "steps", d.steps || "", "area") : "")
@@ -12577,7 +12629,7 @@ function cpCardHTML(m){
       + '<label class="cp-check-row"><input type="checkbox" data-cpm="' + id + '" data-cpf="emailOn"' + (d.emailOn ? " checked" : "") + '> Prepare an email about it when I publish</label>'
       + field("Email subject", "emailSubject", d.emailSubject) + field("Email preview line", "emailPreview", d.emailPreview) + field("Email message", "emailMessage", d.emailMessage, "area") + field("Email button says", "emailButton", d.emailButton);
     acts = saved ? '<button type="button" class="admin-btn admin-btn--primary" data-act="copilot-open" data-id="' + id + '">' + ic("pencil") + ' Open it to publish</button>'
-      : '<button type="button" class="admin-btn admin-btn--primary" data-act="copilot-save" data-id="' + id + '">' + ic("check") + ' Add as a draft entry</button>';
+      : '<button type="button" class="admin-btn admin-btn--primary" data-act="copilot-save" data-id="' + id + '">' + ic("check") + (d.updateId ? (d.updateLive ? " Update the live entry" : " Save the changes") : " Add as a draft entry") + '</button>';
   } else if (c.type === "update"){
     body = '<p class="cp-note">' + E(d.kind) + ': <b>' + E(d.title) + '</b> \u00B7 ' + E(d.fieldLabel) + ' \u00B7 ' + (d.status === "published" ? '<b>live on the site</b>' : E(statusMeta(d.status).label)) + '</p>'
       + '<div class="cp-f"><label>Now<div class="cp-before">' + E(d.before || "(empty)") + '</div></label></div>'
@@ -12613,7 +12665,7 @@ function cpCardHTML(m){
       : (d.rows.length ? '<button type="button" class="admin-btn admin-btn--primary" data-act="copilot-apply" data-id="' + id + '">' + ic("check") + ' <span class="cp-apply-label">' + E(cpBatchLabel(c)) + '</span></button>' : "")
         + '<button type="button" class="admin-btn" data-act="copilot-edit-rec" data-col="' + E(d.col) + '" data-id="' + E(d.recId) + '">Open in the editor</button>';
   }
-  const doneNote = c.type === "update" ? "Saved." : (c.type === "batch" || c.type === "fix") ? "Done." : "Saved as a draft. Nothing is live yet.";
+  const doneNote = c.type === "update" ? "Saved." : (c.type === "batch" || c.type === "fix") ? "Done." : (c.type === "portal" && d.updateLive) ? "Updated. The live entry shows the change." : (c.type === "portal" && d.updateId) ? "Saved. The draft is updated." : "Saved as a draft. Nothing is live yet.";
   return '<div class="cp-card' + (saved ? " is-saved" : "") + '">' + head + (saved ? '<p class="cp-note cp-note--ok">' + ic("check") + ' ' + doneNote + '</p>' : "") + body
     + '<div class="cp-acts">' + acts + (saved ? "" : '<button type="button" class="admin-btn admin-btn--ghost" data-act="copilot-dismiss" data-id="' + id + '">Not now</button>') + '</div></div>';
 }
@@ -12714,8 +12766,11 @@ async function copilotSend(raw){
   CopilotState.msgs.forEach(m => { if (m.pick) m.locked = true; });      // the choice is made once the request is sent
   /* copilotRender() reads the box back into the draft, so empty the box itself or the sent text comes straight back */
   const sentBox = document.getElementById("cp-input"); if (sentBox) sentBox.value = "";
-  const intent = CopilotLib.chooseIntent(text, expecting, WriterLib.siteItems(db.get(), { drafts: true }));
+  let intent = CopilotLib.chooseIntent(text, expecting, WriterLib.siteItems(db.get(), { drafts: true }));
   if (picked && intent.kind === "portal") intent.picked = picked;       // a kind picked in the chat beats any guess from the words
+  /* "add working keys to the prompt" right after a portal draft changes that draft; chat cannot see it and would make up a new one */
+  const lastPortal = cpLastPortalCard();
+  if (lastPortal && (intent.kind === "chat" || intent.kind === "revise") && CopilotLib.isEntryFollowUp(text)) intent = { kind: "portal-edit", card: lastPortal };
   cpPush(intent.kind === "game" ? { role: "user", text: "", code: Math.round(intent.html.length / 1024) + " KB" } : { role: "user", text: text });
   CopilotState.busy = true; copilotRender();
   try {
@@ -12725,6 +12780,7 @@ async function copilotSend(raw){
     if (intent.kind === "fix") await cpFix(intent.item.col, intent.item.id);
     else if (intent.kind === "fixall") await cpFixMany(cpAttentionRows());
     else if (intent.kind === "portal") await cpPortal(intent, text);
+    else if (intent.kind === "portal-edit") await cpPortalEdit(intent.card, text);
     else if (intent.kind === "alt") await cpAlt();
     else if (intent.kind === "tags") await cpTags();
     else if (intent.kind === "update") await cpUpdate(intent);
@@ -12780,6 +12836,32 @@ async function cpPortal(intent, userText){
   if (!d){ cpPush({ role: "assistant", text: "That didn\u2019t come out right. Try again, with a little more about what the entry should say." }); return; }
   cpPush({ role: "card", card: { type: "portal", state: "draft", data: { layout: layout, title: realTitle || d.title || "", description: d.description, body: d.body, steps: d.steps.join("\n"), aiPrompt: d.aiPrompt, warning: d.warning, emailOn: true,
     emailSubject: d.emailSubject, emailPreview: d.emailPreview, emailMessage: d.emailMessage, emailButton: d.emailButton, source: source, cover: cover, sourceLabel: label } } });
+}
+
+/** The portal draft the admin is most likely talking about: the latest thing made, if it was one, a few messages back at most. */
+function cpLastPortalCard(){
+  const recent = CopilotState.msgs.slice(-8);
+  const last = recent.filter(m => m.role === "card").slice(-1)[0];
+  return last && last.card && last.card.type === "portal" ? last : null;
+}
+
+/** Changes the latest portal draft the way the admin asks ("add working keys to the prompt"), keeping the rest.
+    The new version is a card of its own; saving it updates the same entry when the first one was already saved. */
+async function cpPortalEdit(m, instruction){
+  const old = m.card.data;
+  cpPush({ role: "note", text: "Changing the draft above…" });
+  const text = await cpAsk(WriterLib.taskMessages("draft", { brand: BRAND, who: cpWho(), items: WriterLib.siteItems(db.get()),
+    entry: { layout: old.layout, title: old.title, description: old.description, body: old.body, steps: old.steps, aiPrompt: old.aiPrompt }, change: instruction }), { json: true, maxTokens: 1800 });
+  const d = WriterLib.parseDraft(text);
+  if (!d){ cpPush({ role: "assistant", text: "That didn’t come out right. Try again, or open the draft in the editor and change it there." }); return; }
+  const keep = (v, was) => (String(v || "").trim() ? v : was);
+  const updateId = m.card.savedId || old.updateId || "";
+  const rec = updateId ? db.find("portalEntries", updateId) : null;
+  cpPush({ role: "card", card: { type: "portal", state: "draft", data: Object.assign({}, old, {
+    title: keep(d.title, old.title), description: keep(d.description, old.description), body: keep(d.body, old.body),
+    steps: d.steps.length ? d.steps.join("\n") : old.steps, aiPrompt: keep(d.aiPrompt, old.aiPrompt), warning: d.warning,
+    emailSubject: keep(d.emailSubject, old.emailSubject), emailPreview: keep(d.emailPreview, old.emailPreview), emailMessage: keep(d.emailMessage, old.emailMessage), emailButton: keep(d.emailButton, old.emailButton),
+    updateId: rec ? updateId : "", updateLive: !!(rec && rec.status === "published"), sourceLabel: "the draft above, with your change" }) } });
 }
 
 async function cpYoutube(intent, userText){
@@ -12880,6 +12962,14 @@ async function copilotSave(id){
         ageMin: Number(d.ageMin) || 4, ageMax: Number(d.ageMax) || 9, blurb: d.blurb, opening: d.opening, learning: d.learning, value: d.value,
         pages: CopilotLib.storyPagesFrom(d.title, texts, uid), status: "draft" }));
       c.savedId = rec.id;
+    } else if (c.type === "portal" && d.updateId){
+      /* a changed version of a draft that was already saved: update that entry, never a second copy (its address stays) */
+      const lay = PORTAL_LAYOUTS.find(l => l.id === d.layout) || PORTAL_LAYOUTS[0];
+      await db.update("portalEntries", d.updateId, { layout: lay.id, title: d.title, description: d.description, category: lay.category, body: WriterLib.paragraphsToHtml(d.body),
+        steps: lay.id === "activity" || lay.id === "lesson" ? String(d.steps || "").split("\n").map(s => s.trim()).filter(Boolean) : [],
+        aiPrompt: String(d.aiPrompt || "").trim(),
+        email: { on: !!d.emailOn, subject: d.emailSubject, preview: d.emailPreview, message: d.emailMessage, button: d.emailButton } });
+      c.savedId = d.updateId;
     } else if (c.type === "portal"){
       const lay = PORTAL_LAYOUTS.find(l => l.id === d.layout) || PORTAL_LAYOUTS[0], src = d.source || {};
       const rec = await db.add("portalEntries", Object.assign(BLANKS.portalEntries(), { layout: lay.id, title: d.title, slug: slugify(d.title), description: d.description, category: lay.category,
@@ -14214,8 +14304,8 @@ const FIELDS = {
     { key:"gameMode", label:"Show the game", type:"select", layouts:["game"], options:() => [{ value:"embed", label:"Right on the page" },{ value:"launch", label:"With a Play button" }] },
     { key:"gameId", label:"Which game?", type:"select", wide:true, layouts:["game"], options:() => [{ value:"", label:"Choose a game..." }].concat(db.list("games").filter(g => g.kind === "embed").map(g => ({ value:g.id, label:g.title }))), help:"A game already on the site. Or use a file or link below." },
     { key:"gamePath", label:"Game file", type:"file", wide:true, layouts:["game"], accept:".html", folder:"games", placeholder:"games/new-game.html", help:"Upload the game's .html file, or paste its link." },
-    { key:"privateGameCode", label:"Members-only game code", type:"textarea", wide:true, layouts:["game"], placeholder:"Paste the game's whole HTML code here", help:"For a game that only newsletter members should be able to play. It is kept private and has no page address. Leave the boxes above empty." },
-    { key:"privateGameRemove", label:"Remove the members-only game from this entry", type:"bool", wide:true, layouts:["game"] },
+    { key:"privateGameCode", label:"Members-only game code", type:"textarea", wide:true, layouts:["game", "lesson"], placeholder:"Paste the game's whole HTML code here", help:"For a game that only newsletter members should be able to play, or, on an AI lesson, an example of what its prompt makes (shown at the top of the lesson). It is kept private and has no page address. On a game, leave the boxes above empty." },
+    { key:"privateGameRemove", label:"Remove the members-only game from this entry", type:"bool", wide:true, layouts:["game", "lesson"] },
     { key:"howToPlay", label:"How to play (one step per line)", type:"lines", wide:true, layouts:["game"], placeholder:"Pick who to play against\nDrop a chip in a column", help:"Shown in a \u201cHow to play\u201d box under the Play button. Leave empty to hide it." },
     { key:"bookId", label:"Which book?", type:"select", wide:true, layouts:["ebook"], options:() => [{ value:"", label:"Choose a book..." }].concat(BOOKS.map(b => ({ value:b.id, label:(db.find("stories", b.id) || b).title }))), help:"Your interactive books. Readers open it here, free." },
     { key:"bookMode", label:"Show the book", type:"select", layouts:["ebook"], options:() => [{ value:"launch", label:"With a Read button" },{ value:"embed", label:"Right on the page" }] },
@@ -14431,7 +14521,7 @@ async function portalApplyPrivateGame(c){
   const code = String(c.privateGameCode || "").trim();
   const remove = !!c.privateGameRemove;
   delete c.privateGameCode; delete c.privateGameRemove;
-  if (c.layout !== "game") return true;
+  if (c.layout !== "game" && c.layout !== "lesson") return true;      // a lesson keeps its example of what the prompt makes the same way
   if (!code){
     if (remove && c.privateGameId){
       const old = c.privateGameId;
@@ -14450,6 +14540,7 @@ async function portalApplyPrivateGame(c){
   catch(_e){ up = { error: { message: "" } }; }
   if (up.error){ toast("Couldn\u2019t save the game. " + (up.error.message || "Check your connection and try again."), "bad"); return false; }
   c.privateGameId = gid; c.privateGameKb = a.kb; c.gamePath = ""; c.gameId = "";
+  delete PORTAL_EXAMPLE_HTML[gid];      // show the new code next time, not the one read before
   return true;
 }
 
@@ -22658,13 +22749,17 @@ const ACTIONS = {
     const box = document.getElementById("pprompt-text");
     if (!box) return;
     const label = el.innerHTML;
+    /* the prompt, then the style and footer folded under it (open or not), never the "Show it" line */
+    const main = box.querySelector(".pprompt__main"), extra = box.querySelector(".pprompt__extra");
+    const words = (main ? main.textContent : box.textContent).trim() + (extra ? "\n\n" + extra.textContent.trim() : "");
     try {
-      await navigator.clipboard.writeText(box.textContent);
+      await navigator.clipboard.writeText(words);
       el.innerHTML = ic("check") + " Copied!";
-      toast("Prompt copied. Now paste it into Gemini.");
+      toast("Prompt copied. Now paste it into Gemini or Claude.");
       setTimeout(() => { el.innerHTML = label; }, 2200);
     } catch(_e){
       /* clipboard blocked: select the words so Ctrl+C / Cmd+C works */
+      const more = box.querySelector(".pprompt__more"); if (more) more.open = true;   // so a select-and-copy takes the footer too
       try { const r = document.createRange(); r.selectNodeContents(box); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); } catch(_e2){ /* ignore */ }
       toast("Press Ctrl+C (or Cmd+C) to copy the prompt.");
     }

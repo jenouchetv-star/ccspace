@@ -17,6 +17,22 @@ export const PORTAL_LAYOUTS = [
 
 export const PORTAL_CATEGORIES = ["Stories", "Videos", "New games", "New books", "Photos", "Activities", "AI lessons", "Creative tips", "AI for kids", "Behind the scenes", "Updates"];
 
+/** What the site adds to the end of every copied prompt, in plain sight: Chike's Creative Space style for the
+    page around what is built, and a footer that links back to the site and shares this lesson. "" when the
+    prompt already carries it. */
+export function promptExtras(prompt, lessonUrl) {
+  if (/Chike['’]s Creative Space style:/.test(String(prompt || ""))) return "";
+  return [
+    "🎨 Chike’s Creative Space style (for the page, menus and buttons; the play area can have its own colors):",
+    "• A cream background (#FAF4E6) with charcoal text (#1E2226). Use the Plus Jakarta Sans font from Google Fonts.",
+    "• Rounded, chunky buttons with a dark outline and a hard shadow. Main buttons are blue (#1273B0) with white text. Highlights are sunny yellow (#F2C230).",
+    "",
+    "📣 Footer (always at the bottom, small):",
+    "• The words “Learn more at www.chikescreativespace.com” with a blue button that opens https://www.chikescreativespace.com in a new tab.",
+    "• A “Share this lesson” button that opens the share menu, or copies this link if it can’t: " + lessonUrl,
+  ].join("\n");
+}
+
 /** The steps box under an entry: How to play for a game, What to do for an activity, and for an AI lesson
     the questions that catch what AI got wrong or made up. */
 export function portalStepsFor(e) {

@@ -264,6 +264,10 @@ function entryNotes(ctx) {
     e.title ? "Title so far: " + e.title : "",
     e.description ? "Short description so far: " + e.description : "",
     e.body ? "Text so far: " + clip(e.body, 1200) : "",
+    e.steps ? (e.layout === "lesson" ? "Checks so far: " : "Steps so far: ") + clip(String(e.steps).replace(/\n+/g, " | "), 600) : "",
+    e.aiPrompt ? "Prompt so far:\n" + String(e.aiPrompt).trim().slice(0, 1500) : "",
+    ctx.change ? "The writer wants this change, and everything else kept the same: " + ctx.change
+      + "\nMake the change in full and spell it out in the lines it belongs in: name the exact keys, buttons, numbers and what appears on the screen, and add a check that tests it." : "",
     ctx.idea ? "The writer says it is about: " + ctx.idea : "",
   ].filter(Boolean).join("\n");
 }
@@ -288,7 +292,9 @@ export function taskMessages(task, ctx) {
       + (layout === "activity" ? ", steps (a list of 4 to 6 short steps a child can follow, each under 15 words)" : "")
       + (layout === "lesson" ? ", project (what the child will ask AI to build, as an object with: name (2 to 4 words), isGame (true or false), what (a few words saying exactly what it is, in your own words), goal (for a game only: one sentence saying exactly what the player must do to win, with a number to reach, such as how many things to collect, catch or score), limit (for a game only: one sentence saying what ends the game if the player has not won yet, with a number, such as seconds on a timer or lives), does (for a game, 1 to 3 more rules; otherwise 2 to 4 short lines saying what it does), use (2 to 4 short lines: the buttons, keys or clicks and what happens), looks (3 to 5 short lines: what is on the screen, the colors, what moves), avoid (1 or 2 things it must not have, like sounds or scary things)). It must work on its own in the browser and never talk to Gemini or any other AI. Every line is a short sentence a 7-year-old can read. Be specific: name the shapes, colors, keys and numbers, so the AI does not have to guess"
         + ", checks (4 to 6 yes-or-no questions the child asks about what AI built, to catch mistakes and made-up parts, each one testing a different line of the project, written for this project only; for a game, one check is whether it ends with a win when the goal is reached)" : "")
-      + ", emailSubject (under 8 words), emailPreview (one line), emailMessage (two short paragraphs for the email, ending with an invitation to take a look), emailButton (2 to 3 words)." + JSON_NOTE,
+      + ", emailSubject (under 8 words), emailPreview (one line), emailMessage (two short paragraphs for the email, ending with an invitation to take a look), emailButton (2 to 3 words)."
+      // a change goes last too, where a small model pays it the most attention
+      + (ctx.change ? "\nMOST IMPORTANT: make this change in full: " + ctx.change + ". Spell it out with the exact keys, buttons and what shows on the screen, in its own lines, and add a check for it." : "") + JSON_NOTE,
     titles: "Give me six different title ideas for this entry.\n" + notes + "\nReturn JSON like {\"titles\": [\"...\"]}. Each under 8 words." + JSON_NOTE,
     description: "Write the short description for this entry: one or two sentences that make someone want to open it.\n" + notes + "\nReply with only the sentences.",
     email: "Write the email that goes with this entry.\n" + notes + "\nReturn JSON with keys subject (under 8 words), preview (one line), message (two short paragraphs separated by a blank line, ending with an invitation to take a look), button (2 to 3 words)." + JSON_NOTE,
@@ -357,7 +363,9 @@ export function parseJson(text) {
 }
 
 const promptLines = (v) => (Array.isArray(v) ? v : String(v == null ? "" : v).split(/\n|(?<=[.!])\s+(?=[A-Z])/))
-  .map((x) => String(x && typeof x === "object" ? x.text || "" : x == null ? "" : x).replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "").trim()).filter(Boolean);
+  .map((x) => String(x && typeof x === "object" ? x.text || "" : x == null ? "" : x))
+  .flatMap((x) => x.split(/\s+•\s*/))   // "• Press the keys. • Click save." given as one line is two lines
+  .map((x) => x.replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "").trim()).filter(Boolean);
 
 /** The Gemini prompt for an AI lesson's project (a game, a calculator, a digital pet...), laid out like the
     Gravity 4 prompt that works: what it is, what it does (How to win, for a game), how to use it (How to
@@ -381,7 +389,8 @@ export function projectPrompt(p) {
   const g = p || {};
   const game = isGameProject(g);
   const name = str(g.name).replace(/[!.]+$/, "");
-  const what = str(g.what).replace(/^(?:an?|the)\s+/i, "").replace(/[.!]+$/, "");
+  // the opener already says "a fun ... in one HTML file", so those words are not said twice
+  const what = str(g.what).replace(/^(?:an?|the)\s+/i, "").replace(/^fun\s+/i, "").replace(/\s+in (?:one|a single) html file\b.*$/i, "").replace(/[.!]+$/, "");
   // a game's How to win: the goal, what ends it, its other rules, and always a clear win and a clear lose
   const does = game
     ? promptLines(g.goal).concat(promptLines(g.limit), promptLines(g.does || g.win), ["When I reach the goal, show “You win!”. When the game ends before that, show “Try again!”. Both have a Play again button."])
@@ -423,7 +432,7 @@ export function parseDraft(text) {
   const list = checks || j.steps;   // an AI lesson's list is its checks; an activity's is its steps
   const steps = Array.isArray(list) ? list : String(list || "").split("\n");
   out.steps = steps.map((s) => String(s && typeof s === "object" ? s.text || s.step || s.question || "" : s == null ? "" : s))
-    .flatMap((s) => (checks ? s.split(/(?<=\?)\s+(?=[A-Z])/) : [s]))   // several questions on one line become one each
+    .flatMap((s) => (checks ? s.split(/\s*\|\s*|(?<=\?)\s+(?=[A-Z])/) : [s]))   // several questions on one line become one each
     .map((s) => s.replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "").trim()).filter(Boolean);
   // a lesson that came back without its checks still gets the questions that catch what AI got wrong or made up
   if (proj && !out.steps.length) {

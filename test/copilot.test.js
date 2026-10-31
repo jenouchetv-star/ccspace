@@ -7,7 +7,7 @@ import {
   findYoutubeIds, extractHtml, chooseIntent, analyzeGameHtml, gameDigest, gameSlug, MAX_GAME_BYTES,
   copilotSystem, chatMessages, episodeMessages, parseEpisode, gameMessages, parseGame, newsletterMessages, parseNewsletter,
   storyMessages, parseStory, storyPagesFrom, whereLabel, quickFixes, planFix, FIXABLE, recordFacts, fixMessages, parseFix, findItemInText, pickField, TEXT_FIELDS, altTargets, altMessages, parseAlt, tagTargets, existingTags, tagMessages, parseTags,
-  portalLayoutFor, portalAsk,
+  portalLayoutFor, portalAsk, isEntryFollowUp,
 } from "../assets/lib/copilot.js";
 import { siteItems, systemPrompt, whoLine, taskMessages } from "../assets/lib/writer.js";
 import { portalValidate } from "../assets/lib/portal.js";
@@ -147,6 +147,37 @@ describe("what kind of Subscriber’s Portal entry a request is for", () => {
     const save = body("copilotSave");
     expect(save).toContain('steps: lay.id === "activity" || lay.id === "lesson" ?');
     expect(body("copilotEdit")).toContain('if (el.getAttribute("data-cpf") === "layout") copilotRender();');
+  });
+});
+
+describe("changing the portal draft just made", () => {
+  it("knows a change request from a question or a new job", () => {
+    for (const t of ["Add working keys to the prompt so that the kid can actually type a message in their laptop", "make the title shorter",
+      "Please change the goal to 20 stars", "also mention the footer", "The prompt needs a timer", "can you remove the third check"]) expect(isEntryFollowUp(t), t).toBe(true);
+    for (const t of ["What should we make next?", "how many subscribers do we have?", "thanks!", ""]) expect(isEntryFollowUp(t), t).toBe(false);
+  });
+  it("sends it to the latest portal draft, with what the draft says, instead of to a chat that cannot see it", () => {
+    const send = body("copilotSend");
+    expect(send).toContain('if (lastPortal && (intent.kind === "chat" || intent.kind === "revise") && CopilotLib.isEntryFollowUp(text)) intent = { kind: "portal-edit", card: lastPortal };');
+    expect(send).toContain('else if (intent.kind === "portal-edit") await cpPortalEdit(intent.card, text);');
+    const edit = body("cpPortalEdit");
+    expect(edit).toContain("entry: { layout: old.layout, title: old.title, description: old.description, body: old.body, steps: old.steps, aiPrompt: old.aiPrompt }, change: instruction");
+    const user = taskMessages("draft", { items: [], entry: { layout: "lesson", title: "T", aiPrompt: "✨ Mini Laptop!\nMake a fun mini laptop.", steps: "Is the screen green?\nDo keys type?" }, change: "add working keys" })[1].content;
+    expect(user).toContain("Prompt so far:\n✨ Mini Laptop!\nMake a fun mini laptop.");
+    expect(user).toContain("Checks so far: Is the screen green? | Do keys type?");
+    expect(user).toContain("The writer wants this change, and everything else kept the same: add working keys");
+    expect(user).toContain("MOST IMPORTANT: make this change in full: add working keys. Spell it out with the exact keys, buttons and what shows on the screen, in its own lines, and add a check for it.");
+  });
+  it("updates the entry already saved, never a second copy, and says when it is live", () => {
+    expect(body("cpPortalEdit")).toContain('updateId: rec ? updateId : "", updateLive: !!(rec && rec.status === "published")');
+    expect(body("copilotSave")).toContain('} else if (c.type === "portal" && d.updateId){');
+    expect(body("copilotSave")).toContain('await db.update("portalEntries", d.updateId, {');
+    expect(body("cpCardHTML")).toContain('(d.updateId ? (d.updateLive ? " Update the live entry" : " Save the changes") : " Add as a draft entry")');
+  });
+  it("keeps the chat from writing whole lessons or emails, or signing them", () => {
+    const sys = chatMessages([{ role: "user", text: "write me a lesson" }], { items: [] })[0].content;
+    expect(sys).toContain("You never write a whole lesson, entry, story or email here, and you never sign anything with a name");
+    expect(sys).toContain("You cannot see or change drafts from here.");
   });
 });
 

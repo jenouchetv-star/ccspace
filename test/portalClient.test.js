@@ -5,7 +5,7 @@ import { readFileSync, existsSync } from "node:fs";
 import {
   PORTAL_LAYOUTS, portalEntryUrl, portalReadQuery, portalVideoEmbed, portalSafeUrl, portalParseGallery, portalFormatGallery,
   portalSlug, portalLinkUrl, portalBookPath, portalValidate, portalGateMessage, portalErrorState, portalEmailOk, PORTAL_CATEGORIES,
-  portalSections, portalStepsFor,
+  portalSections, portalStepsFor, promptExtras,
 } from "../assets/lib/portal.js";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -388,7 +388,7 @@ describe("how the site wires the portal in", () => {
     expect(box).toContain("E(String(e.aiPromptTip).trim())");               /* the creator tip too */
     expect(body("portalEntryHTML")).toContain("portalPromptHTML(e)");
     const copy = html.split('"portal-copy-prompt": async (el) => {')[1].split("\n  },")[0];
-    expect(copy).toContain("navigator.clipboard.writeText(box.textContent)");
+    expect(copy).toContain("navigator.clipboard.writeText(words)");
     expect(copy).toContain("Ctrl+C");                                       /* the fallback when the clipboard is blocked */
     expect(portalValidate({ title: "T", description: "d", category: "AI for kids", publishedAt: "2026-10-01", layout: "article", body: "x", aiPrompt: "a".repeat(1300) }, []).some((v) => v.field === "aiPrompt" && v.level === "warn")).toBe(true);
   });
@@ -599,6 +599,56 @@ describe("the portal's own sign-in box uses the 6-digit code", () => {
   });
 });
 
+describe("the style and footer at the end of every copied prompt", () => {
+  const url = "https://www.chikescreativespace.com/newsletter/how-to-build-your-own-spaceship-game";
+  it("asks for the site's look and a footer that links back and shares this lesson", () => {
+    const x = promptExtras("Make me a game.", url);
+    expect(x).toContain("Chike’s Creative Space style (for the page, menus and buttons; the play area can have its own colors):");
+    expect(x).toContain("#FAF4E6");
+    expect(x).toContain("Plus Jakarta Sans");
+    expect(x).toContain("blue (#1273B0)");
+    expect(x).toContain("Footer (always at the bottom, small):");
+    expect(x).toContain("“Learn more at www.chikescreativespace.com” with a blue button that opens https://www.chikescreativespace.com in a new tab.");
+    expect(x).toContain("“Share this lesson” button that opens the share menu, or copies this link if it can’t: " + url);
+    expect(promptExtras("Chike's Creative Space style: already here", url)).toBe("");   // never twice
+  });
+  it("is folded under one line anyone can open, and Copy prompt always copies it, with the live site's address", () => {
+    const box = body("portalPromptHTML");
+    expect(box).toContain("const extras = promptExtras(text, portalEntryUrl(SITE_ORIGIN, e));");
+    expect(box).toContain("<span class=\"pprompt__main\">' + E(text) + '</span>'");
+    expect(box).toContain("'<details class=\"pprompt__more\"><summary>' + ic(\"plus\") + ' Copy prompt also adds our style and a footer that links back to this lesson. <u class=\"pprompt__show\">Show it</u><u class=\"pprompt__hide\">Hide it</u></summary>'");
+    expect(box).toContain("'<span class=\"pprompt__extra\">' + E(extras) + '</span></details>'");
+    const copy = html.split('"portal-copy-prompt": async (el) => {')[1].split("\n  },")[0];
+    // the prompt and the folded style and footer, open or not, but never the "Show it" line
+    expect(copy).toContain('const words = (main ? main.textContent : box.textContent).trim() + (extra ? "\\n\\n" + extra.textContent.trim() : "");');
+    expect(copy).toContain("if (more) more.open = true;");   // a select-and-copy fallback takes the footer too
+    expect(html).toContain(".pprompt__more[open] .pprompt__hide{ display:inline; }");
+  });
+});
+
+describe("an AI lesson's example of what its prompt makes", () => {
+  it("is kept members-only like a portal game, and can be added to a lesson in the editor", () => {
+    expect(html).toContain('{ key:"privateGameCode", label:"Members-only game code", type:"textarea", wide:true, layouts:["game", "lesson"]');
+    expect(body("portalApplyPrivateGame")).toContain('if (c.layout !== "game" && c.layout !== "lesson") return true;');
+  });
+  it("sits at the very top of the lesson in a sealed frame, with a full-screen icon in its corner, and an admin's view reads its code", () => {
+    const ex = body("portalExampleHTML");
+    expect(ex).toContain('if (e.layout !== "lesson" || !e.privateGameId) return "";');
+    expect(ex).toContain('sandbox="allow-scripts allow-popups"');
+    expect(ex).toContain('<button type="button" class="pexample__full" data-act="portal-play-private" data-title="\' + E(e.title) + \'" aria-label="Open the example full screen" title="Full screen">\' + ic("maximize-2") + \'</button></div>\'');
+    expect(html).toContain(".pexample__full{ position:absolute; right:12px; bottom:12px;");
+    expect(html).toContain(".pmedia--example{ position:relative; aspect-ratio:4/3; margin-bottom:10px; background:linear-gradient(");
+    expect(ex).toContain("What this prompt can make");
+    expect(body("portalFillExamples")).toContain("PORTAL_EXAMPLE_HTML[id] = (await loadPortalGameHtml(id)) || \"\";");
+    const page = body("portalEntryHTML");
+    expect(page).toContain("portalExampleHTML(e) + portalWordHTML(e) + text");
+    expect(page).toContain("(storyLike ? (portalExampleHTML(e) || media) + portalWordHTML(e) + text");
+  });
+  it("gives a game or story with an AI prompt an AI Lesson badge too", () => {
+    expect(body("portalEntryHTML")).toContain("(e.layout !== \"lesson\" && String(e.aiPrompt || \"\").trim() ? '<span class=\"chip chip--ink\">' + ic(PORTAL_LAYOUT_ICON.lesson) + ' AI Lesson</span>' : \"\")");
+  });
+});
+
 describe("right-click in the Subscriber's Portal", () => {
   it("is blocked on the archive and on every entry, but not in boxes people type in", () => {
     const h = html.split('document.addEventListener("contextmenu", (ev) => {')[1].split("\n});")[0];
@@ -627,7 +677,7 @@ describe("Activity and AI Lesson entries", () => {
     const page = body("portalEntryHTML");
     expect(page).toContain('const storyLike = e.layout === "article" || e.layout === "activity" || e.layout === "lesson";');
     expect(page).toContain("portalWordHTML(e) + text + portalHowToHTML(e) + portalPromptHTML(e) + portalActionsRow(e, shareBtn)");
-    expect(page).toContain("(storyLike ? media + portalWordHTML(e) + text + portalHowToHTML(e)");
+    expect(page).toContain("(storyLike ? (portalExampleHTML(e) || media) + portalWordHTML(e) + text + portalHowToHTML(e)");
   });
 });
 

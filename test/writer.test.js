@@ -211,6 +211,15 @@ describe("reading answers back", () => {
       "Does it show “You win!” when you reach the goal?", "Does it show “Try again!” when the game ends before that?", "Did the AI add anything the prompt did not ask for?"]);
   });
 
+  it("tidies what the model sends: no words said twice in the first line, one bullet per line, one check per line", () => {
+    const d = parseDraft(JSON.stringify({ title: "T", checks: ["Is the screen green? | Are the keys white?"],
+      project: { name: "Mini Laptop", isGame: false, what: "fun mini laptop with a keyboard in one HTML file", use: ["Press the keys to type. • Click save to keep it."], looks: "• Green screen. • White keys." } }));
+    expect(d.aiPrompt).toContain("Make a fun mini laptop with a keyboard in one HTML file that I can use in my browser.");
+    expect(d.aiPrompt).toContain("• Press the keys to type.\n• Click save to keep it.");
+    expect(d.aiPrompt).toContain("• Green screen.\n• White keys.");
+    expect(d.steps).toEqual(["Is the screen green?", "Are the keys white?"]);
+  });
+
   it("warns when a game has no goal, no number to reach, or nothing that ends it", () => {
     const spaceship = { name: "Spaceship Game", isGame: true, what: "spaceship that flies across the screen", does: ["The spaceship moves smoothly from one side to the other."], use: ["Move with the arrow keys."] };
     expect(parseDraft(JSON.stringify({ title: "T", project: spaceship })).warning).toContain("This game has no goal yet, so it has no clear end.");

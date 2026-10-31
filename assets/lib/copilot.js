@@ -403,7 +403,18 @@ export function gameSlug(title) {
 
 /* ---------------- prompts ---------------- */
 
-const COPILOT_ROLE = "You are the Copilot for the admin of this site. You help the owner add and improve content: episodes, games, stories and newsletters. Be brief and practical. When you are not sure, say so.";
+const COPILOT_ROLE = "You are the Copilot for the admin of this site. You help the owner add and improve content: episodes, games, stories and newsletters. Be brief and practical. When you are not sure, say so."
+  + " In this chat you answer questions and give short advice. You never write a whole lesson, entry, story or email here, and you never sign anything with a name: those are made with the buttons (Add to the Subscriber’s Portal, Write a newsletter, Write a story), so if the owner asks for one, say which button to use."
+  + " You cannot see or change drafts from here.";
+
+/** A message that asks to change the entry just drafted ("add working keys to the prompt", "make the title
+    shorter"), rather than a new job or a question. Only used when a portal draft is the latest thing made. */
+export function isEntryFollowUp(text) {
+  const t = String(text || "").trim();
+  if (!t || /\?\s*$/.test(t)) return false;
+  return /^\s*(?:please\s+|can you\s+|could you\s+|now\s+|also\s+)?(?:add|make|change|include|remove|delete|take out|put|use|give|let|update|fix|rewrite|shorten|lengthen|replace|turn|swap|switch|edit|improve|expand|simplify|drop|keep|mention|say|set)\b/i.test(t)
+    || /\b(?:the|this|that|its)\s+(?:prompt|title|steps|checks|email|text|lesson|game|entry|activity|description|footer|goal)\b/i.test(t);
+}
 const JSON_ONLY = " Reply with one JSON object only and nothing else.";
 
 /** The standing brief: who you are, the voice, and the whole site. `where` says which admin screen they are on. */
