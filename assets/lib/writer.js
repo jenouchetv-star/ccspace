@@ -286,7 +286,7 @@ export function taskMessages(task, ctx) {
     draft: "Write a new Subscriber’s Portal entry and the email that announces it.\n" + notes + (DRAFT_BRIEF[layout] ? "\n" + DRAFT_BRIEF[layout] : "")
       + "\nReturn JSON with these keys: title (under 8 words), description (one or two sentences for a card), body (three or four short paragraphs separated by a blank line)"
       + (layout === "activity" || layout === "lesson" ? ", steps (a list of 4 to 6 short steps a child can follow, each under 15 words)" : "")
-      + (layout === "lesson" ? ", aiPrompt (a short, simple prompt of one to three sentences that a child can copy into Gemini with a grown-up to try the lesson)" : "")
+      + (layout === "lesson" ? ", aiPrompt (two to four short, simple sentences a child copies into Gemini to make a tiny game they can play in the browser. It must start with \"Make me a simple game I can play in my browser.\" and the game must practice the lesson's idea. Never a drawing, a story or a question)" : "")
       + ", emailSubject (under 8 words), emailPreview (one line), emailMessage (two short paragraphs for the email, ending with an invitation to take a look), emailButton (2 to 3 words)." + JSON_NOTE,
     titles: "Give me six different title ideas for this entry.\n" + notes + "\nReturn JSON like {\"titles\": [\"...\"]}. Each under 8 words." + JSON_NOTE,
     description: "Write the short description for this entry: one or two sentences that make someone want to open it.\n" + notes + "\nReply with only the sentences.",

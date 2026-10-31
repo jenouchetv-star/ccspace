@@ -74,6 +74,10 @@ describe("what kind of Subscriber’s Portal entry a request is for", () => {
       "put together a lesson on how to use Gemini for the newsletter portal",
       "Create a portal entry that teaches kids how to use AI safely",
       "create an ai-lesson for 2nd graders",
+      "Create an AI coding lesson for the subscriber's portal",
+      "create a AI coding lesson for kids",
+      "make an AI art and music lesson",
+      "\"AI Lesson\" for subscriber's portal: Create a simple AI coding lesson for kids to try in Gemini or Claude.",
     ]) {
       const r = ask(t);
       expect(r.kind, t).toBe("portal");
@@ -110,7 +114,9 @@ describe("what kind of Subscriber’s Portal entry a request is for", () => {
     expect(user).toContain("This is an AI LESSON, not a story");
     expect(user).toContain("Do not invent characters or a plot.");
     expect(user).toContain("steps (a list of 4 to 6 short steps");
-    expect(user).toContain("aiPrompt (a short, simple prompt");
+    expect(user).toContain("aiPrompt (two to four short, simple sentences a child copies into Gemini to make a tiny game");   // the prompt box says "save it as game.html and play"
+    expect(user).toContain("It must start with \\\"Make me a simple game I can play in my browser.\\\"".replace(/\\"/g, '"'));
+    expect(user).toContain("Never a drawing, a story or a question");
     const act = taskMessages("draft", { items: [], entry: { layout: "activity" } })[1].content;
     expect(act).toContain("This is an ACTIVITY, not a story");
     expect(act).not.toContain("aiPrompt");

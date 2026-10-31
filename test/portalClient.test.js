@@ -362,6 +362,8 @@ describe("how the site wires the portal in", () => {
     expect(actions).toContain('href="https://gemini.google.com/app"');
     expect(actions.indexOf("Copy prompt")).toBeLessThan(actions.indexOf("Open Gemini"));
     expect(box.split('Open Gemini</a>').length - 1).toBe(1);
+    expect(html).toContain(".pprompt__box .pprompt__text{ padding-top:78px; }");   /* the words start below the corner buttons, never under them */
+    expect(html).toContain("  .pprompt__box .pprompt__text{ padding-top:16px; }");   /* on a phone the buttons sit above the box */
     expect(box).toContain('href="https://gemini.google.com/app"');
     expect(box).toContain('rel="noopener noreferrer"');
     /* the grown-up message comes first, on every prompt box, before the steps */
@@ -493,6 +495,7 @@ describe("how the site wires the portal in", () => {
     expect(body("portalEntryHTML").split("portalActionsRow(e, shareBtn)").length - 1).toBe(2);
     expect(body("portalEntryHTML")).not.toContain("+ portalExtraButton(e)");
     expect(html).toContain(".pactions{ margin-top:30px; }");
+    expect(html).toContain(".pbody{ font-size:1.08rem; line-height:1.7; margin-top:8px; margin-bottom:26px; }");   // a gap under the text, before the steps box
   });
 
   it("puts each subscriber's private key in newsletters", () => {
