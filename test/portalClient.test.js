@@ -362,7 +362,8 @@ describe("how the site wires the portal in", () => {
     expect(actions).toContain('href="https://gemini.google.com/app"');
     expect(actions.indexOf("Copy prompt")).toBeLessThan(actions.indexOf("Open Gemini"));
     expect(box.split('Open Gemini</a>').length - 1).toBe(1);
-    expect(html).toContain(".pprompt__box .pprompt__text{ padding-top:78px; }");   /* the words start below the corner buttons, never under them */
+    expect(html).toContain(".pprompt__box .pprompt__text{ padding-top:78px; }");
+    expect(html).toContain(".pprompt__text{ background:#1E2226; color:#F5F1E6; border:3px dashed #8B96A3;");   /* light words on a dark box */   /* the words start below the corner buttons, never under them */
     expect(html).toContain("  .pprompt__box .pprompt__text{ padding-top:16px; }");   /* on a phone the buttons sit above the box */
     expect(box).toContain('href="https://gemini.google.com/app"');
     expect(box).toContain('rel="noopener noreferrer"');
@@ -588,6 +589,15 @@ describe("the portal's own sign-in box uses the 6-digit code", () => {
       expect(portalGateMessage(s).tone).toBe("assertive");
     }
     expect(portalGateMessage("sent", "a@b.co").text).toContain("6-digit code");
+  });
+});
+
+describe("right-click in the Subscriber's Portal", () => {
+  it("is blocked on the archive and on every entry, but not in boxes people type in", () => {
+    const h = html.split('document.addEventListener("contextmenu", (ev) => {')[1].split("\n});")[0];
+    expect(h).toContain('if (r !== "newsletter" && r !== "newsletter-detail") return;');
+    expect(h).toContain("ev.target.closest('input, textarea, select, [contenteditable=\"true\"]')");
+    expect(h).toContain("ev.preventDefault();");
   });
 });
 

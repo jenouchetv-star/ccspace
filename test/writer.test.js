@@ -7,7 +7,7 @@ import {
   ollamaUrl, chatModels, pickModel, listModels, chat, siteItems, siteDigest, relevantItems, systemPrompt,
   taskMessages, suggestMessages, parseJson, parseDraft, parseTitles, parseEmail, cleanText, paragraphsToHtml,
   cleanSuggestion, recordFacts, subjectIdeas, buttonIdeas, DEFAULT_OLLAMA, NUM_CTX, warm, leanSystem, visionModels, pickVision, pullModel,
-  projectPrompt,
+  projectPrompt, projectGoalProblem,
 } from "../assets/lib/writer.js";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -180,7 +180,7 @@ describe("reading answers back", () => {
 
   it("reads a full draft, accepting the email keys under either name", () => {
     const d = parseDraft(JSON.stringify({ title: "A Title", description: "D", body: ["P1", "P2"], subject: "S", preview: "P", message: "M", emailButton: "Take a look" }));
-    expect(d).toEqual({ title: "A Title", description: "D", body: "P1\n\nP2", emailSubject: "S", emailPreview: "P", emailMessage: "M", emailButton: "Take a look", aiPrompt: "", steps: [] });
+    expect(d).toEqual({ title: "A Title", description: "D", body: "P1\n\nP2", emailSubject: "S", emailPreview: "P", emailMessage: "M", emailButton: "Take a look", aiPrompt: "", warning: "", steps: [] });
     const lesson = parseDraft(JSON.stringify({ title: "T", steps: ["1. Open Gemini with a grown-up", "- Ask it a question", { text: "Check the answer" }, ""], aiPrompt: "Tell me a joke about a cat." }));
     expect(lesson.steps).toEqual(["Open Gemini with a grown-up", "Ask it a question", "Check the answer"]);
     expect(lesson.aiPrompt).toBe("Tell me a joke about a cat.");
@@ -188,17 +188,38 @@ describe("reading answers back", () => {
   });
 
   it("lays out an AI lesson's game prompt like the Gravity 4 prompt, from the parts the model fills in", () => {
-    const d = parseDraft(JSON.stringify({ title: "T", game: { name: "Robot Key Hunt!", what: "a maze game where a robot finds a key",
-      win: ["Find the gold key.", "1. Reach the door before the timer ends."], play: "Use the arrow keys to move the robot. Bump a wall and you stop.",
+    const d = parseDraft(JSON.stringify({ title: "T", project: { name: "Robot Key Hunt!", isGame: true, what: "a maze game where a robot finds a key",
+      goal: "Collect 5 gold keys to win.", limit: "You have 60 seconds.", does: ["1. Bumping a wall costs 2 seconds."], use: "Use the arrow keys to move the robot. Bump a wall and you stop.",
       looks: ["A green maze on a white background.", "A small blue robot."], avoid: [] } }));
     expect(d.aiPrompt).toBe([
       "🎮 Robot Key Hunt!\nMake a fun maze game where a robot finds a key in one HTML file that I can play in my browser.",
-      "🌟 How to win:\n• Find the gold key.\n• Reach the door before the timer ends.",
+      // the goal (with a number), what ends it, the other rules, then always a clear win and a clear lose
+      "🌟 How to win:\n• Collect 5 gold keys to win.\n• You have 60 seconds.\n• Bumping a wall costs 2 seconds.\n• When I reach the goal, show “You win!”. When the game ends before that, show “Try again!”. Both have a Play again button.",
       "🕹️ How to play:\n• Use the arrow keys to move the robot.\n• Bump a wall and you stop.",
       "🎨 How it looks:\n• A green maze on a white background.\n• A small blue robot.\n• Big buttons that work on phones, tablets and computers, so I can start, see my score and play again.",
       "🚫 Please don't add:\n• Sounds or music.",
     ].join("\n\n"));
     expect(projectPrompt({})).toBe("");
+    expect(d.warning).toBe("");
+    expect(d.title).toBe("How to Build Your Own Robot Key Hunt Game");   // the title names what the child ends up with
+    expect(parseDraft(JSON.stringify({ title: "How to Give AI Clear Instructions", project: { name: "my big calculator", what: "calculator" } })).title).toBe("How to Build Your Own Big Calculator");
+    const stars = parseDraft(JSON.stringify({ title: "T", project: { name: "Catch The Stars!", isGame: true, what: "Collect stars and avoid asteroids", goal: "Catch 10 stars.", limit: "You have 30 seconds." } }));
+    expect(stars.title).toBe("How to Build Your Own Catch the Stars Game");
+    expect(stars.aiPrompt).toContain("Make a fun game in one HTML file that I can play in my browser: collect stars and avoid asteroids.");   // not "a fun Collect stars..."
+    // no checks came back: the questions that catch what AI got wrong or made up are put in
+    expect(stars.steps).toEqual(["Does it look the way the prompt says, with the same colors and shapes?", "Do the keys and buttons do what the prompt says?",
+      "Does it show “You win!” when you reach the goal?", "Does it show “Try again!” when the game ends before that?", "Did the AI add anything the prompt did not ask for?"]);
+  });
+
+  it("warns when a game has no goal, no number to reach, or nothing that ends it", () => {
+    const spaceship = { name: "Spaceship Game", isGame: true, what: "spaceship that flies across the screen", does: ["The spaceship moves smoothly from one side to the other."], use: ["Move with the arrow keys."] };
+    expect(parseDraft(JSON.stringify({ title: "T", project: spaceship })).warning).toContain("This game has no goal yet, so it has no clear end.");
+    expect(projectGoalProblem({ ...spaceship, goal: "Collect the stars." })).toContain("has no number to reach");
+    expect(projectGoalProblem({ ...spaceship, goal: "Collect 20 stars." })).toContain("nothing that ends it");
+    expect(projectGoalProblem({ ...spaceship, goal: "Collect twenty stars.", limit: "Before the 60-second timer runs out." })).toBe("");
+    expect(projectGoalProblem({ isGame: false, what: "calculator" })).toBe("");   // not a game: no goal needed
+    expect(html).toContain('(d.layout === "lesson" && d.warning ? \'<p class="cp-note cp-note--warn">\'');
+    expect(html).toContain('writerRow("Check before you use it", d.warning)');
   });
 
   it("lays out a project that is not a game (a calculator, a digital pet) with What it does and How to use it", () => {

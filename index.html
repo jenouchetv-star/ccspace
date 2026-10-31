@@ -3347,7 +3347,10 @@ body.portal-locked{ overflow:hidden; }
 }
 .pprompt__box{ position:relative; }
 .pprompt__actions{ position:absolute; top:12px; right:12px; z-index:1; display:flex; gap:10px; justify-content:flex-end; }
-.pprompt__text{ background:#fff; border:3px dashed var(--ink); border-radius:var(--r); padding:16px 18px; font-size:1.08rem; line-height:1.65; white-space:pre-wrap; user-select:text; -webkit-user-select:text; }
+/* the prompt reads like a screen: light words on a dark box */
+.pprompt__text{ background:#1E2226; color:#F5F1E6; border:3px dashed #8B96A3; border-radius:var(--r); padding:16px 18px; font-size:1.08rem; line-height:1.65; white-space:pre-wrap; user-select:text; -webkit-user-select:text; }
+.pprompt__text::selection{ background:#F5B921; color:#1E2226; }
+.pprompt__text:focus-visible{ outline:3px solid #F5B921; outline-offset:3px; }
 /* the buttons sit in the box's top-right corner, so the words start below them and never run underneath */
 .pprompt__box .pprompt__text{ padding-top:78px; }
 @media (max-width:620px){
@@ -3473,6 +3476,8 @@ body.cp-dragging #app{ transition:none !important; pointer-events:none; }
 .cp-row{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
 .cp-note{ margin:0; font-size:.8rem; color:var(--admin-mute); line-height:1.45; }
 .cp-note--ok{ color:var(--admin-good); font-weight:700; display:flex; gap:6px; align-items:center; }
+.cp-note--warn{ display:flex; gap:6px; align-items:flex-start; padding:8px 10px; border-radius:8px; background:#FFF4D6; border:1px solid #E8B93A; color:#6B4A00; font-weight:600; }
+.cp-note--warn svg{ flex:none; margin-top:2px; }
 .cp-acts{ display:flex; flex-wrap:wrap; gap:8px; }
 .cp-checks{ display:flex; flex-direction:column; gap:6px; }
 .cp-check{ display:flex; gap:8px; align-items:flex-start; font-size:.82rem; line-height:1.4; padding:7px 9px; border-radius:8px; background:var(--admin-info-soft); }
@@ -12248,7 +12253,7 @@ function writerShow(task, text){
     if (!d){ WriterState.result = null; writerOut(sorry); return; }
     WriterState.result = { task: task, data: d };
     writerOut('<div class="pai__result">' + writerRow("Title", d.title) + writerRow("Short description", d.description) + writerRow("Text", d.body)
-      + (d.steps && d.steps.length ? writerRow("Steps", d.steps.join("\n")) : "") + writerRow("Prompt for Gemini", d.aiPrompt)
+      + (d.steps && d.steps.length ? writerRow("Steps", d.steps.join("\n")) : "") + writerRow("Prompt for Gemini", d.aiPrompt) + writerRow("Check before you use it", d.warning)
       + writerRow("Email subject", d.emailSubject) + writerRow("Email preview", d.emailPreview) + writerRow("Email message", d.emailMessage) + writerRow("Email button", d.emailButton)
       + '<div class="pai__acts"><button type="button" class="admin-btn admin-btn--primary" data-act="writer-apply" data-what="all">' + ic("check") + ' Use this draft</button>'
       + '<button type="button" class="admin-btn" data-act="writer-apply" data-what="empty">Fill only the empty boxes</button>' + again + '</div></div>');
@@ -12566,6 +12571,7 @@ function cpCardHTML(m){
       + '<div class="cp-f"><label>Type<select data-cpm="' + id + '" data-cpf="layout">' + PORTAL_LAYOUTS.map(l => '<option value="' + l.id + '"' + (l.id === d.layout ? " selected" : "") + '>' + E(l.label) + '</option>').join("") + '</select></label></div>'
       + field("Title", "title", d.title) + field("Short description", "description", d.description, "area") + field("Text (blank line between paragraphs)", "body", d.body, "area")
       + (d.layout === "activity" || d.layout === "lesson" ? field(d.layout === "activity" ? "What to do (one step per line)" : "Check what AI made (one question per line)", "steps", d.steps || "", "area") : "")
+      + (d.layout === "lesson" && d.warning ? '<p class="cp-note cp-note--warn">' + ic("triangle-alert") + ' ' + E(d.warning) + '</p>' : "")
       + (d.layout === "lesson" ? field("Prompt kids can copy into Gemini", "aiPrompt", d.aiPrompt || "", "area") : "")
       + '<label class="cp-check-row"><input type="checkbox" data-cpm="' + id + '" data-cpf="emailOn"' + (d.emailOn ? " checked" : "") + '> Prepare an email about it when I publish</label>'
       + field("Email subject", "emailSubject", d.emailSubject) + field("Email preview line", "emailPreview", d.emailPreview) + field("Email message", "emailMessage", d.emailMessage, "area") + field("Email button says", "emailButton", d.emailButton);
@@ -12771,7 +12777,7 @@ async function cpPortal(intent, userText){
   const text = await cpAsk(WriterLib.taskMessages("draft", { brand: BRAND, who: cpWho(), items: WriterLib.siteItems(db.get()), entry: { layout: layout, title: seed.split(". ")[0] }, idea: idea + (seed ? " Source: " + seed : "") }), { json: true, maxTokens: 1800 });
   const d = WriterLib.parseDraft(text);
   if (!d){ cpPush({ role: "assistant", text: "That didn\u2019t come out right. Try again, with a little more about what the entry should say." }); return; }
-  cpPush({ role: "card", card: { type: "portal", state: "draft", data: { layout: layout, title: realTitle || d.title || "", description: d.description, body: d.body, steps: d.steps.join("\n"), aiPrompt: d.aiPrompt, emailOn: true,
+  cpPush({ role: "card", card: { type: "portal", state: "draft", data: { layout: layout, title: realTitle || d.title || "", description: d.description, body: d.body, steps: d.steps.join("\n"), aiPrompt: d.aiPrompt, warning: d.warning, emailOn: true,
     emailSubject: d.emailSubject, emailPreview: d.emailPreview, emailMessage: d.emailMessage, emailButton: d.emailButton, source: source, cover: cover, sourceLabel: label } } });
 }
 
@@ -25167,6 +25173,15 @@ document.addEventListener("mousedown", (ev) => {
   });
   document.addEventListener("scroll", hide, true);
 })();
+
+/* The Subscriber’s Portal is for members: no right-click menu there (Save image, Copy image address, ...), except in
+   boxes people type in, so pasting still works. It only slows copying down; anything shown on a page can be saved. */
+document.addEventListener("contextmenu", (ev) => {
+  const r = AppState.route && AppState.route.name;
+  if (r !== "newsletter" && r !== "newsletter-detail") return;
+  if (ev.target.closest && ev.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+  ev.preventDefault();
+});
 
 /* The send-to links in the share dialog (Facebook, X, WhatsApp, Email, ...) are plain links that open in a new tab,
    so they never reach ACTIONS; this only counts the click and lets the link do its normal thing. */

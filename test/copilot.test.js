@@ -116,7 +116,10 @@ describe("what kind of Subscriber’s Portal entry a request is for", () => {
     // any small project, not only a game, described in parts the way the Gravity 4 prompt is
     expect(user).toContain("a game, a calculator, a mini laptop, a digital pet");
     expect(user).toContain("project (what the child will ask Gemini to build, as an object with: name (2 to 4 words), isGame (true or false)");
-    expect(user).toContain("does (2 to 4 short lines: for a game, the goal and how to win; otherwise, what it does)");
+    // a game always has a goal with a number and something that ends it, so it has a clear end
+    expect(user).toContain("goal (for a game only: one sentence saying exactly what the player must do to win, with a number to reach");
+    expect(user).toContain("limit (for a game only: one sentence saying what ends the game if the player has not won yet, with a number");
+    expect(user).toContain("for a game, one check is whether it ends with a win when the goal is reached");
     expect(user).toContain("so the AI does not have to guess");
     // the list is questions that catch what AI got wrong, not the same steps again
     expect(user).toContain("checks (4 to 6 yes-or-no questions the child asks about what AI built, to catch mistakes and made-up parts");
