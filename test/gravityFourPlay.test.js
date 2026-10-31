@@ -67,7 +67,7 @@ describe("Gravity 4 on the Play page", () => {
     expect(modal).toContain("/^\\/newsletter(\\/[a-z0-9][a-z0-9-]{0,80})?$/i");   // the same rule the portal function uses
     const send = index.split('if (act === "newsletter-submit"){')[1].split("\n  }\n")[0];
     expect(send).toContain('next: back || "/newsletter"');
-    expect(index).toContain('data-act="open-mailing-list" data-next="/newsletter/chikes-gravity-four" data-game="Chike’s Gravity 4">\' + ic("lock") + \' Join free to play');
+    expect(index).toContain('data-act="open-mailing-list" data-next="/newsletter/\' + E(slug) + \'" data-game="\' + E(g.title) + \'">\' + ic("lock") + \' Join free to play');   // the game's own page
     expect(fn("portalNextPath")).toContain('"/newsletter/" + encodeURIComponent(r.params.id)');
   });
   it("can be set up from the admin games form, which insists on the portal game", () => {

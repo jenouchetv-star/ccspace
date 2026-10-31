@@ -502,21 +502,19 @@ describe("what the portal calls its readers", () => {
   });
 });
 
-describe("the Gravity 4 invitation on the home page", () => {
-  const promo = body("gravityFourPromoHTML");
+describe("the new games band on the home page", () => {
+  const promo = body("newGamesPromoHTML");
   const home = body("viewHome");
 
-  it("invites people to join the mailing list and play, and sticks to the game", () => {
-    expect(promo).toContain("Join free to play");
-    expect(promo).toContain('data-act="open-mailing-list"');                    /* the same sign-up as the nav and footer */
-    expect(promo).toContain("Subscribers only content");
-    expect(promo).toContain("<h2 id=\"g4-title\">Play Gravity <em>4</em> with Chike!</h2>");   /* the 4 is in italics */
-    expect(promo).toContain("A 3D chip-dropping game made just for newsletter subscribers. Play against Chike, or challenge a friend online. Then make your own game with AI!");
-    for (const perk of ["Exclusive content", "Free AI lessons for kids", "Downloadables", "Stories, videos and more"]) expect(promo).not.toContain(perk);   /* nothing unrelated to the game */
-    expect(promo).toContain("data-member");                                      /* people already on the list: Already joined? Sign in */
-    expect(promo).toContain("Already joined? Sign in");
-    expect(promo).toContain("It’s free to subscribe! Unsubscribe at any time.</p>");
-    expect(promo.indexOf("Kids, please ask a grown-up before you use AI.")).toBeGreaterThan(promo.indexOf("</picture>"));   /* the AI note sits under the picture */
+  it("announces the eight games, sends people to play them, and invites them to join for the exclusive game", () => {
+    expect(promo).toContain("<h2 id=\"g4-title\">8 games, one big arcade makeover!</h2>");
+    expect(promo).toContain("Every game has a learning twist for kids from Kindergarten to 5th grade.");
+    expect(promo).toContain('href="#/play"');
+    expect(promo).toContain("Play the new games");
+    expect(promo).toContain('data-act="open-mailing-list" data-next="/newsletter/arcade-makeover"');   /* the same sign-up as the nav and footer */
+    expect(promo).toContain("Join for exclusive games");
+    expect(promo).toContain("Subscribers also get Chike’s Gravity 4, a game made just for them.");
+    expect(html).not.toContain("function gravityFourPromoHTML(");
   });
 
   it("keeps its two buttons big and equal", () => {
@@ -525,23 +523,21 @@ describe("the Gravity 4 invitation on the home page", () => {
     expect(actions.split("btn--sm").length - 1).toBe(2);
     expect(html).toContain(".g4promo__actions{ display:flex; flex-wrap:nowrap;");   /* one row, even on a phone */
     expect(html).toContain("height:56px; min-height:56px;");                          /* the same height */
-    expect(html).not.toContain(".g4perks");                                          /* the perks list is gone, and its styles with it */
   });
 
-  it("uses the cover picture, holds still for people who ask for less motion, and never uses another company's game name", () => {
-    expect(promo).toContain('srcset="assets/games/gravity-four.webp"');
-    expect(promo).toContain("assets/games/gravity-four-loop.gif");
+  it("shows the moving reel of the games, and holds still for people who ask for less motion", () => {
+    expect(promo).toContain('srcset="assets/newsletter/arcade-update/reel-still.jpg"');
+    expect(promo).toContain("assets/newsletter/arcade-update/reel.gif");
     expect(promo).toContain('loading="lazy"');
-    expect(promo).not.toMatch(/connect[ -]?(four|4)\b/i);
-    for (const f of ["../assets/games/gravity-four.webp", "../assets/games/gravity-four-loop.gif"]) expect(existsSync(new URL(f, import.meta.url))).toBe(true);
+    for (const f of ["../assets/newsletter/arcade-update/reel.gif", "../assets/newsletter/arcade-update/reel-still.jpg"]) expect(existsSync(new URL(f, import.meta.url))).toBe(true);
   });
 
   it("is a homepage module the admin can switch off, sitting right under the promise strip", () => {
-    expect(home).toContain('if (on("gravityfour")) html += gravityFourPromoHTML();');
+    expect(home).toContain('if (on("gravityfour")) html += newGamesPromoHTML();');
     expect(home.indexOf('on("strip")')).toBeLessThan(home.indexOf('on("gravityfour")'));
     expect(home.indexOf('on("gravityfour")')).toBeLessThan(home.indexOf('on("videos")'));
     const seed = body("seedHomepage");
-    expect(seed).toContain('M("gravityfour","gravityfour"');
+    expect(seed).toContain('M("gravityfour","gravityfour","New games band"');
     expect(seed.indexOf('M("promise"')).toBeLessThan(seed.indexOf('M("gravityfour"'));
     expect(seed.indexOf('M("gravityfour"')).toBeLessThan(seed.indexOf('M("episodes"'));
   });
