@@ -127,6 +127,14 @@ describe("what kind of Subscriber’s Portal entry a request is for", () => {
   });
 });
 
+describe("your own messages in the chat", () => {
+  it("have a quick copy icon beside them (not pasted code)", () => {
+    expect(html).toContain('<div class="cp-umsg"><button type="button" class="cp-qcopy" data-act="copilot-copy" data-id="\' + E(m.id) + \'" aria-label="Copy this message" title="Copy">\' + ic("copy") + \'</button>\'');
+    expect(html).toContain("m.code ? '<div class=\"cp-msg cp-msg--user\"><span class=\"cp-code\">'");
+    expect(html).toContain(".cp-qcopy{");
+  });
+});
+
 describe("editing what is already on the site", () => {
   const items = siteItems({
     games: [{ id: "g1", title: "Doodle Dash", summary: "Draw a level.", status: "published" }],
