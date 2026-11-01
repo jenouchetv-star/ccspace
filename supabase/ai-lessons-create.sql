@@ -37,8 +37,8 @@ insert into activities (id, data) values ('act-ai-lesson-3d-computer', jsonb_bui
   'status', 'published', 'createdAt', '2026-10-31T12:00:00.000Z', 'updatedAt', '2026-10-31T12:00:00.000Z'))
 on conflict (id) do update set data = excluded.data, updated_at = now();
 
--- AI Lesson 03, added as a draft beside its Subscriber's Portal lesson (supabase/ai-lesson-math-robot.sql):
--- publish both together, so the card never opens a lesson subscribers cannot see yet.
+-- AI Lesson 03, beside its Subscriber's Portal lesson (supabase/ai-lesson-math-robot.sql); both are published,
+-- and the card uses the lesson's cover.
 insert into activities (id, data) values ('act-ai-lesson-math-robot', jsonb_build_object(
   'id', 'act-ai-lesson-math-robot', 'slug', 'ai-lesson-math-robot',
   'kind', 'members', 'portalSlug', 'how-to-build-your-own-math-robot',
@@ -50,7 +50,7 @@ insert into activities (id, data) values ('act-ai-lesson-math-robot', jsonb_buil
   'learning', jsonb_build_object('topic', 'structures', 'title', 'A detailed prompt makes a smarter robot', 'text', ''),
   'discussionPrompt', '', 'variation', '', 'value', 'curiosity',
   'printable', jsonb_build_object('label', '', 'path', ''), 'youtubeUrl', '',
-  'image', jsonb_build_object('src', '', 'alt', ''),
+  'image', jsonb_build_object('src', 'https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/uploads/media/1793509939119-Gemini_Generated_Image_78agxd78agxd78ag.jpg', 'alt', 'Children looking at their Math tutoring robot.'),
   'related', '[]'::jsonb, 'tags', '["ai", "coding", "math", "robot", "subscribers"]'::jsonb, 'featured', false,
-  'status', 'draft', 'createdAt', '2026-11-01T12:00:00.000Z', 'updatedAt', '2026-11-01T12:00:00.000Z'))
+  'status', 'published', 'createdAt', '2026-11-01T12:00:00.000Z', 'updatedAt', '2026-11-01T12:00:00.000Z'))
 on conflict (id) do update set data = excluded.data, updated_at = now();

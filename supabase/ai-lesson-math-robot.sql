@@ -1,17 +1,17 @@
--- Chike's Creative Space - AI Lesson 03: Make a Talking 3D Math Robot (Subscriber's Portal, saved as a draft).
--- The admin reviews and publishes it in the editor. Safe to re-run: it replaces the draft with this text.
+-- Chike's Creative Space - AI Lesson 03: Make a Talking 3D Math Robot (Subscriber's Portal, published).
+-- Safe to re-run: it replaces the entry with this text, so edits made in the editor belong here too.
 
 insert into portal_entries (id, data) values ('port-ai-lesson-math-robot', jsonb_build_object(
   'id', 'port-ai-lesson-math-robot',
   'slug', 'how-to-build-your-own-math-robot',
   'layout', 'lesson',
   'category', 'AI lessons',
-  'status', 'draft',
+  'status', 'published',
   'publishedAt', '2026-11-01',
   'title', 'AI Lesson 03: Make a Talking 3D Math Robot',
   'description', 'Use AI to build a friendly 3D robot that chats with you, remembers your name, helps with your math homework, quizzes you when you ask, and high-fives you when you do great.',
-  'cover', jsonb_build_object('src', '', 'alt', ''),
-  'body', $b$<h3>What should we create today?<br>How about A robot that talks, listens, and remembers</h3><p>This time, you are going to ask AI to build a robot buddy that can hold a real conversation. It says hello the right way for the time of day, learns your name and your grade, lets you give it a name of its own, and helps you with math in the way you choose: answering your questions, helping with your homework, or quizzing you when you ask. By the way, your robot is not an AI robot so it's responses will be limited.&nbsp;</p><h3>Why such a long prompt?</h3><p>AI only knows what you tell it. If you just say "make a talking robot", AI has to guess how it should talk, what it should remember and when it should cheer, and it will make some of that up. So this prompt spells out every part: what the robot says, how you use it, how it looks, what it remembers, and what it must never do.</p><h3>Be the robot tester</h3><p>When AI has built your robot, chat with it like a friend and try everything in the prompt. If something is missing or different, tell AI exactly what to fix, like "The robot forgot my grade. Make it remember." That is how real app makers work!&nbsp;</p>$b$,
+  'cover', jsonb_build_object('src', 'https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/uploads/media/1793509939119-Gemini_Generated_Image_78agxd78agxd78ag.jpg', 'alt', 'Children looking at their Math tutoring robot.'),
+  'body', $b$<h3>What should we create today?<br>How about A robot that talks, listens, and remembers</h3><p>This time, you are going to ask AI to build a robot buddy that can hold a real conversation. It says hello the right way for the time of day, learns your name and your grade, lets you give it a name of its own, and helps you with math in the way you choose: answering your questions, helping with your homework, or quizzing you when you ask. By the way, your robot is not an AI robot so its responses will be limited.&nbsp;</p><h3>Why such a long prompt?</h3><p>AI only knows what you tell it. If you just say "make a talking robot", AI has to guess how it should talk, what it should remember and when it should cheer, and it will make some of that up. So this prompt spells out every part: what the robot says, how you use it, how it looks, what it remembers, and what it must never do.</p><h3>Be the robot tester</h3><p>When AI has built your robot, chat with it like a friend and try everything in the prompt. If something is missing or different, tell AI exactly what to fix, like "The robot forgot my grade. Make it remember." That is how real app makers work!&nbsp;</p>$b$,
   'steps', jsonb_build_array(
     'Does the robot ask your first name, and then what grade you are in?',
     'If you ask the robot its name, does it ask you to give it one, then use that name?',
