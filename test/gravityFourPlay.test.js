@@ -128,6 +128,7 @@ describe("Welcome back (Already joined? Sign in)", () => {
     // in the Join box it shares one row with Cancel and Join: Sign in on the left, the two buttons on the right
     expect(index).toContain(`+ '<div class="modal__foot modal__foot--join">'\n    + (back2 ? "" : signInLinkHTML(back, play, "join-signin"))`);
     expect(index).toContain(".join-signin{ display:flex; align-items:center; gap:6px; margin:0 auto 0 0;");
+    expect(index).toContain(".modal__foot--join .btn{ height:46px; min-height:46px; padding-block:0; box-sizing:border-box; }");   // all three the same height
     expect(index.split('signInLinkHTML("", ""').length - 1).toBe(2);   // the footer, and the Articles box (laid out beside its form)
     expect(fn("signInLinkHTML")).toContain("Already joined?</b>");
   });
