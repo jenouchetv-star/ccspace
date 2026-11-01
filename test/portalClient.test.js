@@ -500,7 +500,9 @@ describe("how the site wires the portal in", () => {
   it("puts the extra button, Share this and All entries in one row, with a gap above it", () => {
     expect(body("portalActionsRow")).toContain('\'<div class="prow pactions no-print">\' + portalExtraButton(e)');
     expect(body("portalExtraButton")).not.toContain("<div");
-    expect(body("portalEntryHTML").split("portalActionsRow(e, shareBtn)").length - 1).toBe(2);
+    /* the cover layout, and the plain one (which moves Share under an AI lesson's example) */
+    expect(body("portalEntryHTML").split("portalActionsRow(e, shareBtn)").length - 1).toBe(1);
+    expect(body("portalEntryHTML")).toContain('portalActionsRow(e, example ? "" : shareBtn)');
     expect(body("portalEntryHTML")).not.toContain("+ portalExtraButton(e)");
     expect(html).toContain(".pactions{ margin-top:30px; }");
     expect(html).toContain(".pbody{ font-size:1.08rem; line-height:1.7; margin-top:8px; margin-bottom:26px; }");   // a gap under the text, before the steps box
@@ -642,7 +644,7 @@ describe("an AI lesson's example of what its prompt makes", () => {
     expect(body("portalFillExamples")).toContain("PORTAL_EXAMPLE_HTML[id] = (await loadPortalGameHtml(id)) || \"\";");
     const page = body("portalEntryHTML");
     expect(page).toContain("portalExampleHTML(e) + portalWordHTML(e) + text");
-    expect(page).toContain("(storyLike ? (portalExampleHTML(e) || media) + portalWordHTML(e) + text");
+    expect(page).toContain("(storyLike ? (example ? example + shareTop : media) + portalWordHTML(e) + text");
   });
   it("never redraws a lesson's example in the background, which would start it over", () => {
     /* the 30-second sync and realtime updates skip their redraw while hasPlayingEmbed() is true */
@@ -703,7 +705,13 @@ describe("Activity and AI Lesson entries", () => {
     const page = body("portalEntryHTML");
     expect(page).toContain('const storyLike = e.layout === "article" || e.layout === "activity" || e.layout === "lesson";');
     expect(page).toContain("portalWordHTML(e) + text + portalHowToHTML(e) + portalPromptHTML(e) + portalActionsRow(e, shareBtn)");
-    expect(page).toContain("(storyLike ? (portalExampleHTML(e) || media) + portalWordHTML(e) + text + portalHowToHTML(e)");
+    expect(page).toContain("(storyLike ? (example ? example + shareTop : media) + portalWordHTML(e) + text + portalHowToHTML(e)");
+  });
+  it("puts Share right under an AI lesson's example, not at the bottom", () => {
+    const page = body("portalEntryHTML");
+    expect(page).toContain('const example = storyLike ? portalExampleHTML(e) : "";');
+    expect(page).toContain("const shareTop = example ? '<div class=\"prow pshare no-print\">' + shareBtn + '</div>' : \"\";");
+    expect(page).toContain('+ portalActionsRow(e, example ? "" : shareBtn)');
   });
 });
 
