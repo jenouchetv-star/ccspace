@@ -46,12 +46,14 @@ describe("Gravity 4 on the Play page", () => {
     const modal = fn("mailingListModal");
     expect(modal).toContain("const play = back && game ? String(game) : \"\";");
     expect(modal).toContain("const back2 = !!member;");
-    expect(modal).toContain("? '<h3 style=\"margin:.2em 0 .3em;font-size:1.6rem\">Join our mailing list</h3>'");
+    expect(modal).toContain("? '<h3 style=\"margin:.2em 0 .3em;font-size:1.6rem\">' + (lesson ? 'This AI lesson is for subscribers' : 'Join our mailing list') + '</h3>'");
     expect(modal).not.toContain(">Play ' + nameHTML(play)");
-    expect(modal).toContain("Join our free mailing list to play. We’ll email you a 6-digit code to confirm.");
+    expect(modal).toContain("(lesson ? 'Join our free mailing list to see it, and every AI lesson.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '");
     expect(modal).toContain(">Welcome back!</h3>");
     expect(modal).toContain("Enter the email you subscribed with and we’ll send you a 6-digit code to ");
-    expect(modal).toContain("(play ? 'play ' + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.')");
+    expect(modal).toContain("(play ? (lesson ? 'open ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.')");
+    // an AI lesson from the Create page is opened, not played
+    expect(modal).toContain("const lesson = !!play && (what === \"lesson\" || /^AI Lesson\\b/i.test(play));");
     expect(modal).toContain("(back2 ? ' Send my code' : ' Join')");
     expect(modal).toContain("(play ? '<input type=\"hidden\" name=\"code\" value=\"1\"><input type=\"hidden\" name=\"game\" value=\"' + E(play) + '\">' : \"\")");   // both ask for a code
     expect(modal).toContain('1789240884060-Gemini_Generated_Image_tri3mjtri3mjtri3.jpg" alt="Chike, Zech, and their 6 uniquely creative friends"');              // the whole crew, for a game
@@ -59,7 +61,7 @@ describe("Gravity 4 on the Play page", () => {
     expect(index).toContain(".modal--narrow{ width:min(520px,100%); }");
     expect(modal).toContain('(back2 ? "" : adultCheckHTML("ml-adult"))');   // the tick box is for joining, not for "Welcome back"
     expect(modal).toContain('(back2 ? \'<input type="hidden" name="member" value="1">\' : "")');
-    expect(index).toContain('openModal(mailingListModal(el && el.getAttribute("data-next"), game, member), null, game || member ? "modal--narrow" : "");');
+    expect(index).toContain('openModal(mailingListModal(el && el.getAttribute("data-next"), game, member, el && el.getAttribute("data-what")), null, game || member ? "modal--narrow" : "");');
   });
   it("brings people back to the game after they confirm their email", () => {
     const modal = fn("mailingListModal");
@@ -138,5 +140,49 @@ describe("Welcome back (Already joined? Sign in)", () => {
     expect(send).toContain('if (member && sent.status === "needs_consent"){');
     expect(send).toContain('openModal(mailingListModal(back, game, false), null, "modal--narrow");');
     expect(send).toContain("That email is not on our mailing list yet.");
+  });
+});
+
+describe("the AI lessons on the Create page", () => {
+  const sql = readFileSync(new URL("../supabase/ai-lessons-create.sql", import.meta.url), "utf8");
+  it("are activities rows of their own kind, each pointing at its Subscriber's Portal lesson", () => {
+    expect(sql).toContain("'kind', 'members', 'portalSlug', 'chikes-gravity-four'");
+    expect(sql).toContain("'kind', 'members', 'portalSlug', 'how-to-build-your-own-3d-computer'");
+    expect(sql).toContain("'type', 'ai', 'access', 'members'");
+    expect(index).toContain('{ id:"ai",        label:"AI Lesson",  icon:"bot"');
+    expect(index).toContain('{id:"members",label:"Subscribers only"}');
+  });
+  it("show only on the Create page: the finder, home page, related activities and collections leave them out", () => {
+    expect(fn("publishedActivities")).toContain('a.status === "published" && a.kind !== "members"');
+    expect(fn("createActivities")).toContain('a.status === "published"');
+    expect(fn("viewCreate")).toContain("let list = createActivities();");
+    expect(fn("createFilterMatches")).toContain("return createActivities().filter(");
+  });
+  it("have a lock on the card, and a click opens the join notice (or the lesson, for a subscriber), never an activity page", () => {
+    expect(fn("activityCard")).toContain('if (a.kind === "members") return membersActivityCard(a);');
+    const card = fn("membersActivityCard");
+    expect(card).toContain("' Subscribers only</span>'");
+    expect(card).toContain(`'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(a.title) + '" data-what="lesson"'`);
+    expect(card).toContain(`'data-act="go" data-hash="#/newsletter/' + E(slug) + '"'`);
+    expect(card).not.toContain("#/activity/");
+    expect(fn("viewActivity")).toContain('membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: "#D9C2E3", p2: "#7A4A86" }, "lesson")');
+  });
+  it("stay out of the sitemap and need only a card's fields in the editor", () => {
+    const gen = readFileSync(new URL("../supabase/generate-sitemap.mjs", import.meta.url), "utf8");
+    expect(gen).toContain('{ table: "activities",  path: r => "/activity/" + r.id, skip: r => r.kind === "members" }');
+    expect(index).toContain('if (col === "activities" && r.kind === "members"){');
+    expect(index).toContain('{ key:"portalSlug", label:"Subscriber’s Portal lesson", type:"select"');
+  });
+});
+
+describe("compact cards on Watch, Read and Create", () => {
+  it("use the Play page's compact card, three to a row (two on a tablet, one on a phone)", () => {
+    expect(index).toContain(".grid--compact{ gap:clamp(14px,1.8vw,22px); grid-template-columns:repeat(3,minmax(0,1fr)); }");
+    expect(index).toContain("@media (max-width:940px){ .grid--compact{ grid-template-columns:repeat(2,minmax(0,1fr)); } }");
+    expect(index).toContain(".grid--compact .card__media, .grid--compact .ep__thumb{ aspect-ratio:16/9; }");
+    expect(index).toContain("-webkit-line-clamp:2;");
+    expect(index).toContain(`'<div class="grid ep-grid grid--compact">' + pageEps.map(v => episodeRow(v))`);
+    expect(fn("viewStories")).toContain('<div class="grid g-3 grid--compact">');
+    expect(fn("viewCreate")).toContain('<div class="grid g-3 grid--compact">');
   });
 });

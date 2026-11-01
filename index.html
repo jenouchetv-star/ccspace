@@ -571,6 +571,19 @@ img.skel.is-loaded, video.skel.is-loaded{ animation:none; background-image:none;
 .card--game .card__foot{ padding-top:8px; gap:8px; }
 .card--game .btn.card__share{ width:38px; height:38px; min-height:38px; }
 .card--game .card__share .i{ width:17px; height:17px; }
+/* Watch, Read and Create use the same compact cards as the Play page, three to a row, so more of them fit on a
+   screen: a wider, shorter picture, tighter spacing, a smaller title, and the summary kept to two lines. */
+.grid--compact{ gap:clamp(14px,1.8vw,22px); grid-template-columns:repeat(3,minmax(0,1fr)); }
+@media (max-width:940px){ .grid--compact{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:620px){ .grid--compact{ grid-template-columns:1fr; } }
+.grid--compact .card__media, .grid--compact .ep__thumb{ aspect-ratio:16/9; }
+.grid--compact .card__body{ padding:12px 15px 13px; gap:5px; }
+.grid--compact .card__title{ font-size:1.1rem; margin:0 !important; }
+.grid--compact .card__body > p.tiny{ display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; }
+.grid--compact .card__foot{ padding-top:8px; gap:8px; }
+.grid--compact .card__foot .btn--sm{ height:38px; min-height:38px; }
+.grid--compact .btn.card__share{ width:38px; height:38px; min-height:38px; }
+.grid--compact .card__share .i{ width:17px; height:17px; }
 /* generated cover plates (used when no photograph exists) */
 .plate{
   position:absolute; inset:0; display:grid; place-items:center;
@@ -4180,7 +4193,9 @@ const TYPES = [
   { id:"dance",     label:"Move",       icon:"footprints",    p1:"#FBDE9A", p2:"#E8863B" },
   { id:"story",     label:"Story",      icon:"book-open",     p1:"#C9E7BC", p2:"#4E9E4A" },
   { id:"toyplay",   label:"Toy Play",   icon:"train-front",   p1:"#CFE7F7", p2:"#5D93C4" },
-  { id:"experiment",label:"Experiment", icon:"flask-conical", p1:"#BFEDE3", p2:"#3FA894" }
+  { id:"experiment",label:"Experiment", icon:"flask-conical", p1:"#BFEDE3", p2:"#3FA894" },
+  /* the Subscriber's Portal's AI lessons, listed on the Create page for subscribers (kind:"members") */
+  { id:"ai",        label:"AI Lesson",  icon:"bot",           p1:"#D9C2E3", p2:"#7A4A86" }
 ];
 const typeMeta = id => TYPES.find(t => t.id === id) || TYPES[0];
 
@@ -4202,7 +4217,7 @@ const VALUES = ["teamwork","patience","courage","kindness","perseverance","hones
 const SETTINGS  = [{id:"indoor",label:"Indoors"},{id:"outdoor",label:"Outdoors"},{id:"either",label:"Either"}];
 const DIFFS     = [{id:"easy",label:"Easy start"},{id:"medium",label:"A bit of a stretch"},{id:"challenge",label:"Big challenge"}];
 const SUPPORT   = [{id:"none",label:"Kid can lead"},{id:"nearby",label:"Grown-up nearby"},{id:"hands-on",label:"Grown-up hands-on"}];
-const ACCESS    = [{id:"free",label:"Free"},{id:"printable",label:"Free printable"}];
+const ACCESS    = [{id:"free",label:"Free"},{id:"printable",label:"Free printable"},{id:"members",label:"Subscribers only"}];
 const MATERIALS = [
   {id:"paper",label:"Paper"},{id:"cardboard",label:"Cardboard & boxes"},{id:"tape-glue",label:"Tape or glue"},
   {id:"markers",label:"Markers or crayons"},{id:"scissors",label:"Safety scissors"},{id:"clay",label:"Clay or dough"},
@@ -6569,10 +6584,12 @@ function adultCheckHTML(id){
     Opened for a subscribers-only game (`game` is its name), both ways in email a 6-digit code to type in the next box:
     "Join free to play" joins someone new, and "Already subscribed? Get my code" (`member`) welcomes someone back,
     so a subscriber never thinks they are signing up twice. Either way the server answers the same. */
-function mailingListModal(next, game, member){
+function mailingListModal(next, game, member, what){
   const back = /^\/newsletter(\/[a-z0-9][a-z0-9-]{0,80})?$/i.test(String(next || "")) ? next : "";
   const play = back && game ? String(game) : "";
   const back2 = !!member;                               /* "Already joined? Sign in" */
+  /* an AI lesson from the Create page is opened, not played */
+  const lesson = !!play && (what === "lesson" || /^AI Lesson\b/i.test(play));
   const bleed = "calc(-1 * clamp(20px,3vw,32px))";
   return '<div style="margin:' + bleed + ' ' + bleed + ' 22px;position:relative">'
     + (play
@@ -6586,10 +6603,10 @@ function mailingListModal(next, game, member){
     + (back2
         ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Welcome back!</h3>'
           + '<p class="tiny mute" style="margin:0 0 18px">Enter the email you subscribed with and we’ll send you a 6-digit code to '
-          + (play ? 'play ' + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.') + '</p>'
+          + (play ? (lesson ? 'open ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.') + '</p>'
       : play
-        ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Join our mailing list</h3>'
-          + '<p class="tiny mute" style="margin:0 0 18px">Join our free mailing list to play. We’ll email you a 6-digit code to confirm. '
+        ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">' + (lesson ? 'This AI lesson is for subscribers' : 'Join our mailing list') + '</h3>'
+          + '<p class="tiny mute" style="margin:0 0 18px">' + (lesson ? 'Join our free mailing list to see it, and every AI lesson.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '
           + 'You can unsubscribe at any time.</p>'
         : '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Join our mailing list</h3>'
           + '<p class="tiny mute" style="margin:0 0 18px">It’s free to subscribe! Unsubscribe at any time. Parents, guardians and teachers get new creative activities, free printables and AI lessons for kids.</p>')
@@ -8209,7 +8226,28 @@ function cardShareBtn(path, title, atEnd){
     + ic("share-2") + '<span class="card__share-label">Share</span></button>';
 }
 
+/* A subscribers-only AI lesson's card: a lock instead of the type, and a click that opens the join notice (or, for
+   a subscriber, the lesson in the Subscriber's Portal), never an activity page. */
+function membersActivityCard(a){
+  const slug = encodeURIComponent(a.portalSlug || "");
+  const sub = portalIsSubscriber();
+  const open = sub ? 'data-act="go" data-hash="#/newsletter/' + E(slug) + '"'
+    : 'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(a.title) + '" data-what="lesson"';
+  return '<article class="card card--members" ' + open + ' tabindex="0" role="link" aria-label="' + E(a.title + ", subscribers only") + '">'
+    + '<div class="card__media">' + cover(a, a.type, typeMeta(a.type).label, true)
+    + '<span class="card__badge chip chip--members">' + ic("lock") + ' Subscribers only</span>'
+    + '</div>'
+    + '<div class="card__body">'
+    + '<h3 class="card__title">' + E(a.title) + '</h3>'
+    + '<p class="tiny mute" style="margin:0">' + E(a.summary) + '</p>'
+    + '<div class="card__foot">'
+    + '<button type="button" class="btn btn--sm btn--sun" ' + open + '>' + ic(sub ? "sparkles" : "lock") + (sub ? ' Open the lesson' : ' Join free to see it') + '</button>'
+    + '</div>'
+    + '</div></article>';
+}
+
 function activityCard(a){
+  if (a.kind === "members") return membersActivityCard(a);
   const t = typeMeta(a.type);
   return '<article class="card" data-act="go" data-hash="#/activity/' + E(a.id) + '" tabindex="0" role="link">'
     + '<div class="card__media">' + cover(a, a.type, t.label, true)
@@ -9506,7 +9544,13 @@ const FINDER_RULES = [
   { key:"access",     points:"2",  label:"Free or printable" }
 ];
 
+/* A subscribers-only AI lesson (kind:"members") is an activities row so it can sit on the Create page, but it is
+   a card that opens the Subscriber's Portal, not an activity: the finder, the home page, related activities and
+   collections leave it out. Only the Create page lists it (createActivities). */
 function publishedActivities(){
+  return db.list("activities").filter(a => a.status === "published" && a.kind !== "members");
+}
+function createActivities(){
   return db.list("activities").filter(a => a.status === "published");
 }
 
@@ -10133,7 +10177,7 @@ function pageHeader(eyebrow, title, lede, actions, opts){
     from `state` still applied - shared by the inline panel, the mobile
     filter sheet, and its live preview counts. */
 function createFilterMatches(state, over){
-  return publishedActivities().filter(a => {
+  return createActivities().filter(a => {
     const q = ("q" in over ? over.q : state.q);
     if (("type" in over ? over.type : state.type) && a.type !== ("type" in over ? over.type : state.type)) return false;
     if (("access" in over ? over.access : state.access) && a.access !== ("access" in over ? over.access : state.access)) return false;
@@ -10268,7 +10312,7 @@ function reopenStoryFilterModal(){
 
 function viewCreate(){
   const f = AppState.createFilter;
-  let list = publishedActivities();
+  let list = createActivities();
   if (f.type)   list = list.filter(a => a.type === f.type);
   if (f.access) list = list.filter(a => a.access === f.access);
   if (f.q){
@@ -10290,7 +10334,7 @@ function viewCreate(){
   const createId = createRec ? createRec.id : null;
   const createHeading = (createRec && String(createRec.heading || "").trim())
     ? headingHTML(createRec.heading, createRec.highlight, createRec.tone)
-    : 'Or browse all ' + publishedActivities().length + '.';
+    : 'Or browse all ' + createActivities().length + '.';
   const createIntro = pageVal("create", "intro", "Every one lists what you need, the steps to follow, safety notes, and one thing to learn.");
   if (createId){
     CMS_HEADER_FALLBACKS[createId + "::heading"] = quPlainTextFromHTML(createHeading);
@@ -10313,14 +10357,14 @@ function viewCreate(){
     + '<p class="mute" style="margin:0">'
     + (totalPages > 1
         ? "Showing " + ((page - 1) * PAGE_SIZE + 1) + "–" + Math.min(list.length, page * PAGE_SIZE) + " of " + E(plural(list.length,"activity","activities"))
-        : E(plural(list.length,"activity","activities")) + ' shown' + (list.length === publishedActivities().length ? ", which is all of them" : ""))
+        : E(plural(list.length,"activity","activities")) + ' shown' + (list.length === createActivities().length ? ", which is all of them" : ""))
     + '</p>'
     + '<button type="button" class="btn btn--paper filter-icon-btn" data-act="cf-modal-open" aria-label="Filter">'
     + ic("sliders-horizontal")
     + (activeCount ? '<span class="pill-count">' + activeCount + '</span>' : "")
     + '</button>'
     + '</div>'
-    + (pageList.length ? '<div class="grid g-3">' + pageList.map(a => activityCard(a)).join("") + '</div>'
+    + (pageList.length ? '<div class="grid g-3 grid--compact">' + pageList.map(a => activityCard(a)).join("") + '</div>'
         : '<div class="empty">' + ic("search-x","i-lg")
           + '<p style="margin-top:12px">Nothing matches all of those at once.</p>'
           + '<button class="btn btn--sm btn--paper" data-act="cf-clear" style="margin-top:14px">' + ic("rotate-ccw") + ' Start the filter again</button></div>')
@@ -10344,6 +10388,14 @@ function viewCreate(){
 function viewActivity(id){
   const a = db.find("activities", id);
   if (!a || a.status === "archived") return notFound("activity");
+  /* a subscribers-only AI lesson has no activity page: a shared link shows the same join notice as its card */
+  if (a.kind === "members"){
+    return '<section class="section"><div class="shell" style="max-width:860px">'
+      + '<div class="crumb no-print"><a href="#/create">Create</a>' + ic("chevron-right") + '<span>AI Lesson</span></div>'
+      + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem)">' + E(a.title) + '</h1><p class="lede">' + E(a.summary) + '</p>'
+      + membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: "#D9C2E3", p2: "#7A4A86" }, "lesson")
+      + '</div></section>';
+  }
   noteView(a.id, "activities");
   const t = typeMeta(a.type);
   const ch = db.list("characters").find(c => c.slug === a.character);
@@ -10498,10 +10550,23 @@ function gamePoster(g){
     Anyone else gets the site's own Join modal (it closes on a tap outside, and has the grown-up tick box), in one of
     two wordings: "Join free to play" for someone new, "Already subscribed? Get my code" for someone on the list on a
     new device. Both email a 6-digit code that opens the game here. */
-function membersPoster(g){
+function membersPoster(g, what){
   const slug = encodeURIComponent(g.portalSlug || "");
   const to = "#/newsletter/" + slug;
   const sub = portalIsSubscriber();
+  if (what === "lesson"){
+    /* the same poster for a subscribers-only AI lesson, in a lesson's words */
+    return '<div class="gameposter gameposter--low" style="--p1:' + E(g.p1) + ';--p2:' + E(g.p2) + '">'
+      + (g.cover && g.cover.src ? '<img class="gameposter__photo skel" src="' + E(g.cover.src) + '" alt="' + E(g.cover.alt || "") + '" loading="lazy">' : '<div class="plate" role="presentation"></div>')
+      + '<div class="gameposter__inner">'
+      + (sub
+          ? '<a class="btn btn--lg btn--sun" href="' + E(to) + '">' + ic("sparkles") + ' Open the lesson</a>'
+          : '<button type="button" class="btn btn--lg btn--sun" data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '" data-what="lesson">' + ic("lock") + ' Join free to see it</button>'
+            + '<button type="button" class="btn btn--sm btn--paper" data-act="open-mailing-list" data-member data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '" data-what="lesson">' + ic("log-in") + ' Already joined? Sign in</button>')
+      + '</div>'
+      + '<span class="gameposter__note gameposter__note--wrap">' + (sub ? "Opens in the Subscriber’s Portal." : "Free for mailing-list subscribers.") + '</span>'
+      + '</div>';
+  }
   return '<div class="gameposter gameposter--low" style="--p1:' + E(g.p1 || "#D9C2E3") + ';--p2:' + E(g.p2 || "#7A4A86") + '">'
     + (g.cover && g.cover.src
         ? '<img class="gameposter__photo skel" src="' + E(g.cover.src) + '" alt="' + E(g.cover.alt || "") + '" loading="lazy">'
@@ -10695,7 +10760,7 @@ function episodeGridHTML(eps){
   return '<div class="section-head" style="margin-bottom:20px;gap:14px;flex-wrap:wrap"><h2 style="font-size:1.9rem">' + E(plural(eps.length,"episode","episodes")) + ' available</h2>'
     + (playable ? '<button type="button" class="btn btn--cyan" data-act="playall-open">' + ic("play") + ' Play all</button>' : "")
     + '</div>'
-    + '<div class="grid ep-grid">' + pageEps.map(v => episodeRow(v)).join("") + '</div>'
+    + '<div class="grid ep-grid grid--compact">' + pageEps.map(v => episodeRow(v)).join("") + '</div>'
     + (totalPages > 1
         ? '<nav class="pager" aria-label="Episode pages">'
           + '<button class="btn btn--sm btn--ghost" data-act="wp-page" data-page="' + (page - 1) + '"' + (page <= 1 ? " disabled" : "") + '>' + ic("chevron-left") + ' Prev</button>'
@@ -10787,7 +10852,7 @@ function viewStories(){
     + (activeCount ? '<span class="pill-count">' + activeCount + '</span>' : "")
     + '</button>'
     + '</div></div>'
-    + (list.length ? '<div class="grid g-3">' + list.map(s => storyCard(s)).join("") + '</div>'
+    + (list.length ? '<div class="grid g-3 grid--compact">' + list.map(s => storyCard(s)).join("") + '</div>'
         : '<div class="empty">' + ic("search-x","i-lg")
           + '<p style="margin-top:12px">Nothing matches that yet.</p>'
           + '<button class="btn btn--sm btn--paper" data-act="sf-clear" style="margin-top:14px">' + ic("rotate-ccw") + ' Start the filter again</button></div>')
@@ -13978,7 +14043,11 @@ function validateRecord(col, r){
   const warn = (field,msg) => out.push({ level:"warn",  field:field, message:msg });
   const req  = (field,label) => { if (isBlank(getPath(r, field))) err(field, label + " is required."); };
 
-  if (col === "activities"){
+  if (col === "activities" && r.kind === "members"){
+    /* a subscribers-only AI lesson is only a card: the lesson itself lives in the Subscriber's Portal */
+    req("title","Title"); req("summary","Summary");
+    if (isBlank(r.portalSlug)) err("portalSlug","A subscribers-only AI lesson needs the Subscriber’s Portal entry it opens.");
+  } else if (col === "activities"){
     req("title","Title"); req("summary","Summary");
     if ((r.materialsDetail||[]).length < 1) err("materialsDetail","At least one material line is required.");
     if ((r.steps||[]).length < 3) err("steps","At least three numbered steps are required.");
@@ -14144,6 +14213,8 @@ const FIELDS = {
   ],
   activities: [
     { key:"image", label:"Cover image", type:"media", wide:true },
+    { key:"kind", label:"What is this?", type:"select", wide:true, options:() => [{ value:"", label:"An activity" },{ value:"members", label:"A subscribers-only AI lesson (its card opens the Subscriber’s Portal)" }], help:"An AI lesson only needs a cover, title, summary and the portal lesson below; set Kind of making to AI Lesson and Access to Subscribers only. Its card shows a lock, and clicking it asks visitors to join first." },
+    { key:"portalSlug", label:"Subscriber’s Portal lesson", type:"select", wide:true, options:() => [{ value:"", label:"Choose a portal entry..." }].concat(db.list("portalEntries").filter(e => e.layout === "lesson" || String(e.aiPrompt || "").trim()).map(e => ({ value:e.slug || e.id, label:e.title }))), help:"Only for a subscribers-only AI lesson: the portal entry its card opens." },
     { key:"title", label:"Title", type:"text", wide:true },
     { key:"summary", label:"Summary", type:"textarea", wide:true, help:"One or two sentences. Shown on cards and in search." },
     { key:"type", label:"Kind of making", type:"select", options:() => opt(TYPES) },
@@ -24400,7 +24471,7 @@ const ACTIONS = {
     AppState.navOpen = false;
     const game = el && el.getAttribute("data-game");
     const member = !!(el && el.hasAttribute("data-member"));
-    openModal(mailingListModal(el && el.getAttribute("data-next"), game, member), null, game || member ? "modal--narrow" : "");
+    openModal(mailingListModal(el && el.getAttribute("data-next"), game, member, el && el.getAttribute("data-what")), null, game || member ? "modal--narrow" : "");
     rootAssetPaths($("#modal-root"));
   },
   "open-book": (el) => {

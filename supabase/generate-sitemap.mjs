@@ -47,7 +47,7 @@ const STATIC = [
 // Table names and path builders must mirror COLLECTION_TABLE / the URL_FOR
 // map in index.html - keep both in sync if either changes.
 const DYNAMIC = [
-  { table: "activities",  path: r => "/activity/" + r.id },
+  { table: "activities",  path: r => "/activity/" + r.id, skip: r => r.kind === "members" },   // subscribers-only AI lessons stay out too
   { table: "games",       path: r => "/play/" + r.id, skip: r => r.kind === "members" },   // subscribers-only games stay out, like the rest of the members' content
   { table: "videos",      path: r => "/watch/" + r.id },
   { table: "stories",     path: r => "/stories/" + r.id },
