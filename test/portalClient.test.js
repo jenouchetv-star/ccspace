@@ -500,8 +500,8 @@ describe("how the site wires the portal in", () => {
   it("puts the extra button, Share this and All entries in one row, with a gap above it", () => {
     expect(body("portalActionsRow")).toContain('\'<div class="prow pactions no-print">\' + portalExtraButton(e)');
     expect(body("portalExtraButton")).not.toContain("<div");
-    /* the cover layout, and the plain one (which moves Share under an AI lesson's example) */
-    expect(body("portalEntryHTML").split("portalActionsRow(e, shareBtn)").length - 1).toBe(1);
+    /* the cover layout and the plain one (both move Share under an AI lesson's example) */
+    expect(body("portalEntryHTML")).toContain('portalActionsRow(e, ex ? "" : shareBtn)');
     expect(body("portalEntryHTML")).toContain('portalActionsRow(e, example ? "" : shareBtn)');
     expect(body("portalEntryHTML")).not.toContain("+ portalExtraButton(e)");
     expect(html).toContain(".pactions{ margin-top:30px; }");
@@ -643,7 +643,7 @@ describe("an AI lesson's example of what its prompt makes", () => {
     expect(ex).toContain("What this prompt can make");
     expect(body("portalFillExamples")).toContain("PORTAL_EXAMPLE_HTML[id] = (await loadPortalGameHtml(id)) || \"\";");
     const page = body("portalEntryHTML");
-    expect(page).toContain("portalExampleHTML(e) + portalWordHTML(e) + text");
+    expect(page).toContain("(ex ? ex + '<div class=\"prow pshare no-print\">' + shareBtn + '</div>' : \"\")");
     expect(page).toContain("(storyLike ? (example ? example + shareTop : media) + portalWordHTML(e) + text");
   });
   it("never redraws a lesson's example in the background, which would start it over", () => {
@@ -704,7 +704,7 @@ describe("Activity and AI Lesson entries", () => {
   it("open like a story: the word card, the text, then the steps", () => {
     const page = body("portalEntryHTML");
     expect(page).toContain('const storyLike = e.layout === "article" || e.layout === "activity" || e.layout === "lesson";');
-    expect(page).toContain("portalWordHTML(e) + text + portalHowToHTML(e) + portalPromptHTML(e) + portalActionsRow(e, shareBtn)");
+    expect(page).toContain("portalWordHTML(e) + text + portalHowToHTML(e) + portalPromptHTML(e) + portalActionsRow(e, ex ? \"\" : shareBtn)");
     expect(page).toContain("(storyLike ? (example ? example + shareTop : media) + portalWordHTML(e) + text + portalHowToHTML(e)");
   });
   it("puts Share right under an AI lesson's example, not at the bottom", () => {
@@ -712,6 +712,37 @@ describe("Activity and AI Lesson entries", () => {
     expect(page).toContain('const example = storyLike ? portalExampleHTML(e) : "";');
     expect(page).toContain("const shareTop = example ? '<div class=\"prow pshare no-print\">' + shareBtn + '</div>' : \"\";");
     expect(page).toContain('+ portalActionsRow(e, example ? "" : shareBtn)');
+    /* a lesson with a cover too: no Share up beside the title when it has an example */
+    expect(page).toContain("+ (ex ? \"\" : '<div class=\"row no-print\" style=\"margin-top:22px\">' + shareBtn + '</div>') + '</div>'");
+  });
+});
+
+describe("the footer for a subscriber signed in on this device", () => {
+  it("swaps the Join box for a way to unsubscribe, and a Sign out button", () => {
+    const foot = body("footer");
+    expect(foot).toContain("(portalIsSubscriber()");
+    expect(foot).toContain('data-act="portal-unsubscribe"');
+    expect(foot).toContain("Want to unsubscribe? Enter your email to unsubscribe.");
+    expect(foot).toContain('data-act="portal-signout"');
+    expect(html).toContain('"portal-signout": () => {');
+  });
+  it("has no Join buttons in the top bar, only the way back into the portal", () => {
+    const nav = html.split("function navBar(")[1].split("\nfunction ")[0];
+    expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--icon btn--paper nav__only-xs" type="button" data-act="open-mailing-list"`);
+    expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--sm btn--paper nav__hide-sm" type="button" data-act="open-mailing-list"`);
+    expect(nav).toContain(`: '<button class="btn btn--sm btn--paper" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join our mailing list</button>')`);
+  });
+  it("leaves out Already joined? Sign in", () => {
+    expect(body("signInLinkHTML")).toContain('if (portalIsSubscriber()) return "";');
+  });
+  it("only ever takes the signed-in subscriber off the list", () => {
+    expect(html).toContain('portalCall("unsubscribe", { session: PortalState.session || portalSavedSession(), email: email })');
+    const fn = readFileSync(new URL("../supabase/functions/portal/index.ts", import.meta.url), "utf8");
+    const un = fn.split('if (action === "unsubscribe") {')[1].split("\n    }\n")[0];
+    expect(un).toContain("const who = await sessionSubscriber(body.session);");
+    expect(un).toContain('if (normalizeEmail(body.email) !== normalizeEmail(who.email)) return fail("wrong_email");');
+    expect(un).toContain('db.rpc("unsubscribe_newsletter", { target_id: who.id })');
+    expect(un).toContain('db.from("portal_sessions").delete().eq("subscriber_id", who.id)');
   });
 });
 

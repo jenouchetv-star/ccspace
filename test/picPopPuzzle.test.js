@@ -78,11 +78,18 @@ describe("Pic Pop Puzzle", () => {
     expect(card).toContain("Already joined? Sign in");
   });
 
+  it("tells a visitor on a subscribers-only card what joining gets them", () => {
+    const lesson = index.split("function membersActivityCard(")[1].split("\nfunction ")[0];
+    expect(lesson).toContain(`(sub ? E(a.summary) : '<b class="card__join">Join our mailing list to view this lesson and other exclusive content.</b>')`);
+    const game = index.split("function gameCard(")[1].split("\nfunction ")[0];
+    expect(game).toContain(`(g.kind === "members" && !portalIsSubscriber() ? '<b class="card__join">Join free to play:</b> ' : "") + E(g.summary)`);
+  });
+
   it("is AI Lesson 04's example, with the kid-friendly prompt and the same Word to know", () => {
     expect(lessonSql).toContain("'privateGameId', 'pg-picture-puzzle'");
     expect(lessonSql).toContain("$p$🧩 Pic Pop Puzzle!");
     expect(lessonSql).toContain("'vocabWord', '2D spatial awareness'");
     expect(lessonSql).toContain("'status', 'published'");
-    expect(lessonSql).toContain("'cover', jsonb_build_object('src', 'assets/games/pic-pop-puzzle.jpg'");
+    expect(lessonSql).toContain("'cover', jsonb_build_object('src', 'https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/uploads/media/1793530924918-");
   });
 });

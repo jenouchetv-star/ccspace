@@ -28,6 +28,11 @@
 //   list      the archive index   (needs a good session)
 //   entry     one entry, in full  (needs a good session)
 //   signout   forget this session
+//   unsubscribe  the footer's "Want to unsubscribe?" for a signed-in
+//             subscriber: needs a good session AND the email it belongs to,
+//             so it can only ever take the person signed in off the list.
+//             Uses unsubscribe_newsletter() (the same as an email's link) and
+//             ends every session of theirs.
 //
 // The portal_entries table is admin-only under RLS. This function reads it
 // with the service role, and only after a session has been checked - so an
@@ -409,6 +414,17 @@ Deno.serve(async (req) => {
     if (action === "signout") {
       const t = String(body.session ?? "");
       if (t.length >= 20) await db.from("portal_sessions").delete().eq("token_hash", await sha256Hex(t));
+      return json({ ok: true });
+    }
+
+    /* ---------------- unsubscribe (signed in) ---------------- */
+    if (action === "unsubscribe") {
+      const who = await sessionSubscriber(body.session);
+      if (!who) return fail("no_session");
+      if (normalizeEmail(body.email) !== normalizeEmail(who.email)) return fail("wrong_email");
+      const { error } = await db.rpc("unsubscribe_newsletter", { target_id: who.id });
+      if (error) throw new Error(error.message);
+      await db.from("portal_sessions").delete().eq("subscriber_id", who.id);
       return json({ ok: true });
     }
 

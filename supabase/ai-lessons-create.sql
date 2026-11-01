@@ -56,7 +56,7 @@ insert into activities (id, data) values ('act-ai-lesson-math-robot', jsonb_buil
 on conflict (id) do update set data = excluded.data, updated_at = now();
 
 -- AI Lesson 04, beside its Subscriber's Portal lesson (supabase/ai-lesson-picture-puzzle.sql); both are published,
--- and the card uses the lesson's cover (the same picture as Pic Pop Puzzle's Play page card).
+-- and the card uses the lesson's cover (two boys playing the game; Pic Pop Puzzle's Play page card keeps the drawing).
 insert into activities (id, data) values ('act-ai-lesson-picture-puzzle', jsonb_build_object(
   'id', 'act-ai-lesson-picture-puzzle', 'slug', 'ai-lesson-picture-puzzle',
   'kind', 'members', 'portalSlug', 'how-to-build-your-own-puzzle-game',
@@ -68,7 +68,7 @@ insert into activities (id, data) values ('act-ai-lesson-picture-puzzle', jsonb_
   'learning', jsonb_build_object('topic', 'structures', 'title', 'Ask AI to keep your pictures private', 'text', ''),
   'discussionPrompt', '', 'variation', '', 'value', 'curiosity',
   'printable', jsonb_build_object('label', '', 'path', ''), 'youtubeUrl', '',
-  'image', jsonb_build_object('src', 'assets/games/pic-pop-puzzle.jpg', 'alt', 'A drawing of kids building a toy city with a train in a treehouse, cut into puzzle pieces, with one piece lifted out of place and one locked in with a green border'),
+  'image', jsonb_build_object('src', 'https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/uploads/media/1793530924918-Gemini_Generated_Image_73wdck73wdck73wd.jpg', 'alt', 'Two boys on a porch playing a picture puzzle game together on a tablet'),
   'related', '[]'::jsonb, 'tags', '["ai", "coding", "games", "puzzle", "subscribers"]'::jsonb, 'featured', false,
-  'status', 'published', 'createdAt', '2026-11-01T12:00:00.000Z', 'updatedAt', '2026-11-01T12:00:00.000Z'))
+  'status', 'published', 'createdAt', '2026-11-01T12:00:00.000Z', 'updatedAt', '2026-11-01T13:00:00.000Z'))
 on conflict (id) do update set data = excluded.data, updated_at = now();
