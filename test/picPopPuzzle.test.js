@@ -82,7 +82,7 @@ describe("Pic Pop Puzzle", () => {
     const lesson = index.split("function membersActivityCard(")[1].split("\nfunction ")[0];
     expect(lesson).toContain(`(sub ? E(a.summary) : '<b class="card__join">Join our mailing list to view this lesson and other exclusive content.</b>')`);
     const game = index.split("function gameCard(")[1].split("\nfunction ")[0];
-    expect(game).toContain(`(g.kind === "members" && !portalIsSubscriber() ? '<b class="card__join">Join free to play:</b> ' : "") + E(g.summary)`);
+    expect(game).toContain(`(g.kind === "members" && !portalIsSubscriber() ? '<b class="card__join">Join our mailing list to play this game and other educational content.</b>' : E(g.summary))`);
   });
 
   it("is AI Lesson 04's example, with the kid-friendly prompt and the same Word to know", () => {
