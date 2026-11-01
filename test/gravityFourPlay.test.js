@@ -54,7 +54,7 @@ describe("Gravity 4 on the Play page", () => {
     expect(modal).toContain("(play ? (lesson ? 'open ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.')");
     // an AI lesson from the Create page is opened, not played
     expect(modal).toContain("const lesson = !!play && (what === \"lesson\" || /^AI Lesson\\b/i.test(play));");
-    expect(modal).toContain("(back2 ? ' Send my code' : ' Join')");
+    expect(modal).toContain("(back2 ? ' Send my code' : ' Join free')");
     expect(modal).toContain("(play ? '<input type=\"hidden\" name=\"code\" value=\"1\"><input type=\"hidden\" name=\"game\" value=\"' + E(play) + '\">' : \"\")");   // both ask for a code
     expect(modal).toContain('1789240884060-Gemini_Generated_Image_tri3mjtri3mjtri3.jpg" alt="Chike, Zech, and their 6 uniquely creative friends"');              // the whole crew, for a game
     expect(index).toContain('game || member ? "modal--narrow" : ""');          // and a smaller box
@@ -125,10 +125,12 @@ describe("the code box after Send my link", () => {
 
 describe("Welcome back (Already joined? Sign in)", () => {
   it("is offered under every Join form: the nav box, the footer and the Articles box", () => {
-    // in the Join box it shares one row with Cancel and Join: Sign in on the left, the two buttons on the right
-    expect(index).toContain(`+ '<div class="modal__foot modal__foot--join">'\n    + (back2 ? "" : signInLinkHTML(back, play, "join-signin"))`);
-    expect(index).toContain(".join-signin{ display:flex; align-items:center; gap:6px; margin:0 auto 0 0;");
-    expect(index).toContain(".modal__foot--join .btn{ height:46px; min-height:46px; padding-block:0; box-sizing:border-box; }");   // all three the same height
+    // in the Join box: the Join free button first, then "Already joined? Sign in" as a plain text link, and no Cancel (the ✕ closes it)
+    const modal = fn("mailingListModal");
+    expect(modal).toContain(`+ '<div class="modal__foot modal__foot--join">'\n    + '<button type="submit" class="btn btn--cyan">' + ic("mail") + (back2 ? ' Send my code' : ' Join free') + '</button>'`);
+    expect(modal).toContain(`'<p class="join-signin"><b>Already joined?</b> <button type="button" class="join-signin__link" data-act="open-mailing-list" data-member'`);
+    expect(modal).not.toContain(">Cancel</button>");
+    expect(index).toContain(".join-signin__link{ font:inherit; font-weight:800; color:var(--cyan); background:none; border:0;");
     expect(index.split('signInLinkHTML("", ""').length - 1).toBe(2);   // the footer, and the Articles box (laid out beside its form)
     expect(fn("signInLinkHTML")).toContain("Already joined?</b>");
   });
