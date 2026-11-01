@@ -514,8 +514,15 @@ describe("how the site wires the portal in", () => {
     expect(html).toContain('"?k=__ACCESS_KEY__"');
   });
 
-  it("is kept out of search engines", () => {
-    expect(html).toContain('<meta name="robots" content="noindex, nofollow">');
+  it("is kept out of search engines, while the public site may be listed", () => {
+    expect(html).toContain('<meta name="robots" content="index, follow">');
+    const fn = body("updateRobotsMeta");
+    expect(fn).toContain('/^\\/(admin|newsletter)(\\/|$|\\?)/.test(path) ? "noindex, nofollow" : "index, follow"');
+    expect(html).toMatch(/updateCanonicalLink\(\);\r?\n\s+updateRobotsMeta\(\);/);   /* on every page change */
+    const robots = readFileSync(new URL("../robots.txt", import.meta.url), "utf8");
+    expect(robots).toContain("Disallow: /admin");
+    expect(robots).not.toMatch(/Disallow: \/\s*$/m);                  /* nothing blocks the whole site */
+    expect(robots).not.toContain("Disallow: /newsletter");           /* a crawler must load it to read its noindex */
   });
 });
 

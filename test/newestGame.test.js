@@ -28,6 +28,27 @@ describe("the Newest game section", () => {
     expect(html).toContain('pageVal("create", "finderLede", "Tell us what you have, what you want to explore, and how much time you have. "');
   });
 
+  it("links the Help page's mention of the Privacy Policy", () => {
+    expect(html).toContain(`E(qa[1]).replace(/Privacy Policy/g, '<a href="#/privacy">Privacy Policy</a>')`);
+    expect(html).toContain("See the Privacy Policy for the details.");
+    expect(html).toContain(`.replace(/Report a problem/g, '<button type="button" class="more__link" data-act="report-problem-open">Report a problem</button>')`);
+    expect(html).toContain('"Use Report a problem, at the bottom of every page. It helps to say which activity and which step was unclear."');
+  });
+
+  it("lays articles out like the other pages, with headings, charts, a photo and their sources", () => {
+    const view = html.split("function viewArticle(")[1].split("\nfunction ")[0];
+    expect(view).toContain('<div class="panel article">');
+    expect(view).toContain("pageHeader(titleCase(a.kind), quEditable(\"article-title\"");
+    const body = html.split("function articleBodyHTML(")[1].split("\nfunction ")[0];
+    expect(body).toContain("/^##\\s+/.test(s)");
+    expect(body).toContain("s.match(/^\\[chart\\s+(\\d+)\\]$/i)");
+    expect(body).toContain("/^\\[photo\\]$/i.test(s)");
+    expect(html).toContain('{ key:"photo", label:"Photo in the article", type:"media"');
+    expect(html).toContain('{ key:"sources", label:"Sources", type:"lines"');
+    expect(html).toContain("return { label: label, url: /^https?:\\/\\//i.test(url) ? url : \"\" };");   /* only real web links */
+    expect(html).not.toContain('R({ id:"art-paper"');
+  });
+
   it("gives Doodle Dash its second sentence, and keeps its Play card summary to one line", () => {
     expect(html).toContain('intro:"' + INTRO + '"');
     expect(sql).toContain(INTRO);
