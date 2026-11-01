@@ -3392,6 +3392,16 @@ body.portal-locked{ overflow:hidden; }
 .pprompt__more[open] .pprompt__hide{ display:inline; }
 .pprompt__extra{ display:block; margin-top:10px; white-space:pre-wrap; }
 .pprompt__text:focus-visible{ outline:3px solid #F5B921; outline-offset:3px; }
+/* a long prompt: its first 720px, fading away into the box, with Show all sitting on the fade */
+.pprompt__text.is-clipped{ max-height:720px; overflow:hidden; position:relative; }
+.pprompt__text.is-clipped::after{ content:""; position:absolute; left:0; right:0; bottom:0; height:220px; pointer-events:none;
+  background:linear-gradient(rgba(30,34,38,0), #1E2226 78%); }
+.pprompt__all{ position:relative; z-index:2; display:flex; width:max-content; margin:12px auto 0; }
+.pprompt__all[hidden]{ display:none; }
+.pprompt__text.is-clipped + .pprompt__all{ margin-top:-64px; }
+.pprompt__all svg{ transition:transform .15s; }
+.pprompt__all[aria-expanded="true"] svg{ transform:rotate(180deg); }
+@media print{ .pprompt__text.is-clipped{ max-height:none; } .pprompt__text.is-clipped::after{ display:none; } }
 /* the buttons sit in the box's top-right corner, so the words start below them and never run underneath */
 .pprompt__box .pprompt__text{ padding-top:78px; }
 @media (max-width:620px){
@@ -10638,6 +10648,8 @@ async function openGameStage(idOrRecord){
   if (frame){
     /* same-origin, so the game can be told it is running inside the site */
     frame.addEventListener("load", () => {
+      /* a sealed frame can't be reached that way, so it's told by message (an AI lesson's example then shows "Exit full screen") */
+      try { frame.contentWindow.postMessage({ ccsStaged: true }, "*"); } catch(_e){}
       try {
         frame.contentDocument.documentElement.classList.add("ccs-staged");
         /* Escape typed while focus sits inside the iframe never reaches the
@@ -10652,6 +10664,24 @@ async function openGameStage(idOrRecord){
     frame.focus();
   }
 }
+/* An AI lesson's example can bring its own full-screen button (the math robot keeps it beside its other buttons).
+   Once it loads it says so, and the page hides the corner button for that box; its button then asks the page to open
+   the same full-screen player, or, inside the player, to close it. Only messages from those exact frames count. */
+window.addEventListener("message", (ev) => {
+  const d = ev.data;
+  if (!d || typeof d !== "object" || typeof d.ccsExample !== "string") return;
+  const stage = $("#gamestage-frame");
+  if (stage && ev.source === stage.contentWindow){
+    if (d.ccsExample === "fullscreen") closeGameStage();
+    return;
+  }
+  const frame = Array.from(document.querySelectorAll(".pexample iframe")).find(f => f.contentWindow === ev.source);
+  const corner = frame && frame.parentElement.querySelector(".pexample__full");
+  if (!corner) return;
+  if (d.ccsExample === "has-fullscreen") corner.style.display = "none";
+  if (d.ccsExample === "fullscreen") ACTIONS["portal-play-private"](corner);
+});
+
 function closeGameStage(){
   if (!$(".gamestage")) return false;
   const frame = $("#gamestage-frame");
@@ -12090,9 +12120,28 @@ function portalHowToHTML(e){
 }
 
 /** "Make your own": a short prompt kids and parents can copy into Gemini, with a Copy button. */
+/* A long prompt folds to its first 720px, fading away, with a Show all button under it. A short one shows in full.
+   Opening it stays open through a redraw of the same lesson. */
+const PROMPT_CLIP = 720;
+const PromptFold = { id: "", open: false };
+function portalClipPrompt(){
+  const box = document.getElementById("pprompt-text"), btn = document.querySelector(".pprompt__all");
+  if (!box || !btn) return;
+  const long = box.scrollHeight > PROMPT_CLIP + 60;     // not worth folding for a line or two
+  btn.hidden = !long;
+  portalPromptShow(!long || PromptFold.open, box, btn);
+}
+function portalPromptShow(open, box, btn){
+  box.classList.toggle("is-clipped", !open);
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+  btn.querySelector("span").textContent = open ? "Show less" : "Show all";
+}
+
 function portalPromptHTML(e){
   const text = String(e.aiPrompt || "").trim();
   if (!text) return "";
+  if (PromptFold.id !== e.id){ PromptFold.id = e.id; PromptFold.open = false; }
+  setTimeout(portalClipPrompt, 0);
   const extras = promptExtras(text, portalEntryUrl(SITE_ORIGIN, e));   // always the live site's address, even in a preview
   return '<section class="pprompt" aria-labelledby="pprompt-h">'
     + '<span class="eyebrow">Make your own</span>'
@@ -12117,6 +12166,8 @@ function portalPromptHTML(e){
     + '<div class="pprompt__text" id="pprompt-text" tabindex="0" role="group" aria-label="The prompt to copy"><span class="pprompt__main">' + E(text) + '</span>'
     + (extras ? '<details class="pprompt__more"><summary>' + ic("plus") + ' Copy prompt also adds our style and a footer that links back to this lesson. <u class="pprompt__show">Show it</u><u class="pprompt__hide">Hide it</u></summary>'
       + '<span class="pprompt__extra">' + E(extras) + '</span></details>' : "") + '</div>'
+    /* a long prompt shows its first 720px, fading away, with Show all under it (portalClipPrompt decides once it's on the page) */
+    + '<button type="button" class="btn btn--paper btn--sm pprompt__all no-print" data-act="portal-prompt-all" aria-controls="pprompt-text" aria-expanded="false" hidden>' + ic("chevron-down") + '<span>Show all</span></button>'
     + '</div>'
     + '<p class="pprompt__note">If Gemini or Claude gives you a file, a grown-up can help you save it with a name ending in <b>.html</b>, like <b>game.html</b>, and open it in your browser.</p>'
     + '<p class="pprompt__legal">Chike\u2019s Creative Space is not affiliated with, endorsed by, or sponsored by Google Gemini, Anthropic’s Claude or any other AI platform.</p>'
@@ -22838,9 +22889,18 @@ const ACTIONS = {
     } catch(_e){
       /* clipboard blocked: select the words so Ctrl+C / Cmd+C works */
       const more = box.querySelector(".pprompt__more"); if (more) more.open = true;   // so a select-and-copy takes the footer too
+      const all = document.querySelector(".pprompt__all"); if (all && !all.hidden){ PromptFold.open = true; portalPromptShow(true, box, all); }
       try { const r = document.createRange(); r.selectNodeContents(box); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); } catch(_e2){ /* ignore */ }
       toast("Press Ctrl+C (or Cmd+C) to copy the prompt.");
     }
+  },
+  "portal-prompt-all": (el) => {
+    const box = document.getElementById("pprompt-text");
+    if (!box) return;
+    PromptFold.open = box.classList.contains("is-clipped");
+    portalPromptShow(PromptFold.open, box, el);
+    /* folding it back: return to the top of the prompt, clear of the sticky header */
+    if (!PromptFold.open) window.scrollTo({ top: box.getBoundingClientRect().top + window.scrollY - 110, behavior: "smooth" });
   },
   "portal-toggle": (el) => { portalToggle(el.getAttribute("data-id")); },
   "copilot-toggle": () => {
@@ -25822,8 +25882,10 @@ window.matchMedia("(prefers-reduced-motion: reduce)").addEventListener
    Background sync (the realtime channel below and the 30s poll fallback)
    must never do that, so both skip their rerender while any embed is live -
    the underlying cache still updates, the screen just waits until nothing
-   is playing. */
-function hasPlayingEmbed(){ return !!document.querySelector(".embed iframe"); }
+   is playing. An AI lesson's example (the 3D computer, the math robot) counts
+   too: it's a sealed frame that can't save anything, so a redraw would start
+   it over and wipe what the visitor typed. */
+function hasPlayingEmbed(){ return !!document.querySelector(".embed iframe, .pexample iframe"); }
 
 /* Same problem as hasPlayingEmbed() above, different casualty: a plain
    <input>/<textarea> (a contact form, the admin sign-in fields, ticketGate()'s

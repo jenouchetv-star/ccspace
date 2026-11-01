@@ -36,3 +36,21 @@ insert into activities (id, data) values ('act-ai-lesson-3d-computer', jsonb_bui
   'related', '[]'::jsonb, 'tags', '["ai", "coding", "3d", "subscribers"]'::jsonb, 'featured', false,
   'status', 'published', 'createdAt', '2026-10-31T12:00:00.000Z', 'updatedAt', '2026-10-31T12:00:00.000Z'))
 on conflict (id) do update set data = excluded.data, updated_at = now();
+
+-- AI Lesson 03, added as a draft beside its Subscriber's Portal lesson (supabase/ai-lesson-math-robot.sql):
+-- publish both together, so the card never opens a lesson subscribers cannot see yet.
+insert into activities (id, data) values ('act-ai-lesson-math-robot', jsonb_build_object(
+  'id', 'act-ai-lesson-math-robot', 'slug', 'ai-lesson-math-robot',
+  'kind', 'members', 'portalSlug', 'how-to-build-your-own-math-robot',
+  'title', 'AI Lesson 03: Make a Talking 3D Math Robot',
+  'summary', 'Use AI to build a friendly 3D robot that chats with you, learns your name, helps with your math homework, and gives high fives.',
+  'type', 'ai', 'access', 'members', 'character', 'chike',
+  'ageMin', 6, 'ageMax', 10, 'timeMinutes', 30, 'difficulty', 'easy', 'setting', 'indoor', 'adultSupport', 'nearby',
+  'materials', '[]'::jsonb, 'materialsDetail', '[]'::jsonb, 'safetyNotes', '[]'::jsonb, 'steps', '[]'::jsonb,
+  'learning', jsonb_build_object('topic', 'structures', 'title', 'A detailed prompt makes a smarter robot', 'text', ''),
+  'discussionPrompt', '', 'variation', '', 'value', 'curiosity',
+  'printable', jsonb_build_object('label', '', 'path', ''), 'youtubeUrl', '',
+  'image', jsonb_build_object('src', '', 'alt', ''),
+  'related', '[]'::jsonb, 'tags', '["ai", "coding", "math", "robot", "subscribers"]'::jsonb, 'featured', false,
+  'status', 'draft', 'createdAt', '2026-11-01T12:00:00.000Z', 'updatedAt', '2026-11-01T12:00:00.000Z'))
+on conflict (id) do update set data = excluded.data, updated_at = now();

@@ -644,6 +644,32 @@ describe("an AI lesson's example of what its prompt makes", () => {
     expect(page).toContain("portalExampleHTML(e) + portalWordHTML(e) + text");
     expect(page).toContain("(storyLike ? (portalExampleHTML(e) || media) + portalWordHTML(e) + text");
   });
+  it("never redraws a lesson's example in the background, which would start it over", () => {
+    /* the 30-second sync and realtime updates skip their redraw while hasPlayingEmbed() is true */
+    expect(html).toContain('function hasPlayingEmbed(){ return !!document.querySelector(".embed iframe, .pexample iframe"); }');
+    expect(html).toContain("realDb.hydrate().then(() => { if (!hasPlayingEmbed() && !isEditingForm()) rerender(); })");
+  });
+  it("folds a long prompt to 720px with a fade and a Show all button", () => {
+    const box = body("portalPromptHTML");
+    expect(box).toContain('data-act="portal-prompt-all" aria-controls="pprompt-text" aria-expanded="false" hidden>');
+    expect(box).toContain("setTimeout(portalClipPrompt, 0);");
+    expect(html).toContain("const PROMPT_CLIP = 720;");
+    expect(body("portalClipPrompt")).toContain("const long = box.scrollHeight > PROMPT_CLIP + 60;");
+    expect(html).toContain(".pprompt__text.is-clipped{ max-height:720px; overflow:hidden; position:relative; }");
+    expect(html).toContain("background:linear-gradient(rgba(30,34,38,0), #1E2226 78%); }");
+    /* printing shows the whole prompt */
+    expect(html).toContain("@media print{ .pprompt__text.is-clipped{ max-height:none; }");
+  });
+  it("lets a lesson's example bring its own full-screen button, and trusts only its own frames", () => {
+    expect(html).toContain('if (!d || typeof d !== "object" || typeof d.ccsExample !== "string") return;');
+    expect(html).toContain('if (stage && ev.source === stage.contentWindow){');
+    expect(html).toContain('if (d.ccsExample === "fullscreen") closeGameStage();');
+    expect(html).toContain('const frame = Array.from(document.querySelectorAll(".pexample iframe")).find(f => f.contentWindow === ev.source);');
+    expect(html).toContain('if (d.ccsExample === "has-fullscreen") corner.style.display = "none";');
+    expect(html).toContain('if (d.ccsExample === "fullscreen") ACTIONS["portal-play-private"](corner);');
+    /* the player tells a sealed frame it's full screen, so the example can offer "Exit full screen" */
+    expect(html).toContain('try { frame.contentWindow.postMessage({ ccsStaged: true }, "*"); } catch(_e){}');
+  });
   it("gives a game or story with an AI prompt an AI Lesson badge too", () => {
     expect(body("portalEntryHTML")).toContain("(e.layout !== \"lesson\" && String(e.aiPrompt || \"\").trim() ? '<span class=\"chip chip--ink\">' + ic(PORTAL_LAYOUT_ICON.lesson) + ' AI Lesson</span>' : \"\")");
   });
