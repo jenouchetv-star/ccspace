@@ -22,6 +22,12 @@ describe("the Newest game section", () => {
     expect(html).toContain('pageVal("home", "arcadeHeading", "8 games, one big arcade makeover!")');
   });
 
+  it("lets Quick Update change the text under the Create page's heading", () => {
+    expect(html).toContain(`'<p class="lede">' + quEditable("create-finder-lede", createId, E(createLede)) + '</p>'`);
+    expect(html).toContain('"create-finder-lede":  { label:"Create page intro",      col:"pages",   fieldKey:"finderLede"');
+    expect(html).toContain('pageVal("create", "finderLede", "Tell us what you have, what you want to explore, and how much time you have. "');
+  });
+
   it("gives Doodle Dash its second sentence, and keeps its Play card summary to one line", () => {
     expect(html).toContain('intro:"' + INTRO + '"');
     expect(sql).toContain(INTRO);
