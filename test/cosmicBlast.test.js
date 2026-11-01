@@ -91,3 +91,12 @@ describe("the page", () => {
     expect(page).toContain("This game needs 3D");
   });
 });
+
+describe("aiming on a touch screen", () => {
+  it("puts the reticle, and the aim with it, 44px above the fingertip, and leaves the mouse where it is", () => {
+    expect(page).toContain("const TOUCH_LIFT = 44;");
+    expect(page).toContain("const lift = (e.pointerType === 'touch' || e.pointerType === 'pen') ? TOUCH_LIFT : 0;");
+    expect(page).toContain("aim.y = clamp(e.clientY - r.top - lift, 4, H - 4);");
+    expect(page).toContain("The target sits just above your finger, so you can always see it.");
+  });
+});
