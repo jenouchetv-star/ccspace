@@ -2978,23 +2978,29 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 /* An article: one panel as wide as the other pages, a readable text column, and its sources beside it */
 .article{ display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:clamp(28px,4vw,56px); align-items:start; padding:clamp(22px,4vw,48px); }
 .article__body{ max-width:70ch; font-size:1.08rem; line-height:1.7; }
-.article__body p{ margin:0 0 1.1em; }
-.article__h{ font-size:clamp(1.3rem,2.2vw,1.6rem); margin:1.6em 0 .5em; text-wrap:balance; }
+.article__body p{ margin:0 0 1.25em; }
+.article__body > :first-child{ margin-top:0; }
+.article__h{ font-size:clamp(1.3rem,2.2vw,1.6rem); margin:2.2em 0 .6em; text-wrap:balance; }
+.afig + .article__h{ margin-top:1.4em; }
 .article__aside{ position:sticky; top:110px; padding-left:24px; border-left:var(--line-thin); }
 .article__sources{ margin:10px 0 0; padding-left:1.2em; font-size:.9rem; line-height:1.45; display:grid; gap:10px; }
+.article__sources a, .afig__source a{ transition:color .15s ease; }
+.article__sources a:hover, .article__sources a:focus-visible, .afig__source a:hover, .afig__source a:focus-visible{ color:var(--cyan); }
 @media (max-width:900px){
   .article{ grid-template-columns:1fr; }
   .article__aside{ position:static; padding:22px 0 0; border-left:0; border-top:var(--line-thin); }
 }
 /* charts and key numbers inside an article */
-.afig{ margin:30px 0; padding:20px 22px; border:var(--line-thin); border-radius:16px; background:var(--paper); }
-.afig--photo{ padding:0; overflow:hidden; }
-.afig--photo img{ display:block; width:100%; height:auto; }
-.afig--photo .afig__caption{ padding:10px 16px 14px; margin:0; }
-.afig__title{ font-weight:800; font-size:1.02rem; line-height:1.35; margin-bottom:16px; }
-.afig__caption{ font-size:.86rem; line-height:1.5; color:var(--ink-mute); margin:14px 0 0; }
-.afig__source{ font-size:.8rem; color:var(--ink-mute); margin:6px 0 0; }
-.abars{ display:grid; gap:12px; }
+.afig{ margin:40px 0; padding:26px 28px; border-radius:16px; background:var(--paper); }
+.afig--photo{ padding:0; background:none; }
+.afig--photo img{ display:block; width:100%; height:auto; border-radius:16px; }
+.afig__title{ font-weight:800; font-size:1.02rem; line-height:1.35; margin-bottom:20px; }
+/* ".afig" in front so these win over the article's own paragraph spacing */
+.afig .afig__caption{ font-size:.86rem; line-height:1.5; color:var(--ink-mute); margin:20px 0 0; }
+.afig .afig__source{ font-size:.8rem; line-height:1.5; color:var(--ink-mute); margin:20px 0 0; }
+.afig .afig__caption + .afig__source{ margin-top:8px; }
+.afig--photo .afig__caption{ margin:12px 0 0; }
+.abars{ display:grid; gap:14px; }
 .abar{ display:grid; grid-template-columns:minmax(96px,34%) 1fr auto; gap:12px; align-items:center; font-size:.9rem; line-height:1.3; }
 .abar__track{ height:18px; background:var(--paper-2); border:2px solid var(--ink); border-radius:999px; overflow:hidden; }
 .abar__fill{ display:block; height:100%; background:var(--cyan); }
@@ -3004,7 +3010,7 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 .astat{ display:flex; flex-direction:column; gap:6px; padding:16px; background:var(--paper-2); border-radius:12px; }
 .astat__num{ font-size:clamp(1.8rem,4vw,2.4rem); font-weight:800; line-height:1; color:var(--cyan); font-variant-numeric:tabular-nums; }
 .astat__label{ font-size:.88rem; line-height:1.4; }
-@media (max-width:520px){ .abar{ grid-template-columns:1fr auto; } .abar__label{ grid-column:1 / -1; } }
+@media (max-width:520px){ .afig{ padding:20px 18px; margin:32px 0; } .abar{ grid-template-columns:1fr auto; } .abar__label{ grid-column:1 / -1; } }
 /* "Report a problem" inside a Help answer: a button that reads like a link */
 .more__body .more__link{ font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
 
@@ -8595,6 +8601,8 @@ function subNavData(){
   const r = AppState.route;
   if (r.name === "about")      return { items: ABOUT_NAV,   current: r.params.sub || "team",   label: "About sections",    title: "About Chike’s Creative Space", short: "About",     progress: true };
   if (r.name === "grown-ups")  return { items: GROWNUP_NAV, current: r.params.sub || "",        label: "Grown-up sections", title: "For Grown-Ups",                short: "Grown-Ups" };
+  /* an article lives under Grown-Ups > News & Articles, so it keeps that tab row with News & Articles selected */
+  if (r.name === "article-detail") return { items: GROWNUP_NAV, current: "articles",          label: "Grown-up sections", title: "For Grown-Ups",                short: "Grown-Ups" };
   if (r.name === "play")       return { items: PLAY_NAV,    current: r.params.sub || "online",  label: "Game types",        title: "Play",                         short: "Play" };
   if (r.name === "shop")       return SHOP_NAV.length ? { items: SHOP_NAV, current: r.params.sub || "amazon", label: "Shop sections", title: "Shop", short: "Shop" } : null;
   return null;
@@ -8609,7 +8617,8 @@ function subNavBar(){
   if (!d) return "";
   const desktop = '<nav class="subnav" aria-label="' + E(d.label) + '"><div class="shell-wide subnav__in">'
     + d.items.map(i => '<a class="opt" href="' + i.hash + '"'
-        + ((i.sub === d.current) ? ' aria-pressed="true" aria-current="page"' : "") + '>' + E(i.label) + '</a>').join("")
+        /* on a page inside a section (an article inside News & Articles), its tab is the current location, not the current page */
+        + ((i.sub === d.current) ? ' aria-pressed="true" aria-current="' + (AppState.route.name === "article-detail" ? "location" : "page") + '"' : "") + '>' + E(i.label) + '</a>').join("")
     + '</div></nav>';
   return desktop + mobileSectionSwitch(d);
 }
@@ -8670,7 +8679,7 @@ function navBar(isAdmin){
     stories: ["stories","story-detail"],
     characters: ["characters","character-detail"],
     about:  ["about"],
-    "grown-ups": ["grown-ups","help"],
+    "grown-ups": ["grown-ups","help","article-detail"],
     shop:   ["shop"]
   };
   const links = PUBLIC_NAV.map(l => {
@@ -11755,10 +11764,13 @@ function viewArticle(id){
   const others = db.list("articles").filter(x => x.status === "published" && x.id !== a.id).slice(0, 3);
   const sources = articleSources(a);
   const shareBtn = '<button class="btn btn--paper no-print" data-act="share" data-url="' + E(location.origin + "/article/" + a.id) + '" data-title="' + E(a.title) + '">' + ic("share-2") + ' Share</button>';
+  /* the way back to the list, at the top and again at the end of the article */
+  const backBtn = '<a class="btn btn--paper no-print" href="#/grown-ups/articles">' + ic("arrow-left") + ' Back to News &amp; Articles</a>';
   /* the same full-width banner as the other pages, with the cover picture beside the title */
-  const head = pageHeader(titleCase(a.kind), quEditable("article-title", a.id, E(a.title)), "", shareBtn, {
+  const head = pageHeader("", quEditable("article-title", a.id, E(a.title)), "", backBtn + shareBtn, {
     ledeHTML: '<p class="lede">' + quEditable("article-blurb", a.id, E(a.blurb)) + '</p>'
-      + (a.readMinutes ? '<p class="tiny mute" style="margin:8px 0 0">' + ic("clock") + ' ' + E(a.readMinutes) + ' minute read</p>' : ""),
+      /* the tab row above already says where this is, so the kind sits here, beside the reading time */
+      + '<p class="tiny mute" style="margin:8px 0 0">' + E(titleCase(a.kind)) + (a.readMinutes ? ' · ' + ic("clock") + ' ' + E(a.readMinutes) + ' minute read' : "") + '</p>',
     aside: a.image && a.image.src
       ? '<div class="taped"><img class="skel" src="' + E(a.image.src) + '" alt="' + E(a.image.alt || "") + '" loading="lazy"></div>'
       : '<div class="taped artcover">' + plate("story", titleCase(a.kind)) + '</div>'
@@ -11767,7 +11779,8 @@ function viewArticle(id){
   return head
     + '<section class="section"><div class="shell">'
     + '<div class="panel article">'
-    + '<div class="article__body">' + quEditable("article-body", a.id, articleBodyHTML(a)) + '</div>'
+    + '<div class="article__body">' + quEditable("article-body", a.id, articleBodyHTML(a))
+    + '<div class="row no-print" style="margin-top:30px;flex-wrap:wrap">' + backBtn + '</div></div>'
     + '<aside class="article__aside">'
     + (sources.length
         ? '<span class="eyebrow">Sources</span><ol class="article__sources">' + sources.map(s => '<li>'

@@ -38,7 +38,7 @@ describe("the Newest game section", () => {
   it("lays articles out like the other pages, with headings, charts, a photo and their sources", () => {
     const view = html.split("function viewArticle(")[1].split("\nfunction ")[0];
     expect(view).toContain('<div class="panel article">');
-    expect(view).toContain("pageHeader(titleCase(a.kind), quEditable(\"article-title\"");
+    expect(view).toContain("pageHeader(\"\", quEditable(\"article-title\"");
     const body = html.split("function articleBodyHTML(")[1].split("\nfunction ")[0];
     expect(body).toContain("/^##\\s+/.test(s)");
     expect(body).toContain("s.match(/^\\[chart\\s+(\\d+)\\]$/i)");
@@ -47,6 +47,10 @@ describe("the Newest game section", () => {
     expect(html).toContain('{ key:"sources", label:"Sources", type:"lines"');
     expect(html).toContain("return { label: label, url: /^https?:\\/\\//i.test(url) ? url : \"\" };");   /* only real web links */
     expect(html).not.toContain('R({ id:"art-paper"');
+    /* an article keeps the Grown-Ups tab row and menu highlight, with a way back to the list */
+    expect(html).toContain('if (r.name === "article-detail") return { items: GROWNUP_NAV, current: "articles"');
+    expect(html).toContain('"grown-ups": ["grown-ups","help","article-detail"],');
+    expect(view).toContain(' Back to News &amp; Articles</a>');
     /* drafts are for admins only: on the list (marked Draft) and on their own page */
     expect(html).toContain('a.status === "published" || (showDrafts && a.status === "draft")');
     expect(view).toContain('(a.status !== "published" && !(isAuthed() && isActiveAdmin()))) return notFound("article")');
