@@ -532,13 +532,15 @@ describe("the new games band on the home page", () => {
   const home = body("viewHome");
 
   it("announces the eight games, sends people to play them, and invites them to join for the exclusive game", () => {
-    expect(promo).toContain("<h2 id=\"g4-title\">8 games, one big arcade makeover!</h2>");
+    expect(promo).toContain("<h2 id=\"g4-title\">' + quEditable(\"home-arcade-heading\", homeId, E(heading)) + '</h2>");
+    expect(promo).toContain('"arcadeHeading", "8 games, one big arcade makeover!"');                 /* the wording until it's changed */
     expect(promo).toContain("Every game has a learning twist for kids from Kindergarten to 5th grade.");
     expect(promo).toContain('href="#/play"');
     expect(promo).toContain("Play the new games");
     expect(promo).toContain('data-act="open-mailing-list" data-next="/newsletter/arcade-makeover"');   /* the same sign-up as the nav and footer */
     expect(promo).toContain("Join for exclusive games");
     expect(promo).toContain("Subscribers also get Chike’s Gravity 4, a game made just for them.");
+    expect(promo).toContain(`quEditable("home-arcade-note", homeId, E(note))`);                      /* Quick Update can change the small print */
     expect(html).not.toContain("function gravityFourPromoHTML(");
   });
 

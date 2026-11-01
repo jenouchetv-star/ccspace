@@ -6018,6 +6018,7 @@ function seedGames(){
       icon:"pencil", p1:"#A9D8FF", p2:"#1F5FBF",
       cover:{ src:"assets/games/doodle-dash.jpg", alt:"Six Chike's Creative Space friends run out of a sketchbook along a rainbow path, next to a hand drawing a Doodle Dash level in a notebook" },
       summary:"Draw your own level, then run and jump through it.",
+      intro:"Draw your own level, then run and jump through it. Share a six-character code to play in the same world as a friend.",
       players:"1 or more (share a code)", minutes:10, ageMin:5, ageMax:12,
       rules:["Pick a player and a world, then press Launch game.","Draw a level with markers or crayons, snap a photo, or try a sample level. Black is ground, green is where you start, blue is the goal, yellow is coins, purple is power-ups, teal is a moving platform, red is lava and orange is enemies.","Arrow keys or A and D move. Space or W jumps. Hold jump for a higher hop.","Jump on orange enemies to squash them and grab purple orbs for special powers.","Press Share code to get a six-character code of letters and numbers. A friend types it under Join a friend to play in the same world. Up to 2 players can share one room.","Sound is on: press the speaker button to turn it off."],
       leadsTo:"" }),
@@ -9968,16 +9969,26 @@ function pwaInstallCard(){
 /** The home page's news band: eight games got an arcade makeover. It sends visitors to the Play page, and invites
     them to join the mailing list, which also unlocks the subscribers-only game. */
 function newGamesPromoHTML(){
+  /* its heading and text live on the home page's record, so Quick Update can change them */
+  const homeRec = pageRec("home"), homeId = homeRec ? homeRec.id : null;
+  const heading = pageVal("home", "arcadeHeading", "8 games, one big arcade makeover!");
+  const text = pageVal("home", "arcadeText", "Build a road home in Pathbuilder, match juicy fruit in Fruit Drop, race a friend through Maze Quest, and more. Every game has a learning twist for kids from Kindergarten to 5th grade.");
+  const note = pageVal("home", "arcadeNote", "It’s free to subscribe! Subscribers also get Chike’s Gravity 4, a game made just for them.");
+  if (homeId){
+    CMS_HEADER_FALLBACKS[homeId + "::arcadeHeading"] = heading;
+    CMS_HEADER_FALLBACKS[homeId + "::arcadeText"] = text;
+    CMS_HEADER_FALLBACKS[homeId + "::arcadeNote"] = note;
+  }
   return '<section class="section g4band" aria-labelledby="g4-title"><div class="shell"><div class="g4promo">'
     + '<div>'
     + '<span class="g4pill">' + ic("sparkles") + ' New and improved</span>'
-    + '<h2 id="g4-title">8 games, one big arcade makeover!</h2>'
-    + '<p class="lede">Build a road home in Pathbuilder, match juicy fruit in Fruit Drop, race a friend through Maze Quest, and more. Every game has a learning twist for kids from Kindergarten to 5th grade.</p>'
+    + '<h2 id="g4-title">' + quEditable("home-arcade-heading", homeId, E(heading)) + '</h2>'
+    + '<p class="lede">' + quEditable("home-arcade-text", homeId, E(text)) + '</p>'
     + '<div class="g4promo__actions">'
     + '<a class="btn btn--sun btn--sm" href="#/play">' + ic("gamepad-2") + ' Play the new games</a>'
     + '<button type="button" class="btn btn--paper btn--sm" data-act="open-mailing-list" data-next="/newsletter/arcade-makeover">' + ic("mail") + ' Join for exclusive games</button>'
     + '</div>'
-    + '<p class="tiny mute g4promo__fine">It’s free to subscribe! Subscribers also get Chike’s Gravity 4, a game made just for them.</p>'
+    + '<p class="tiny mute g4promo__fine">' + quEditable("home-arcade-note", homeId, E(note)) + '</p>'
     + '</div>'
     + '<div class="g4promo__side"><div class="taped g4promo__pic"><picture>'
     + '<source media="(prefers-reduced-motion: reduce)" srcset="assets/newsletter/arcade-update/reel-still.jpg">'
@@ -10080,7 +10091,8 @@ function viewHome(){
         + '<span class="embed__note">' + ic("gamepad-2") + ' Plays right here in your browser</span></a></div></div>'
         + '<div><span class="eyebrow">Newest game</span>'
         + '<h2 class="newest__title">' + E(ng.title) + '</h2>'
-        + '<p class="lede">' + E(ng.summary) + '</p>'
+        /* the home page has room for more than the Play card's one line: the game's intro, when it has one */
+        + '<p class="lede">' + quEditable(ng.intro ? "newest-game-intro" : "newest-game-desc", ng.id, E(ng.intro || ng.summary)) + '</p>'
         + '<div class="row" style="margin-top:20px">'
         + '<a class="btn btn--berry" href="#/play/' + E(ng.id) + '">' + ic("gamepad-2") + ' Play ' + E(ng.title) + '</a>'
         + '<a class="btn btn--paper" href="#/play">' + ic("arrow-right") + ' All games</a>'
@@ -10106,8 +10118,9 @@ function viewHome(){
       html += '<section class="section"><div class="shell"><div class="panel" style="background-image:var(--halftone-lite),linear-gradient(140deg,#FFF6E2 0%,#FCE9B6 60%,#F8D77E 140%);background-size:7px 7px,100% 100%">'
         + '<div class="finder__grid finder__grid--media" style="align-items:center">'
         + '<div><span class="eyebrow">New book on Amazon</span>'
-        + '<h2 style="margin-bottom:.3em">' + E(String(rec.title).split(/:\s+/)[0]) + '</h2>'
-        + '<p class="lede">' + E(rec.why) + '</p>'
+        /* the book's own recommendation record, so Quick Update edits the same title and blurb the Shop page shows */
+        + '<h2 style="margin-bottom:.3em">' + quEditable("amazon-title", rec.id, E(String(rec.title).split(/:\s+/)[0])) + '</h2>'
+        + '<p class="lede">' + quEditable("amazon-why", rec.id, E(rec.why)) + '</p>'
         + '<div class="row" style="margin-top:24px;flex-wrap:wrap">'
         + '<a class="btn btn--cyan" href="' + E(rec.url) + '" target="_blank" rel="noopener noreferrer nofollow">' + ic("external-link") + ' View on Amazon</a>'
         + '<a class="btn btn--paper" href="#/shop">' + ic("arrow-right") + ' See all our books</a></div></div>'
@@ -14366,6 +14379,7 @@ const FIELDS = {
   games: [
     { key:"title", label:"Title", type:"text", wide:true },
     { key:"summary", label:"Summary", type:"textarea", wide:true },
+    { key:"intro", label:"Home page intro", type:"textarea", wide:true, help:"Optional. A sentence or two shown in the home page’s Newest game section; the Summary is used when this is empty. Play page cards keep the short Summary." },
     { key:"kind", label:"Kind", type:"select", options:() => [{value:"card",label:"Rules card (no screen)"},{value:"embed",label:"Browser game (file)"},{value:"members",label:"Subscribers only (plays in the Subscriber’s Portal)"},{value:"roller",label:"Roller (built in)"},{value:"spinner",label:"Spinner (built in)"}] },
     { key:"portalSlug", label:"Subscriber’s Portal game", type:"select", wide:true, options:() => [{ value:"", label:"Choose a portal game..." }].concat(db.list("portalEntries").filter(e => e.layout === "game").map(e => ({ value:e.slug || e.id, label:e.title }))), help:"Only for Kind “Subscribers only”. The Play page shows the game with a lock; pressing it opens this portal entry, which asks visitors to join the mailing list first." },
     { key:"path", label:"Game file", type:"file", wide:true, accept:".html", folder:"games", placeholder:"games/maze-quest.html", help:"Upload the .html file, or type a path/URL. Required for browser games." },
@@ -15318,6 +15332,11 @@ const QU_EDITABLE_REGIONS = {
   "home-hero-words":   { label:"Hero rotating word",     col:"pages",      fieldKey:"heroWords",   contentType:"list" },
   "newest-ep-title":   { label:"Newest episode title",  col:"videos",     fieldKey:"title",       contentType:"text" },
   "newest-ep-desc":    { label:"Newest episode blurb",  col:"videos",     fieldKey:"description", contentType:"text" },
+  "newest-game-intro": { label:"Newest game intro",     col:"games",      fieldKey:"intro",       contentType:"text" },
+  "home-arcade-heading": { label:"New games band heading", col:"pages",   fieldKey:"arcadeHeading", contentType:"text" },
+  "home-arcade-text":    { label:"New games band text",    col:"pages",   fieldKey:"arcadeText",    contentType:"text" },
+  "home-arcade-note":    { label:"New games band small print", col:"pages", fieldKey:"arcadeNote",  contentType:"text" },
+  "newest-game-desc":  { label:"Newest game summary",   col:"games",      fieldKey:"summary",     contentType:"text" },
   "video-title":       { label:"Episode title",         col:"videos",     fieldKey:"title",       contentType:"text" },
   "video-desc":        { label:"Episode description",   col:"videos",     fieldKey:"description", contentType:"text" },
   "video-thumb":       { label:"Episode thumbnail",     col:"videos",     fieldKey:"thumb",       contentType:"image" },
