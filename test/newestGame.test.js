@@ -56,6 +56,15 @@ describe("the Newest game section", () => {
     expect(view).toContain('(a.status !== "published" && !(isAuthed() && isActiveAdmin()))) return notFound("article")');
   });
 
+  it("gives News & Articles a count, a search, pages, and a remembered cards / list switch", () => {
+    expect(html).toContain(`'<span class="hl">' + list.length + '</span> ' + (list.length === 1 ? "article" : "articles")`);
+    expect(html).toContain('id="art-search" type="search" data-act="art-search"');
+    expect(html).toContain('data-act="art-page" data-page="');
+    expect(html).toContain('try { localStorage.setItem("ccs_articles_view", AppState.articlesView); } catch(e) {}');
+    expect(html).toContain('localStorage.getItem("ccs_articles_view") === "list" ? "list" : "cards"');
+    expect(html).toContain("function articleRow(a){");
+  });
+
   it("gives Doodle Dash its second sentence, and keeps its Play card summary to one line", () => {
     expect(html).toContain('intro:"' + INTRO + '"');
     expect(sql).toContain(INTRO);

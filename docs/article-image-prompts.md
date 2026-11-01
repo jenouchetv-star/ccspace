@@ -1,5 +1,8 @@
 # Picture prompts for the nine News & Articles drafts
 
+> Every article now has an Unsplash photo for its cover and its in-article photo (credits in `docs/image-credits.md`).
+> Use these prompts only if you would rather replace a photo with your own picture.
+
 Each article needs two pictures:
 
 - **Cover**: shown on the article's card and beside its title. Make it landscape, 4:3.

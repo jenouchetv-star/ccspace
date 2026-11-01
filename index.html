@@ -2970,6 +2970,29 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 .contact__more li{ display:flex; gap:10px; align-items:flex-start; }
 .contact__more li > svg{ flex:none; margin-top:3px; color:var(--cyan); }
 .contact__more .more__link{ font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+/* News & Articles: the search box and the cards / list switch under the count */
+.arttools{ display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-top:18px; width:min(780px, calc(100vw - 32px)); }
+.arttools__search{ position:relative; flex:1 1 260px; display:block; }
+.arttools__view{ flex:none; }
+.arttools__search > svg{ position:absolute; left:16px; top:50%; transform:translateY(-50%); width:20px; height:20px; color:var(--ink-mute); pointer-events:none; }
+.arttools__search .inp{ width:100%; padding-left:46px; padding-right:46px; }
+.arttools__clear{ position:absolute; right:10px; top:50%; transform:translateY(-50%); display:inline-flex; width:32px; height:32px; align-items:center; justify-content:center; border:0; border-radius:50%; background:transparent; color:var(--ink); cursor:pointer; }
+.arttools__clear:hover, .arttools__clear:focus-visible{ background:var(--paper); }
+.arttools__view{ display:flex; gap:8px; }
+/* the list view: one row per article */
+.artlist{ display:grid; gap:14px; }
+.artrow{ display:grid; grid-template-columns:168px minmax(0,1fr) auto; gap:20px; align-items:center; padding:14px; border:var(--line-thin); border-radius:18px; background:var(--paper); color:inherit; text-decoration:none; transition:transform .15s ease, box-shadow .15s ease; }
+.artrow:hover, .artrow:focus-visible{ transform:translateY(-2px); box-shadow:4px 4px 0 var(--ink); }
+.artrow__pic{ position:relative; display:block; aspect-ratio:4 / 3; border-radius:12px; overflow:hidden; border:2px solid var(--ink); }
+.artrow__pic img{ display:block; width:100%; height:100%; object-fit:cover; }
+.artrow__text{ display:flex; flex-direction:column; gap:6px; min-width:0; }
+.artrow__meta{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.artrow__meta svg{ width:14px; height:14px; vertical-align:-2px; }
+.artrow__draft{ background:var(--sun); color:var(--ink); border:2px solid var(--ink); display:inline-flex; gap:5px; align-items:center; }
+.artrow__title{ font-weight:800; font-size:1.15rem; line-height:1.3; }
+.artrow__go{ width:22px; height:22px; color:var(--ink-mute); }
+@media (max-width:640px){ .artrow{ grid-template-columns:96px minmax(0,1fr); gap:14px; } .artrow__go{ display:none; } }
+@media (prefers-reduced-motion: reduce){ .artrow{ transition:none; } .artrow:hover{ transform:none; } }
 /* a draft article, shown only to a signed-in admin on News & Articles */
 .card__draft{ position:absolute; top:12px; right:12px; z-index:2; background:var(--sun); color:var(--ink); border:2px solid var(--ink); display:inline-flex; gap:5px; align-items:center; }
 .card__draft svg{ width:14px; height:14px; }
@@ -2994,7 +3017,9 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 .afig{ margin:40px 0; padding:26px 28px; border-radius:16px; background:var(--paper); }
 .afig--photo{ padding:0; background:none; }
 .afig--photo img{ display:block; width:100%; height:auto; border-radius:16px; }
-.afig__title{ font-weight:800; font-size:1.02rem; line-height:1.35; margin-bottom:20px; }
+.afig__title{ display:flex; gap:12px; align-items:center; font-weight:800; font-size:1.02rem; line-height:1.35; margin-bottom:20px; }
+.afig__icon{ flex:none; display:inline-flex; width:40px; height:40px; align-items:center; justify-content:center; border-radius:12px; background:var(--cyan); color:#fff; }
+.afig__icon svg{ width:22px; height:22px; }
 /* ".afig" in front so these win over the article's own paragraph spacing */
 .afig .afig__caption{ font-size:.86rem; line-height:1.5; color:var(--ink-mute); margin:20px 0 0; }
 .afig .afig__source{ font-size:.8rem; line-height:1.5; color:var(--ink-mute); margin:20px 0 0; }
@@ -4114,6 +4139,12 @@ async function compressThumbForUpload(file){
     external URLs through unchanged avoids the whole failure mode. */
 function thumbSrc(src){
   if (!src) return src;
+  /* an Unsplash photo: ask Unsplash for a card-sized copy (same crop, 720 wide) */
+  if (/^https:\/\/images\.unsplash\.com\//i.test(src)){
+    const w = Number((src.match(/[?&]w=(\d+)/) || [])[1]), h = Number((src.match(/[?&]h=(\d+)/) || [])[1]);
+    if (w > 720) return src.replace(/([?&])w=\d+/, "$1w=720").replace(/([?&])h=\d+/, h ? "$1h=" + Math.round(h * 720 / w) : "$&");
+    return src;
+  }
   if (/^https?:\/\//i.test(src) && src.indexOf(SUPABASE_URL) !== 0) return src;
   const q = src.indexOf("?");
   const base = q >= 0 ? src.slice(0, q) : src;
@@ -7393,6 +7424,9 @@ const AppState = {
   finderRun: false,
   finderStep: 1,
   createFilter: { type:"", access:"", collection:"", q:"", page:1 },
+  /* News & Articles: the search, the page, and cards or a list (the last one is remembered on this device) */
+  articlesFilter: { q:"", page:1 },
+  articlesView: (() => { try { return localStorage.getItem("ccs_articles_view") === "list" ? "list" : "cards"; } catch(e){ return "cards"; } })(),
   /* A staged copy edited inside the mobile filter sheet - null when the
      sheet is closed, so nothing here touches the applied filters (and the
      results behind the sheet) until "Apply" commits it. */
@@ -11508,8 +11542,44 @@ function viewGrownUps(sub){
     const showDrafts = isAuthed() && isActiveAdmin();
     const list = db.list("articles").filter(a => a.status === "published" || (showDrafts && a.status === "draft"))
       .sort((x, y) => String(y.at || y.createdAt || "").localeCompare(String(x.at || x.createdAt || "")));
-    head = cmsHeader("grown-ups/articles", "Grown-Ups", 'News and research<br>for <span class="hl">grown-ups</span>.',
-      "What new studies, test results, and laws say about reading, play, screens, and AI, and why it shapes what we make for kids.");
+    /* the banner is the number of articles; under it, a search box and the cards / list switch */
+    const af = AppState.articlesFilter, view = AppState.articlesView;
+    const q = String(af.q || "").trim().toLowerCase();
+    const found = q ? list.filter(a => [a.title, a.blurb, a.kind, (a.body || []).join(" ")].join(" ").toLowerCase().indexOf(q) >= 0) : list;
+    const PAGE_SIZE = 9;
+    const totalPages = Math.max(1, Math.ceil(found.length / PAGE_SIZE));
+    const page = Math.min(totalPages, Math.max(1, af.page || 1));
+    const pageList = found.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    head = pageHeader("Grown-Ups", '<span class="hl">' + list.length + '</span> ' + (list.length === 1 ? "article" : "articles"), "", "", {
+      ledeHTML: '<div class="arttools">'
+        + '<label class="arttools__search"><span class="sr-only">Search articles</span>' + ic("search")
+        + '<input class="inp" id="art-search" type="search" data-act="art-search" value="' + E(af.q || "") + '" placeholder="Search articles" autocomplete="off">'
+        + (af.q ? '<button type="button" class="arttools__clear" data-act="art-search-clear" aria-label="Clear the search">' + ic("x") + '</button>' : "")
+        + '</label>'
+        + '<div class="arttools__view" role="group" aria-label="Show articles as">'
+        + '<button type="button" class="opt opt--sm" data-act="art-view" data-view="cards" aria-pressed="' + (view === "cards") + '">' + ic("layout-grid") + ' Cards</button>'
+        + '<button type="button" class="opt opt--sm" data-act="art-view" data-view="list" aria-pressed="' + (view === "list") + '">' + ic("list") + ' List</button>'
+        + '</div></div>'
+    });
+    const results = !pageList.length
+      ? '<div class="empty">' + ic("search-x","i-lg") + '<p style="margin-top:12px">No articles match “' + E(af.q) + '”.</p>'
+        + '<button class="btn btn--sm btn--paper" data-act="art-search-clear" style="margin-top:14px">' + ic("rotate-ccw") + ' Show all articles</button></div>'
+      : view === "list"
+        ? '<div class="artlist">' + pageList.map(a => articleRow(a)).join("") + '</div>'
+        : '<div class="grid g-3">' + pageList.map(a => articleCard(a)).join("") + '</div>';
+    const summaryText = q
+      ? E(plural(found.length, "article")) + (found.length === 1 ? " matches" : " match") + " “" + E(af.q) + "”" + (totalPages > 1 ? ", showing " + ((page - 1) * PAGE_SIZE + 1) + "–" + Math.min(found.length, page * PAGE_SIZE) : "")
+      : totalPages > 1 ? "Showing " + ((page - 1) * PAGE_SIZE + 1) + "–" + Math.min(found.length, page * PAGE_SIZE) + " of " + found.length : "";
+    const summary = summaryText ? '<p class="mute" style="margin:0 0 20px" aria-live="polite">' + summaryText + '</p>' : "";
+    const pager = totalPages > 1
+      ? '<nav class="pager" aria-label="Article pages">'
+        + '<button class="btn btn--sm btn--ghost" data-act="art-page" data-page="' + (page - 1) + '"' + (page <= 1 ? " disabled" : "") + '>' + ic("chevron-left") + ' Prev</button>'
+        + '<span class="pager__nums">' + Array.from({ length: totalPages }, (_, i) => i + 1).map(n =>
+            '<button class="pager__num' + (n === page ? " is-current" : "") + '" data-act="art-page" data-page="' + n + '"'
+            + (n === page ? ' aria-current="page"' : "") + '>' + n + '</button>').join("") + '</span>'
+        + '<button class="btn btn--sm btn--ghost" data-act="art-page" data-page="' + (page + 1) + '"' + (page >= totalPages ? " disabled" : "") + '>Next ' + ic("chevron-right") + '</button>'
+        + '</nav>'
+      : "";
     const siteRec = pageRec("site");
     const siteId = siteRec ? siteRec.id : null;
     const newsletterHeading = pageVal("site", "newsletterHeading", "Exclusive content, new games, free lessons and activities, no noise.");
@@ -11519,7 +11589,7 @@ function viewGrownUps(sub){
       CMS_HEADER_FALLBACKS[siteId + "::newsletterHeading"] = newsletterHeading;
       CMS_HEADER_FALLBACKS[siteId + "::newsletterNote"] = newsletterNote;
     }
-    body = '<div class="grid g-3">' + list.map(a => articleCard(a)).join("") + '</div>'
+    body = '<div id="art-results">' + summary + results + pager + '</div>'
       /* two columns: what the newsletter is on the left, the sign-up on the right (stacked on a phone) */
       + '<div class="panel nlbox">'
       + '<div class="nlbox__copy">'
@@ -11699,6 +11769,20 @@ function articleCard(a){
     + '</div></article>';
 }
 
+/** One article in the list view of News & Articles: a small picture, then the kind, title, blurb and reading time. */
+function articleRow(a){
+  const img = a.image && a.image.src;
+  return '<a class="artrow" href="#/article/' + E(a.id) + '">'
+    + '<span class="artrow__pic">' + (img ? '<img class="skel" src="' + E(thumbSrc(a.image.src)) + '" alt="" loading="lazy">' : plate("story", titleCase(a.kind))) + '</span>'
+    + '<span class="artrow__text">'
+    + '<span class="artrow__meta"><span class="chip chip--ink">' + E(a.kind.toUpperCase()) + '</span>'
+    + (a.status === "draft" ? '<span class="chip artrow__draft">' + ic("eye-off") + ' Draft</span>' : "")
+    + (a.readMinutes ? '<span class="tiny mute">' + ic("clock") + ' ' + E(a.readMinutes) + ' min read</span>' : "") + '</span>'
+    + '<span class="artrow__title">' + E(a.title) + '</span>'
+    + '<span class="tiny mute">' + E(a.blurb) + '</span>'
+    + '</span>' + ic("chevron-right", "i artrow__go") + '</a>';
+}
+
 /** "Label | https://..." lines from an article's Sources field, keeping only real web links. */
 function articleSources(a){
   return (a.sources || []).map(line => {
@@ -11731,8 +11815,10 @@ function articleFigureHTML(f){
         + '<span class="abar__value">' + E(b.display || (b.value + (f.unit || ""))) + '</span></div>';
     }).join("") + '</div>';
   }
+  /* an icon for what the numbers are about (the chart's own, or a plain chart mark) */
+  const icon = f.icon || (f.type === "stats" ? "chart-no-axes-column" : "chart-bar");
   return '<figure class="afig">'
-    + (f.title ? '<figcaption class="afig__title">' + E(f.title) + '</figcaption>' : "")
+    + (f.title ? '<figcaption class="afig__title"><span class="afig__icon">' + ic(icon) + '</span><span>' + E(f.title) + '</span></figcaption>' : "")
     + inner
     + (f.caption ? '<p class="afig__caption">' + E(f.caption) + '</p>' : "")
     + source + '</figure>';
@@ -23631,6 +23717,25 @@ const ACTIONS = {
     AppState.createFilter = { type:"", access:"", collection:"", q:"", page:1 };
     rerender();
   },
+  /* News & Articles: switch between cards and a list (remembered on this device), change page, clear the search */
+  "art-view": (el) => {
+    AppState.articlesView = el.getAttribute("data-view") === "list" ? "list" : "cards";
+    try { localStorage.setItem("ccs_articles_view", AppState.articlesView); } catch(e) {}
+    AppState.keepScroll = true;
+    rerender();
+  },
+  "art-page": (el) => {
+    AppState.articlesFilter.page = Math.max(1, Number(el.getAttribute("data-page")) || 1);
+    AppState.keepScroll = true;
+    rerender();
+    const results = $("#art-results");
+    if (results) results.scrollIntoView({ block:"start" });
+  },
+  "art-search-clear": () => {
+    AppState.articlesFilter = { q:"", page:1 };
+    AppState.keepScroll = true;
+    restoreFocusAfter(() => rerender(), "#art-search");
+  },
   "cf-page": (el) => {
     AppState.createFilter.page = Math.max(1, Number(el.getAttribute("data-page")) || 1);
     AppState.keepScroll = true;
@@ -25835,6 +25940,11 @@ document.addEventListener("input", (ev) => {
   if (el.getAttribute && el.getAttribute("data-ehrow")){ ehEdit(el); return; }
   if (el.getAttribute && el.getAttribute("data-cpm")){ copilotEdit(el); return; }
   writerOnInput(el);
+  if (act === "art-search"){
+    AppState.articlesFilter = { q: el.value, page: 1 };
+    restoreFocusAfter(() => rerender(), "#art-search");
+    return;
+  }
   if (act === "cf-search"){
     AppState.createFilter.q = el.value;
     AppState.createFilter.page = 1;
