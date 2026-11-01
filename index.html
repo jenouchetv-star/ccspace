@@ -2979,6 +2979,10 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 .arttools__clear{ position:absolute; right:10px; top:50%; transform:translateY(-50%); display:inline-flex; width:32px; height:32px; align-items:center; justify-content:center; border:0; border-radius:50%; background:transparent; color:var(--ink); cursor:pointer; }
 .arttools__clear:hover, .arttools__clear:focus-visible{ background:var(--paper); }
 .arttools__view{ display:flex; gap:8px; }
+/* Read and Share along the bottom of an article card, lined up across a row of cards */
+.artcard__actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:auto; padding-top:8px; }
+/* an article's blurb on a card or row: two lines, then "…" */
+.artblurb{ display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; }
 /* the list view: one row per article */
 .artlist{ display:grid; gap:14px; }
 .artrow{ display:grid; grid-template-columns:168px minmax(0,1fr) auto; gap:20px; align-items:center; padding:14px; border:var(--line-thin); border-radius:18px; background:var(--paper); color:inherit; text-decoration:none; transition:transform .15s ease, box-shadow .15s ease; }
@@ -11546,7 +11550,8 @@ function viewGrownUps(sub){
     const af = AppState.articlesFilter, view = AppState.articlesView;
     const q = String(af.q || "").trim().toLowerCase();
     const found = q ? list.filter(a => [a.title, a.blurb, a.kind, (a.body || []).join(" ")].join(" ").toLowerCase().indexOf(q) >= 0) : list;
-    const PAGE_SIZE = 9;
+    /* twelve to a page: three full rows of four cards on a wide screen, four rows of three on a narrower one */
+    const PAGE_SIZE = 12;
     const totalPages = Math.max(1, Math.ceil(found.length / PAGE_SIZE));
     const page = Math.min(totalPages, Math.max(1, af.page || 1));
     const pageList = found.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -11764,8 +11769,13 @@ function articleCard(a){
     + '<span class="card__badge chip chip--ink">' + E(a.kind.toUpperCase()) + '</span>'
     + (a.status === "draft" ? '<span class="card__draft chip">' + ic("eye-off") + ' Draft</span>' : "") + '</div>'
     + '<div class="card__body"><h3 class="card__title">' + E(a.title) + '</h3>'
-    + '<p class="tiny mute" style="margin:0">' + E(a.blurb) + '</p>'
-
+    /* two lines, then "…", so the cards stay short; the whole blurb is on the article itself */
+    + '<p class="tiny mute artblurb" style="margin:0" title="' + E(a.blurb) + '">' + E(a.blurb) + '</p>'
+    /* Read, and Share (the same share as on the article page), along the bottom of the card */
+    + '<div class="artcard__actions no-print">'
+    + '<a class="btn btn--sm btn--cyan" href="#/article/' + E(a.id) + '" aria-label="Read: ' + E(a.title) + '">' + ic("book-open") + ' Read</a>'
+    + '<button type="button" class="btn btn--sm btn--paper" data-act="share" data-url="' + E(location.origin + "/article/" + a.id) + '" data-title="' + E(a.title) + '" aria-label="Share: ' + E(a.title) + '">' + ic("share-2") + ' Share</button>'
+    + '</div>'
     + '</div></article>';
 }
 
@@ -11779,7 +11789,7 @@ function articleRow(a){
     + (a.status === "draft" ? '<span class="chip artrow__draft">' + ic("eye-off") + ' Draft</span>' : "")
     + (a.readMinutes ? '<span class="tiny mute">' + ic("clock") + ' ' + E(a.readMinutes) + ' min read</span>' : "") + '</span>'
     + '<span class="artrow__title">' + E(a.title) + '</span>'
-    + '<span class="tiny mute">' + E(a.blurb) + '</span>'
+    + '<span class="tiny mute artblurb">' + E(a.blurb) + '</span>'
     + '</span>' + ic("chevron-right", "i artrow__go") + '</a>';
 }
 
@@ -11847,7 +11857,9 @@ function viewArticle(id){
   /* a draft is for admins only: anyone else, even with its link, gets the not-found page */
   if (!a || a.status === "archived" || (a.status !== "published" && !(isAuthed() && isActiveAdmin()))) return notFound("article");
   noteView(a.id, "articles");
-  const others = db.list("articles").filter(x => x.status === "published" && x.id !== a.id).slice(0, 3);
+  /* "Read next": the newest other articles first, the same order as the News & Articles list */
+  const others = db.list("articles").filter(x => x.status === "published" && x.id !== a.id)
+    .sort((x, y) => String(y.at || y.createdAt || "").localeCompare(String(x.at || x.createdAt || ""))).slice(0, 3);
   const sources = articleSources(a);
   const shareBtn = '<button class="btn btn--paper no-print" data-act="share" data-url="' + E(location.origin + "/article/" + a.id) + '" data-title="' + E(a.title) + '">' + ic("share-2") + ' Share</button>';
   /* the way back to the list, at the top and again at the end of the article */
