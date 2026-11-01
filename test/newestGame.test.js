@@ -47,6 +47,9 @@ describe("the Newest game section", () => {
     expect(html).toContain('{ key:"sources", label:"Sources", type:"lines"');
     expect(html).toContain("return { label: label, url: /^https?:\\/\\//i.test(url) ? url : \"\" };");   /* only real web links */
     expect(html).not.toContain('R({ id:"art-paper"');
+    /* drafts are for admins only: on the list (marked Draft) and on their own page */
+    expect(html).toContain('a.status === "published" || (showDrafts && a.status === "draft")');
+    expect(view).toContain('(a.status !== "published" && !(isAuthed() && isActiveAdmin()))) return notFound("article")');
   });
 
   it("gives Doodle Dash its second sentence, and keeps its Play card summary to one line", () => {

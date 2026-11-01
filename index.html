@@ -2970,6 +2970,9 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 .contact__more li{ display:flex; gap:10px; align-items:flex-start; }
 .contact__more li > svg{ flex:none; margin-top:3px; color:var(--cyan); }
 .contact__more .more__link{ font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+/* a draft article, shown only to a signed-in admin on News & Articles */
+.card__draft{ position:absolute; top:12px; right:12px; z-index:2; background:var(--sun); color:var(--ink); border:2px solid var(--ink); display:inline-flex; gap:5px; align-items:center; }
+.card__draft svg{ width:14px; height:14px; }
 /* an article with no cover picture yet: the same patterned plate as its card, in a picture-sized frame */
 .artcover{ position:relative; aspect-ratio:4 / 3; overflow:hidden; }
 /* An article: one panel as wide as the other pages, a readable text column, and its sources beside it */
@@ -11492,7 +11495,9 @@ function viewGrownUps(sub){
       + '</div></div>';
   }
   else if (sub === "articles"){
-    const list = db.list("articles").filter(a => a.status === "published")
+    /* a signed-in admin also sees the drafts, marked Draft, so they can be checked in place before publishing */
+    const showDrafts = isAuthed() && isActiveAdmin();
+    const list = db.list("articles").filter(a => a.status === "published" || (showDrafts && a.status === "draft"))
       .sort((x, y) => String(y.at || y.createdAt || "").localeCompare(String(x.at || x.createdAt || "")));
     head = cmsHeader("grown-ups/articles", "Grown-Ups", 'News and research<br>for <span class="hl">grown-ups</span>.',
       "What new studies, test results, and laws say about reading, play, screens, and AI, and why it shapes what we make for kids.");
@@ -11677,7 +11682,8 @@ function articleCard(a){
   return '<article class="card" data-act="go" data-hash="#/article/' + E(a.id) + '" tabindex="0" role="link">'
     + '<div class="card__media">'
     + (img ? '<img class="skel" src="' + E(thumbSrc(a.image.src)) + '" alt="' + E(a.image.alt || "") + '" loading="lazy">' : plate("story", titleCase(a.kind)))
-    + '<span class="card__badge chip chip--ink">' + E(a.kind.toUpperCase()) + '</span></div>'
+    + '<span class="card__badge chip chip--ink">' + E(a.kind.toUpperCase()) + '</span>'
+    + (a.status === "draft" ? '<span class="card__draft chip">' + ic("eye-off") + ' Draft</span>' : "") + '</div>'
     + '<div class="card__body"><h3 class="card__title">' + E(a.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(a.blurb) + '</p>'
 
@@ -11743,7 +11749,8 @@ function articleBodyHTML(a){
 
 function viewArticle(id){
   const a = db.find("articles", id);
-  if (!a || a.status === "archived") return notFound("article");
+  /* a draft is for admins only: anyone else, even with its link, gets the not-found page */
+  if (!a || a.status === "archived" || (a.status !== "published" && !(isAuthed() && isActiveAdmin()))) return notFound("article");
   noteView(a.id, "articles");
   const others = db.list("articles").filter(x => x.status === "published" && x.id !== a.id).slice(0, 3);
   const sources = articleSources(a);
