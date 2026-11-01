@@ -125,7 +125,9 @@ describe("the code box after Send my link", () => {
 
 describe("Welcome back (Already joined? Sign in)", () => {
   it("is offered under every Join form: the nav box, the footer and the Articles box", () => {
-    expect(index).toContain('+ (back2 ? "" : signInLinkHTML(back, play));');
+    // in the Join box it shares one row with Cancel and Join: Sign in on the left, the two buttons on the right
+    expect(index).toContain(`+ '<div class="modal__foot modal__foot--join">'\n    + (back2 ? "" : signInLinkHTML(back, play, "join-signin"))`);
+    expect(index).toContain(".join-signin{ display:flex; align-items:center; gap:6px; margin:0 auto 0 0;");
     expect(index.split('signInLinkHTML("", ""').length - 1).toBe(2);   // the footer, and the Articles box (laid out beside its form)
     expect(fn("signInLinkHTML")).toContain("Already joined?</b>");
   });
