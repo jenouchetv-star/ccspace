@@ -718,16 +718,17 @@ describe("Activity and AI Lesson entries", () => {
 });
 
 describe("the footer for a subscriber signed in on this device", () => {
-  it("swaps the Join box for a way to unsubscribe, and a Sign out button", () => {
+  it("swaps the Join box for a way to unsubscribe", () => {
     const foot = body("footer");
     expect(foot).toContain("(portalIsSubscriber()");
     expect(foot).toContain('data-act="portal-unsubscribe"');
     expect(foot).toContain("Want to unsubscribe? Enter your email to unsubscribe.");
-    expect(foot).toContain('data-act="portal-signout"');
-    expect(html).toContain('"portal-signout": () => {');
+    expect(foot).not.toContain('data-act="portal-signout"');                 /* Sign out is in the top bar */
   });
-  it("has no Join buttons in the top bar, only the way back into the portal", () => {
+  it("has no Join buttons in the top bar, only the way back into the portal, with Sign out right after it", () => {
     const nav = html.split("function navBar(")[1].split("\nfunction ")[0];
+    expect(nav).toMatch(/> Subscriber’s Portal<\/span><\/a>'\r?\n\s+\+ '<button class="btn btn--sm btn--paper" type="button" data-act="portal-signout"/);
+    expect(html).toContain('"portal-signout": () => {');
     expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--icon btn--paper nav__only-xs" type="button" data-act="open-mailing-list"`);
     expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--sm btn--paper nav__hide-sm" type="button" data-act="open-mailing-list"`);
     expect(nav).toContain(`: '<button class="btn btn--sm btn--paper" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join our mailing list</button>')`);

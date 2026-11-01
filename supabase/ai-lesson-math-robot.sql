@@ -81,7 +81,7 @@ Make a fun, friendly 3D robot math buddy in one HTML file that I can use in my b
     'message', 'Our newest AI lesson is here! Kids write one detailed prompt and AI builds a friendly 3D robot that greets them, learns their name and grade, helps with math homework, quizzes them when they ask, and gives a high five for great work.' || chr(10) || chr(10) || 'It is a fun way to learn why clear, detailed instructions help AI build exactly what you want. Come and take a look!',
     'button', 'Take a look'),
   'howToPlay', '[]'::jsonb, 'gallery', '[]'::jsonb, 'coverStill', '',
-  'gameId', '', 'gamePath', '', 'gameMode', 'launch', 'gameLabel', '', 'privateGameId', 'pg-math-robot', 'privateGameKb', 91,
+  'gameId', '', 'gamePath', '', 'gameMode', 'launch', 'gameLabel', '', 'privateGameId', 'pg-math-robot', 'privateGameKb', 86,
   'bookId', '', 'bookMode', 'launch', 'bookPath', '', 'videoUrl', '',
   'buttonLabel', '', 'buttonUrl', '', 'textFirst', 'after', 'adminNote', '',
   'createdAt', '2026-11-01T12:00:00.000Z', 'updatedAt', '2026-11-01T12:00:00.000Z'))
