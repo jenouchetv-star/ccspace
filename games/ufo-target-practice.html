@@ -2367,6 +2367,9 @@
     let rockT = 0;
     let W = 1, H = 1, BX = 5, BY = 3.2, CAM_BACK = 9, CAM_UP = 2.4, baseFov = 60;
     const aim = { x: 0, y: 0 };              /* the reticle, in CSS pixels */
+    /* how far the reticle sits above the finger (0 for a mouse or the keys): the ship flies under the
+       finger, not under the reticle, so its lasers fly up to the reticle instead of starting on top of it */
+    let aimLift = 0;
 
     function setPhase(p) {
         phase = p;
@@ -2672,7 +2675,7 @@
         let tx, ty, rate;
         if (phase === 'play' || phase === 'count') {
             const nx = clamp((aim.x / W - .5) * 2, -1, 1);
-            const ny = clamp((aim.y / H - .45) / .55, -1, 1);
+            const ny = clamp(((aim.y + aimLift) / H - .45) / .55, -1, 1);   /* under the finger, on a touch screen */
             tx = nx * BX; ty = -ny * BY; rate = 5.5;
         } else if (phase === 'warp') {        /* lined up with the black hole */
             tx = 0; ty = 1.4; rate = 2.5;
@@ -3060,6 +3063,7 @@
         const lift = (e.pointerType === 'touch' || e.pointerType === 'pen') ? TOUCH_LIFT : 0;
         aim.x = clamp(e.clientX - r.left, 4, W - 4);
         aim.y = clamp(e.clientY - r.top - lift, 4, H - 4);
+        aimLift = aim.y + lift > H - 4 ? 0 : lift;
     }
     function canShoot() { return phase === 'play' && !isPaused(); }
 
@@ -3157,6 +3161,7 @@
         const kx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
         const ky = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
         if (!kx && !ky) return;
+        aimLift = 0;                          /* the keys steer the reticle itself */
         const sp = Math.min(W, H) * .9 + 160;
         aim.x = clamp(aim.x + kx * sp * dt, 4, W - 4);
         aim.y = clamp(aim.y + ky * sp * dt, 4, H - 4);

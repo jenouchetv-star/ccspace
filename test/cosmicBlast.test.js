@@ -99,4 +99,9 @@ describe("aiming on a touch screen", () => {
     expect(page).toContain("aim.y = clamp(e.clientY - r.top - lift, 4, H - 4);");
     expect(page).toContain("The target sits just above your finger, so you can always see it.");
   });
+  it("keeps the ship under the finger, so its lasers fly up to the reticle instead of starting on top of it", () => {
+    expect(page).toContain("aimLift = aim.y + lift > H - 4 ? 0 : lift;");
+    expect(page).toContain("const ny = clamp(((aim.y + aimLift) / H - .45) / .55, -1, 1);");
+    expect(page).toContain("aimLift = 0;                          /* the keys steer the reticle itself */");
+  });
 });
