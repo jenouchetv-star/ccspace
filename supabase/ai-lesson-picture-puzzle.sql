@@ -1,6 +1,6 @@
--- Chike's Creative Space - AI Lesson 04: Make a Picture Puzzle Game (Subscriber's Portal, saved as a draft).
+-- Chike's Creative Space - AI Lesson 04: Make a Picture Puzzle Game (Subscriber's Portal, published).
 -- Started with Copilot; the example (Pic Pop Puzzle, made with AI from this exact prompt) is portal_game_files row
--- pg-picture-puzzle, shown at the top of the lesson. The admin reviews and publishes it in the editor.
+-- pg-picture-puzzle, shown at the top of the lesson. Pic Pop Puzzle's subscribers-only card on the Play page opens this lesson (supabase/pic-pop-puzzle.sql).
 -- Safe to re-run: it replaces the entry with this text, so edits made in the editor belong here too.
 
 insert into portal_entries (id, data) values ('port-mvxnxdib-9', jsonb_build_object(
@@ -8,11 +8,11 @@ insert into portal_entries (id, data) values ('port-mvxnxdib-9', jsonb_build_obj
   'slug', 'how-to-build-your-own-puzzle-game',
   'layout', 'lesson',
   'category', 'AI lessons',
-  'status', 'draft',
+  'status', 'published',
   'publishedAt', '2026-11-01',
   'title', 'AI Lesson 04: Make a Picture Puzzle Game',
   'description', 'Use AI to build a puzzle game that turns any picture into a puzzle, with a timer, a Peek button and confetti when you finish.',
-  'cover', jsonb_build_object('src', '', 'alt', ''),
+  'cover', jsonb_build_object('src', 'assets/games/pic-pop-puzzle.jpg', 'alt', 'A drawing of kids building a toy city with a train in a treehouse, cut into puzzle pieces, with one piece lifted out of place and one locked in with a green border'),
   'body', $b$<h3>Turn any picture into a puzzle</h3><p>This time, you are going to ask AI to build a puzzle game. You pick a picture, the game cuts it into square pieces and mixes them up, and you put it back together by swapping pieces. You choose how hard it is, from Easy (9 pieces) to Wizard (36), and a timer, a move counter and a progress bar show how you are doing.</p><h3>Your picture stays with you</h3><p>The prompt asks for a game where your picture stays on your computer and is never sent anywhere. That is a smart thing to ask for whenever you make something with your own photos. It also asks for 3 pictures drawn by the computer, so you can play right away.</p><h3>Be the puzzle tester</h3><p>When AI has built your game, try everything in the prompt: every size, the Peek button, Shuffle again, and finishing a puzzle. If something is missing or different, tell AI exactly what to fix, like "The pieces don't turn green. Make them turn green when they are in the right spot."</p>$b$,
   'steps', jsonb_build_array(
     'Can you pick a picture from your computer or phone, and does it turn into a puzzle?',

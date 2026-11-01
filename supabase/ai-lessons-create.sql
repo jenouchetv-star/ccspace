@@ -54,3 +54,21 @@ insert into activities (id, data) values ('act-ai-lesson-math-robot', jsonb_buil
   'related', '[]'::jsonb, 'tags', '["ai", "coding", "math", "robot", "subscribers"]'::jsonb, 'featured', false,
   'status', 'published', 'createdAt', '2026-11-01T12:00:00.000Z', 'updatedAt', '2026-11-01T12:00:00.000Z'))
 on conflict (id) do update set data = excluded.data, updated_at = now();
+
+-- AI Lesson 04, beside its Subscriber's Portal lesson (supabase/ai-lesson-picture-puzzle.sql); both are published,
+-- and the card uses the lesson's cover (the same picture as Pic Pop Puzzle's Play page card).
+insert into activities (id, data) values ('act-ai-lesson-picture-puzzle', jsonb_build_object(
+  'id', 'act-ai-lesson-picture-puzzle', 'slug', 'ai-lesson-picture-puzzle',
+  'kind', 'members', 'portalSlug', 'how-to-build-your-own-puzzle-game',
+  'title', 'AI Lesson 04: Make a Picture Puzzle Game',
+  'summary', 'Use AI to build a puzzle game that turns any picture into a puzzle, with a timer, a Peek button and confetti when you finish.',
+  'type', 'ai', 'access', 'members', 'character', 'chike',
+  'ageMin', 6, 'ageMax', 10, 'timeMinutes', 30, 'difficulty', 'easy', 'setting', 'indoor', 'adultSupport', 'nearby',
+  'materials', '[]'::jsonb, 'materialsDetail', '[]'::jsonb, 'safetyNotes', '[]'::jsonb, 'steps', '[]'::jsonb,
+  'learning', jsonb_build_object('topic', 'structures', 'title', 'Ask AI to keep your pictures private', 'text', ''),
+  'discussionPrompt', '', 'variation', '', 'value', 'curiosity',
+  'printable', jsonb_build_object('label', '', 'path', ''), 'youtubeUrl', '',
+  'image', jsonb_build_object('src', 'assets/games/pic-pop-puzzle.jpg', 'alt', 'A drawing of kids building a toy city with a train in a treehouse, cut into puzzle pieces, with one piece lifted out of place and one locked in with a green border'),
+  'related', '[]'::jsonb, 'tags', '["ai", "coding", "games", "puzzle", "subscribers"]'::jsonb, 'featured', false,
+  'status', 'published', 'createdAt', '2026-11-01T12:00:00.000Z', 'updatedAt', '2026-11-01T12:00:00.000Z'))
+on conflict (id) do update set data = excluded.data, updated_at = now();
