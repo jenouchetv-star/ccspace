@@ -46,14 +46,14 @@ describe("Gravity 4 on the Play page", () => {
     const modal = fn("mailingListModal");
     expect(modal).toContain("const play = back && game ? String(game) : \"\";");
     expect(modal).toContain("const back2 = !!member;");
-    expect(modal).toContain("? '<h3 style=\"margin:.2em 0 .3em;font-size:1.6rem\">' + (lesson ? 'This AI lesson is for subscribers' : 'Join our mailing list') + '</h3>'");
+    expect(modal).toContain("? '<h3 style=\"margin:.2em 0 .3em;font-size:1.6rem\">' + (book ? 'This book is for subscribers' : lesson ? 'This AI lesson is for subscribers' : 'Join our mailing list') + '</h3>'");
     expect(modal).not.toContain(">Play ' + nameHTML(play)");
-    expect(modal).toContain("(lesson ? 'Join our free mailing list to see it, and every AI lesson.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '");
+    expect(modal).toContain("(book ? 'Join our free mailing list to read it, along with every AI lesson.' : lesson ? 'Join our free mailing list to see it, and every AI lesson.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '");
     expect(modal).toContain(">Welcome back!</h3>");
     expect(modal).toContain("Enter the email you subscribed with and we’ll send you a 6-digit code to ");
     expect(modal).toContain("(play ? (lesson ? 'open ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.')");
     // an AI lesson from the Create page is opened, not played
-    expect(modal).toContain("const lesson = !!play && (what === \"lesson\" || /^AI Lesson\\b/i.test(play));");
+    expect(modal).toContain("const lesson = !!play && (what === \"lesson\" || book || /^AI Lesson\\b/i.test(play));");
     expect(modal).toContain("(back2 ? ' Send my code' : ' Join free')");
     expect(modal).toContain("(play ? '<input type=\"hidden\" name=\"code\" value=\"1\"><input type=\"hidden\" name=\"game\" value=\"' + E(play) + '\">' : \"\")");   // both ask for a code
     expect(modal).toContain('1789240884060-Gemini_Generated_Image_tri3mjtri3mjtri3.jpg" alt="Chike, Zech, and their 6 uniquely creative friends"');              // the whole crew, for a game

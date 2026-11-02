@@ -2179,6 +2179,10 @@ body.is-admin .tour-spotlight, body.is-admin .tour-card{ display:none; }
    target exactly where the visible image already is. */
 .qu-editable--block{ display:block; width:100%; height:100%; }
 .qu-editable--copy{ display:block; }
+/* the join box's list of what's in the Subscriber's Portal */
+.joinlist{ list-style:none; margin:0 0 12px; padding:0; display:grid; gap:8px; }
+.joinlist li{ display:grid; grid-template-columns:22px 1fr; gap:10px; align-items:start; font-size:.92rem; line-height:1.45; }
+.joinlist li svg{ width:20px; height:20px; margin-top:2px; color:var(--cyan); }
 /* the page's own "use your camera?" question, above everything (the full-screen player included) */
 .camask{ position:fixed; inset:0; z-index:2147483000; display:grid; place-items:center; padding:16px; background:rgba(15,20,24,.55); }
 .camask__card{ max-width:440px; padding:22px 24px; border:var(--line); border-radius:var(--r-lg); background:var(--paper); box-shadow:var(--hard); }
@@ -6722,7 +6726,8 @@ function mailingListModal(next, game, member, what){
   const play = back && game ? String(game) : "";
   const back2 = !!member;                               /* "Already joined? Sign in" */
   /* an AI lesson from the Create page is opened, not played */
-  const lesson = !!play && (what === "lesson" || /^AI Lesson\b/i.test(play));
+  const book = !!play && what === "book";
+  const lesson = !!play && (what === "lesson" || book || /^AI Lesson\b/i.test(play));
   const bleed = "calc(-1 * clamp(20px,3vw,32px))";
   return '<div style="margin:' + bleed + ' ' + bleed + ' 22px;position:relative">'
     + (play
@@ -6738,11 +6743,18 @@ function mailingListModal(next, game, member, what){
           + '<p class="tiny mute" style="margin:0 0 18px">Enter the email you subscribed with and we’ll send you a 6-digit code to '
           + (play ? (lesson ? 'open ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.') + '</p>'
       : play
-        ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">' + (lesson ? 'This AI lesson is for subscribers' : 'Join our mailing list') + '</h3>'
-          + '<p class="tiny mute" style="margin:0 0 18px">' + (lesson ? 'Join our free mailing list to see it, and every AI lesson.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '
+        ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">' + (book ? 'This book is for subscribers' : lesson ? 'This AI lesson is for subscribers' : 'Join our mailing list') + '</h3>'
+          + '<p class="tiny mute" style="margin:0 0 18px">' + (book ? 'Join our free mailing list to read it, along with every AI lesson.' : lesson ? 'Join our free mailing list to see it, and every AI lesson.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '
           + 'You can unsubscribe at any time.</p>'
-        : '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Join our mailing list</h3>'
-          + '<p class="tiny mute" style="margin:0 0 18px">It’s free to subscribe! Unsubscribe at any time. Parents, guardians and teachers get new creative activities, free printables and AI lessons for kids.</p>')
+        /* exactly what's waiting in the Subscriber's Portal (keep this list in step with it) */
+        : '<h3 style="margin:.2em 0 .4em;font-size:1.5rem;text-wrap:balance">Join our mailing list and get instant access to our extended content.</h3>'
+          + '<ul class="joinlist">'
+          + '<li>' + ic("bot") + '<span><b>AI lessons for kids:</b> step by step, kids use AI to build their own games, a 3D computer, a talking math robot, a picture puzzle and a hand-gesture reader.</span></li>'
+          + '<li>' + ic("gamepad-2") + '<span><b>Subscribers-only games:</b> Pathbuilder, Gravity 4 and Pic-a-Puzzle.</span></li>'
+          + '<li>' + ic("book-open") + '<span><b>The book <i>How Computers See</i>:</b> turn the pages with your hand.</span></li>'
+          + '<li>' + ic("clapperboard") + '<span><b>Videos and news:</b> first looks at new games and episodes.</span></li>'
+          + '</ul>'
+          + '<p class="tiny mute" style="margin:0 0 18px">It’s free, and you can unsubscribe at any time.</p>')
     + '<form data-act="newsletter-submit">'
     + (back ? '<input type="hidden" name="next" value="' + E(back) + '">' : "")
     + (play ? '<input type="hidden" name="code" value="1"><input type="hidden" name="game" value="' + E(play) + '">' : "")
@@ -11196,7 +11208,26 @@ function storyCoverFromPages(s){
   const any = bg || page1.layers.find(l => l.type === "image" && l.src);
   return any ? { src: any.src, alt: any.alt || "" } : null;
 }
+/* A subscribers-only book (the computer vision book, which lives in its AI lesson): a lock on the card, and a click
+   that takes a subscriber (or an admin) to the lesson page, and anyone else to the join box first. */
+function membersStoryCard(s){
+  const slug = encodeURIComponent(s.portalSlug || "");
+  const sub = portalHasAccess();
+  const open = sub ? 'data-act="go" data-hash="#/newsletter/' + E(slug) + '"'
+    : 'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(s.title) + '" data-what="book"';
+  const img = s.image && s.image.src
+    ? '<img class="skel" src="' + E(thumbSrc(s.image.src)) + '" alt="' + E(s.image.alt || "") + '" data-full="' + E(s.image.src) + '" loading="lazy">'
+    : plate("story", "Book");
+  return '<article class="card card--members" ' + open + ' tabindex="0" role="link" aria-label="' + E(s.title + ", subscribers only") + '">'
+    + '<div class="card__media">' + img + '<span class="card__badge chip chip--members">' + ic("lock") + ' Subscribers only</span></div>'
+    + '<div class="card__body"><h3 class="card__title">' + E(s.title) + '</h3>'
+    + '<p class="tiny mute" style="margin:0">' + (sub ? E(s.blurb) : '<b class="card__join">Join our mailing list to read this book and other exclusive content.</b>') + '</p>'
+    + '<div class="card__foot">'
+    + '<button type="button" class="btn btn--sm btn--sun" ' + open + '>' + ic(sub ? "book-open" : "lock") + (sub ? ' Read it in the lesson' : ' Join free to read it') + '</button>'
+    + '</div></div></article>';
+}
 function storyCard(s){
+  if (s.kind === "members") return membersStoryCard(s);
   /* Every published short story now has a matching book, sharing its id,
      so it turns pages like the space adventure instead of opening a plain
      text page. A story without one yet (still in review) falls back to the
@@ -11226,6 +11257,14 @@ function storyCard(s){
 function viewStory(id){
   const s = db.find("stories", id);
   if (!s || (s.status === "archived" && !adminSeesAll())) return notFound("story");
+  /* a subscribers-only book has no page of its own here: it lives in its AI lesson */
+  if (s.kind === "members" && s.portalSlug){
+    if (portalHasAccess()){ setTimeout(() => navigate("#/newsletter/" + encodeURIComponent(s.portalSlug)), 0); return ""; }
+    return '<section class="section"><div class="shell" style="max-width:820px">'
+      + '<div class="crumb"><a href="#/stories">Stories</a>' + ic("chevron-right") + '<span>' + E(s.title) + '</span></div>'
+      + '<div style="margin-top:20px">' + membersPoster({ title: s.title, portalSlug: s.portalSlug, cover: s.image, p1: "#CFE3EA", p2: "#0E7490" }, "lesson") + '</div>'
+      + '</div></section>';
+  }
   noteView(s.id, "stories");
   const ch = db.list("characters").find(c => c.slug === s.character);
   const act = db.find("activities", s.linkedActivity);
@@ -14576,7 +14615,10 @@ function validateRecord(col, r){
     if (r.videoState === "live" && r.youtubeUrl === BRAND.youtube) warn("youtubeUrl","Still pointing at the channel rather than an individual video.");
   }
 
-  if (col === "stories"){
+  if (col === "stories" && r.kind === "members"){
+    req("title","Title"); req("blurb","Blurb");
+    if (isBlank(r.portalSlug)) err("portalSlug","A subscribers-only book needs the Subscriber’s Portal lesson it opens.");
+  } else if (col === "stories"){
     req("title","Title"); req("blurb","Blurb"); req("opening","Opening line"); req("learning","Discovery");
     if (r.linkedActivity && !db.find("activities", r.linkedActivity)) err("linkedActivity","Linked activity no longer exists.");
   }
@@ -14810,6 +14852,8 @@ const FIELDS = {
     { key:"source", label:"Signed up from", type:"text" }
   ],
   stories: [
+    { key:"kind", label:"What is this?", type:"select", wide:true, options:() => [{ value:"", label:"A story or picture book" },{ value:"members", label:"A subscribers-only book that lives in an AI lesson (its card opens the lesson)" }], help:"A subscribers-only book only needs a title, blurb, cover image and the lesson below. Its card shows a lock; subscribers go to the lesson, and visitors are asked to join first." },
+    { key:"portalSlug", label:"Subscriber’s Portal lesson", type:"select", wide:true, options:() => [{ value:"", label:"Choose a portal entry..." }].concat(db.list("portalEntries").filter(e => e.layout === "lesson" || String(e.aiPrompt || "").trim()).map(e => ({ value:e.slug || e.id, label:e.title }))), help:"Only for a subscribers-only book: the lesson its card opens." },
     { key:"title", label:"Title", type:"text", wide:true },
     { key:"character", label:"Character", type:"select", options:characterOptions },
     { key:"readMinutes", label:"Read minutes", type:"number" },
