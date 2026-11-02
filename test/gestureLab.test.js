@@ -117,7 +117,7 @@ describe("How Computers See on the Read page", () => {
   it("is a subscribers-only book whose card opens the lesson", () => {
     expect(storySql).toContain("'kind', 'members', 'portalSlug', 'how-to-build-a-hands-free-reader'");
     expect(index).toContain('if (s.kind === "members") return membersStoryCard(s);');
-    expect(index).toContain("' Subscribers only</span></div>'");
+    expect(index).toContain("' Subscribers only</span>' + PAGE_CURL + '</div>'");
     expect(index).toContain('data-what="book"');
     expect(index).toContain("'This book is for subscribers'");
     expect(index).toContain('if (col === "stories" && r.kind === "members"){');

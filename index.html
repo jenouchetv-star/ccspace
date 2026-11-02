@@ -539,6 +539,25 @@ img.skel.is-loaded, video.skel.is-loaded{ animation:none; background-image:none;
 .card__badge{
   position:absolute; top:11px; left:11px; z-index:2;
 }
+/* A book card's picture has its top right corner turned back like a page (assets/icons/page-curl.svg).
+   The picture is cut away beyond the fold, so the paper under it shows there, and the flap sits on the
+   fold. --curl is the flap's width; its fold runs from 84% of that in from the right on the top edge
+   down to the right edge 1.035 widths down (the SVG is 572 x 592). The corner lifts a little on hover. */
+.card__media--book{ --curl:46px; }
+.card__media--book > img, .card__media--book > video, .card__media--book > .plate{
+  clip-path:polygon(0 0, calc(100% - var(--curl) * .843) 0, 100% calc(var(--curl) * 1.035), 100% 100%, 0 100%);
+  transition:clip-path .22s ease;
+}
+.card__curl{
+  position:absolute; top:0; right:0; z-index:2; width:var(--curl); height:calc(var(--curl) * 1.035);
+  background:url("/assets/icons/page-curl.svg") no-repeat 0 0 / 100% 100%;
+  filter:drop-shadow(-2px 3px 2px rgba(30,40,46,.28));
+  transition:width .22s ease, height .22s ease; pointer-events:none;
+}
+.card:hover .card__media--book, .card:focus-visible .card__media--book{ --curl:58px; }
+@media (prefers-reduced-motion: reduce){
+  .card__media--book > img, .card__media--book > video, .card__media--book > .plate, .card__curl{ transition:none; }
+}
 /* The Share button on a card sits in the bottom row: right next to the card's main button, or at the
    end of the row when the card has none. It is a round icon that shows its "Share" label on hover or
    keyboard focus. The whole card is a link, so this opens the share dialog instead of the card. */
@@ -11178,6 +11197,8 @@ function viewStories(){
     + '</div></section>';
 }
 /** The book as one of the cards in the list, alongside the short stories. */
+/* the turned-back corner on a book card's picture (see .card__curl) */
+const PAGE_CURL = '<span class="card__curl" aria-hidden="true"></span>';
 function bookListCard(b){
   const media = (b.cover && b.cover.src)
     ? (isVideoSrc(b.cover.src)
@@ -11186,7 +11207,7 @@ function bookListCard(b){
     : '<div class="plate" style="--p1:' + E(b.color || "#1273B0") + ';--p2:' + E(b.colorDeep || "#0A5280") + '" role="presentation">'
       + '<div class="plate__mark">' + ic(b.icon || "book-open") + '</div></div>';
   return '<article class="card" data-act="open-book" data-id="' + E(b.id) + '" tabindex="0" role="button" aria-label="Read ' + E(b.title) + '">'
-    + '<div class="card__media">' + media + '</div>'
+    + '<div class="card__media card__media--book">' + media + PAGE_CURL + '</div>'
     + '<div class="card__body"><h3 class="card__title">' + E(b.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(b.blurb) + '</p>'
     + '<div class="card__foot">'
@@ -11234,7 +11255,7 @@ function membersStoryCard(s){
     ? '<img class="skel" src="' + E(thumbSrc(s.image.src)) + '" alt="' + E(s.image.alt || "") + '" data-full="' + E(s.image.src) + '" loading="lazy">'
     : plate("story", "Book");
   return '<article class="card card--members" ' + open + ' tabindex="0" role="link" aria-label="' + E(s.title + ", subscribers only") + '">'
-    + '<div class="card__media">' + img + '<span class="card__badge chip chip--members">' + ic("lock") + ' Subscribers only</span></div>'
+    + '<div class="card__media card__media--book">' + img + '<span class="card__badge chip chip--members">' + ic("lock") + ' Subscribers only</span>' + PAGE_CURL + '</div>'
     + '<div class="card__body"><h3 class="card__title">' + E(s.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + (sub ? E(s.blurb) : '<b class="card__join">Join our mailing list to read this book and other exclusive content.</b>') + '</p>'
     + '<div class="card__foot">'
@@ -11263,8 +11284,8 @@ function storyCard(s){
 
   const ch = db.list("characters").find(c => c.slug === s.character);
   return '<article class="card" data-act="go" data-hash="#/stories/' + E(s.id) + '" tabindex="0" role="link">'
-    + '<div class="card__media">' + (s.image && s.image.src ? '<img class="skel" src="' + E(thumbSrc(s.image.src)) + '" alt="' + E(s.image.alt) + '" data-full="' + E(s.image.src) + '" loading="lazy">' : plate("story","Story"))
-    + '<span class="card__badge chip chip--ink">' + E(ch ? ch.name : "Story") + '</span></div>'
+    + '<div class="card__media card__media--book">' + (s.image && s.image.src ? '<img class="skel" src="' + E(thumbSrc(s.image.src)) + '" alt="' + E(s.image.alt) + '" data-full="' + E(s.image.src) + '" loading="lazy">' : plate("story","Story"))
+    + '<span class="card__badge chip chip--ink">' + E(ch ? ch.name : "Story") + '</span>' + PAGE_CURL + '</div>'
     + '<div class="card__body"><h3 class="card__title">' + E(s.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(s.blurb) + '</p>'
     + '<div class="card__foot">' + cardShareBtn("/stories/" + s.id, s.title, true) + '</div>'
