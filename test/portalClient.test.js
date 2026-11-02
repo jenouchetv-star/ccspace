@@ -547,7 +547,7 @@ describe("the new games band on the home page", () => {
     expect(promo).toContain('data-act="open-mailing-list" data-next="/newsletter/arcade-makeover"');   /* the same sign-up as the nav and footer */
     expect(promo).toContain("Join for exclusive games");
     expect(promo).toContain("Subscribers also get Chike’s Gravity 4, a game made just for them.");
-    expect(promo).toContain(`quEditable("home-arcade-note", homeId, E(note))`);                      /* Quick Update can change the small print */
+    expect(promo).toContain(`copyPara("home-arcade-note", homeId, note, { cls:"tiny mute g4promo__fine" })`);                      /* Quick Update can change the small print */
     expect(html).not.toContain("function gravityFourPromoHTML(");
   });
 

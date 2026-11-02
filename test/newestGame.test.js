@@ -17,19 +17,20 @@ describe("the Newest game section", () => {
     expect(html).toContain(`quEditable("amazon-title", rec.id, E(String(rec.title).split(/:\\s+/)[0]))`);
     expect(html).toContain(`quEditable("amazon-why", rec.id, E(rec.why))`);
     expect(html).toContain(`quEditable("home-arcade-heading", homeId, E(heading))`);
-    expect(html).toContain(`quEditable("home-arcade-text", homeId, E(text))`);
+    expect(html).toContain(`copyPara("home-arcade-text", homeId, text, { cls:"lede" })`);
     expect(html).toContain('"home-arcade-heading": { label:"New games band heading", col:"pages",   fieldKey:"arcadeHeading"');
     expect(html).toContain('pageVal("home", "arcadeHeading", "8 games, one big arcade makeover!")');
   });
 
   it("lets Quick Update change the text under the Create page's heading", () => {
-    expect(html).toContain(`'<p class="lede">' + quEditable("create-finder-lede", createId, E(createLede)) + '</p>'`);
+    expect(html).toContain(`copyPara("create-finder-lede", createId, createLede, { cls:"lede" })`);
     expect(html).toContain('"create-finder-lede":  { label:"Create page intro",      col:"pages",   fieldKey:"finderLede"');
     expect(html).toContain('pageVal("create", "finderLede", "Tell us what you have, what you want to explore, and how much time you have. "');
   });
 
   it("links the Help page's mention of the Privacy Policy", () => {
-    expect(html).toContain(`E(qa[1]).replace(/Privacy Policy/g, '<a href="#/privacy">Privacy Policy</a>')`);
+    expect(html).toContain("plain: p => p.replace(/Privacy Policy(?![^<]*<");
+    expect(html).toContain(`'<a href="#/privacy">Privacy Policy</a>')`);
     expect(html).toContain("See the Privacy Policy for the details.");
     expect(html).toContain(`.replace(/Report a problem/g, '<button type="button" class="more__link" data-act="report-problem-open">Report a problem</button>')`);
     expect(html).toContain('"Use Report a problem, at the bottom of every page. It helps to say which activity and which step was unclear."');

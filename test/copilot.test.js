@@ -783,7 +783,7 @@ describe("how the admin screen uses it", () => {
   });
 
   it("has a Writing helper in every content editor, which only fills in the form", () => {
-    expect(html).toContain("    + ehCardHTML(col, rec)\n    + '<div class=\"admin-form-grid\">' + (FIELDS[col] || []).map(");
+    expect(html).toContain("    + ehCardHTML(col, rec)\n    + '<div class=\"admin-form-grid\">' + (FIELDS[col] || []).filter(");
     expect(body("ehCardHTML")).toContain('col === "portalEntries" || !ehFields(col).length');   // the archive editor has its own, and an editor with no text boxes has none
     for (const fn of ["ehRun", "ehFix", "ehApply", "ehShowRows"]) expect(body(fn)).not.toMatch(/db\.(add|update|remove)\(|\.requestSubmit\(/);
     expect(html).toContain("This only fills in the form. Nothing is saved until you press Save.");
