@@ -1,4 +1,4 @@
--- Chike's Creative Space - the two AI lessons on the Create page, for subscribers.
+-- Chike's Creative Space - the AI lessons on the Create page, for subscribers.
 --
 -- Each is an activities row with kind "members": its card shows a "Subscribers only" lock, and clicking it opens
 -- the join notice (or, for a subscriber, the lesson in the Subscriber's Portal). It has no activity page of its own,
@@ -56,7 +56,7 @@ insert into activities (id, data) values ('act-ai-lesson-math-robot', jsonb_buil
 on conflict (id) do update set data = excluded.data, updated_at = now();
 
 -- AI Lesson 04, beside its Subscriber's Portal lesson (supabase/ai-lesson-picture-puzzle.sql); both are published,
--- and the card uses the lesson's cover (two boys playing the game; Pic Pop Puzzle's Play page card keeps the drawing).
+-- and the card uses the lesson's cover (two boys playing the game; Pic-a-Puzzle's Play page card keeps the drawing).
 insert into activities (id, data) values ('act-ai-lesson-picture-puzzle', jsonb_build_object(
   'id', 'act-ai-lesson-picture-puzzle', 'slug', 'ai-lesson-picture-puzzle',
   'kind', 'members', 'portalSlug', 'how-to-build-your-own-puzzle-game',
@@ -71,4 +71,22 @@ insert into activities (id, data) values ('act-ai-lesson-picture-puzzle', jsonb_
   'image', jsonb_build_object('src', 'https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/uploads/media/1793530924918-Gemini_Generated_Image_73wdck73wdck73wd.jpg', 'alt', 'Two boys on a porch playing a picture puzzle game together on a tablet'),
   'related', '[]'::jsonb, 'tags', '["ai", "coding", "games", "puzzle", "subscribers"]'::jsonb, 'featured', false,
   'status', 'published', 'createdAt', '2026-11-01T12:00:00.000Z', 'updatedAt', '2026-11-01T13:00:00.000Z'))
+on conflict (id) do update set data = excluded.data, updated_at = now();
+
+-- AI Lesson 05, beside its Subscriber's Portal lesson (supabase/ai-lesson-gesture-lab.sql); both are DRAFTS until the
+-- lesson has a cover, which this card will use too.
+insert into activities (id, data) values ('act-ai-lesson-gesture-lab', jsonb_build_object(
+  'id', 'act-ai-lesson-gesture-lab', 'slug', 'ai-lesson-gesture-lab',
+  'kind', 'members', 'portalSlug', 'how-to-build-a-hands-free-reader',
+  'title', 'AI Lesson 05: Control a Page with Hand Gestures',
+  'summary', 'Use AI to build a page you control without touching anything: swipe to turn the pages of a book, point to scroll, pinch to change the text size, and more.',
+  'type', 'ai', 'access', 'members', 'character', 'chike',
+  'ageMin', 7, 'ageMax', 12, 'timeMinutes', 30, 'difficulty', 'medium', 'setting', 'indoor', 'adultSupport', 'nearby',
+  'materials', '[]'::jsonb, 'materialsDetail', '[]'::jsonb, 'safetyNotes', '[]'::jsonb, 'steps', '[]'::jsonb,
+  'learning', jsonb_build_object('topic', 'structures', 'title', 'How computers learn to see', 'text', ''),
+  'discussionPrompt', '', 'variation', '', 'value', 'curiosity',
+  'printable', jsonb_build_object('label', '', 'path', ''), 'youtubeUrl', '',
+  'image', jsonb_build_object('src', '', 'alt', ''),
+  'related', '[]'::jsonb, 'tags', '["ai", "coding", "computer vision", "subscribers"]'::jsonb, 'featured', false,
+  'status', 'draft', 'createdAt', '2026-11-01T22:00:00.000Z', 'updatedAt', '2026-11-01T22:00:00.000Z'))
 on conflict (id) do update set data = excluded.data, updated_at = now();

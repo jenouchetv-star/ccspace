@@ -1,6 +1,6 @@
 -- Chike's Creative Space - AI Lesson 04: Make a Picture Puzzle Game (Subscriber's Portal, published).
--- Started with Copilot; the example (Pic Pop Puzzle, made with AI from this exact prompt) is portal_game_files row
--- pg-picture-puzzle, shown at the top of the lesson. Pic Pop Puzzle's subscribers-only card on the Play page opens this lesson (supabase/pic-pop-puzzle.sql).
+-- Started with Copilot; the example (Pic-a-Puzzle, made with AI from this exact prompt) is portal_game_files row
+-- pg-picture-puzzle, shown at the top of the lesson. Pic-a-Puzzle's subscribers-only card on the Play page opens this lesson (supabase/pic-pop-puzzle.sql).
 -- Safe to re-run: it replaces the entry with this text, so edits made in the editor belong here too.
 
 insert into portal_entries (id, data) values ('port-mvxnxdib-9', jsonb_build_object(
@@ -31,7 +31,7 @@ insert into portal_entries (id, data) values ('port-mvxnxdib-9', jsonb_build_obj
   'vocabMeaning', 'Knowing where things are on a flat surface, and seeing how the pieces fit together to make a whole picture.',
   'vocabExample', 'My 2D spatial awareness helped me finish the puzzle: the sky pieces go at the top and the grass pieces go at the bottom!',
   'aiPromptTitle', '', 'aiPromptTip', '',
-  'aiPrompt', $p$🧩 Pic Pop Puzzle!
+  'aiPrompt', $p$🧩 Pic-a-Puzzle!
 Make a fun picture puzzle game in one HTML file called puzzle.html, so I can open it in my browser by double-clicking it. Put all the HTML, CSS and JavaScript in that one file.
 
 🌟 How to win:

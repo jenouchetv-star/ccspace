@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hands-Free Reader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
+<!-- The hand-tracking AI (MediaPipe Hands) loads only when the camera is turned on. Everything else is in this file. -->
+<style>
+  :root{
+    --bg:#F3F3F1; --surface:#FFFFFF; --surface-2:#F7F7F5; --border:#E3E3DF; --border-2:#D4D4CE;
+    --text:#18181B; --muted:#6B6B72; --accent:#0E7490; --accent-soft:#E3F1F4; --on-accent:#FFFFFF;
+    --page:#FFFDF8; --page-2:#F6F1E6; --page-edge:#E6E0D3; --spine:rgba(60,45,20,.16); --hl:#FBEFC4;
+    --good:#15803D; --good-soft:#E3F3E8; --warn:#B45309; --warn-soft:#FBF0DD; --rose:#BE123C; --rose-soft:#FBE5EA;
+    --cam:#0B0D10; --cam-grid:rgba(56,189,248,.10);
+    --shadow-sm:0 1px 2px rgba(16,18,22,.06); --shadow:0 1px 2px rgba(16,18,22,.05), 0 12px 32px -12px rgba(16,18,22,.18);
+    --ui:"Geist", ui-sans-serif, system-ui, sans-serif; --serif:"Newsreader", Georgia, serif; --mono:"Geist Mono", ui-monospace, monospace;
+    color-scheme:light;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0D0E10; --surface:#16171A; --surface-2:#1C1D21; --border:#2A2B30; --border-2:#383940;
+    --text:#ECECEE; --muted:#9C9CA4; --accent:#38BDF8; --accent-soft:#0F2733; --on-accent:#08141A;
+    --page:#1C1B19; --page-2:#24221F; --page-edge:#33302B; --spine:rgba(0,0,0,.45); --hl:#4A3D12;
+    --good:#4ADE80; --good-soft:#12291B; --warn:#FBBF24; --warn-soft:#2E2410; --rose:#FB7185; --rose-soft:#33141C;
+    --cam:#070809; --cam-grid:rgba(56,189,248,.10);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow:0 1px 2px rgba(0,0,0,.4), 0 16px 40px -12px rgba(0,0,0,.6);
+    color-scheme:dark;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{ overflow:hidden; background:var(--bg); color:var(--text); font-family:var(--ui); font-size:14px; -webkit-font-smoothing:antialiased; }
+  button{ font:inherit; color:inherit; }
+  svg{ flex:none; }
+  .hidden{ display:none !important; }
+  .surface{ background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow-sm); }
+  .label{ font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:7px; height:36px; padding:0 12px; border:1px solid var(--border); border-radius:10px;
+    background:var(--surface); font-weight:500; font-size:13.5px; cursor:pointer; transition:background-color .15s, border-color .15s; white-space:nowrap; }
+  .btn:hover{ background:var(--surface-2); border-color:var(--border-2); }
+  .btn:focus-visible, .glist li:focus-visible, input:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .btn--primary{ background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+  .btn--primary:hover{ background:var(--accent); border-color:var(--accent); filter:brightness(1.08); }
+  .btn--icon{ width:36px; padding:0; }
+  .btn[aria-pressed="true"]{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+  .btn svg{ width:17px; height:17px; }
+
+  /* layout: gestures on the left, the book in the middle, the digital hand on the right */
+  .app{ position:fixed; inset:0; display:grid; grid-template-columns:264px minmax(0,1fr) 264px; grid-template-rows:auto minmax(0,1fr); gap:16px; padding:16px; }
+  .app.focus{ grid-template-columns:minmax(0,1fr) !important; grid-template-rows:auto minmax(0,1fr) !important; }
+  .app.focus .guide, .app.focus .side{ display:none !important; }
+  .bar{ grid-column:1 / -1; display:flex; align-items:center; gap:10px; padding:8px 8px 8px 14px; }
+  .mark{ width:32px; height:32px; border-radius:9px; background:var(--accent); color:var(--on-accent); display:grid; place-items:center; }
+  .mark svg{ width:20px; height:20px; }
+  .bar h1{ margin:0; font-size:15px; font-weight:600; letter-spacing:-.01em; }
+  .bar p{ margin:0; font-size:12.5px; color:var(--muted); }
+  .bar .spacer{ flex:1; }
+  .size{ display:flex; align-items:center; gap:8px; height:36px; padding:0 12px; border:1px solid var(--border); border-radius:10px; color:var(--muted); }
+  .size input{ width:96px; accent-color:var(--accent); }
+  .size output{ min-width:38px; text-align:right; font-family:var(--mono); font-size:12px; color:var(--text); }
+  .size .a-sm{ font-size:11px; font-weight:600; } .size .a-lg{ font-size:16px; font-weight:600; }
+  .sep{ width:1px; height:22px; background:var(--border); margin:0 2px; }
+
+  /* the gesture list: each gesture drawn as a little digital hand */
+  .guide{ padding:14px 10px 12px; overflow:auto; display:flex; flex-direction:column; gap:10px; }
+  .guide .label{ padding:0 6px; }
+  .glist{ list-style:none; margin:0; padding:0; display:grid; gap:2px; }
+  .glist li{ display:grid; grid-template-columns:40px 1fr; gap:10px; align-items:center; padding:7px 8px; border-radius:10px; cursor:pointer; transition:background-color .15s; }
+  .glist li:hover{ background:var(--surface-2); }
+  .glist li.on{ background:var(--accent-soft); }
+  .gico{ width:40px; height:40px; border-radius:10px; background:var(--surface-2); border:1px solid var(--border); display:grid; place-items:center; color:var(--text); }
+  .glist li.on .gico{ border-color:var(--accent); color:var(--accent); background:var(--surface); }
+  .gico svg{ width:32px; height:32px; }
+  .glist .t{ display:flex; align-items:center; gap:6px; font-weight:600; font-size:13.5px; }
+  .glist .d{ display:block; font-size:12.5px; color:var(--muted); line-height:1.35; margin-top:1px; }
+  .kind{ font-size:10.5px; font-weight:600; padding:1px 7px; border-radius:999px; }
+  .k-pose{ background:var(--warn-soft); color:var(--warn); } .k-motion{ background:var(--accent-soft); color:var(--accent); }
+  .k-slider{ background:var(--rose-soft); color:var(--rose); } .k-pointer{ background:var(--good-soft); color:var(--good); }
+  .k-rest{ background:var(--surface-2); color:var(--muted); border:1px solid var(--border); }
+  .keys{ margin:auto 6px 0; padding-top:10px; border-top:1px solid var(--border); font-size:12px; color:var(--muted); line-height:1.7; }
+  kbd{ font-family:var(--mono); font-size:11px; padding:1px 5px; border:1px solid var(--border-2); border-bottom-width:2px; border-radius:5px; background:var(--surface); color:var(--text); }
+
+  /* the book: sheets of paper stacked on a spine, like the site's own book reader. Each sheet has a front (a right-hand
+     page) and a back (the next left-hand page); turning a sheet swings it around the spine. When the book opens, it
+     slides right so the spine sits in the middle and the spread is centered. */
+  .reader{ display:flex; flex-direction:column; min-height:0; gap:12px; }
+  .book-area{ position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .book-wrap{ position:relative; transition:transform .55s cubic-bezier(.36,.06,.22,1); }
+  .book-area.opened .book-wrap{ transform:translateX(50%); }
+  .book{ position:relative; width:var(--pw, 360px); height:var(--ph, 490px); perspective:2500px; }
+  .paper{ position:absolute; inset:0; transform-style:preserve-3d; transform-origin:left center;
+    transition:transform .75s cubic-bezier(.36,.06,.22,1); will-change:transform; }
+  .paper.turning{ z-index:500 !important; }
+  .paper.flipped{ transform:rotateY(-180deg); }
+  .front, .back{ position:absolute; inset:0; background:var(--page); border:1px solid var(--page-edge); overflow:hidden; cursor:pointer;
+    backface-visibility:hidden; -webkit-backface-visibility:hidden; }
+  .front{ border-radius:0 10px 10px 0; transform:rotateY(0deg); box-shadow:0 22px 44px -22px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.06); }
+  .back{ border-radius:10px 0 0 10px; transform:rotateY(180deg); }
+  .paper.flipped .back{ box-shadow:0 22px 44px -22px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.06); }
+  .paper.flipped .front{ box-shadow:none; }
+  /* the shadow where the page bends into the spine; it darkens while a page is turning */
+  .front::after, .back::after{ content:""; position:absolute; top:0; bottom:0; width:40px; pointer-events:none; opacity:.55; transition:opacity .75s ease; z-index:3; }
+  .front::after{ left:0; background:linear-gradient(to right, var(--spine), transparent); }
+  .back::after{ right:0; background:linear-gradient(to left, var(--spine), transparent); }
+  .paper.turning .front::after, .paper.turning .back::after{ opacity:1; }
+  .paper:not(.flipped):not(.turning):hover{ transform:rotateY(-6deg); transition:transform .25s ease; }
+  .paper.flipped:not(.turning):hover{ transform:rotateY(-174deg); transition:transform .25s ease; }
+
+  /* a chapter's left page: its number, title and drawing */
+  .pg{ position:absolute; inset:0; display:flex; flex-direction:column; }
+  .pg-left{ padding:calc(34px * var(--s, 1)) calc(30px * var(--s, 1)) calc(40px * var(--s, 1)) calc(34px * var(--s, 1)); }
+  .chapter{ font-family:var(--mono); font-size:calc(11.5px * var(--s, 1)); color:var(--accent); letter-spacing:.06em; text-transform:uppercase; }
+  .pg-left h2{ margin:calc(10px * var(--s, 1)) 0 0; font-family:var(--serif); font-weight:500; font-size:calc(34px * var(--s, 1) * var(--ts, 1)); line-height:1.08; letter-spacing:-.015em; text-wrap:balance; }
+  .pg-left .rule{ width:44px; height:2px; background:var(--accent); margin:calc(16px * var(--s, 1)) 0 0; border-radius:2px; }
+  .art{ flex:1; min-height:0; display:grid; place-items:center; padding-top:calc(14px * var(--s, 1)); }
+  .art svg{ width:100%; height:100%; max-height:calc(230px * var(--s, 1)); }
+  /* a chapter's right page: the words */
+  .pg-right{ padding:calc(26px * var(--s, 1)) 0 calc(40px * var(--s, 1)) 0; }
+  .rhead{ display:flex; align-items:center; gap:10px; padding:0 calc(26px * var(--s, 1)) calc(8px * var(--s, 1)) calc(40px * var(--s, 1)); }
+  .runner{ font-family:var(--serif); font-style:italic; font-size:calc(13.5px * var(--s, 1)); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .like{ margin-left:auto; flex:none; height:32px; }
+  .like.liked{ color:var(--rose); border-color:var(--rose); background:var(--rose-soft); }
+  .like.liked svg{ fill:currentColor; }
+  .pbody{ flex:1; min-height:0; overflow:auto; padding:0 calc(28px * var(--s, 1)) 0 calc(40px * var(--s, 1)); font-family:var(--serif); }
+  .pbody p{ margin:0 0 .8em; font-size:calc(17px * var(--s, 1) * var(--ts, 1)); line-height:1.6; }
+  .pbody ul{ margin:0 0 .8em; padding-left:1.1em; font-size:calc(16.5px * var(--s, 1) * var(--ts, 1)); line-height:1.55; }
+  .pbody li{ margin-bottom:.35em; }
+  .pbody p:first-child::first-letter{ float:left; font-size:3.1em; line-height:.85; padding:.06em .08em 0 0; color:var(--accent); }
+  .rules{ width:100%; border-collapse:collapse; margin:2px 0 14px; font-family:var(--ui); font-size:calc(12.5px * var(--s, 1) * var(--ts, 1)); }
+  .rules th, .rules td{ text-align:left; padding:6px 10px 6px 0; border-bottom:1px solid var(--page-edge); }
+  .rules th{ font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .rules td:first-child{ font-weight:600; white-space:nowrap; }
+  .pno{ position:absolute; bottom:calc(14px * var(--s, 1)); font-family:var(--mono); font-size:11px; color:var(--muted); }
+  .pg-left .pno{ left:calc(34px * var(--s, 1)); } .pg-right .pno{ right:calc(26px * var(--s, 1)); }
+  .scrollhint{ position:absolute; right:7px; top:30%; bottom:30%; width:3px; border-radius:3px; background:var(--accent); opacity:0; transition:opacity .2s; z-index:4; }
+  .scrollhint.on{ opacity:.7; }
+
+  /* the cover: a hardcover in deep teal with a frame, the title and a big digital hand */
+  .front.cover-face{ background:radial-gradient(120% 90% at 70% 20%, #155563, #0B2D36 70%); border-color:#082128; color:#F3EEE4; }
+  .front.cover-face::after{ width:30px; opacity:1; background:linear-gradient(90deg, rgba(0,0,0,.5), rgba(255,255,255,.06) 60%, transparent); }
+  .front.cover-face::before{ content:""; position:absolute; inset:calc(16px * var(--s, 1)) calc(16px * var(--s, 1)) calc(16px * var(--s, 1)) calc(40px * var(--s, 1)); border:1px solid rgba(243,238,228,.28); border-radius:6px; pointer-events:none; }
+  .cover-in{ position:relative; z-index:1; height:100%; display:flex; flex-direction:column; padding:calc(40px * var(--s, 1)) calc(36px * var(--s, 1)) calc(32px * var(--s, 1)) calc(60px * var(--s, 1)); }
+  .kicker{ font-family:var(--mono); font-size:calc(11px * var(--s, 1)); letter-spacing:.16em; text-transform:uppercase; color:#7DD3E6; }
+  .cover-in h2{ margin:calc(14px * var(--s, 1)) 0 0; font-family:var(--serif); font-weight:500; font-size:calc(52px * var(--s, 1)); line-height:1; letter-spacing:-.02em; color:#F3EEE4; max-width:7ch; }
+  .cover-in .sub{ margin:calc(12px * var(--s, 1)) 0 0; font-family:var(--serif); font-style:italic; font-size:calc(17px * var(--s, 1)); color:rgba(243,238,228,.78); max-width:20ch; }
+  .cover-art{ position:absolute; right:9%; bottom:13%; width:44%; aspect-ratio:3/4; pointer-events:none; }
+  .cover-art svg{ width:100%; height:100%; }
+  .open-hint{ margin-top:auto; display:inline-flex; align-items:center; gap:8px; font-size:calc(12.5px * var(--s, 1)); color:rgba(243,238,228,.82); }
+  .open-hint svg{ width:30px; height:30px; color:#F3EEE4; }
+  .back.endpaper{ background:var(--page-2); }
+
+  /* one page at a time in small boxes (like the site's reader on phones): a crossfade instead of a spread */
+  .book.single .paper, .book.single .paper.flipped, .book.single .paper.turning{ transform:none !important; transition:none; }
+  .book.single .front, .book.single .back{ transform:none; backface-visibility:visible; -webkit-backface-visibility:visible; visibility:hidden; opacity:0;
+    transition:opacity .3s ease, visibility 0s linear .3s; border-radius:10px; }
+  .book.single .front.active, .book.single .back.active{ visibility:visible; opacity:1; z-index:20; transition:opacity .3s ease; box-shadow:0 22px 44px -22px rgba(0,0,0,.35); }
+  .book.single .back::after{ left:0; right:auto; background:linear-gradient(to right, var(--spine), transparent); }
+  .book.single .pg-left .pno, .book.single .pg-right .pno{ left:50%; right:auto; transform:translateX(-50%); }
+
+  .nav{ display:flex; align-items:center; justify-content:center; gap:12px; }
+  .count{ font-family:var(--mono); font-size:12px; color:var(--muted); min-width:120px; text-align:center; }
+
+  /* the digital hand */
+  .side{ display:flex; flex-direction:column; gap:12px; min-height:0; overflow:auto; }
+  .panel{ padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .panel-head{ display:flex; align-items:center; justify-content:space-between; }
+  .live{ display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+  .live i{ width:7px; height:7px; border-radius:50%; background:var(--border-2); }
+  .live.on i{ background:#22C55E; box-shadow:0 0 0 3px rgba(34,197,94,.18); }
+  .cam canvas{ display:block; width:100%; aspect-ratio:4/3; border-radius:10px; background:var(--cam); }
+  .fingers{ display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
+  .fingers span{ text-align:center; font-size:11px; font-weight:500; padding:4px 0; border-radius:7px; background:var(--surface-2); border:1px solid var(--border); color:var(--muted); }
+  .fingers span.up{ background:var(--good-soft); border-color:transparent; color:var(--good); }
+  .status{ display:flex; align-items:center; gap:12px; }
+  .face{ position:relative; width:48px; height:48px; border-radius:12px; background:var(--surface-2); border:1px solid var(--border); display:grid; place-items:center; color:var(--accent); flex:none; }
+  .face svg.hand{ width:36px; height:36px; }
+  .ring{ position:absolute; inset:-5px; width:calc(100% + 10px); height:calc(100% + 10px); pointer-events:none; }
+  .ring circle{ fill:none; stroke:var(--accent); stroke-width:3; stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%; }
+  .status .name{ font-weight:600; font-size:14.5px; }
+  .status .does{ font-size:12.5px; color:var(--muted); line-height:1.35; margin-top:1px; }
+  .side .note{ margin:0; font-size:12px; color:var(--muted); display:flex; gap:7px; align-items:flex-start; line-height:1.45; }
+  .side .note svg{ width:14px; height:14px; margin-top:1px; }
+  .btn--wide{ width:100%; }
+
+  /* floating things: the fingertip cursor, the text-size dial, hearts, toasts, x-ray */
+  #cursor{ position:fixed; left:0; top:0; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%; background:var(--accent); border:3px solid var(--surface);
+    box-shadow:0 0 0 1px var(--accent), 0 4px 14px rgba(0,0,0,.25); z-index:30; pointer-events:none; opacity:0; transition:opacity .15s; }
+  #cursor.on{ opacity:1; }
+  .dial{ position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:31; padding:18px 22px 14px; text-align:center; pointer-events:none; opacity:0; transition:opacity .2s;
+    background:var(--surface); border:1px solid var(--border); border-radius:20px; box-shadow:var(--shadow); }
+  .dial.on{ opacity:1; }
+  .dial svg{ width:120px; height:120px; display:block; margin:0 auto 6px; }
+  .dial .label{ display:block; }
+  .heart{ position:fixed; z-index:32; color:var(--rose); pointer-events:none; animation:float .9s ease-out forwards; }
+  .heart svg{ width:28px; height:28px; fill:currentColor; }
+  @keyframes float{ from{ transform:translate(-50%,0) scale(.6); opacity:1; } to{ transform:translate(-50%,-90px) scale(1.3); opacity:0; } }
+  .toast{ position:fixed; left:50%; top:76px; transform:translate(-50%,-6px); z-index:33; padding:8px 14px; border-radius:10px; background:var(--text); color:var(--bg);
+    font-weight:500; font-size:13px; pointer-events:none; opacity:0; transition:opacity .2s, transform .2s; }
+  .toast.show{ opacity:1; transform:translate(-50%,0); }
+  #xray{ position:fixed; inset:0; z-index:20; pointer-events:none; display:none; }
+  #xray.on{ display:block; }
+  .xlabel{ position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:21; padding:8px 14px; border-radius:10px; background:rgba(11,13,16,.85); color:#E5F6FD;
+    font-size:13px; font-family:var(--mono); display:none; }
+  .xlabel.on{ display:block; }
+
+  /* the start box */
+  .start{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(10,12,14,.42); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); z-index:50; padding:16px; }
+  .start .box{ max-width:500px; padding:26px; border-radius:20px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); }
+  .start h2{ margin:10px 0 8px; font-family:var(--serif); font-weight:500; font-size:28px; letter-spacing:-.01em; line-height:1.15; }
+  .start p{ margin:0 0 12px; font-size:14.5px; line-height:1.55; color:var(--muted); }
+  .start p b{ color:var(--text); font-weight:600; }
+  .start .note{ display:flex; gap:10px; padding:10px 12px; border-radius:12px; background:var(--surface-2); border:1px solid var(--border); font-size:13px; color:var(--muted); }
+  .start .note svg{ width:16px; height:16px; color:var(--good); margin-top:2px; }
+  .start .row{ display:flex; gap:8px; flex-wrap:wrap; margin-top:18px; }
+  .start .err{ color:var(--rose); font-weight:500; }
+
+  /* smaller boxes, like the example at the top of a lesson */
+  @media (max-width:1060px){
+    .app{ grid-template-columns:minmax(0,1fr) 220px; }
+    .guide{ display:none; }
+  }
+  @media (max-width:760px), (max-height:560px){
+    .app{ grid-template-columns:minmax(0,1fr) 168px; gap:10px; padding:10px; }
+    .bar p, .status .does, .side .note, .fingers, .size .a-sm, .size .a-lg, .size input{ display:none; }
+    .bar{ padding:6px 6px 6px 10px; gap:6px; }
+    .panel{ padding:10px; gap:8px; }
+  }
+  @media (max-width:540px){
+    .app{ grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr) auto; }
+    .side{ flex-direction:row; overflow:visible; }
+    .side .panel{ flex:1; }
+    .bar h1{ font-size:14px; }
+    .bar .mark{ display:none; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .paper, .book-wrap{ transition:none !important; }
+    .heart{ animation-duration:.3s; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="surface bar">
+    <div class="mark" id="mark" aria-hidden="true"></div>
+    <div><h1>Hands-Free Reader</h1><p>A book you read with your hand</p></div>
+    <div class="spacer"></div>
+    <label class="size" title="Text size"><span class="a-sm" aria-hidden="true">A</span><input type="range" id="ts" min="80" max="150" value="100" aria-label="Text size"><span class="a-lg" aria-hidden="true">A</span><output id="ts-out">100%</output></label>
+    <button class="btn btn--icon" type="button" id="btn-theme" aria-pressed="false" aria-label="Dark mode" title="Dark mode"></button>
+    <button class="btn btn--icon" type="button" id="btn-focus" aria-pressed="false" aria-label="Focus mode" title="Focus mode"></button>
+    <button class="btn btn--icon" type="button" id="btn-xray" aria-pressed="false" aria-label="X-ray" title="X-ray"></button>
+  </header>
+
+  <aside class="surface guide" aria-label="Hand gestures">
+    <div class="label">Hand gestures</div>
+    <ul class="glist" id="glist"></ul>
+    <div class="keys">No camera? <kbd>←</kbd> <kbd>→</kbd> turn pages, <kbd>↑</kbd> <kbd>↓</kbd> scroll, <kbd>L</kbd> like, <kbd>D</kbd> dark, <kbd>F</kbd> focus, <kbd>+</kbd> <kbd>−</kbd> text size, <kbd>X</kbd> X-ray.</div>
+  </aside>
+
+  <main class="reader">
+    <div class="book-area" id="book-area"><div class="book-wrap"><div class="book" id="book"></div></div></div>
+    <div class="nav">
+      <button class="btn btn--icon" type="button" id="prev" aria-label="Previous page"></button>
+      <div class="count" id="count" aria-live="polite">Cover</div>
+      <button class="btn btn--icon" type="button" id="next" aria-label="Next page"></button>
+    </div>
+  </main>
+
+  <aside class="side">
+    <section class="surface panel cam">
+      <div class="panel-head"><span class="label">Digital hand</span><span class="live" id="live"><i></i><span id="live-txt">Off</span></span></div>
+      <canvas id="cam" width="320" height="240" aria-label="Your digital hand: the 21 points the AI found on your hand (your video is never shown)"></canvas>
+      <div class="fingers" id="fingers" aria-hidden="true"><span>Thumb</span><span>Index</span><span>Middle</span><span>Ring</span><span>Pinky</span></div>
+      <div class="status" role="status" aria-live="polite">
+        <div class="face"><span id="g-face"></span><svg class="ring" viewBox="0 0 64 64" aria-hidden="true"><circle id="g-ring" cx="32" cy="32" r="30" stroke-dasharray="188.5" stroke-dashoffset="188.5"/></svg></div>
+        <div><div class="name" id="g-name">Camera is off</div><div class="does" id="g-does">Turn on the camera, or use the buttons</div></div>
+      </div>
+      <button class="btn btn--primary btn--wide" type="button" id="btn-camera"></button>
+      <p class="note" id="cam-note"></p>
+    </section>
+  </aside>
+</div>
+
+<div id="cursor" aria-hidden="true"></div>
+<div class="dial" id="dial" aria-hidden="true">
+  <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="48" fill="none" stroke="var(--border)" stroke-width="10"/><circle id="dial-arc" cx="60" cy="60" r="48" fill="none" stroke="var(--accent)" stroke-width="10" stroke-linecap="round" stroke-dasharray="301.6" stroke-dashoffset="258.5" transform="rotate(-90 60 60)"/><text x="60" y="67" text-anchor="middle" font-size="22" font-weight="600" fill="var(--text)" font-family="Geist Mono, monospace" id="dial-txt">100%</text></svg>
+  <span class="label">Text size</span>
+</div>
+<canvas id="xray" aria-hidden="true"></canvas>
+<div class="xlabel" id="xlabel">X-ray</div>
+<div class="toast" id="toast" role="status"></div>
+
+<div class="start" id="start">
+  <div class="box">
+    <div class="mark" id="mark2" aria-hidden="true"></div>
+    <h2>Read this book with your hand</h2>
+    <p>This page uses <b>computer vision</b>: an AI looks through your camera, finds 21 points on your hand, and works out which gesture you are making. Swipe to turn the page, point to scroll, pinch to change the text size.</p>
+    <div class="note"><span id="lock"></span><span>You won't see your video, only your digital hand. The video stays on this device, and nothing is recorded, saved or sent anywhere. Ask a grown-up before you turn on a camera.</span></div>
+    <p class="err hidden" id="start-err"></p>
+    <div class="row">
+      <button class="btn btn--primary" type="button" id="start-camera">Turn on the camera</button>
+      <button class="btn" type="button" id="start-mouse">Use buttons and keys</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var E = function(s){ return String(s).replace(/[&<>"]/g, function(c){ return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]; }); };
+
+  /* ---------------- line icons ---------------- */
+  var ICON = {
+    camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+    cameraOff:'<path d="M2 2l20 20"/><path d="M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16"/><path d="M9.5 4h5L17 7h3a2 2 0 0 1 2 2v7.5"/><path d="M14.12 15.12A3 3 0 1 1 9.88 10.88"/>',
+    moon:'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
+    sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+    focus:'<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>',
+    xray:'<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
+    left:'<path d="M15 18l-6-6 6-6"/>', right:'<path d="M9 18l6-6-6-6"/>',
+    heart:'<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/>',
+    lock:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    keys:'<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/>'
+  };
+  function icon(name, cls){ return '<svg' + (cls ? ' class="' + cls + '"' : '') + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON[name] + '</svg>'; }
+
+  /* ---------------- little digital hands, drawn from the same 21 points the AI uses ---------------- */
+  function poseLm(f, thumb){
+    var L = [], set = function(i, x, y){ L[i] = { x:x, y:y, z:0 }; };
+    set(0, 0.5, 0.78); var mcpX = [0.44, 0.5, 0.555, 0.605];
+    [5, 9, 13, 17].forEach(function(m, k){ var x = mcpX[k], y = 0.56 + (k === 3 ? 0.02 : 0); set(m, x, y);
+      if (f[k]){ set(m + 1, x, y - 0.07); set(m + 2, x, y - 0.12); set(m + 3, x, y - 0.16); }
+      else { set(m + 1, x, y - 0.045); set(m + 2, x, y - 0.01); set(m + 3, x, y + 0.03); } });
+    if (thumb === "out"){ set(1, 0.44, 0.72); set(2, 0.39, 0.67); set(3, 0.35, 0.62); set(4, 0.31, 0.58); }
+    else if (thumb === "up"){ set(1, 0.44, 0.72); set(2, 0.41, 0.64); set(3, 0.40, 0.54); set(4, 0.40, 0.45); }
+    else if (thumb === "pinch"){ set(1, 0.44, 0.72); set(2, 0.40, 0.66); set(3, 0.39, 0.56); set(4, 0.41, 0.49);
+      set(6, 0.44, 0.49); set(7, 0.425, 0.455); set(8, 0.415, 0.48); }
+    else { set(1, 0.45, 0.72); set(2, 0.44, 0.67); set(3, 0.47, 0.63); set(4, 0.5, 0.62); }
+    return L;
+  }
+  var POSES = {
+    open:[[1,1,1,1], "out"], swipe:[[1,1,1,1], "out"], fist:[[0,0,0,0], "in"], point:[[1,0,0,0], "in"], peace:[[1,1,0,0], "in"],
+    rock:[[1,0,0,1], "in"], thumbs:[[0,0,0,0], "up"], pinch:[[0,1,1,1], "pinch"]
+  };
+  var BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+  var TIPS = [4,8,12,16,20];
+  function handSVG(g, cls, label){
+    var p = POSES[g], L = poseLm(p[0].map(Boolean), p[1]);
+    var xs = L.map(function(q){ return q.x; }), ys = L.map(function(q){ return q.y; });
+    var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+    var s = 30 / Math.max(x1 - x0, y1 - y0), ox = 20 - (x0 + x1) / 2 * s, oy = 20 - (y0 + y1) / 2 * s;
+    var P = function(q){ return [(q.x * s + ox).toFixed(1), (q.y * s + oy).toFixed(1)]; };
+    var out = '<svg class="' + (cls || "hand") + '" viewBox="0 0 40 40"' + (label ? ' role="img" aria-label="' + E(label) + '"' : ' aria-hidden="true"') + '>';
+    if (g === "swipe") out += '<path d="M3 20h5M4.5 17.5L2.5 20l2 2.5M37 20h-5M35.5 17.5l2 2.5-2 2.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>';
+    BONES.forEach(function(b){ var a = P(L[b[0]]), c = P(L[b[1]]); out += '<line x1="' + a[0] + '" y1="' + a[1] + '" x2="' + c[0] + '" y2="' + c[1] + '" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'; });
+    L.forEach(function(q, i){ var a = P(q), tip = TIPS.indexOf(i) >= 0;
+      out += '<circle cx="' + a[0] + '" cy="' + a[1] + '" r="' + (tip ? 1.9 : 1.25) + '" fill="' + (tip ? "var(--accent)" : "currentColor") + '"/>'; });
+    return out + '</svg>';
+  }
+
+  /* ---------------- the gestures, and what each one controls ---------------- */
+  var GESTURES = {
+    swipe:  { name:"Swipe",     does:"Turn the page forward or back",         kind:"motion" },
+    point:  { name:"Point",     does:"Point high or low to scroll the page",  kind:"pointer" },
+    pinch:  { name:"Pinch",     does:"Pinch and slide up or down for text size", kind:"slider" },
+    thumbs: { name:"Thumbs up", does:"Hold to like the page",                 kind:"pose", hold:true },
+    peace:  { name:"Peace",     does:"Hold to switch light and dark",         kind:"pose", hold:true },
+    open:   { name:"Open hand", does:"Hold still for focus mode",             kind:"pose", hold:true },
+    rock:   { name:"Rock on",   does:"Hold for X-ray: see what the computer sees", kind:"pose", hold:true },
+    fist:   { name:"Fist",      does:"Resting hand: does nothing",            kind:"rest" }
+  };
+  var ORDER = ["swipe", "point", "pinch", "thumbs", "peace", "open", "rock", "fist"];
+  var KIND = { pose:"Hold", motion:"Move", slider:"Slide", pointer:"Aim", rest:"Rest" };
+  $("glist").innerHTML = ORDER.map(function(k){ var g = GESTURES[k];
+    return '<li data-g="' + k + '" tabindex="0" role="button"><span class="gico">' + handSVG(k) + '</span><div><span class="t">' + g.name
+      + '<span class="kind k-' + g.kind + '">' + KIND[g.kind] + '</span></span><span class="d">' + g.does + '</span></div></li>'; }).join("");
+
+  /* ---------------- the pages: what computer vision is, and how this book works ---------------- */
+  var SVGT = ' font-family="Geist, sans-serif" fill="var(--text)"';
+  function artHand(){
+    var P = [[60,150],[42,138],[30,118],[22,100],[14,84],[50,88],[47,62],[45,46],[44,32],[66,84],[66,56],[66,38],[66,22],[81,88],[83,62],[84,46],[85,32],[95,95],[100,76],[103,63],[106,51]];
+    var s = '<svg viewBox="0 0 280 170" role="img" aria-label="A hand drawn as 21 numbered points joined by lines"><g transform="translate(80,6)">';
+    BONES.forEach(function(b){ s += '<line x1="' + P[b[0]][0] + '" y1="' + P[b[0]][1] + '" x2="' + P[b[1]][0] + '" y2="' + P[b[1]][1] + '" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"/>'; });
+    P.forEach(function(p, i){ var tip = TIPS.indexOf(i) >= 0;
+      s += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (tip ? 5 : 3.6) + '" fill="' + (tip ? "var(--accent)" : "var(--page)") + '" stroke="' + (tip ? "var(--accent)" : "var(--text)") + '" stroke-width="1.6"/>';
+      if (i === 0 || tip) s += '<text x="' + (p[0] + (i === 0 ? 12 : 0)) + '" y="' + (p[1] - (i === 0 ? -4 : 10)) + '" font-size="10" font-weight="600" text-anchor="middle"' + SVGT + '>' + i + '</text>'; });
+    return s + '</g></svg>';
+  }
+  function artPixels(){
+    var s = '<svg viewBox="0 0 280 170" role="img" aria-label="A picture zoomed in until you can see its square pixels, with one pixel showing its red, green and blue numbers">';
+    for (var y = 0; y < 6; y++) for (var x = 0; x < 6; x++){
+      var h = 190 + x * 9 - y * 6, l = 42 + y * 6 - x * 2 + ((x * y) % 3) * 4;
+      s += '<rect x="' + (40 + x * 23) + '" y="' + (16 + y * 23) + '" width="22" height="22" rx="2" fill="hsl(' + h + ' 55% ' + l + '%)"/>';
+    }
+    s += '<rect x="85" y="61" width="24" height="24" rx="3" fill="none" stroke="var(--text)" stroke-width="2"/><path d="M110 73 H182" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="3 3"/>';
+    s += '<rect x="182" y="42" width="76" height="62" rx="10" fill="var(--page-2)" stroke="var(--page-edge)"/>'
+      + '<g font-family="Geist Mono, monospace" font-size="12"><text x="196" y="62" fill="#DC2626">R  64</text><text x="196" y="79" fill="#16A34A">G 139</text><text x="196" y="96" fill="#2563EB">B 181</text></g>';
+    return s + '</svg>';
+  }
+  function artCamera(){
+    var dots = [[200,122],[187,107],[180,93],[190,85],[196,67],[196,51],[205,64],[207,47],[215,68],[218,55],[224,77],[228,67]];
+    return '<svg viewBox="0 0 280 170" role="img" aria-label="A camera looking at a hand, and the computer turning it into points">'
+      + '<rect x="30" y="58" width="78" height="56" rx="12" fill="none" stroke="var(--text)" stroke-width="2"/><circle cx="69" cy="86" r="17" fill="none" stroke="var(--text)" stroke-width="2"/><circle cx="69" cy="86" r="6" fill="var(--accent)"/><path d="M44 58 l6 -9 h16 l6 9" fill="none" stroke="var(--text)" stroke-width="2" stroke-linejoin="round"/>'
+      + '<path d="M118 86 H150" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 4"/><path d="M146 80 l7 6 -7 6" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
+      + '<rect x="162" y="30" width="96" height="112" rx="14" fill="var(--page-2)" stroke="var(--page-edge)"/>'
+      + dots.map(function(p){ return '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="3.5" fill="var(--accent)"/>'; }).join("")
+      + '<text x="210" y="160" font-size="11" text-anchor="middle"' + SVGT + '>"a thumbs-up"</text></svg>';
+  }
+  function artRules(){
+    var s = '<svg viewBox="0 0 280 170" role="img" aria-label="Three digital hands: pointing, a peace sign and a pinch, each with its rule">';
+    [["point","Point","index up"],["peace","Peace","index + middle up"],["pinch","Pinch","thumb touches index"]].forEach(function(r, i){
+      var cx = 50 + i * 90;
+      s += '<g transform="translate(' + (cx - 30) + ',8) scale(1.5)" color="var(--text)">' + handSVG(r[0], "x").replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "") + '</g>'
+        + '<text x="' + cx + '" y="86" font-size="12" font-weight="600" text-anchor="middle"' + SVGT + '>' + r[1] + '</text>'
+        + '<text x="' + cx + '" y="101" font-size="10" text-anchor="middle" font-family="Geist, sans-serif" fill="var(--muted)">' + r[2] + '</text>';
+    });
+    return s + '<rect x="40" y="116" width="200" height="42" rx="10" fill="var(--page-2)" stroke="var(--page-edge)"/>'
+      + '<text x="140" y="133" font-size="10.5" text-anchor="middle" font-family="Geist Mono, monospace" fill="var(--text)">if tip is farther from wrist</text>'
+      + '<text x="140" y="148" font-size="10.5" text-anchor="middle" font-family="Geist Mono, monospace" fill="var(--accent)">than knuckle → finger is up</text></svg>';
+  }
+  function artUses(){
+    var I = [
+      ['Face unlock', '<rect x="-8" y="-12" width="16" height="24" rx="3"/><circle cx="0" cy="-2" r="3"/><path d="M-3 5h6"/>'],
+      ['Translate signs', '<path d="M-10 -8h10M-5 -10v2M-8 -8c0 5 3 9 8 10M-2 -8c0 4-3 8-8 10M2 10l5-12 5 12M4 6h6"/>'],
+      ['Car safety', '<path d="M-11 4v-4l3-7h16l3 7v4zM-11 4v4h4v-4M7 4v4h4v-4"/><circle cx="-6" cy="1" r="1.2"/><circle cx="6" cy="1" r="1.2"/>'],
+      ['Sports replays', '<circle cx="0" cy="0" r="10"/><path d="M-7 -7c4 4 4 10 0 14M7 -7c-4 4-4 10 0 14"/>'],
+      ['Medical scans', '<rect x="-11" y="-11" width="22" height="22" rx="3"/><path d="M-5 -6v12M5 -6v12M-5 -2h10M-5 2h10"/>'],
+      ['Sign language', '<path d="M-6 8v-10M-2 8v-14M2 8v-13M6 8v-9M-6 8c0 3 2 4 6 4s6-1 6-4"/>']
+    ];
+    var s = '<svg viewBox="0 0 280 170" role="img" aria-label="Six places computer vision is used: face unlock, translating signs, car safety, sports replays, medical scans and sign language">';
+    I.forEach(function(it, i){ var cx = 60 + (i % 3) * 80, cy = 46 + Math.floor(i / 3) * 76;
+      s += '<rect x="' + (cx - 34) + '" y="' + (cy - 34) + '" width="68" height="64" rx="12" fill="var(--page-2)" stroke="var(--page-edge)"/>'
+        + '<g transform="translate(' + cx + ',' + (cy - 8) + ')" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + it[1] + '</g>'
+        + '<text x="' + cx + '" y="' + (cy + 20) + '" font-size="9.5" font-weight="500" text-anchor="middle"' + SVGT + '>' + it[0] + '</text>'; });
+    return s + '</svg>';
+  }
+  function artPrivate(){
+    return '<svg viewBox="0 0 280 170" role="img" aria-label="A shield with a lock, next to a question asking before the camera turns on">'
+      + '<path d="M90 22 l44 15 v34 c0 30 -19 50 -44 62 c-25 -12 -44 -32 -44 -62 v-34 z" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>'
+      + '<rect x="76" y="72" width="28" height="22" rx="4" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M82 72 v-7 a8 8 0 0 1 16 0 v7" fill="none" stroke="var(--accent)" stroke-width="2"/>'
+      + '<rect x="152" y="46" width="104" height="78" rx="14" fill="var(--page-2)" stroke="var(--page-edge)"/>'
+      + '<text x="204" y="74" font-size="12" font-weight="600" text-anchor="middle"' + SVGT + '>Use the camera?</text>'
+      + '<rect x="166" y="90" width="36" height="22" rx="7" fill="var(--accent)"/><text x="184" y="105" font-size="10.5" font-weight="600" text-anchor="middle" font-family="Geist, sans-serif" fill="var(--on-accent)">Yes</text>'
+      + '<rect x="208" y="90" width="36" height="22" rx="7" fill="none" stroke="var(--border-2)"/><text x="226" y="105" font-size="10.5" font-weight="600" text-anchor="middle"' + SVGT + '>No</text></svg>';
+  }
+
+  /* the cover's big digital hand, on graph paper, with a scan line passing over it */
+  function coverArt(){
+    var P = [[60,150],[42,138],[30,118],[22,100],[14,84],[50,88],[47,62],[45,46],[44,32],[66,84],[66,56],[66,38],[66,22],[81,88],[83,62],[84,46],[85,32],[95,95],[100,76],[103,63],[106,51]];
+    var s = '<svg viewBox="0 0 120 160" aria-hidden="true">';
+    for (var g = 10; g < 160; g += 10) s += '<line x1="0" y1="' + g + '" x2="120" y2="' + g + '" stroke="rgba(125,211,230,.08)" stroke-width=".5"/>';
+    for (g = 10; g < 120; g += 10) s += '<line x1="' + g + '" y1="0" x2="' + g + '" y2="160" stroke="rgba(125,211,230,.08)" stroke-width=".5"/>';
+    BONES.forEach(function(b){ s += '<line x1="' + P[b[0]][0] + '" y1="' + P[b[0]][1] + '" x2="' + P[b[1]][0] + '" y2="' + P[b[1]][1] + '" stroke="rgba(243,238,228,.75)" stroke-width="1.6" stroke-linecap="round"/>'; });
+    P.forEach(function(p, i){ var tip = TIPS.indexOf(i) >= 0;
+      s += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (tip ? 3.6 : 2.4) + '" fill="' + (tip ? "#67E8F9" : "#F3EEE4") + '"/>'; });
+    return s + '<rect x="4" y="70" width="112" height="1.2" fill="#67E8F9" opacity=".55"/></svg>';
+  }
+
+  var PAGES = [
+    { cover:true, title:"How Computers See" },
+    { title:"What is computer vision?", art:artCamera, body:[
+      "Computer vision is when a computer uses a camera and AI to make sense of what it sees.",
+      "You see a hand. A computer only sees a big grid of numbers. Computer vision is the set of tricks that turns those numbers into answers, like \"that's a hand, and it's giving a thumbs-up.\"",
+      "Right now, this book is doing it. If your camera is on, it is watching for your hand and working out which gesture you are making, many times every second.",
+      "Try it: swipe your open hand to the left to turn the page." ] },
+    { title:"Pictures are made of numbers", art:artPixels, body:[
+      "A camera picture is made of tiny colored squares called pixels. Zoom in far enough on any photo and you will see them.",
+      "Each pixel is stored as three numbers: how much red, green and blue it has, from 0 to 255. Mix them and you get every color on your screen.",
+      "A small camera picture, 640 pixels wide and 480 tall, has 307,200 pixels. That's 921,600 numbers in one picture, and a camera can send around 30 new pictures every second.",
+      "So the computer's job is to find a hand hidden inside millions of numbers. That's why it needs AI." ] },
+    { title:"Finding a hand: 21 points", art:artHand, body:[
+      "This book uses a free tool from Google called MediaPipe Hands. It learned by studying a huge number of hand pictures where the joints had been marked.",
+      "Now, when it sees a hand, it guesses where 21 points are: your wrist, plus four points on your thumb and on each finger.",
+      "For every point it gives three numbers: x for left and right, y for up and down, and a rough z for how close it is to the camera.",
+      "The points are numbered. The wrist is 0, and the fingertips are 4, 8, 12, 16 and 20. Hold up rock on to turn on X-ray and watch them move." ] },
+    { title:"Turning points into gestures", art:artRules, table:true, body:[
+      "The AI only gives us 21 points. Deciding what they mean is up to the code, and the rules are simpler than you might think.",
+      "A finger counts as up when its tip is farther from the wrist than its middle joint. Then each gesture is a pattern of fingers:",
+      "There are different kinds of gestures in this book. Poses, like thumbs up, are shapes you hold still. Motions, like a swipe, are about how your hand moves over time. Sliders, like pinch for text size, turn how far you move into a number.",
+      "Good gesture controls also avoid mistakes. That's why you hold a pose until the ring fills up, and why a fist is a resting hand that does nothing." ] },
+    { title:"Where is computer vision used?", art:artUses, body:[
+      "Computer vision is already part of many things people use every day. Here are a few:",
+      "• Phones that unlock when they recognize their owner's face.",
+      "• Apps that read the words in a photo and translate them into another language.",
+      "• Cars with cameras that help drivers spot lanes and people crossing the road.",
+      "• Sports replays that follow the ball to help referees make a call.",
+      "• Tools that help doctors look for problems in X-rays and scans.",
+      "• Research projects that are teaching computers to understand sign language.",
+      "Which one would you like to build someday?" ] },
+    { title:"Fair, safe and private", art:artPrivate, body:[
+      "Computer vision can make mistakes. If an AI learned mostly from pictures of some kinds of people, it may work less well for others. That's why careful builders test with lots of different people, hands and kinds of light.",
+      "Cameras can also see private things. Good apps ask before they turn a camera on, explain what they do with the video, and keep it on your device when they can.",
+      "This book never records or sends your video. It looks at each picture, finds the 21 points, and lets the picture go. That's why you only ever see your digital hand, never your video.",
+      "Always ask a grown-up before you turn on a camera, and remember: it's always OK to say no." ] }
+  ];
+  var GESTURE_ROWS = [["Point","Index up, the rest down"],["Peace","Index and middle up"],["Rock on","Index and pinky up"],["Open hand","Three or four fingers up"],["Fist","All fingers down"],["Thumbs up","Fingers down, thumb highest"],["Pinch","Thumb tip touching index tip"]];
+
+  /* ---------------- the book ---------------- */
+  /* Sheet 0's front is the cover. Every sheet's back is the next chapter's left page (its title and drawing), and
+     the next sheet's front is that chapter's right page (its words). cur = how many sheets have been turned, so
+     cur 0 is the closed cover and cur 3 is the spread for chapter 3. */
+  var CHAPTERS = PAGES.length - 1, SHEETS = CHAPTERS + 1;
+  var cur = 0, pos = 0, single = false, turning = null, papers = [], faces = [], likes = PAGES.map(function(){ return 0; });
+  function bodyHTML(c){
+    return c.body.map(function(t, k){
+      var out = t.indexOf("• ") === 0 ? '<li>' + E(t.slice(2)) + '</li>' : '<p>' + E(t) + '</p>';
+      if (c.table && k === 1) out += '<table class="rules"><thead><tr><th>Gesture</th><th>Rule</th></tr></thead><tbody>'
+        + GESTURE_ROWS.map(function(r){ return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>'; }).join("") + '</tbody></table>';
+      return out;
+    }).join("").replace(/<\/p><li>/g, "</p><ul><li>").replace(/<\/li><p>/g, "</li></ul><p>").replace(/<\/li>$/, "</li></ul>");
+  }
+  function coverHTML(){
+    return '<div class="cover-in"><div class="kicker">Hands-Free Reader</div><h2>' + E(PAGES[0].title) + '</h2>'
+      + '<p class="sub">A hands-free book about computer vision</p>'
+      + '<div class="open-hint">' + handSVG("swipe") + '<span>Swipe left to open the book</span></div></div>'
+      + '<div class="cover-art">' + coverArt() + '</div>';
+  }
+  function leftHTML(k){
+    var c = PAGES[k];
+    return '<div class="pg pg-left"><div class="chapter">Chapter ' + k + '</div><h2>' + E(c.title) + '</h2><div class="rule"></div>'
+      + '<div class="art">' + c.art() + '</div><div class="pno">' + (k * 2) + '</div></div>';
+  }
+  function rightHTML(k){
+    var c = PAGES[k];
+    return '<div class="pg pg-right"><div class="rhead"><span class="runner">' + E(c.title) + '</span>'
+      + '<button class="btn like" type="button" data-like="' + k + '" aria-label="Like this chapter">' + icon("heart") + '<span>' + likes[k] + '</span></button></div>'
+      + '<div class="pbody" tabindex="0">' + bodyHTML(c) + '</div><div class="pno">' + (k * 2 + 1) + '</div><div class="scrollhint"></div></div>';
+  }
+  function buildBook(){
+    var book = $("book"); book.innerHTML = ""; papers = []; faces = [];
+    for (var p = 0; p < SHEETS; p++){
+      var paper = document.createElement("div"), front = document.createElement("div"), back = document.createElement("div");
+      paper.className = "paper"; front.className = "front" + (p === 0 ? " cover-face" : ""); back.className = "back" + (p === SHEETS - 1 ? " endpaper" : "");
+      front.innerHTML = p === 0 ? coverHTML() : rightHTML(p);
+      back.innerHTML = p < SHEETS - 1 ? leftHTML(p + 1) : "";
+      paper.appendChild(front); paper.appendChild(back); book.appendChild(paper); papers.push(paper);
+      faces.push(front); if (p < SHEETS - 1) faces.push(back);
+      /* clicking a page turns it, like the site's book reader: the right page goes forward, the left page goes back */
+      front.addEventListener("click", function(e){ if (!e.target.closest("button")) turn(1); });
+      back.addEventListener("click", function(e){ if (!e.target.closest("button")) turn(-1); });
+    }
+    [].forEach.call(book.querySelectorAll("[data-like]"), function(b){ b.addEventListener("click", function(){ like(+b.getAttribute("data-like")); }); });
+  }
+  function chapterNow(){ return single ? Math.ceil(pos / 2) : cur; }
+  function restack(){
+    $("book-area").classList.toggle("opened", !single && cur > 0);
+    papers.forEach(function(paper, i){
+      if (i < cur){ paper.classList.add("flipped"); paper.style.zIndex = i + 1; }
+      else { paper.classList.remove("flipped"); paper.style.zIndex = SHEETS - i; }
+    });
+    faces.forEach(function(f, i){ f.classList.toggle("active", single && i === pos); });
+    var ch = chapterNow();
+    $("count").textContent = ch === 0 ? "Cover" : "Chapter " + ch + " of " + CHAPTERS;
+  }
+  function turn(dir){
+    if (single){
+      var np = pos + dir;
+      if (np < 0 || np >= faces.length){ toast(dir > 0 ? "That's the last page" : "That's the cover"); return; }
+      pos = np; cur = Math.ceil(pos / 2); restack(); return;
+    }
+    if (turning) return;
+    var n = cur + dir;
+    if (n < 0 || n > CHAPTERS){ toast(dir > 0 ? "That's the last page" : "That's the cover"); return; }
+    var paper = papers[dir > 0 ? cur : cur - 1];
+    turning = paper; paper.classList.add("turning");
+    cur = n; pos = cur === 0 ? 0 : cur * 2 - 1; restack();
+    var settle = function(e){
+      if (e && e.target !== paper) return;
+      paper.removeEventListener("transitionend", settle); clearTimeout(guard);
+      paper.classList.remove("turning"); turning = null; restack();
+    };
+    paper.addEventListener("transitionend", settle);
+    var guard = setTimeout(settle, 1100);
+  }
+  /* the right-hand page you're reading now (or the one page shown in a small box) */
+  function readingFace(){ return single ? faces[pos] : (cur > 0 ? papers[cur].querySelector(".front") : null); }
+  function like(k){
+    if (typeof k !== "number") k = chapterNow();
+    if (!k){ toast("Open the book to like a chapter"); return; }
+    likes[k]++;
+    var shown = null;
+    [].forEach.call(document.querySelectorAll('[data-like="' + k + '"]'), function(b){ b.classList.add("liked"); b.querySelector("span").textContent = likes[k];
+      var r = b.getBoundingClientRect(); if (r.width && readingFace() && readingFace().contains(b)) shown = r; });
+    var r = shown || $("book").getBoundingClientRect(), h = document.createElement("div"); h.className = "heart"; h.innerHTML = icon("heart");
+    h.style.left = (r.left + r.width / 2) + "px"; h.style.top = (shown ? r.top - 8 : r.top + r.height / 2) + "px";
+    document.body.appendChild(h); setTimeout(function(){ h.remove(); }, 900);
+    blip(880);
+  }
+  function scrollPage(px){ var f = readingFace(), b = f && f.querySelector(".pbody"); if (b) b.scrollTop += px; }
+  /* size the pages to fit: a two-page spread when there's room, one page at a time when there isn't */
+  function layoutBook(){
+    var area = $("book-area"), W = area.clientWidth, H = area.clientHeight;
+    var wasSingle = single; single = W < 620;
+    var pw = single ? Math.min(W - 8, (H - 8) / 1.36) : Math.min((W - 16) / 2, (H - 8) / 1.36);
+    pw = Math.max(200, Math.floor(pw));
+    var book = $("book");
+    book.style.setProperty("--pw", pw + "px"); book.style.setProperty("--ph", Math.round(pw * 1.36) + "px");
+    book.style.setProperty("--s", (pw / 400).toFixed(3));
+    book.classList.toggle("single", single);
+    if (single !== wasSingle){ if (single) pos = cur === 0 ? 0 : cur * 2 - 1; else cur = Math.ceil(pos / 2); }
+    restack();
+  }
+
+  /* ---------------- light and dark ---------------- */
+  var dark = false;
+  function setTheme(d, quiet){
+    dark = d; document.documentElement.setAttribute("data-theme", d ? "dark" : "light");
+    var b = $("btn-theme"); b.innerHTML = icon(d ? "sun" : "moon"); b.setAttribute("aria-pressed", String(d));
+    b.setAttribute("aria-label", d ? "Light mode" : "Dark mode"); b.title = d ? "Light mode" : "Dark mode";
+    if (!quiet) toast(d ? "Dark mode" : "Light mode");
+  }
+
+  /* ---------------- a little click for feedback ---------------- */
+  var audio = null;
+  function blip(freq){
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      var t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
+      o.type = "sine"; o.frequency.value = freq; g.gain.setValueAtTime(0.1, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+      o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t + 0.13);
+    } catch(e) {}
+  }
+
+  /* ---------------- text size (the pinch slider) ---------------- */
+  var TS_MIN = 0.8, TS_MAX = 1.5, textSize = 1;
+  function setTextSize(v, quiet){
+    var before = Math.round(textSize * 10); textSize = Math.max(TS_MIN, Math.min(TS_MAX, v));
+    var pct = Math.round(textSize * 100);
+    document.documentElement.style.setProperty("--ts", textSize.toFixed(3));
+    $("ts").value = pct; $("ts-out").textContent = pct + "%"; $("dial-txt").textContent = pct + "%";
+    $("dial-arc").setAttribute("stroke-dashoffset", (301.6 * (1 - (textSize - TS_MIN) / (TS_MAX - TS_MIN))).toFixed(1));
+    if (!quiet && Math.round(textSize * 10) !== before) blip(300 + (textSize - TS_MIN) * 700);
+  }
+
+  /* ---------------- focus mode: hide the side panels so the book fills the screen ---------------- */
+  var focus = false;
+  function setFocus(on){
+    focus = on; $("app").classList.toggle("focus", on); layoutBook(); $("btn-focus").setAttribute("aria-pressed", String(on));
+    toast(on ? "Focus mode" : "Panels are back");
+  }
+
+  /* ---------------- toast ---------------- */
+  var toastTimer = 0;
+  function toast(msg){ var t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 1500); }
+
+  /* ---------------- reading a gesture from the 21 points ---------------- */
+  function d3(a, b){ return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z); }
+  function fingerStates(lm){
+    var palm = d3(lm[0], lm[9]) || 0.1;
+    function up(tip, pip){ return d3(lm[tip], lm[0]) > d3(lm[pip], lm[0]) + palm * 0.12; }
+    return { palm:palm, thumb:d3(lm[4], lm[5]) > palm * 0.5 && d3(lm[4], lm[0]) > d3(lm[3], lm[0]),
+      index:up(8, 6), middle:up(12, 10), ring:up(16, 14), pinky:up(20, 18) };
+  }
+  function classify(lm){
+    var f = fingerStates(lm), palm = f.palm;
+    var count = (f.index ? 1 : 0) + (f.middle ? 1 : 0) + (f.ring ? 1 : 0) + (f.pinky ? 1 : 0);
+    /* pinch: thumb and index tips touch, with the index finger reaching out (in a fist it is tucked in) */
+    if (d3(lm[4], lm[8]) < palm * 0.32 && d3(lm[8], lm[0]) > palm * 1.1) return "pinch";
+    /* thumbs up: fingers curled, thumb stretched out and higher than every other part of the hand */
+    var top = Math.min.apply(null, lm.slice(5).map(function(p){ return p.y; }));
+    if (count === 0 && d3(lm[4], lm[5]) > palm * 0.5 && lm[4].y < top - palm * 0.15) return "thumbs";
+    if (count === 0) return "fist";
+    if (f.index && !f.middle && !f.ring && f.pinky) return "rock";
+    if (f.index && f.middle && !f.ring && !f.pinky) return "peace";
+    if (f.index && !f.middle && !f.ring && !f.pinky) return "point";
+    if (count >= 3) return "open";
+    return null;
+  }
+
+  /* ---------------- what the gestures do ---------------- */
+  var HOLD_MS = 700, SWIPE_MS = 500;
+  var state = { mode:"off", gesture:null, candidate:null, frames:0, holdStart:0, holdDone:false, seen:0,
+    track:[], cooldown:0, pinchY0:0, ts0:1, pointY:-1 };
+  function showGesture(g){
+    var info = g ? GESTURES[g] : null;
+    $("g-face").innerHTML = info ? handSVG(g) : icon(state.mode === "camera" ? "eye" : state.mode === "keys" ? "keys" : "camera", "hand");
+    $("g-name").textContent = info ? info.name : (state.mode === "camera" ? "Looking for your hand…" : state.mode === "keys" ? "Buttons and keys" : "Camera is off");
+    $("g-does").textContent = info ? info.does : (state.mode === "camera" ? "Hold one hand up in front of the camera" : state.mode === "keys" ? "Or turn on the camera to use gestures" : "Turn on the camera, or use the buttons");
+    [].forEach.call(document.querySelectorAll("#glist li"), function(li){ li.classList.toggle("on", li.getAttribute("data-g") === g); });
+  }
+  function setRing(p){ $("g-ring").setAttribute("stroke-dashoffset", (188.5 * (1 - Math.max(0, Math.min(1, p)))).toFixed(1)); }
+  function doHold(g){
+    if (g === "thumbs") like();
+    if (g === "peace") setTheme(!dark);
+    if (g === "open") setFocus(!focus);
+    if (g === "rock") setXray(!xray);
+  }
+  function doSwipe(dir){
+    showGesture("swipe"); setRing(0);
+    turn(dir === "left" ? 1 : -1);
+    state.cooldown = performance.now() + 900; state.track = []; state.holdStart = performance.now(); state.holdDone = true;
+    setTimeout(function(){ if (state.gesture) showGesture(state.gesture); }, 600);
+  }
+
+  /* ---------------- camera + hand-tracking AI (MediaPipe Hands) ---------------- */
+  var camCanvas = $("cam"), camCtx = camCanvas.getContext("2d");
+  var video = document.createElement("video"); video.setAttribute("playsinline", ""); video.muted = true;
+  var hands = null, stream = null, running = false;
+  var MP = "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/";
+  function loadScript(src){ return new Promise(function(ok, no){ var s = document.createElement("script"); s.src = src; s.crossOrigin = "anonymous"; s.onload = ok; s.onerror = function(){ no(new Error("Could not load " + src)); }; document.head.appendChild(s); }); }
+  /* behind the digital hand: a dark panel with a faint grid, like graph paper for the 21 points */
+  function drawCamBackdrop(){
+    var w = camCanvas.width, h = camCanvas.height, cs = getComputedStyle(document.documentElement);
+    camCtx.fillStyle = cs.getPropertyValue("--cam").trim() || "#0B0D10"; camCtx.fillRect(0, 0, w, h);
+    camCtx.strokeStyle = cs.getPropertyValue("--cam-grid").trim() || "rgba(56,189,248,.1)"; camCtx.lineWidth = 1;
+    for (var x = 20; x < w; x += 20){ camCtx.beginPath(); camCtx.moveTo(x + .5, 0); camCtx.lineTo(x + .5, h); camCtx.stroke(); }
+    for (var y = 20; y < h; y += 20){ camCtx.beginPath(); camCtx.moveTo(0, y + .5); camCtx.lineTo(w, y + .5); camCtx.stroke(); }
+  }
+  function drawCamIdle(text){
+    drawCamBackdrop();
+    camCtx.fillStyle = "#8B95A1"; camCtx.font = "500 15px Geist, sans-serif"; camCtx.textAlign = "center";
+    camCtx.fillText(text, camCanvas.width / 2, camCanvas.height / 2 + 5);
+  }
+  function setLive(on, text){ $("live").classList.toggle("on", on); $("live-txt").textContent = text; }
+  function camButton(){
+    var on = state.mode === "camera";
+    $("btn-camera").innerHTML = icon(on ? "cameraOff" : "camera") + (on ? "Turn camera off" : "Turn camera on");
+  }
+
+  async function startCamera(){
+    var err = $("start-err"); err.classList.add("hidden");
+    $("g-name").textContent = "Starting the camera…"; $("g-does").textContent = "Your browser may ask if this page can use the camera";
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("nocam");
+      stream = await navigator.mediaDevices.getUserMedia({ video:{ width:{ ideal:640 }, height:{ ideal:480 }, facingMode:"user" }, audio:false });
+    } catch(e){
+      err.textContent = e && (e.name === "NotAllowedError" || e.name === "SecurityError")
+        ? "The camera is blocked, so the AI can't see your hand. You can allow it in your browser, or use the buttons and keys."
+        : "We couldn't find a camera on this device. You can still use the buttons and keys.";
+      err.classList.remove("hidden"); $("start").classList.remove("hidden"); showGesture(null); return;
+    }
+    $("start").classList.add("hidden");
+    video.srcObject = stream; await video.play();
+    state.mode = "camera"; camButton(); setLive(false, "Loading");
+    $("g-name").textContent = "Loading the hand-tracking AI…"; $("g-does").textContent = "This takes a few seconds the first time";
+    try {
+      if (!window.Hands) await loadScript(MP + "hands.js");
+      hands = hands || new window.Hands({ locateFile:function(f){ return MP + f; } });
+      hands.setOptions({ maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.65, minTrackingConfidence:0.6 });
+      hands.onResults(onResults);
+    } catch(e){
+      $("g-name").textContent = "The AI couldn't load"; $("g-does").textContent = "Check your internet connection, then try again"; return;
+    }
+    running = true; setLive(true, "Live"); showGesture(null); pump();
+  }
+  function stopCamera(){
+    running = false; if (stream) stream.getTracks().forEach(function(t){ t.stop(); }); stream = null;
+    state.mode = "keys"; state.gesture = null; showGesture(null); setRing(0); hideCursor(); $("dial").classList.remove("on");
+    camButton(); setLive(false, "Off"); drawCamIdle("Camera is off"); camNote("off");
+    [].forEach.call($("fingers").children, function(s){ s.classList.remove("up"); });
+    if (xray) setXray(false);
+  }
+  var busy = false;
+  async function pump(){
+    if (!running) return;
+    if (!busy && video.readyState >= 2){ busy = true; try { await hands.send({ image:video }); } catch(e) {} busy = false; }
+    requestAnimationFrame(pump);
+  }
+  function camNote(kind){
+    $("cam-note").innerHTML = icon("lock") + '<span>' + (kind === "found" ? "21 points found. Only these points are drawn, never your video."
+      : kind === "looking" ? "Looking for a hand. Your video is never shown or saved." : "Your video is never shown or saved, only your digital hand.") + '</span>';
+  }
+
+  var lastLm = null;
+  function drawSkeleton(ctx, lm, rx, ry, rw, rh, big){
+    var accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#38BDF8";
+    ctx.lineCap = "round"; ctx.lineWidth = big ? 4 : 2.5; ctx.strokeStyle = big ? "rgba(229,246,253,.9)" : "rgba(229,246,253,.85)";
+    BONES.forEach(function(b){ ctx.beginPath(); ctx.moveTo(rx + (1 - lm[b[0]].x) * rw, ry + lm[b[0]].y * rh); ctx.lineTo(rx + (1 - lm[b[1]].x) * rw, ry + lm[b[1]].y * rh); ctx.stroke(); });
+    lm.forEach(function(p, i){
+      var tip = TIPS.indexOf(i) >= 0, x = rx + (1 - p.x) * rw, y = ry + p.y * rh;
+      ctx.fillStyle = tip ? accent : "#E5F6FD"; ctx.beginPath(); ctx.arc(x, y, big ? (tip ? 10 : 6.5) : (tip ? 5.5 : 3.6), 0, Math.PI * 2); ctx.fill();
+      if (big && (tip || i === 0)){ ctx.fillStyle = "#E5F6FD"; ctx.font = "500 14px Geist Mono, monospace"; ctx.textAlign = "center"; ctx.fillText(String(i), x, y - 17); }
+    });
+  }
+
+  /* a picture-shaped box that fills the screen, cropping the edges like a phone camera does */
+  function coverRect(W, H){
+    var vw = video.videoWidth || 640, vh = video.videoHeight || 480, s = Math.max(W / vw, H / vh);
+    return { x:(W - vw * s) / 2, y:(H - vh * s) / 2, w:vw * s, h:vh * s };
+  }
+
+  function onResults(res){
+    var now = performance.now();
+    /* the video picture is never shown: only the digital hand the AI found in it */
+    drawCamBackdrop();
+    var lm = res.multiHandLandmarks && res.multiHandLandmarks[0];
+    lastLm = lm || null;
+    if (xray) drawXray();
+    var fe = $("fingers").children;
+    if (!lm){
+      if (now - state.seen > 350){ state.gesture = null; state.candidate = null; state.track = []; showGesture(null); setRing(0); hideCursor(); $("dial").classList.remove("on"); }
+      [].forEach.call(fe, function(s){ s.classList.remove("up"); });
+      camNote("looking");
+      return;
+    }
+    state.seen = now;
+    drawSkeleton(camCtx, lm, 0, 0, camCanvas.width, camCanvas.height, false);
+    var f = fingerStates(lm);
+    ["thumb","index","middle","ring","pinky"].forEach(function(k, i){ fe[i].classList.toggle("up", f[k]); });
+    camNote("found");
+
+    var g = classify(lm);
+    /* a gesture counts once it has been seen for a few frames in a row */
+    if (g === state.candidate) state.frames++; else { state.candidate = g; state.frames = 1; }
+    if (state.frames >= 3 && g !== state.gesture){
+      state.gesture = g; state.holdStart = now; state.holdDone = false; showGesture(g);
+      if (g === "pinch"){ state.pinchY0 = (lm[4].y + lm[8].y) / 2; state.ts0 = textSize; }
+    }
+    var cur = state.gesture;
+
+    /* motion: a quick sideways move of the hand is a swipe */
+    var mx = 1 - lm[9].x, my = lm[9].y;
+    state.track.push({ t:now, x:mx, y:my });
+    while (state.track.length && now - state.track[0].t > SWIPE_MS) state.track.shift();
+    if (now > state.cooldown && cur !== "pinch" && cur !== "point" && state.track.length > 3){
+      var a = state.track[0], dx = mx - a.x, dy = my - a.y;
+      if (Math.abs(dx) > 0.18 && Math.abs(dx) > Math.abs(dy) * 1.8){ doSwipe(dx < 0 ? "left" : "right"); return; }
+    }
+
+    /* pointer: the fingertip is a cursor; point high to scroll up, low to scroll down */
+    if (cur === "point"){
+      state.pointY = lm[8].y; moveCursor((1 - lm[8].x) * innerWidth, lm[8].y * innerHeight);
+    } else { state.pointY = -1; hideCursor(); }
+
+    /* slider: pinch, then slide up or down to change the text size */
+    if (cur === "pinch"){
+      var py = (lm[4].y + lm[8].y) / 2;
+      setTextSize(state.ts0 + (state.pinchY0 - py) * 1.8); $("dial").classList.add("on");
+    } else $("dial").classList.remove("on");
+
+    /* poses: hold still until the ring fills up */
+    if (cur && GESTURES[cur].hold){
+      var old = state.track[0], moved = old ? Math.hypot(mx - old.x, my - old.y) : 0;
+      if (moved > 0.06 && !state.holdDone) state.holdStart = now;   /* moving restarts the ring, so swipes don't trigger it */
+      var p = (now - state.holdStart) / HOLD_MS; setRing(state.holdDone ? 1 : p);
+      if (!state.holdDone && p >= 1){ state.holdDone = true; doHold(cur); }
+    } else setRing(0);
+  }
+
+  function moveCursor(x, y){ var c = $("cursor"); c.style.transform = "translate(" + x + "px," + y + "px)"; c.classList.add("on"); }
+  function hideCursor(){ $("cursor").classList.remove("on"); }
+
+  /* ---------------- X-ray: the whole page shows what the computer sees ---------------- */
+  var xray = false, xc = $("xray"), xctx = xc.getContext("2d");
+  function setXray(on){
+    if (on && state.mode !== "camera"){ toast("Turn on the camera to use X-ray"); return; }
+    xray = on; xc.classList.toggle("on", on); $("xlabel").classList.toggle("on", on); $("btn-xray").setAttribute("aria-pressed", String(on));
+    if (on){ xc.width = innerWidth; xc.height = innerHeight; drawXray(); toast("X-ray on"); } else toast("X-ray off");
+  }
+  function drawXray(){
+    var W = xc.width, H = xc.height; xctx.clearRect(0, 0, W, H);
+    xctx.fillStyle = "rgba(8,10,12,.82)"; xctx.fillRect(0, 0, W, H);
+    xctx.strokeStyle = "rgba(56,189,248,.07)"; xctx.lineWidth = 1;
+    for (var x = 40; x < W; x += 40){ xctx.beginPath(); xctx.moveTo(x + .5, 0); xctx.lineTo(x + .5, H); xctx.stroke(); }
+    for (var y = 40; y < H; y += 40){ xctx.beginPath(); xctx.moveTo(0, y + .5); xctx.lineTo(W, y + .5); xctx.stroke(); }
+    var r = coverRect(W, H);
+    if (lastLm){
+      drawSkeleton(xctx, lastLm, r.x, r.y, r.w, r.h, true);
+      $("xlabel").textContent = "X-ray · 21 points · rules say: " + (state.gesture ? GESTURES[state.gesture].name : "no gesture yet");
+    } else $("xlabel").textContent = "X-ray · no hand found yet";
+  }
+  window.addEventListener("resize", function(){ if (xray){ xc.width = innerWidth; xc.height = innerHeight; } });
+
+  /* ---------------- every frame: scrolling while pointing ---------------- */
+  var lastFrame = performance.now();
+  (function loop(){
+    requestAnimationFrame(loop);
+    var now = performance.now(), dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
+    var rf = readingFace(), hint = rf && rf.querySelector(".scrollhint");
+    if (state.pointY >= 0){
+      var y = state.pointY, speed = y < 0.4 ? -(0.4 - y) / 0.4 : y > 0.6 ? (y - 0.6) / 0.4 : 0;
+      if (speed) scrollPage(speed * 900 * dt);
+      if (hint) hint.classList.toggle("on", !!speed);
+    } else if (hint) hint.classList.remove("on");
+    if (state.mode === "camera" && now - state.seen > 350) hideCursor();
+  })();
+
+  /* ---------------- buttons and keys (they work with or without the camera) ---------------- */
+  $("mark").innerHTML = handSVG("open"); $("mark2").innerHTML = handSVG("open"); $("lock").innerHTML = icon("lock");
+  $("prev").innerHTML = icon("left"); $("next").innerHTML = icon("right");
+  $("btn-focus").innerHTML = icon("focus"); $("btn-xray").innerHTML = icon("xray");
+  $("prev").addEventListener("click", function(){ turn(-1); });
+  $("next").addEventListener("click", function(){ turn(1); });
+  $("btn-theme").addEventListener("click", function(){ setTheme(!dark); });
+  $("btn-focus").addEventListener("click", function(){ setFocus(!focus); });
+  $("btn-xray").addEventListener("click", function(){ setXray(!xray); });
+  $("ts").addEventListener("input", function(){ setTextSize(this.value / 100); });
+  $("btn-camera").addEventListener("click", function(){ if (state.mode === "camera") stopCamera(); else startCamera(); });
+  $("start-camera").addEventListener("click", startCamera);
+  $("start-mouse").addEventListener("click", function(){ $("start").classList.add("hidden"); state.mode = "keys"; showGesture(null); });
+  function tryGesture(g){
+    if (g === "swipe") turn(1);
+    else if (g === "point") scrollPage(160);
+    else if (g === "pinch") setTextSize(textSize >= 1.45 ? 0.9 : textSize + 0.15);
+    else if (g === "fist") toast("A fist is the resting hand: it does nothing on purpose");
+    else doHold(g);
+  }
+  $("glist").addEventListener("click", function(e){ var li = e.target.closest("li"); if (li) tryGesture(li.getAttribute("data-g")); });
+  $("glist").addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ var li = e.target.closest("li"); if (li){ e.preventDefault(); tryGesture(li.getAttribute("data-g")); } } });
+  window.addEventListener("keydown", function(e){
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON" && (e.key === "Enter" || e.key === " "))) return;
+    var k = e.key;
+    if (k === "ArrowRight") turn(1); else if (k === "ArrowLeft") turn(-1);
+    else if (k === "ArrowDown"){ e.preventDefault(); scrollPage(80); } else if (k === "ArrowUp"){ e.preventDefault(); scrollPage(-80); }
+    else if (k === "l" || k === "L") like(); else if (k === "d" || k === "D") setTheme(!dark);
+    else if (k === "f" || k === "F") setFocus(!focus); else if (k === "x" || k === "X") setXray(!xray);
+    else if (k === "+" || k === "=") setTextSize(textSize + 0.1); else if (k === "-") setTextSize(textSize - 0.1);
+  });
+
+  setTheme(!!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches), true);
+  buildBook(); layoutBook(); setTextSize(1, true);
+  if (window.ResizeObserver) new ResizeObserver(layoutBook).observe($("book-area")); else window.addEventListener("resize", layoutBook); camButton(); camNote("off"); showGesture(null);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function(){ if (state.mode !== "camera") drawCamIdle("Camera is off"); });
+  drawCamIdle("Camera is off");
+  /* for checking the gesture reader with made-up hands (no camera needed) */
+  window.GestureLab = { classify:classify, onResults:onResults, state:state, get page(){ return cur; }, get single(){ return single; }, get textSize(){ return textSize; }, get dark(){ return dark; }, get focus(){ return focus; }, get xray(){ return xray; } };
+})();
+</script>
+</body>
+</html>

@@ -53,7 +53,7 @@ describe("the Newest game section", () => {
     expect(view).toContain(' Back to News &amp; Articles</a>');
     /* drafts are for admins only: on the list (marked Draft) and on their own page */
     expect(html).toContain('a.status === "published" || (showDrafts && a.status === "draft")');
-    expect(view).toContain('(a.status !== "published" && !(isAuthed() && isActiveAdmin()))) return notFound("article")');
+    expect(view).toContain('(a.status !== "published" && !adminSeesAll())) return notFound("article")');
   });
 
   it("gives News & Articles a count, a search, pages, and a remembered cards / list switch", () => {

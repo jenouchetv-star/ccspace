@@ -1,4 +1,4 @@
-// Pic Pop Puzzle is one self-contained page, for subscribers only (like Gravity 4): its source is a private file
+// Pic-a-Puzzle is one self-contained page, for subscribers only (like Gravity 4): its source is a private file
 // (supabase/private-games/pic-pop-puzzle.html, never served), it runs as the example at the top of AI Lesson 04 in a
 // sealed frame (so it can't load anything from the site), and its Play page card leads there.
 import { describe, it, expect } from "vitest";
@@ -9,7 +9,7 @@ const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const gameSql = readFileSync(new URL("../supabase/pic-pop-puzzle.sql", import.meta.url), "utf8");
 const lessonSql = readFileSync(new URL("../supabase/ai-lesson-picture-puzzle.sql", import.meta.url), "utf8");
 
-describe("Pic Pop Puzzle", () => {
+describe("Pic-a-Puzzle", () => {
   it("needs nothing from the site: its three pictures are inside the file", () => {
     expect((page.match(/src: 'data:image\/jpeg;base64,/g) || []).length).toBe(3);
     for (const name of ["Toy city", "Bike ride", "Basketball"]) expect(page).toContain("name: '" + name + "'");
@@ -22,7 +22,7 @@ describe("Pic Pop Puzzle", () => {
     expect(page).not.toContain("Fredoka");
     expect(page).toContain("--ink: #1E2226;");
     expect(page).toContain("--hard: 4px 4px 0 #1E2226;");
-    expect(page).toContain('<h1>Pic Pop <span class="hl">Puzzle</span></h1>');
+    expect(page).toContain('<h1>Pic-a-<span class="hl">Puzzle</span></h1>');
     expect(page).toContain(".ccs-staged .top { display: none; }");   // the Play page's stage bar names it
   });
 
@@ -87,7 +87,7 @@ describe("Pic Pop Puzzle", () => {
 
   it("is AI Lesson 04's example, with the kid-friendly prompt and the same Word to know", () => {
     expect(lessonSql).toContain("'privateGameId', 'pg-picture-puzzle'");
-    expect(lessonSql).toContain("$p$🧩 Pic Pop Puzzle!");
+    expect(lessonSql).toContain("$p$🧩 Pic-a-Puzzle!");
     expect(lessonSql).toContain("'vocabWord', '2D spatial awareness'");
     expect(lessonSql).toContain("'status', 'published'");
     expect(lessonSql).toContain("'cover', jsonb_build_object('src', 'https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/uploads/media/1793530924918-");

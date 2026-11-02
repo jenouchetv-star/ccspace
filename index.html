@@ -3799,6 +3799,8 @@ function isAuthed(){ return !!AuthState.session; }
 function isActiveAdmin(){
   return !!(AuthState.profile && AuthState.profile.status === "active" && AuthState.aal === "aal2");
 }
+/* admins can open every page, drafts and archived ones included; visitors get the not-found page for those */
+function adminSeesAll(){ return isAuthed() && isActiveAdmin(); }
 function isInvitedAdmin(){ return !!(AuthState.profile && AuthState.profile.status === "invited"); }
 
 /** Re-reads the current Supabase auth session and the matching profiles
@@ -6061,7 +6063,7 @@ function seedGames(){
   /* GAME_WORDS_BEGIN */
   /* "Word to know": the green learning card on every game's page. Meanings are written for ages 6 to 8. */
   const WORDS = {
-    "game-pic-pop-puzzle":   { vocabWord:"2D spatial awareness", vocabSay:"too-DEE SPAY-shul uh-WAIR-ness · noun", vocabMeaning:"Knowing where things are on a flat surface, and seeing how the pieces fit together to make a whole picture.", vocabExample:"In Pic Pop Puzzle, your 2D spatial awareness helps you spot where each piece belongs: sky at the top, grass at the bottom!" },
+    "game-pic-pop-puzzle":   { vocabWord:"2D spatial awareness", vocabSay:"too-DEE SPAY-shul uh-WAIR-ness · noun", vocabMeaning:"Knowing where things are on a flat surface, and seeing how the pieces fit together to make a whole picture.", vocabExample:"In Pic-a-Puzzle, your 2D spatial awareness helps you spot where each piece belongs: sky at the top, grass at the bottom!" },
     "game-pathbuilder":        { vocabWord:"engineer", vocabSay:"en-jin-EER · noun", vocabMeaning:"Someone who plans and builds things like roads, bridges and machines, and fixes the problems along the way.", vocabExample:"In Pathbuilder you are the engineer! Plan the shortest road, build a bridge over the river, and fix your plan if it does not work." },
     "game-gravity-four":     { vocabWord:"gravity", vocabSay:"GRAV-ih-tee · noun", vocabMeaning:"The invisible pull that brings things down to the ground.", vocabExample:"In Chike’s Gravity 4, gravity pulls your chip down to the lowest empty spot in the column!" },
     "game-doodle-dash":      { vocabWord:"design", vocabSay:"dih-ZINE · noun", vocabMeaning:"A plan for how something will look and work before you make it.", vocabExample:"In Doodle Dash you design a level with markers or crayons, then run through your own design." },
@@ -6085,7 +6087,7 @@ function seedGames(){
   const list = [
     /* ---------- plays in the browser ---------- */
     /* subscribers only, like Gravity 4: its code lives only in the Subscriber’s Portal (the example of AI Lesson 04), so this card leads there */
-    G({ id:"game-pic-pop-puzzle", title:"Pic Pop Puzzle", slug:"pic-pop-puzzle",
+    G({ id:"game-pic-pop-puzzle", title:"Pic-a-Puzzle", slug:"pic-pop-puzzle",
       kind:"members", interactive:true, featured:false, badge:"New", order:0, portalSlug:"how-to-build-your-own-puzzle-game", path:"",
       icon:"puzzle", p1:"#CDDFE4", p2:"#1273B0",
       cover:{ src:"assets/games/pic-pop-puzzle.jpg", alt:"A drawing of kids building a toy city with a train in a treehouse, cut into puzzle pieces, with one piece lifted out of place and one locked in with a green border" },
@@ -10537,7 +10539,7 @@ function viewCreate(){
    ============================================================ */
 function viewActivity(id){
   const a = db.find("activities", id);
-  if (!a || a.status === "archived") return notFound("activity");
+  if (!a || (a.status === "archived" && !adminSeesAll())) return notFound("activity");
   /* a subscribers-only AI lesson has no activity page: a shared link shows the same join notice as its card */
   if (a.kind === "members"){
     return '<section class="section"><div class="shell" style="max-width:860px">'
@@ -10776,7 +10778,7 @@ function gameStage(g){
     + '</div>'
     + (g.srcdoc !== undefined
         /* pasted code runs in a sealed box: it cannot read this site's storage or sign-ins */
-        ? '<iframe id="gamestage-frame" srcdoc="' + E(g.srcdoc) + '" title="' + E(g.title) + '" sandbox="allow-scripts allow-popups" allow="fullscreen; clipboard-write; autoplay"></iframe>'
+        ? '<iframe id="gamestage-frame" srcdoc="' + E(g.srcdoc) + '" title="' + E(g.title) + '" sandbox="allow-scripts allow-popups" allow="fullscreen; camera; clipboard-write; autoplay"></iframe>'
         : '<iframe id="gamestage-frame" src="' + E(g.path) + '" title="' + E(g.title) + '"'
           + ' sandbox="allow-scripts allow-same-origin allow-popups"'
           + ' allow="fullscreen; camera; clipboard-write"></iframe>')
@@ -10851,7 +10853,7 @@ function closeGameStage(){
 
 function viewGame(id){
   const g = db.find("games", id);
-  if (!g || g.status === "archived") return notFound("game");
+  if (!g || (g.status === "archived" && !adminSeesAll())) return notFound("game");
   noteView(g.id, "games");
 
   let board = "";
@@ -10967,7 +10969,7 @@ function episodeGridHTML(eps){
 
 function viewVideo(id){
   const v = db.find("videos", id);
-  if (!v || v.status === "archived") return notFound("episode");
+  if (!v || (v.status === "archived" && !adminSeesAll())) return notFound("episode");
   noteView(v.id, "videos");
   const act = db.find("activities", v.linkedActivity);
   const cast = (v.cast||[]).map(s => db.list("characters").find(c => c.slug === s)).filter(Boolean);
@@ -11127,7 +11129,7 @@ function storyCard(s){
 }
 function viewStory(id){
   const s = db.find("stories", id);
-  if (!s || s.status === "archived") return notFound("story");
+  if (!s || (s.status === "archived" && !adminSeesAll())) return notFound("story");
   noteView(s.id, "stories");
   const ch = db.list("characters").find(c => c.slug === s.character);
   const act = db.find("activities", s.linkedActivity);
@@ -11169,7 +11171,7 @@ function viewCharacters(){
 
 function viewCharacter(slug){
   const c = db.list("characters").find(x => x.slug === slug || x.id === slug);
-  if (!c || c.status === "archived") return notFound("character");
+  if (!c || (c.status === "archived" && !adminSeesAll())) return notFound("character");
   noteView(c.id, "characters");
   const acts = publishedActivities().filter(a => a.character === c.slug);
   const eps  = db.list("videos").filter(v => (v.cast||[]).indexOf(c.slug) >= 0 && v.status === "published" && v.videoState === "live");
@@ -11210,7 +11212,7 @@ function viewCharacter(slug){
    ============================================================ */
 function viewCollection(id){
   const c = db.find("collections", id);
-  if (!c || c.status === "archived") return notFound("collection");
+  if (!c || (c.status === "archived" && !adminSeesAll())) return notFound("collection");
   const acts = c.items.map(i => db.find("activities", i)).filter(a => a && a.status === "published");
   return pageHeader("Collection", E(c.title), c.blurb)
     + '<section class="section"><div class="shell">'
@@ -11855,7 +11857,7 @@ function articleBodyHTML(a){
 function viewArticle(id){
   const a = db.find("articles", id);
   /* a draft is for admins only: anyone else, even with its link, gets the not-found page */
-  if (!a || a.status === "archived" || (a.status !== "published" && !(isAuthed() && isActiveAdmin()))) return notFound("article");
+  if (!a || (a.status !== "published" && !adminSeesAll())) return notFound("article");
   noteView(a.id, "articles");
   /* "Read next": the newest other articles first, the same order as the News & Articles list */
   const others = db.list("articles").filter(x => x.status === "published" && x.id !== a.id)
@@ -12351,7 +12353,7 @@ function portalGameHTML(e){
     const play = (text) => '<button type="button" class="btn btn--sun btn--sm" data-act="portal-play-private" data-title="' + E(e.title) + '">' + ic("play") + ' ' + text + '</button>';
     if (e.gameMode === "embed" && e.gameHtml){
       return '<div class="pmedia pmedia--game"><iframe srcdoc="' + E(e.gameHtml) + '" title="' + E(e.title) + '" loading="lazy"'
-        + ' sandbox="allow-scripts allow-popups" allow="fullscreen; clipboard-write; autoplay"></iframe></div>'
+        + ' sandbox="allow-scripts allow-popups" allow="fullscreen; camera; clipboard-write; autoplay"></iframe></div>'
         + '<div class="prow">' + play("Open full screen") + share + '</div>';
     }
     return hero(play(nameHTML(label)));
@@ -12509,7 +12511,7 @@ function portalExampleHTML(e){
   if (!html) setTimeout(portalFillExamples, 0);
   return '<section class="pexample" aria-label="An example of what this prompt makes"><span class="eyebrow">' + ic("sparkles") + ' What this prompt can make</span>'
     + '<div class="pmedia pmedia--example"><iframe ' + (html ? 'srcdoc="' + E(html) + '"' : 'data-private-example="' + E(e.privateGameId) + '"')
-    + ' title="' + E("Example: " + e.title) + '" sandbox="allow-scripts allow-popups" allow="fullscreen; clipboard-write"></iframe>'
+    + ' title="' + E("Example: " + e.title) + '" sandbox="allow-scripts allow-popups" allow="fullscreen; camera; clipboard-write"></iframe>'
     /* full screen, in the box's bottom-right corner */
     + '<button type="button" class="pexample__full" data-act="portal-play-private" data-title="' + E(e.title) + '" aria-label="Open the example full screen" title="Full screen">' + ic("maximize-2") + '</button></div>'
     + '<p class="tiny pexample__note">An example made with AI from the prompt below. Yours may look a little different.</p></section>';
@@ -14337,7 +14339,7 @@ function productCard(p){
 
 function viewProduct(id){
   const p = db.find("products", id);
-  if (!p || p.status === "archived") return notFound("printable pack");
+  if (!p || (p.status === "archived" && !adminSeesAll())) return notFound("printable pack");
   noteView(p.id, "products");
   const others = db.list("products").filter(x => x.status === "published" && x.id !== p.id);
   return '<section class="section"><div class="shell">'
