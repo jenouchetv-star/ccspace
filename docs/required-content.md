@@ -27,21 +27,13 @@ All 6 published products point to PDF files that don't exist. On the live site, 
 
 ## 2. Book pictures
 
-These pages have text but no picture (30 pages across 7 books):
+The published books are now storyboarded: every story page has its own picture of its own moment, wide pictures
+under the text and a tall full-page picture for each payoff, made in Higgsfield from the character sheets
+(`assets/books/<book>/`, applied by `supabase/book-storyboards.sql`). Page colors are light tints of each picture.
 
-| Book | Text-only pages | Card image |
-| --- | --- | --- |
-| Mateo and the Floating Train | 2, 4, 6, 8, 9 | missing |
-| Zech's Windmill Power | 2, 3, 5, 7, 9 | missing |
-| Kiyah's Garden of Tiny Clues | 3, 5, 6, 7 | missing |
-| Zech's Paper Airplane Parade | 3, 5, 6, 7 | missing |
-| Averi's Brave First Step | 3, 5, 6, 7 | missing |
-| Stacey and the Sound of Sunshine | 3, 5, 6, 7 | missing |
-| Chike and his flying box | 3, 5, 6, 7 | set |
-
-- [ ] Picture for each text-only page above
-- [ ] Card image for the 6 books without one
-- [ ] Chike and Zech's Space Adventure: move its 8 pictures off the old GoDaddy site (img1.wsimg.com) into the site's own storage. No new art needed.
+- [x] A picture for every story page in the seven published books (the character portraits on some pages were replaced with real scenes)
+- [x] Chike and Zech's Space Adventure: its pictures now live on this site instead of the old GoDaddy site
+- [ ] Card image for the 6 books without one (their Read cards could use each book's payoff picture)
 - [ ] The Missing Golden Leaf (draft): write and illustrate the whole book. It has no pages yet.
 
 ## 3. Activity videos
