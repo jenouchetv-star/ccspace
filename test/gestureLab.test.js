@@ -92,6 +92,19 @@ describe("the camera in a sealed frame", () => {
     expect(page).toContain('Promise.resolve(hands.send({ image:c })).catch(function(){}).then(next);');
   });
 
+  it("asks on the page every time, so a game can never turn the camera on by itself", () => {
+    expect(index).toContain("function camRelayConfirm(name){");
+    expect(index).toContain("if (!(await camRelayConfirm(name))){");
+    expect(index).toContain("use your camera?</h3>");
+  });
+
+  it("lists the gestures with big hands and room between them, and the keys as a tidy list", () => {
+    expect(page).toContain(".glist{ list-style:none; margin:0; padding:0; display:grid; gap:8px; }");
+    expect(page).toContain(".gico svg{ width:52px; height:52px; }");
+    expect(page).toContain('<dl class="keylist">');
+    expect(page).toContain("<div><dt><kbd>←</kbd><kbd>→</kbd></dt><dd>Turn pages</dd></div>");
+  });
+
   it("shows the book as a preview in the lesson's example box, opening the full-screen player", () => {
     expect(page).toContain('<div class="preview hidden" id="preview" role="button" tabindex="0"');
     expect(page).toContain('function openFull(){ try { window.parent.postMessage({ ccsExample:"fullscreen" }, "*"); } catch(_e){} }');

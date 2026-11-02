@@ -2179,6 +2179,11 @@ body.is-admin .tour-spotlight, body.is-admin .tour-card{ display:none; }
    target exactly where the visible image already is. */
 .qu-editable--block{ display:block; width:100%; height:100%; }
 .qu-editable--copy{ display:block; }
+/* the page's own "use your camera?" question, above everything (the full-screen player included) */
+.camask{ position:fixed; inset:0; z-index:2147483000; display:grid; place-items:center; padding:16px; background:rgba(15,20,24,.55); }
+.camask__card{ max-width:440px; padding:22px 24px; border:var(--line); border-radius:var(--r-lg); background:var(--paper); box-shadow:var(--hard); }
+.camask__card h3{ margin:0 0 8px; font-size:1.3rem; }
+.camask__card p{ margin:0 0 16px; font-size:1rem; }
 /* formatted body copy: paragraphs and lists keep the page's own look and spacing */
 .copy p, .copy ul, .copy ol{ margin:0 0 .75em; }
 .copy ul, .copy ol{ padding-left:1.3em; }
@@ -10874,11 +10879,38 @@ function camRelaySend(){
     catch(_e){ CamRelay.waiting = false; }
   }, () => { CamRelay.waiting = false; });
 }
+/* The page's own question, every time a game asks: the browser remembers "allow" for the whole site, so without
+   this a game could turn the camera on without anyone being asked again. It sits above everything, the
+   full-screen player included, and the camera only starts after a real tap on Allow. */
+function camRelayConfirm(name){
+  return new Promise(resolve => {
+    const box = document.createElement("div");
+    box.className = "camask"; box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "camask-title");
+    box.innerHTML = '<div class="camask__card">'
+      + '<h3 id="camask-title">Let “' + E(name) + '” use your camera?</h3>'
+      + '<p>It looks for your hand to follow your gestures. The pictures stay on this device: nothing is shown, recorded, saved or sent.</p>'
+      + '<div class="row" style="gap:10px;flex-wrap:wrap"><button type="button" class="btn btn--cyan" data-yes>' + ic("camera") + ' Allow</button>'
+      + '<button type="button" class="btn btn--paper" data-no>Not now</button></div></div>';
+    document.body.appendChild(box);
+    drawIcons();
+    const done = ok => { box.remove(); resolve(ok); };
+    box.querySelector("[data-yes]").addEventListener("click", () => done(true));
+    box.querySelector("[data-no]").addEventListener("click", () => done(false));
+    box.addEventListener("keydown", e => { if (e.key === "Escape"){ e.stopPropagation(); done(false); } });
+    box.querySelector("[data-yes]").focus();
+  });
+}
 async function camRelayStart(frame){
   camRelayStop();
   const win = frame.contentWindow;
-  /* tell the game straight away that the page is asking, so it waits for the browser's prompt instead of giving up */
+  /* tell the game straight away that the page is asking, so it waits for the answer instead of giving up */
   try { win.postMessage({ ccsCamera: "asking" }, "*"); } catch(_e){ return; }
+  const name = String(frame.getAttribute("title") || "This game").replace(/^Example:\s*/, "");
+  if (!(await camRelayConfirm(name))){
+    try { win.postMessage({ ccsCamera: "error", name: "NotAllowedError" }, "*"); } catch(_e){ /* gone */ }
+    return;
+  }
+  if (!frame.isConnected) return;
   try {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error("No camera"), { name: "NotFoundError" });
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: false });
