@@ -46,20 +46,21 @@ Published activities: The Story Stage, The Library Book Portal Submarine, The Ca
 
 ## 4. Printables
 
-Activities with no printable:
+Activities with no printable (made November 2, with the character who leads each one; linked by
+`supabase/offline-games-pictures.sql`):
 
-- [ ] Make a Clay Volcano
-- [ ] The Country Line-Dance
-- [ ] Draw a Map of Your Neighborhood
+- [x] Make a Clay Volcano: a volcano eruption log
+- [x] The Country Line-Dance: a line-dance step chart
+- [x] Draw a Map of Your Neighborhood: a map-maker sheet
 
-Offline games with no printable (suggested idea for each):
+Offline games with no printable (each game page now has a printable button):
 
-- [ ] The Bridge Challenge: a load log
-- [ ] Draw What I Say: prompt cards
-- [ ] Freeze and Swap: call cards
-- [ ] Materials Mashup: challenge cards
-- [ ] Sound Scavenger Hunt: a checklist
-- [ ] Story Relay: story-starter cards
+- [x] The Bridge Challenge: a load log
+- [x] Draw What I Say: picture cards
+- [x] Freeze and Swap: call cards
+- [x] Materials Mashup: challenge cards
+- [x] Sound Scavenger Hunt: a checklist
+- [x] Story Relay: story-starter cards
 
 Upgrade (lower priority):
 
@@ -69,8 +70,9 @@ Upgrade (lower priority):
 
 The six offline games: The Bridge Challenge, Draw What I Say, Freeze and Swap, Materials Mashup, Sound Scavenger Hunt and Story Relay.
 
-- [ ] Branded cover art with Chike and friends for all 6 (today they use stock photos)
-- [ ] "How to play" pictures for each game (today each has 4 text-only steps)
+- [x] Branded cover art with Chike and friends for all 6 (`assets/games/offline/<game>.jpg`)
+- [x] "How to play" pictures for each game: a small picture beside every rule that opens large on a click
+  (`assets/games/offline/<game>/rule-N.jpg`)
 
 ## 6. Episodes not yet made
 
@@ -87,7 +89,10 @@ The six offline games: The Bridge Challenge, Draw What I Say, Freeze and Swap, M
 
 ## 7. Activity step pictures (nice to have)
 
-- [ ] A photo or drawing for the activity steps (156 steps across all activities, none with a picture). Steps are text-only today, so this also needs a small site change.
+- [x] The site change: a step can have its own small picture (left of the words) that opens large, with arrows
+  to move through the steps. An activity record takes them as `stepPictures` (`[{ src, full, alt }]`, one per step).
+- [x] Stacey's Rubber Band Sound Lab (finder activity) has a main picture and a picture for every step
+- [ ] Pictures for the steps of the 22 published activities (130 steps). The Rubber-Band Guitar is first.
 
 ## 8. Draft activities to finish
 
