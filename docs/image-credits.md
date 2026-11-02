@@ -5,7 +5,8 @@ Photos from [Unsplash](https://unsplash.com), used under the [Unsplash License](
 
 | File | Used for | Photo | Photographer |
 | --- | --- | --- | --- |
-| `assets/about/teacher-helping-student.jpg` | Business inquiries page | [A teacher gesturing to a student pointing at a colorful workbook](https://unsplash.com/photos/6c86TCPmNRQ) | Ronald Felton |
+| `assets/about/teacher-reading-with-student.jpg` | Business inquiries page | [Woman and child reading in library](https://unsplash.com/photos/7fF0iei80AQ) | Adam Winger |
+| `assets/about/kids-3d-printer.jpg` | Our mission page | [Children gathered around a 3D printer](https://unsplash.com/photos/2fr56H6rgJk) | Adam Winger |
 | `assets/games/draw-what-i-say.jpg` | Draw What I Say card | [Two young girls sitting at a table with markers and crayons](https://unsplash.com/photos/N17Nkbsc-zY) | Alan Rodriguez |
 | `assets/games/freeze-and-swap.jpg` | Freeze and Swap card | [Girl twirling around room](https://unsplash.com/photos/dEVHukGkHq4) | Laura Fuhrman |
 | `assets/games/materials-mashup.jpg` | Materials Mashup card | [A child gluing colorful paper scraps onto a drawing of a rainbow](https://unsplash.com/photos/g7dUm6lRvtQ) | Taylor Heery |

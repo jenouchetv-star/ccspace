@@ -1,0 +1,1530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robo Math Buddy</title>
+<!-- the fonts load without holding up the page -->
+<link id="fonts" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Press+Start+2P&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<style>
+/* the robot's own look: glossy white shell, dark visor, slate metal, glowing cyan */
+:root{
+  --bg1:#0d1a36; --bg2:#050914;
+  --panel:rgba(10,18,38,.82); --line:rgba(103,232,249,.24); --line2:rgba(103,232,249,.5);
+  --cyan:#22d3ee; --glow:#67e8f9; --text:#e2e8f0; --muted:#8fa3bf;
+  --field:#0b1428; --fieldText:#e2e8f0;
+  --botBg:rgba(8,51,68,.6); --botText:#cffafe;
+  --meBg:#f8fafc; --meText:#0f172a; --meLine:transparent;
+  --shell1:#ffffff; --shell2:#d5dee9; --shellText:#0f172a; --metal:#334155;
+  --scan:rgba(255,255,255,.025);
+}
+:root[data-theme="light"]{
+  --bg1:#e2e8f0; --bg2:#94a3b8;
+  --panel:rgba(248,250,252,.78); --line:rgba(51,65,85,.18); --line2:rgba(8,145,178,.55);
+  --cyan:#0891b2; --glow:#06b6d4; --text:#0f172a; --muted:#475569;
+  --field:#ffffff; --fieldText:#0f172a;
+  --botBg:#0f172a; --botText:#a5f3fc;
+  --meBg:#ffffff; --meText:#0f172a; --meLine:#cbd5e1;
+  --scan:transparent;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+html{background:var(--bg2)}
+body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%);color:var(--text);
+  font-family:"Chakra Petch",system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden;transition:background .3s}
+.arcade{font-family:"Press Start 2P","Chakra Petch",monospace}
+
+/* robot and board on the left, the chat on the right */
+.app{display:grid;grid-template-columns:minmax(0,1fr) minmax(290px,38%);height:100%}
+.stage{position:relative;min-height:0;touch-action:none;cursor:grab;overflow:hidden}
+.stage.drag{cursor:grabbing}
+.stage canvas{display:block;width:100%;height:100%}
+.stage:after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,var(--scan) 0 1px,transparent 1px 3px)}
+
+/* arcade score counters */
+.hud{position:absolute;left:12px;top:12px;display:flex;flex-wrap:wrap;gap:8px;z-index:3;pointer-events:none}
+.ctr{display:grid;gap:5px;padding:7px 10px;background:var(--panel);border:1px solid var(--line2);border-radius:10px;
+  box-shadow:0 0 14px rgba(34,211,238,.18), inset 0 0 12px rgba(34,211,238,.08);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.ctr small{font:8px/1 "Press Start 2P",monospace;color:var(--muted);letter-spacing:.06em}
+.ctr b{font:14px/1 "Press Start 2P",monospace;color:var(--cyan);text-shadow:0 0 8px rgba(34,211,238,.6);font-variant-numeric:tabular-nums}
+.ctr[hidden]{display:none}
+
+.hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:3;display:none;white-space:nowrap;
+  font:10px/1 "Press Start 2P",monospace;color:var(--cyan);padding:10px 14px;border-radius:10px;background:var(--panel);border:1px solid var(--line2);
+  box-shadow:0 0 18px rgba(34,211,238,.35);animation:blink 1s steps(2,end) infinite}
+@keyframes blink{50%{opacity:.35}}
+/* a small promise in the corner: the chat never leaves this computer */
+.privacy{margin:0;display:flex;align-items:center;gap:6px;color:var(--muted);font:600 .72rem/1.3 "Chakra Petch",system-ui,sans-serif}
+.privacy svg{width:12px;height:12px;flex:none;fill:none;stroke:var(--cyan);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.hint{bottom:64px}
+/* the robot's controls, under the robot, in the same outlined style as the light/dark button */
+.stagebar{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:3;display:flex;gap:8px;max-width:calc(100% - 24px)}
+.stagebar button{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 12px;border-radius:10px;border:1px solid var(--line2);background:var(--panel);color:var(--text);
+  font:600 .8rem "Chakra Petch",system-ui,sans-serif;cursor:pointer;white-space:nowrap;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.stagebar svg{width:17px;height:17px;flex:none;fill:none;stroke:var(--cyan);stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}
+.stagebar button:hover{box-shadow:0 0 12px rgba(34,211,238,.45)}
+.stagebar button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.stagebar button[aria-pressed="true"]{background:rgba(34,211,238,.16);border-color:var(--cyan);box-shadow:0 0 12px rgba(34,211,238,.35)}
+.nogl{position:absolute;inset:0;display:none;place-items:center;text-align:center;padding:20px;font-weight:600;z-index:2}
+
+/* the chat panel */
+.panel{display:flex;flex-direction:column;gap:10px;min-height:0;min-width:0;padding:12px;background:var(--panel);border-left:1px solid var(--line);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.panel__top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.title{display:flex;align-items:center;gap:9px;font:10px/1.3 "Press Start 2P",monospace;color:var(--cyan);text-shadow:0 0 8px rgba(34,211,238,.5)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);flex:none}
+.icon{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--cyan);cursor:pointer}
+.icon:hover{box-shadow:0 0 12px rgba(34,211,238,.45)}
+.tools{display:flex;align-items:center;gap:8px;min-width:0}
+/* the kid's name; tap it to change it */
+.nametag{display:inline-flex;align-items:center;gap:6px;max-width:140px;height:32px;padding:0 10px;border-radius:999px;border:1px solid var(--line2);background:transparent;
+  color:var(--text);font:600 .82rem "Chakra Petch",system-ui,sans-serif;cursor:pointer}
+.nametag span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nametag svg{width:14px;height:14px;flex:none;fill:none;stroke:var(--cyan);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.nametag:hover{box-shadow:0 0 12px rgba(34,211,238,.45)}
+.nametag:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.nametag[hidden]{display:none}
+.log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 2px 4px 0;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+.msg{max-width:90%;padding:9px 12px;border-radius:14px;font-size:.97rem;font-weight:600;line-height:1.38;overflow-wrap:anywhere}
+.msg--bot{align-self:flex-start;background:var(--botBg);color:var(--botText);border:1px solid var(--line2);border-bottom-left-radius:4px;box-shadow:0 0 14px rgba(34,211,238,.14)}
+.msg--me{align-self:flex-end;background:var(--meBg);color:var(--meText);border:1px solid var(--meLine);border-bottom-right-radius:4px}
+.who{display:block;font:7px/1 "Press Start 2P",monospace;color:var(--glow);margin-bottom:6px;letter-spacing:.08em}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* suggested replies: tap one to send it */
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0}
+.chips:empty{display:none}
+.chip{flex:none;font:600 .8rem "Chakra Petch",system-ui,sans-serif;padding:6px 11px;border-radius:999px;border:1px solid var(--line2);
+  background:transparent;color:var(--cyan);cursor:pointer;white-space:nowrap;transition:box-shadow .15s,background .15s}
+.chip:hover{background:rgba(34,211,238,.12);box-shadow:0 0 12px rgba(34,211,238,.35)}
+.chip:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+.ask{display:flex;gap:8px}
+.ask input{flex:1;min-width:0;height:46px;padding:0 14px;border-radius:12px;border:1px solid var(--line2);background:var(--field);color:var(--fieldText);
+  font:600 1rem "Chakra Petch",system-ui,sans-serif;caret-color:var(--cyan)}
+.ask input::placeholder{color:var(--muted)}
+.ask input:focus{outline:none;box-shadow:0 0 0 2px var(--cyan),0 0 16px rgba(34,211,238,.45)}
+
+/* chunky arcade buttons in the robot's white shell */
+.btn{font:700 .86rem "Chakra Petch",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.05em;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  height:46px;padding:0 14px;border-radius:12px;border:1px solid #cbd5e1;background:linear-gradient(180deg,var(--shell1),var(--shell2));color:var(--shellText);
+  box-shadow:0 4px 0 var(--metal);cursor:pointer;white-space:nowrap;transition:box-shadow .15s}
+.btn:hover{box-shadow:0 4px 0 var(--metal),0 0 16px rgba(34,211,238,.55)}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--metal)}
+.btn:focus-visible,.icon:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+.btn svg,.icon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.btn--go{background:linear-gradient(180deg,#a5f3fc,#22d3ee);color:#042f3a;border-color:#67e8f9;box-shadow:0 4px 0 #0e7490,0 0 14px rgba(34,211,238,.45)}
+.btn--go:hover{box-shadow:0 4px 0 #0e7490,0 0 22px rgba(34,211,238,.75)}
+.btn--go:active{box-shadow:0 1px 0 #0e7490}
+.mic{width:46px;padding:0;border-radius:50%}
+.mic.on{background:linear-gradient(180deg,#fecaca,#ef4444);color:#fff;border-color:#f87171;box-shadow:0 4px 0 #991b1b,0 0 18px rgba(239,68,68,.7)}
+.ask .lbl{display:none}
+.ask .btn--go{width:46px;padding:0}
+
+.sure{position:absolute;inset:0;display:none;place-items:center;background:rgba(2,6,23,.55);z-index:10}
+.sure .card{background:var(--panel);border:1px solid var(--line2);border-radius:16px;box-shadow:0 0 30px rgba(34,211,238,.3);padding:20px 22px;max-width:320px;text-align:center;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.sure p{font-weight:700;font-size:1.1rem;margin:0 0 16px}
+.sure .row{display:flex;gap:10px;justify-content:center}
+
+/* in a short window (like the example box at the top of the lesson), the box's full-screen corner stays clear */
+@media (max-height:760px){
+  .panel{padding:10px}
+  .btn,.ask input{height:42px}
+  .mic,.ask .btn--go{width:42px}
+}
+/* a phone: the robot on top, the chat underneath */
+@media (max-width:640px){
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,40%) minmax(0,1fr)}
+  .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .chips::-webkit-scrollbar{display:none}
+  .panel{border-left:0;border-top:1px solid var(--line);padding:8px 10px 10px;gap:8px}
+  .panel__top .title{font-size:8px}
+  .icon{width:32px;height:32px}
+  .stagebar{bottom:8px;gap:6px}
+  .stagebar button{height:32px;padding:0 8px;font-size:.7rem;gap:5px}
+  .stagebar svg{width:14px;height:14px}
+  #full .lbl{display:none}                 /* just the icon on a phone, so all four buttons fit */
+  .hint{bottom:48px}
+  .msg{font-size:.9rem;padding:7px 10px}
+  .hud{left:8px;top:8px;gap:6px}
+  .ctr{padding:5px 7px;gap:4px}
+  .ctr b{font-size:11px}
+  .ctr small{font-size:7px}
+  .hint{font-size:8px;bottom:8px}
+}
+@media (prefers-reduced-motion:reduce){ .hint{animation:none} }
+
+/* the chat sits on the left and the robot on the right (stacked on a phone, robot on top) */
+.app{grid-template-columns:minmax(290px,38%) minmax(0,1fr)}
+.panel{order:-1;border-left:0;border-right:1px solid var(--line)}
+#full[hidden]{display:none}
+/* the robot's buttons sit along the top, and the score counters in the bottom-left corner */
+.stagebar{top:12px;bottom:auto}
+.hud{top:auto;bottom:12px}
+.hint{bottom:70px}
+@media (max-width:640px){ .stagebar{top:8px} .hud{bottom:8px} .hint{bottom:56px} }
+@media (max-width:640px){ .app{grid-template-columns:minmax(0,1fr)} .panel{order:0;border-right:0} }
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="stage" id="stage" aria-label="The robot and its math board">
+    <div class="hud" aria-live="polite">
+      <div class="ctr"><small>RIGHT</small><b id="sRight">000</b></div>
+      <div class="ctr"><small>HIGH 5</small><b id="sFive">000</b></div>
+      <div class="ctr" id="sGrade" hidden><small>GRADE</small><b>-</b></div>
+    </div>
+    <div class="hint" id="hint">TAP MY HAND! &#9995;</div>
+    <div class="stagebar" role="group" aria-label="Robot controls">
+      <button id="voice" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg><span>Voice off</span></button>
+      <button id="newq" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>New question</button>
+      <button id="reset" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Reset robot</button>
+      <button id="full" type="button" aria-label="Full screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg><span class="lbl">Full screen</span></button>
+    </div>
+    <div class="nogl" id="nogl">The 3D robot needs an internet connection to load. You can still chat with me!</div>
+    <div class="sure" id="sure"><div class="card"><p>Are you sure? I will forget everything.</p>
+      <div class="row"><button class="btn btn--go" id="sureYes" type="button">Yes, reset</button><button class="btn" id="sureNo" type="button">No, keep it</button></div></div></div>
+  </section>
+
+  <aside class="panel" aria-label="Chat with the robot">
+    <div class="panel__top">
+      <div class="title"><span class="dot" aria-hidden="true"></span>ROBO MATH BUDDY</div>
+      <div class="tools">
+        <button class="nametag" id="nametag" type="button" hidden title="Change your name"></button>
+        <button class="icon" id="theme" type="button" aria-label="Switch to light mode" title="Light mode / dark mode"></button>
+      </div>
+    </div>
+    <div class="log" id="log" role="log" aria-live="polite"></div>
+    <div class="chips" id="chips" role="group" aria-label="Suggested replies"></div>
+    <!-- not a <form>: the lesson's example box blocks forms, so Send and Enter are handled directly -->
+    <div class="ask">
+      <input id="say" type="text" autocomplete="off" enterkeyhint="send" placeholder="Type to chat or answer..." aria-label="Talk to the robot">
+      <button class="btn btn--go" id="send" type="button" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg><span class="lbl">Send</span></button>
+      <button class="btn mic" id="mic" type="button" aria-label="Talk with the microphone" title="Talk"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></button>
+    </div>
+    <p class="privacy"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Your chats stay on this device.</p>
+  </aside>
+</main>
+
+<script type="importmap">{ "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.js" } }</script>
+<script type="module">
+  import * as THREE from "three";
+  window.THREE = THREE;
+  window.dispatchEvent(new Event("three-ready"));
+</script>
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------------- memory: only on this computer, and fine without it ---------------- */
+  var KEY = "robo-math-buddy";
+  var mem = { name:"", grade:null, botName:"", right:0, highFives:0 };
+  try { var saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved) for (var k in mem) if (k in saved) mem[k] = saved[k]; } catch(e) {}
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(mem)); } catch(e) { /* saving not allowed here: remember until the page closes */ } }
+
+  var state = { phase: mem.name ? (mem.grade === null ? "askGrade" : "chat") : "askName", awaitBotName:false, pending:"", q:null, quiz:false, streak:0, wantFive:false, voice:false };
+  var GRADES = ["Kindergarten","1st grade","2nd grade","3rd grade","4th grade","5th grade"];
+
+  function pad(n){ return ("000" + n).slice(-3); }
+  function scores(){
+    $("sRight").textContent = pad(mem.right); $("sFive").textContent = pad(mem.highFives);
+    var g = $("sGrade"); g.hidden = mem.grade === null; g.querySelector("b").textContent = mem.grade === null ? "-" : (mem.grade === 0 ? "K" : String(mem.grade));
+    var tag = $("nametag"); tag.hidden = !mem.name;
+    tag.innerHTML = '<span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+    tag.querySelector("span").textContent = mem.name;
+    tag.setAttribute("aria-label", "Your name is " + mem.name + ". Change your name");
+  }
+
+  /* ---------------- dark mode / light mode ---------------- */
+  var theme = "light";
+  try { theme = localStorage.getItem("robo-math-theme") || "light"; } catch(e) {}
+  var SUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  var MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>';
+  function applyTheme(){
+    document.documentElement.setAttribute("data-theme", theme);
+    $("theme").innerHTML = theme === "dark" ? SUN : MOON;
+    $("theme").setAttribute("aria-label", theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+    if (window.__theme3d) window.__theme3d(theme);
+  }
+  $("theme").addEventListener("click", function(){
+    theme = theme === "dark" ? "light" : "dark";
+    try { localStorage.setItem("robo-math-theme", theme); } catch(e) {}
+    applyTheme();
+  });
+  applyTheme();
+
+  /* ---------------- the robot's feelings, shown with its eyes ---------------- */
+  var robot = { spin:0, turn:0, raise:0, wave:2.5, mood:"happy", moodUntil:performance.now() + 2500 };
+  function mood(name, secs){ robot.mood = name; robot.moodUntil = performance.now() + secs * 1000; }
+
+  /* ---------------- the chat window: the robot's words type out, yours appear at once ---------------- */
+  var log = $("log"), typing = null, talkUntil = 0;
+  function scrollDown(){ log.scrollTop = log.scrollHeight; }
+  function addMsg(who, text){
+    if (typing) typing.finish();
+    var row = document.createElement("div"); row.className = "msg msg--" + who;
+    if (who === "bot"){ var tag = document.createElement("b"); tag.className = "who"; tag.setAttribute("aria-hidden", "true"); tag.textContent = (mem.botName || "Robo").toUpperCase(); row.appendChild(tag); }
+    var sr = document.createElement("span"); sr.className = "sr"; sr.textContent = (who === "bot" ? (mem.botName || "Robot") + " says: " : "You said: ") + text;
+    var vis = document.createElement("span"); vis.setAttribute("aria-hidden", "true");
+    row.appendChild(sr); row.appendChild(vis); log.appendChild(row);
+    while (log.children.length > 80) log.removeChild(log.firstChild);
+    if (who === "me" || reduceMotion){ vis.textContent = text; scrollDown(); return; }
+    var i = 0, timer = setInterval(step, 24);
+    function step(){ i += 2; vis.textContent = text.slice(0, i); scrollDown(); if (i >= text.length) finish(); }
+    function finish(){ clearInterval(timer); vis.textContent = text; scrollDown(); if (typing && typing.row === row) typing = null; }
+    typing = { row: row, finish: finish };
+  }
+
+  /* suggested replies that fit the moment; tapping one sends it, and typing anything else always works too */
+  var MENU = ["Ask a question", "Homework help", "Quiz me!", "Tell a joke", "How are you?", "High five! ✋"];
+  var HOMEWORK = [["3 + 4", "9 - 5"], ["8 + 7", "15 - 6"], ["45 + 38", "72 - 29"], ["7 times 8", "36 divided by 4"], ["24 times 6", "144 divided by 12"], ["3/4 + 1/8", "2.5 + 1.75"]];
+  function suggestions(){
+    if (state.phase === "askName" || state.awaitNewName) return [];
+    if (state.phase === "askGrade") return ["Kindergarten", "1st grade", "2nd grade", "3rd grade", "4th grade", "5th grade"];
+    if (state.wantFive) return ["✋ High five!"];
+    if (state.q) return ["Give me a hint", "Show me how", "Stop the quiz"];
+    if (state.hw) return ["Give me a hint", "Show me the answer", "Something else"];
+    if (state.awaitBotName) return ["Sparky", "Pixel", "Bolt", "Nova"];
+    if (state.pending === "howAreYou") return ["Great!", "Okay", "Not so good"];
+    if (state.pending === "day") return ["I went to school", "I played outside", "I read a book"];
+    if (state.pending === "color") return ["Blue", "Green", "Pink", "Purple"];
+    if (state.pending === "ask") return ["What is 12 times 8?", "What is your name?", "What did you do today?", "What's your favorite color?"];
+    if (state.pending === "homework") return HOMEWORK[mem.grade === null ? 3 : mem.grade].concat(["Something else"]);
+    if (state.pending === "more") return ["I have another one", "Quiz me!", "Something else"];
+    if (state.pending === "another") return ["Another one!", "Something else"];
+    return MENU;
+  }
+  function refreshChips(){
+    var box = $("chips"); box.innerHTML = "";
+    suggestions().forEach(function(s){
+      var b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = s;
+      b.addEventListener("click", function(){ hear(s); });
+      box.appendChild(b);
+    });
+    box.scrollLeft = 0;
+  }
+
+  /* ---------------- the voice ----------------
+     The best-sounding English voice built into this browser and device. It speaks right away, with nothing to download.
+     Online voices are skipped, so nothing the robot says leaves the computer. */
+  function voiceLabel(text){ $("voice").querySelector("span").textContent = text; }
+  var bestVoice = null;
+  function voiceScore(v){
+    var n = v.name, s = 0;
+    if (!/^en/i.test(v.lang) || v.localService === false) return -1;
+    if (/^en[-_]US/i.test(v.lang)) s += 20; else if (/^en[-_](GB|AU|CA|IE|NZ)/i.test(v.lang)) s += 10;
+    if (/natural/i.test(n)) s += 60;
+    if (/\b(Aria|Jenny|Ana|Emma|Michelle|Ava|Sonia|Libby)\b/i.test(n)) s += 12;
+    if (/enhanced|premium|neural/i.test(n)) s += 35;
+    if (/Samantha/i.test(n)) s += 32;
+    if (/\b(Zira|Hazel|Susan|Karen|Moira|Tessa)\b/i.test(n)) s += 5;        /* the friendlier of the older voices */
+    if (/espeak|Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Deranged|Good News|Hysterical|Jester|Junior|Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox|Fred|Ralph|Kathy|Princess/i.test(n)) s -= 100;
+    return s;
+  }
+  function chooseVoice(){
+    var list = [];
+    try { list = speechSynthesis.getVoices() || []; } catch(e) {}
+    var best = null, top = -1;
+    list.forEach(function(v){ var s = voiceScore(v); if (s > top){ top = s; best = v; } });
+    return best;
+  }
+  if ("speechSynthesis" in window){
+    bestVoice = chooseVoice();
+    try { speechSynthesis.addEventListener("voiceschanged", function(){ bestVoice = chooseVoice(); }); } catch(e) {}
+  }
+  function deviceSpeak(text){
+    if (!("speechSynthesis" in window)) return;
+    try {
+      speechSynthesis.cancel();
+      if (!bestVoice) bestVoice = chooseVoice();
+      if (!bestVoice) return;                        /* no voice on this device: the words still show in the chat */
+      var u = new SpeechSynthesisUtterance(text); u.voice = bestVoice; u.lang = bestVoice.lang;
+      var natural = voiceScore(bestVoice) >= 50;     /* a natural voice sounds friendly a little higher; an old flat one needs more lift */
+      u.rate = natural ? 1.0 : 1.05; u.pitch = natural ? 1.15 : 1.35;
+      u.onend = function(){ talkUntil = performance.now() + 150; };
+      speechSynthesis.speak(u);
+    } catch(e) {}
+  }
+
+  /* read math out the way a person would say it ("7/8" is "7 over 8", not July 8th) */
+  function spoken(text){
+    return text.replace(/(\d)\s*\/\s*(\d)/g, "$1 over $2").replace(/×/g, " times ").replace(/÷/g, " divided by ").replace(/−/g, " minus ")
+      .replace(/=/g, " equals ").replace(/[^\w\s.,!?'’:+\-%]/g, " ").replace(/\s+/g, " ");
+  }
+
+  /* saying things: a chat message, and the voice when it is on */
+  function say(text){
+    addMsg("bot", text);
+    refreshChips();
+    talkUntil = performance.now() + Math.min(9000, 400 + text.length * 30);
+    if (!state.voice) return;
+    deviceSpeak(spoken(text));
+  }
+  function pick(list){ return list[Math.floor(Math.random() * list.length)]; }
+
+  /* ---------------- the digital whiteboard behind the robot ---------------- */
+  var board = { title:"ROBO MATH", lines:["Ask me math!", "Like: 12 times 8", "or: 15 plus 27"], big:false };
+  var boardCanvas = document.createElement("canvas"); boardCanvas.width = 1400; boardCanvas.height = 760;
+  var boardTex = null, tallStage = false;
+  var DIGITAL = "'Chakra Petch','Segoe UI',sans-serif", PIXEL = "'Press Start 2P','Chakra Petch',monospace";
+
+  /* a picture for the board where one helps young kids count: balls for adding and taking away (and small times
+     tables), a pie cut into equal slices for sharing (dividing), and pies for fractions. Bigger numbers get the steps only. */
+  function picFor(lines){
+    var first = String(lines[0] || ""), m = first.match(/^(\d+) ([+−×÷]) (\d+) = \?$/);
+    if (m){
+      var a = +m[1], b = +m[3], op = m[2];
+      if (op === "+" && a && b && a + b <= 20) return { kind:"add", a:a, b:b };
+      if (op === "−" && b && b <= a && a <= 20) return { kind:"take", a:a, b:b };
+      if (op === "×" && a && b && a <= 10 && b <= 10 && a * b <= 50){
+        /* the same groups the steps talk about ("3 groups of 8"), or the first number's groups */
+        var g = lines.join(" ").match(/(\d+) groups of (\d+)/);
+        return g && +g[1] * +g[2] === a * b ? { kind:"times", rows:+g[1], cols:+g[2] } : { kind:"times", rows:a, cols:b };
+      }
+      if (op === "÷" && b >= 2 && b <= 10 && a >= b && a <= 60 && Math.floor(a / b) <= 10) return { kind:"share", a:a, b:b };
+      /* bigger numbers: hundreds, tens and ones blocks, for kids who learn by seeing */
+      if ((op === "+" || (op === "−" && b <= a)) && blockSize([a, b], 2)) return { kind:"blocks", nums:[a, b], op:op };
+      var big = Math.max(a, b), small = Math.min(a, b);
+      if (op === "×" && big >= 10 && small >= 2 && small <= 5 && blockSize([big], small)) return { kind:"blockrows", n:big, rows:small };
+      return null;
+    }
+    var f = first.match(/^(\d+)\/(\d+) ([+−]) (\d+)\/(\d+) = \?$/);
+    if (f && +f[2] >= 2 && +f[2] <= 12 && +f[5] >= 2 && +f[5] <= 12 && +f[1] <= +f[2] && +f[4] <= +f[5]) return { kind:"frac", parts:[[+f[1], +f[2]], [+f[4], +f[5]]], op:f[3] };
+    return null;
+  }
+  var BLUE = ["#67e8f9", "#0e7490"], ORANGE = ["#fdba74", "#c2410c"], GREY = ["#e2e8f0", "#94a3b8"];
+  function ball(c, x, y, r, col){
+    var g = c.createRadialGradient(x - r * .35, y - r * .4, r * .12, x, y, r);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(.32, col[0]); g.addColorStop(1, col[1]);
+    c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+    c.lineWidth = Math.max(2, r * .08); c.strokeStyle = col[1]; c.stroke();
+  }
+  /* balls in rows of `per`, with a little extra gap after every 5, like a ten frame */
+  function rowsWidth(per, r){ return per * (2 * r + 8) - 8 + (per > 5 ? r * .8 : 0); }
+  function ballAt(i, per, x, y, r){ var col = i % per, row = Math.floor(i / per); return [x + r + col * (2 * r + 8) + (col >= 5 ? r * .8 : 0), y + r + row * (2 * r + 8)]; }
+  function label(c, text, x, y){ c.font = "600 40px " + DIGITAL; c.fillStyle = "#334155"; c.textAlign = "center"; c.fillText(text, x, y); c.textAlign = "left"; }
+  function slice(c, cx, cy, R, from, to, fill){
+    c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, R, from, to); c.closePath();
+    c.fillStyle = fill; c.fill(); c.lineWidth = 4; c.strokeStyle = "#0f172a"; c.stroke();
+  }
+  function pie(c, cx, cy, R, n, d, fill){
+    for (var i = 0; i < d; i++) slice(c, cx, cy, R, -Math.PI / 2 + i * Math.PI * 2 / d, -Math.PI / 2 + (i + 1) * Math.PI * 2 / d, i < n ? fill : "#ffffff");
+  }
+  /* q balls inside one slice of a pie, ring by ring from the crust inward; smaller balls if they don't fit */
+  function slicePlaces(R, mid, ang, q){
+    for (var br = Math.min(24, R * .13); br >= 7; br *= .85){
+      var out = [], step = 2 * br + 6;
+      for (var rho = R - br - 12; rho >= br + 14 && out.length < q; rho -= step){
+        var fit = ang >= Math.PI * 2 - .01 ? Math.floor(Math.PI * 2 * rho / step) : Math.floor((rho * ang - 10) / step);
+        var k = Math.min(fit, q - out.length);
+        for (var j = 0; j < k; j++){ var t = mid + (j - (k - 1) / 2) * step / rho; out.push([Math.cos(t) * rho, Math.sin(t) * rho, br]); }
+      }
+      if (out.length === q) return out;
+    }
+    return null;
+  }
+  /* hundreds are flats (10 by 10), tens are rods (1 by 10), ones are small cubes; each place has its own color */
+  var PLACE = { 100:["#a5f3fc", "#0e7490"], 10:["#fed7aa", "#c2410c"], 1:["#d9f99d", "#4d7c0f"] };
+  function digitsOf(n){ return [Math.floor(n / 100), Math.floor(n / 10) % 10, n % 10]; }
+  /* how wide a number's blocks are, as so much per unit plus a fixed part */
+  function blockSpan(n){ var d = digitsOf(n), cols = Math.ceil(d[2] / 5); return [10 * d[0] + d[1] + cols, 8 * d[0] + 6 * d[1] + 5 * cols + 18 * d.filter(Boolean).length]; }
+  /* the unit size that fits the picture area (blocks get 470 across, beside the numbers, and 600 down with the key),
+     or 0 when the blocks would be too small to count */
+  function blockSize(nums, rows){
+    if (nums.some(function(n){ return n < 1 || n > 999; })) return 0;
+    var u = Math.min(13, ((600 - 150 - (rows > 2 ? 60 : 0)) / rows - 26) / 10);
+    nums.forEach(function(n){ var s = blockSpan(n); u = Math.min(u, (470 - s[1]) / s[0]); });
+    return u >= 5 ? u : 0;
+  }
+  function block(c, x, y, w, h, across, down, col){
+    c.fillStyle = col[0]; c.fillRect(x, y, w, h);
+    c.strokeStyle = col[1]; c.lineWidth = 1.2; c.beginPath();
+    for (var i = 1; i < across; i++){ c.moveTo(x + w * i / across, y); c.lineTo(x + w * i / across, y + h); }
+    for (i = 1; i < down; i++){ c.moveTo(x, y + h * i / down); c.lineTo(x + w, y + h * i / down); }
+    c.stroke(); c.lineWidth = 2.5; c.strokeRect(x, y, w, h);
+  }
+  /* one number as blocks, standing on the line at y + 10u */
+  function drawBlocks(c, n, x, y, u){
+    var d = digitsOf(n), i;
+    for (i = 0; i < d[0]; i++){ block(c, x, y, 10 * u, 10 * u, 10, 10, PLACE[100]); x += 10 * u + 8; }
+    if (d[0]) x += 18;
+    for (i = 0; i < d[1]; i++){ block(c, x, y, u, 10 * u, 1, 10, PLACE[10]); x += u + 6; }
+    if (d[1]) x += 18;
+    for (i = 0; i < d[2]; i++) block(c, x + Math.floor(i / 5) * (u + 5), y + 10 * u - (i % 5 + 1) * (u + 3) + 3, u, u, 1, 1, PLACE[1]);
+  }
+  /* the key under the blocks: what each shape is worth */
+  function blockKey(c, cx, y){
+    var u = 6, x = cx - 200;
+    c.font = "600 36px " + DIGITAL; c.fillStyle = "#334155"; c.textAlign = "left";
+    block(c, x, y - 10 * u + 4, 10 * u, 10 * u, 10, 10, PLACE[100]); x += 10 * u + 14; c.fillStyle = "#334155"; c.fillText("= 100", x, y); x += 150;
+    block(c, x, y - 10 * u + 4, u + 2, 10 * u, 1, 10, PLACE[10]); x += u + 16; c.fillStyle = "#334155"; c.fillText("= 10", x, y); x += 120;
+    block(c, x, y - 12, 14, 14, 1, 1, PLACE[1]); x += 28; c.fillStyle = "#334155"; c.fillText("= 1", x, y);
+  }
+  function drawPic(c, p, X, Y, Wd, Hd){
+    var r, x0, y0;
+    if (p.kind === "blocks" || p.kind === "blockrows"){
+      var rowsN = p.kind === "blocks" ? 2 : p.rows, nums = p.kind === "blocks" ? p.nums : [p.n], u = blockSize(nums, rowsN);
+      var rowH = 10 * u + 26, total = rowsN * rowH + 110 + (p.kind === "blockrows" ? 50 : 0);
+      y0 = Y + Math.max(0, (Hd - total) / 2); x0 = X + 20;
+      for (var bi = 0; bi < rowsN; bi++){
+        var num = p.kind === "blocks" ? p.nums[bi] : p.n, by = y0 + bi * rowH;
+        c.font = "700 46px " + DIGITAL; c.fillStyle = "#0f172a"; c.textAlign = "right";
+        c.fillText(String(num), x0 + 140, by + 10 * u / 2 + 16);
+        if (p.kind === "blocks" && bi === 1){ c.textAlign = "left"; c.fillText(p.op, x0, by + 10 * u / 2 + 16); }
+        c.textAlign = "left";
+        drawBlocks(c, num, x0 + 170, by, u);
+      }
+      var ky = y0 + rowsN * rowH + 80;
+      if (p.kind === "blockrows"){ label(c, p.rows + " groups of " + p.n, X + Wd / 2, y0 + rowsN * rowH + 24); ky += 50; }
+      blockKey(c, X + Wd / 2, Math.min(ky, Y + Hd - 6));
+    } else if (p.kind === "add"){
+      /* the first number's balls on top, the second's below, in rows of 5, each with its number beside it */
+      var per = 5, ra = Math.ceil(p.a / per), rb = Math.ceil(p.b / per);
+      r = Math.min(40, (Wd - 150 - 32) / 10, ((Hd - 90) / (ra + rb) - 8) / 2);
+      var gw = rowsWidth(Math.min(per, Math.max(p.a, p.b)), r), ha = ra * (2 * r + 8), hb = rb * (2 * r + 8);
+      x0 = X + (Wd - gw - 120) / 2; y0 = Y + (Hd - ha - hb - 70) / 2;
+      var yb = y0 + ha + 70;
+      for (var i = 0; i < p.a; i++){ var q1 = ballAt(i, per, x0, y0, r); ball(c, q1[0], q1[1], r, BLUE); }
+      for (i = 0; i < p.b; i++){ var q2 = ballAt(i, per, x0, yb, r); ball(c, q2[0], q2[1], r, ORANGE); }
+      c.font = "700 64px " + DIGITAL; c.fillStyle = "#0f172a"; c.textAlign = "center"; c.fillText("+", x0 + gw / 2, y0 + ha + 52);
+      c.font = "700 54px " + DIGITAL; c.textAlign = "left";
+      c.fillText(String(p.a), x0 + gw + 34, y0 + ha / 2 + 18); c.fillText(String(p.b), x0 + gw + 34, yb + hb / 2 + 18);
+    } else if (p.kind === "take"){
+      var per2 = 5, rows = Math.ceil(p.a / per2);
+      r = Math.min(40, (Wd - 20) / 10 - 4, ((Hd - 80) / rows - 8) / 2);
+      var tw = rowsWidth(per2, r), th = rows * (2 * r + 8);
+      x0 = X + (Wd - tw) / 2; y0 = Y + (Hd - th - 60) / 2;
+      for (var k = 0; k < p.a; k++){
+        var q3 = ballAt(k, per2, x0, y0, r), gone = k >= p.a - p.b;
+        ball(c, q3[0], q3[1], r, gone ? GREY : BLUE);
+        if (gone){ c.strokeStyle = "#ef4444"; c.lineWidth = Math.max(4, r * .18); c.lineCap = "round"; c.beginPath();
+          c.moveTo(q3[0] - r * .7, q3[1] - r * .7); c.lineTo(q3[0] + r * .7, q3[1] + r * .7); c.moveTo(q3[0] + r * .7, q3[1] - r * .7); c.lineTo(q3[0] - r * .7, q3[1] + r * .7); c.stroke(); }
+      }
+      label(c, "Take away " + p.b, X + Wd / 2, y0 + th + 46);
+    } else if (p.kind === "times"){
+      r = Math.min(40, (Wd - 40) / p.cols / 2 - 5, (Hd - 80) / p.rows / 2 - 6);
+      var mw = rowsWidth(p.cols, r), mh = p.rows * (2 * r + 12) - 4;
+      x0 = X + (Wd - mw) / 2; y0 = Y + (Hd - mh - 60) / 2;
+      for (var row = 0; row < p.rows; row++){
+        var ry = y0 + row * (2 * r + 12);
+        c.fillStyle = "#e0f2fe"; c.strokeStyle = "#7dd3fc"; c.lineWidth = 2; c.beginPath();       /* each group sits on its own tray */
+        if (c.roundRect) c.roundRect(x0 - 8, ry - 3, mw + 16, 2 * r + 6, r); else c.rect(x0 - 8, ry - 3, mw + 16, 2 * r + 6);
+        c.fill(); c.stroke();
+        for (var col = 0; col < p.cols; col++){ var q4 = ballAt(col, p.cols, x0, ry, r); ball(c, q4[0], q4[1], r, row % 2 ? ORANGE : BLUE); }
+      }
+      label(c, p.rows + (p.rows === 1 ? " group of " : " groups of ") + p.cols, X + Wd / 2, y0 + mh + 46);
+    } else if (p.kind === "share"){
+      var each = Math.floor(p.a / p.b), left = p.a - each * p.b, R = Math.min(Wd - 20, Hd - (left ? 150 : 90)) / 2;
+      var cx = X + Wd / 2, cy = Y + 10 + R, ang = Math.PI * 2 / p.b, spots = slicePlaces(R, 0, ang, each);
+      for (var s = 0; s < p.b; s++){
+        var from = -Math.PI / 2 + s * ang;
+        slice(c, cx, cy, R, from, from + ang, s % 2 ? "#cffafe" : "#a5f3fc");
+      }
+      for (s = 0; s < p.b; s++){
+        var mid = -Math.PI / 2 + (s + .5) * ang;
+        if (spots) spots.forEach(function(sp){ var cs = Math.cos(mid), sn = Math.sin(mid); ball(c, cx + sp[0] * cs - sp[1] * sn, cy + sp[0] * sn + sp[1] * cs, sp[2], ORANGE); });
+        else { c.font = "700 " + Math.round(R * .2) + "px " + DIGITAL; c.fillStyle = "#0f172a"; c.textAlign = "center"; c.fillText(String(each), cx + Math.cos(mid) * R * .62, cy + Math.sin(mid) * R * .62 + R * .07); c.textAlign = "left"; }
+      }
+      var ly = cy + R + 46;
+      if (left){
+        var lr = 18, lx = cx - (left * (2 * lr + 8) - 8) / 2 - 90;
+        label(c, "Left over:", lx + 10, ly + 10);
+        for (var o = 0; o < left; o++) ball(c, lx + 110 + lr + o * (2 * lr + 8), ly, lr, GREY);
+        ly += 54;
+      }
+      label(c, p.a + " shared into " + p.b + " equal parts", cx, ly);
+    } else if (p.kind === "frac"){
+      var PR = Math.min((Wd - 100) / 4, (Hd - 90) / 2), py = Y + (Hd - 2 * PR - 60) / 2 + PR, p1 = X + Wd / 2 - PR - 50, p2 = X + Wd / 2 + PR + 50;
+      pie(c, p1, py, PR, p.parts[0][0], p.parts[0][1], "#22d3ee");
+      pie(c, p2, py, PR, p.parts[1][0], p.parts[1][1], "#fb923c");
+      c.font = "700 72px " + DIGITAL; c.fillStyle = "#0f172a"; c.textAlign = "center"; c.fillText(p.op, X + Wd / 2, py + 24); c.textAlign = "left";
+      label(c, p.parts[0][0] + "/" + p.parts[0][1], p1, py + PR + 50); label(c, p.parts[1][0] + "/" + p.parts[1][1], p2, py + PR + 50);
+    }
+  }
+
+  function drawBoard(){
+    var c = boardCanvas.getContext("2d"), W = c.canvas.width, H = c.canvas.height;
+    var n = board.lines.length, size = n > 6 ? 50 : n > 5 ? 56 : n > 4 ? 60 : 66, pic = picFor(board.lines);
+    /* a picture or long work makes the board bigger, and the robot steps aside so nothing hides behind it */
+    c.font = "700 " + size + "px " + DIGITAL;
+    var widest = Math.max.apply(null, board.lines.map(function(l){ return c.measureText(l).width; }));
+    board.big = !!pic || n > 4 || widest > W * (tallStage ? .94 : .60) - 50;
+    c.fillStyle = "#f8fafc"; c.fillRect(0, 0, W, H);
+    c.fillStyle = "#dbe4ee";                                          /* a faint dot grid, like a smart board */
+    for (var gx = 30; gx < W; gx += 44) for (var gy = 150; gy < H; gy += 44){ c.beginPath(); c.arc(gx, gy, 2.4, 0, Math.PI * 2); c.fill(); }
+    c.fillStyle = "#0f172a"; c.fillRect(0, 0, W, 112);                /* the header bar, like the robot's visor */
+    c.fillStyle = "#22d3ee"; c.fillRect(0, 108, W, 6);
+    /* the writing starts right of the robot's raised hand, or at the left when the robot isn't in front of the board
+       (it stepped aside, or the board hangs above it); with a picture, the writing takes the left half; long lines shrink to fit */
+    var x = W * (tallStage || board.big ? .05 : .40), room = (pic ? W * .47 : W - 50) - x;
+    c.font = "34px " + PIXEL; c.fillStyle = "#67e8f9"; c.shadowColor = "#22d3ee"; c.shadowBlur = 18;
+    c.fillText(board.title.toUpperCase(), x, 74, W - x - 40); c.shadowBlur = 0;
+    if (widest > room) size = Math.max(36, Math.floor(size * room / widest));
+    /* a line still too long breaks onto the next line (never running under the picture), and everything shrinks until it fits */
+    var shown = board.lines.slice(0, 7), rows;
+    for (;;){
+      c.font = "700 " + size + "px " + DIGITAL; rows = [];
+      shown.forEach(function(line, i){
+        var words = line.split(" "), cur = "";
+        words.forEach(function(w){
+          var next = cur ? cur + " " + w : w;
+          if (cur && c.measureText(next).width > room){ rows.push({ t:cur, last:i === shown.length - 1 && shown.length > 1 }); cur = w; } else cur = next;
+        });
+        rows.push({ t:cur, last:i === shown.length - 1 && shown.length > 1 });
+      });
+      if (210 + (rows.length - 1) * (size + 22) <= H - 30 || size <= 24) break;
+      size -= 2;
+    }
+    rows.forEach(function(row, i){
+      c.fillStyle = row.last ? "#0891b2" : "#0f172a";
+      c.fillText(row.t, x, 210 + i * (size + 22), room);
+    });
+    if (pic) drawPic(c, pic, W * .50, 140, W * .47, H - 160);
+    if (boardTex) boardTex.needsUpdate = true;
+  }
+  function showOnBoard(title, lines){ board = { title: title, lines: lines }; drawBoard(); }
+  drawBoard();
+  /* draw again once the board's fonts have loaded */
+  (function(){
+    var link = $("fonts");
+    function go(){ if (!document.fonts) return; Promise.all([document.fonts.load("700 60px 'Chakra Petch'"), document.fonts.load("34px 'Press Start 2P'")]).then(drawBoard, function(){}); }
+    if (link.media === "all") go(); else link.addEventListener("load", function(){ setTimeout(go, 0); });
+  })();
+
+  /* ---------------- math: questions for each grade, and working out what the kid asks ---------------- */
+  function rnd(a, b){ return a + Math.floor(Math.random() * (b - a + 1)); }
+  function fmt(n){ return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : String(Math.round(n * 1000) / 1000); }
+  function gcd(a, b){ return b ? gcd(b, a % b) : Math.abs(a); }
+  function makeQuestion(){
+    var g = mem.grade === null ? 1 : mem.grade, a, b, q;
+    if (g === 0){ a = rnd(1, 5); b = rnd(0, 5); q = { text: a + " + " + b, answer: a + b, steps: [a + " + " + b + " = ?", "Start at " + a + " and count on " + b + ".", a + " + " + b + " = " + (a + b)] }; }
+    else if (g === 1){
+      if (Math.random() < .5){ a = rnd(2, 12); b = rnd(1, 8); q = { text: a + " + " + b, answer: a + b, steps: [a + " + " + b + " = ?", "Count on " + b + " from " + a + ".", a + " + " + b + " = " + (a + b)] }; }
+      else { a = rnd(8, 20); b = rnd(1, a - 1 > 9 ? 9 : a - 1); q = { text: a + " − " + b, answer: a - b, steps: [a + " − " + b + " = ?", "Count back " + b + " from " + a + ".", a + " − " + b + " = " + (a - b)] }; }
+    } else if (g === 2){
+      if (Math.random() < .5){ a = rnd(12, 60); b = rnd(11, 39);
+        q = { text: a + " + " + b, answer: a + b, steps: [a + " + " + b + " = ?", "Tens: " + (a - a % 10) + " + " + (b - b % 10) + " = " + (a - a % 10 + b - b % 10), "Ones: " + (a % 10) + " + " + (b % 10) + " = " + (a % 10 + b % 10), "Together: " + (a + b)] }; }
+      else { a = rnd(40, 99); b = rnd(11, a - 10);
+        q = { text: a + " − " + b, answer: a - b, steps: [a + " − " + b + " = ?", "Take away " + (b - b % 10) + ": " + a + " − " + (b - b % 10) + " = " + (a - (b - b % 10)), "Take away " + (b % 10) + " more: " + (a - b), a + " − " + b + " = " + (a - b)] }; }
+    } else if (g === 3){ a = rnd(2, 10); b = rnd(2, 10); q = { text: a + " × " + b, answer: a * b, steps: [a + " × " + b + " = ?", a + " groups of " + b, Array(Math.min(a, 6)).fill(b).join(" + ") + (a > 6 ? " + ..." : ""), a + " × " + b + " = " + (a * b)] }; }
+    else if (g === 4){
+      if (Math.random() < .5){ a = rnd(12, 49); b = rnd(3, 9); var t = a - a % 10, o = a % 10;
+        q = { text: a + " × " + b, answer: a * b, steps: [a + " × " + b + " = ?", t + " × " + b + " = " + (t * b), o + " × " + b + " = " + (o * b), (t * b) + " + " + (o * b) + " = " + (a * b)] }; }
+      else { b = rnd(3, 9); var ans = rnd(6, 25); a = b * ans;
+        q = { text: a + " ÷ " + b, answer: ans, steps: [a + " ÷ " + b + " = ?", "How many groups of " + b + " make " + a + "?", b + " × " + ans + " = " + a, a + " ÷ " + b + " = " + ans] }; }
+    } else {
+      if (Math.random() < .5){ var d = pick([4, 5, 6, 8, 10]); a = rnd(1, d - 2); b = rnd(1, d - a - 1); var s = a + b, gg = gcd(s, d);
+        q = { text: a + "/" + d + " + " + b + "/" + d, answer: s / d, steps: [a + "/" + d + " + " + b + "/" + d + " = ?", "Same bottom number, so add the tops:", a + " + " + b + " = " + s, "= " + s + "/" + d + (gg > 1 ? " = " + (s / gg) + "/" + (d / gg) : "")] }; }
+      else { a = rnd(10, 90) / 10; b = rnd(5, 95) / 100;
+        q = { text: fmt(a) + " + " + fmt(b), answer: a + b, steps: [fmt(a) + " + " + fmt(b) + " = ?", "Line up the dots:", "  " + a.toFixed(2) + " + " + b.toFixed(2), "= " + fmt(a + b)] }; }
+    }
+    return q;
+  }
+  function askQuestion(prefix){
+    state.q = makeQuestion();
+    showOnBoard("Question", [state.q.text + " = ?"]);
+    say((prefix ? prefix + " " : "") + "What is " + state.q.text.replace("−", "minus").replace("×", "times").replace("÷", "divided by") + "?");
+  }
+
+  /* words to numbers and signs, then a small safe calculator that writes each step */
+  var WORDNUM = { zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14,
+    fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19, twenty:20, thirty:30, forty:40, fifty:50, sixty:60, seventy:70, eighty:80, ninety:90, hundred:100 };
+  function normalize(t){
+    t = " " + t.toLowerCase().replace(/,/g, "") + " ";
+    t = t.replace(/\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)\b/g, function(w){ return WORDNUM[w]; });
+    t = t.replace(/(\d+)\s+(\d)\b/g, function(m, a, b){ return (+a % 10 === 0 && +a >= 20) ? String(+a + +b) : m; });     /* "twenty five" → 25 */
+    t = t.replace(/(\d+(?:\.\d+)?)\s*(?:percent|%)\s*of/g, "$1 %of ");
+    t = t.replace(/multiplied by|times|\bx\b|×|\*/g, " * ").replace(/divided by|over|÷|\//g, " / ").replace(/plus|add|and|\+/g, " + ").replace(/minus|take away|subtract|−|-/g, " - ");
+    return t;
+  }
+  /* showing the work for one sum, the way kids learn it in school (not just the answer) */
+  function isInt(n){ return Math.abs(n - Math.round(n)) < 1e-9; }
+  function decimals(n){ var s = fmt(n), i = s.indexOf("."); return i < 0 ? 0 : s.length - i - 1; }
+  function places(n){                                   /* 345 → [300, 40, 5] */
+    var s = String(Math.round(n)), out = [];
+    for (var i = 0; i < s.length; i++){ var d = +s[i]; if (d) out.push(d * Math.pow(10, s.length - 1 - i)); }
+    return out.length ? out : [0];
+  }
+  function countList(from, by, n){ var out = []; for (var i = 1; i <= n; i++) out.push(fmt(from + by * i)); return out.join(", "); }
+  function explain(a, op, b){
+    var S = { "+":"+", "-":"−", "*":"×", "/":"÷" }[op], A = fmt(a), B = fmt(b), steps = [A + " " + S + " " + B + " = ?"], r;
+    if (!(isInt(a) && isInt(b))){                       /* decimals */
+      if (op === "+" || op === "-"){
+        var dp = Math.max(decimals(a), decimals(b)); r = op === "+" ? a + b : a - b;
+        /* digit-wide spaces (U+2007) keep the columns lined up */
+        var wide = Math.max(a.toFixed(dp).length, b.toFixed(dp).length, r.toFixed(dp).length), col = function(s){ return Array(wide - s.length + 1).join(" ") + s; };
+        steps.push("Line up the decimal points:", "  " + col(a.toFixed(dp)), (op === "+" ? "+" : "−") + " " + col(b.toFixed(dp)), "= " + col(r.toFixed(dp)));
+        return steps;
+      }
+      if (op === "*"){
+        var da = decimals(a), db = decimals(b), ia = Math.round(a * Math.pow(10, da)), ib = Math.round(b * Math.pow(10, db));
+        steps.push("Pretend there are no dots: " + ia + " × " + ib + " = " + (ia * ib), "Put back " + (da + db) + " decimal place" + (da + db > 1 ? "s" : "") + ": " + fmt(a * b));
+        return steps;
+      }
+      steps.push(A + " ÷ " + B + " = " + fmt(a / b)); return steps;
+    }
+    if (op === "+"){
+      r = a + b;
+      if (b <= 10 && a <= 20){ steps.push("Start at " + A + " and count on " + B + ":", countList(a, 1, b)); }
+      else if (r < 10000){
+        var pa = places(a), pb = places(b), sums = [], labels = { 1000:"Thousands", 100:"Hundreds", 10:"Tens", 1:"Ones" };
+        [1000, 100, 10, 1].forEach(function(p){
+          var x = Math.floor(a / p) % 10 * p, y = Math.floor(b / p) % 10 * p;
+          if (x || y){ steps.push(labels[p] + ": " + x + " + " + y + " = " + (x + y)); sums.push(x + y); }
+        });
+        if (sums.length > 1) steps.push("Put them together: " + sums.join(" + ") + " = " + r);
+      }
+      steps.push(A + " + " + B + " = " + fmt(r)); return steps;
+    }
+    if (op === "-"){
+      r = a - b;
+      if (b > a){ steps.push(B + " is bigger than " + A + ", so the answer goes below zero."); }
+      else if (b <= 10 && a <= 20){ steps.push("Start at " + A + " and count back " + B + ":", countList(a, -1, b)); }
+      else {
+        var left = a;
+        places(b).slice(0, 4).forEach(function(p){ steps.push("Take away " + p + ": " + left + " − " + p + " = " + (left - p)); left -= p; });
+      }
+      steps.push(A + " − " + B + " = " + fmt(r)); return steps;
+    }
+    if (op === "*"){
+      r = a * b;
+      var big = Math.max(a, b), small = Math.min(a, b);
+      if (small === 0){ steps.push("Anything times 0 is 0."); }
+      else if (small === 1){ steps.push("Anything times 1 stays the same."); }
+      else if (big <= 10){
+        if (small <= 5) steps.push(small + " groups of " + big + ":", Array(small).fill(big).join(" + ") + " = " + r);
+        else steps.push("Count by " + big + ", " + small + " times:", countList(0, big, small));
+      } else {
+        /* break a number into tens and ones, times each part, then add */
+        var split = small <= 12 ? big : small, other = small <= 12 ? small : big, parts = places(split).slice(0, 3);
+        steps.push(fmt(split) + " = " + parts.join(" + ") + ", so do each part:");
+        parts.forEach(function(p){ steps.push(p + " × " + other + " = " + p * other); });
+        steps.push("Add them up: " + parts.map(function(p){ return p * other; }).join(" + ") + " = " + r);
+      }
+      steps.push(A + " × " + B + " = " + fmt(r)); return steps;
+    }
+    /* dividing */
+    var q = Math.floor(a / b), rem = a - q * b;
+    if (b <= 12 && q <= 12){
+      steps.push("How many groups of " + B + " fit in " + A + "?", "Count by " + B + "s: " + countList(0, b, q));
+      if (rem) steps.push(A + " − " + (b * q) + " = " + rem + " left over");
+      steps.push("How many numbers did we count? That's how many groups!");
+    } else {
+      /* take away big groups of the number until what's left is too small (like long division) */
+      var leftover = a, groups = [];
+      while (leftover >= b && groups.length < 4){
+        var k = 1; while (b * k * 10 <= leftover) k *= 10;
+        var m = Math.floor(leftover / (b * k)) * k;
+        steps.push("Take away " + m + " groups of " + B + " (" + (b * m) + "): " + leftover + " − " + (b * m) + " = " + (leftover - b * m));
+        leftover -= b * m; groups.push(m);
+      }
+      if (groups.length > 1) steps.push("Count the groups: " + groups.join(" + ") + " = " + q);
+    }
+    steps.push(rem ? A + " ÷ " + B + " = " + q + " R " + rem : A + " ÷ " + B + " = " + q);
+    return steps;
+  }
+  function explainPercent(p, of){
+    var one = of / 100;
+    return [fmt(p) + "% of " + fmt(of) + " = ?", fmt(p) + "% means " + fmt(p) + " out of every 100.", "1% of " + fmt(of) + " = " + fmt(of) + " ÷ 100 = " + fmt(one),
+      fmt(p) + "% of " + fmt(of) + " = " + fmt(p) + " × " + fmt(one) + " = " + fmt(one * p)];
+  }
+
+  function calculate(text){
+    var t = normalize(text);
+    var tokens = t.match(/\d+(?:\.\d+)?|%of|[+\-*/]/g);
+    if (!tokens || tokens.length < 3 || !/\d/.test(tokens[0])) return null;
+    /* two fractions added or taken away ("3/4 + 1/8") are worked out as fractions */
+    var fr = tokens.join(" ").match(/^(\d+) \/ (\d+) ([+\-]) (\d+) \/ (\d+)$/);
+    if (fr && +fr[2] && +fr[5]){
+      var n1 = +fr[1], d1 = +fr[2], n2 = +fr[4], d2 = +fr[5], op = fr[3] === "+" ? "+" : "−";
+      var den = d1 / gcd(d1, d2) * d2, m1 = n1 * den / d1, m2 = n2 * den / d2, top = fr[3] === "+" ? m1 + m2 : m1 - m2, k = gcd(top, den) || 1;
+      var ftext = top === 0 ? "0" : (top / k) + "/" + (den / k);
+      var fsteps = [n1 + "/" + d1 + " " + op + " " + n2 + "/" + d2 + " = ?"];
+      if (d1 !== d2) fsteps.push("Same bottom number: " + m1 + "/" + den + " " + op + " " + m2 + "/" + den);
+      fsteps.push("Work out the tops, keep the bottom: (" + m1 + " " + op + " " + m2 + ")/" + den);
+      if (k > 1 && top) fsteps.push("= " + top + "/" + den + ", then simplify");
+      fsteps.push("= " + ftext);
+      return { answer: top / den, answerText: ftext, steps: fsteps };
+    }
+    var nums = [], ops = [];
+    for (var i = 0; i < tokens.length; i++){
+      if (i % 2 === 0){ if (!/^\d/.test(tokens[i])) return null; nums.push(parseFloat(tokens[i])); }
+      else { if (!/^(%of|[+\-*/])$/.test(tokens[i])) return null; ops.push(tokens[i]); }
+    }
+    if (nums.length !== ops.length + 1) return null;
+    var sign = { "+":"+", "-":"−", "*":"×", "/":"÷" };
+    var show = function(){ var s = fmt(nums[0]); for (var j = 0; j < ops.length; j++) s += (ops[j] === "%of" ? "% of " : " " + sign[ops[j]] + " ") + fmt(nums[j + 1]); return s; };
+    /* one sum: show the work */
+    if (ops.length === 1){
+      if (ops[0] === "/" && nums[1] === 0) return { error: true };
+      var x = nums[0], y = nums[1];
+      if (ops[0] === "%of") return { answer: x / 100 * y, steps: explainPercent(x, y) };
+      var left = ops[0] === "/" && isInt(x) && isInt(y) ? x % y : 0;
+      return { answer: { "+": x + y, "-": x - y, "*": x * y, "/": x / y }[ops[0]], steps: explain(x, ops[0], y),
+        answerText: left ? Math.floor(x / y) + " remainder " + left + " (or " + fmt(x / y) + ")" : "",
+        rForm: left ? Math.floor(x / y) + " R " + left : "", div: ops[0] === "/" ? y : 0 };
+    }
+    /* a longer one: times and divide first, then plus and minus, one step per line */
+    var steps = [show()];
+    if (ops.some(function(o){ return o === "+" || o === "-"; }) && ops.some(function(o){ return o !== "+" && o !== "-"; })) steps.push("Times and divide come first.");
+    /* percent of, times and divide first, then plus and minus */
+    [["%of","*","/"],["+","-"]].forEach(function(level){
+      var j = 0;
+      while (j < ops.length){
+        if (level.indexOf(ops[j]) < 0){ j++; continue; }
+        var a = nums[j], b = nums[j + 1], r, line;
+        if (ops[j] === "%of"){ r = a / 100 * b; line = fmt(a) + "% of " + fmt(b) + " = " + fmt(a / 100) + " × " + fmt(b) + " = " + fmt(r); }
+        else if (ops[j] === "*"){ r = a * b; line = fmt(a) + " × " + fmt(b) + " = " + fmt(r); }
+        else if (ops[j] === "/"){ if (b === 0) return { error: true }; r = a / b; line = fmt(a) + " ÷ " + fmt(b) + " = " + fmt(r); }
+        else if (ops[j] === "+"){ r = a + b; line = fmt(a) + " + " + fmt(b) + " = " + fmt(r); }
+        else { r = a - b; line = fmt(a) + " − " + fmt(b) + " = " + fmt(r); }
+        nums.splice(j, 2, r); ops.splice(j, 1);
+        if (ops.length) steps.push(line + "   →   " + show()); else steps.push(line);
+      }
+    });
+    return { answer: nums[0], steps: steps };
+  }
+  function readNumber(text){
+    var t = normalize(text).trim();
+    var f = t.match(/^-?\s*(\d+)\s*\/\s*(\d+)$/) || t.match(/(?:^|\s)(\d+)\s*\/\s*(\d+)(?:\s|$)/);
+    if (f && +f[2] !== 0) return +f[1] / +f[2];
+    var n = t.match(/-?\d+(?:\.\d+)?/);
+    return n ? parseFloat(n[0]) : null;
+  }
+
+  /* ---------------- greetings by the time on this computer (never "good night") ---------------- */
+  function greeting(){
+    var h = new Date().getHours(), n = mem.name;
+    if (h < 12) return "Good morning, " + n + "! Ready to learn?";
+    if (h < 17) return "Good afternoon, " + n + "! How is your day going?";
+    return "Good evening, " + n + "! How are you tonight? Did you have a great day today?";
+  }
+
+  /* ---------------- the conversation ---------------- */
+  function cleanName(t){
+    var m = t.replace(/[.!?]/g, " ").match(/(?:my name is|i am|i'm|im|it's|its|call me|you can call me|name is|your name is|call you|i'll call you|ill call you|i will call you)\s+([a-z][a-z'-]*(?:\s+[a-z][a-z'-]*)?)/i);
+    var w = (m ? m[1] : t.replace(/[^a-z' -]/gi, " ").trim().split(/\s+/).slice(0, 2).join(" ")).trim();
+    if (!w || w.length > 20) return "";
+    return w.split(/\s+/).map(function(x){ return x.charAt(0).toUpperCase() + x.slice(1).toLowerCase(); }).join(" ");
+  }
+  function readGrade(t){
+    t = t.toLowerCase();
+    if (/\bk\b|kinder/.test(t)) return 0;
+    var words = { first:1, second:2, third:3, fourth:4, fifth:5, one:1, two:2, three:3, four:4, five:5 };
+    var m = t.match(/\b([1-5])(?:st|nd|rd|th)?\b/) || t.match(/\b(first|second|third|fourth|fifth|one|two|three|four|five)\b/);
+    if (!m) return null;
+    return /\d/.test(m[1]) ? +m[1] : words[m[1]];
+  }
+
+  /* the robot never starts quizzing on its own: it asks what the kid would like to do */
+  var ASK_MENU = "What would you like to do? Do you have a question for me, or would you like help with your homework? I can also quiz you!";
+  function answerText(q){ return q.answerText || fmt(q.answer); }
+  function startQuiz(prefix){ state.quiz = true; state.pending = ""; mood("excited", 1.6); askQuestion(prefix); }
+  function stopQuiz(){ state.quiz = false; state.q = null; state.streak = 0; state.pending = ""; showOnBoard("ROBO MATH", ["Ask me math!", "Like: 12 times 8", "or: 15 plus 27"]); }
+  /* one question at a time: after each answer the kid chooses whether to keep going */
+  function offerAnother(text){ state.pending = "another"; say(text + " Want another one?"); }
+
+  /* homework help: the robot shows the work but leaves the last step as "?", and the kid types the final answer */
+  function hideAnswer(steps, forms){
+    var out = [steps[0]];
+    for (var i = 1; i < steps.length; i++){
+      var line = steps[i], end = line.replace(/\s+$/, "");
+      forms.forEach(function(f){
+        /* only a whole number at the end of the line ("= 56", "48, 56"), never the end of a bigger one ("156", "/8") */
+        if (f && end.length > f.length && end.slice(-f.length) === f && !/[\d.\/]/.test(end.charAt(end.length - f.length - 1))) end = end.slice(0, -f.length) + "?";
+      });
+      if (end !== steps[0]) out.push(end);
+    }
+    return out;
+  }
+  function readHwAnswer(text, hw){
+    var r = normalize(text).match(/(\d+)\s*(?:r|rem|remainder)\s*(\d+)/);
+    if (r && hw.div) return +r[1] + +r[2] / hw.div;
+    return readNumber(text);
+  }
+  function revealHw(){
+    var h = state.hw; state.hw = null; state.pending = "more"; state.streak = 0;
+    showOnBoard("Here's the answer", h.steps); mood("happy", 2);
+    say("No problem! The answer is " + h.text + ". Look at the board to see each step. Do you have another one?");
+  }
+  function stopHomework(){ state.homework = false; state.hw = null; }
+  /* switching to something new ends whatever the kid was doing before */
+  function leaveModes(){ state.quiz = false; state.q = null; state.streak = 0; state.wantFive = false; $("hint").style.display = "none"; stopHomework(); }
+
+  function hear(raw){
+    var text = String(raw || "").trim();
+    if (!text) return;
+    addMsg("me", text);
+    respond(text, text.toLowerCase());
+  }
+
+  function respond(text, t){
+    if (state.phase === "askName"){
+      if (/^(hi|hello|hey|yo|good (morning|afternoon|evening))[!. ]*$/.test(t)){ robot.wave = 2.5; mood("happy", 2); say("Hi! What's your first name or a nickname?"); return; }
+      var nm = cleanName(text);
+      if (!nm){ mood("confused", 2); say("Hmm, what should I call you? Tell me your first name or a nickname."); return; }
+      mem.name = nm; save(); state.phase = "askGrade"; scores(); mood("happy", 2.5);
+      showOnBoard("Hello, " + nm + "!", ["What grade are you in?", "K, 1, 2, 3, 4 or 5"]);
+      say("Nice to meet you, " + nm + "! What grade are you in? You can say Kindergarten, or 1st to 5th grade.");
+      return;
+    }
+    if (state.phase === "askGrade"){
+      var g = readGrade(text);
+      if (g === null){ mood("confused", 2); say("I didn't catch that. What grade are you in? Kindergarten, or 1st to 5th grade?"); return; }
+      mem.grade = g; save(); state.phase = "chat"; scores(); mood("happy", 2.2);
+      var later = new Date().getHours() >= 12;              /* the afternoon and evening greetings ask how the kid is */
+      state.pending = later ? "howAreYou" : "";
+      showOnBoard("Hi, " + mem.name + "!", ["Ask me a math question,", "or get homework help."]);
+      say(GRADES[g] + "! Got it. " + greeting() + (later ? "" : " " + ASK_MENU));
+      return;
+    }
+
+    /* changing the kid's name: tap the name at the top, or say "call me ...", "my name is ..." or "change my name" */
+    if (state.awaitNewName){
+      state.awaitNewName = false;
+      var nn = cleanName(text);
+      if (nn){ mem.name = nn; save(); scores(); mood("happy", 2.2); say("Got it! I'll call you " + nn + " from now on."); return; }
+    }
+    var callMe = t.match(/(?:change my name to|my new name is|my nickname is|call me|my name is)\s+([a-z][a-z'-]*(?:\s+[a-z][a-z'-]*)?)/i);
+    if (callMe){
+      var cn = cleanName(callMe[1]);
+      if (cn){ mem.name = cn; save(); scores(); mood("happy", 2.2); say("Got it! I'll call you " + cn + " from now on."); return; }
+    }
+    if (/change my (nick)?name|new (nick)?name for me|that'?s not my name|wrong name/.test(t)){
+      state.awaitNewName = true; mood("happy", 1.5);
+      say("Sure! What should I call you now? Type your first name or a nickname."); return;
+    }
+
+    /* the high five, by tapping the robot's hand or the suggestion */
+    if (state.wantFive && /high ?five|✋/.test(t)){ giveHighFive(); return; }
+    if (/high ?(five|5)|\bhi ?(five|5)\b|gimme five|give me five|up top|✋/.test(t)){ requestHighFive(); return; }
+
+    /* naming the robot */
+    if (state.awaitBotName){
+      var bn = cleanName(text);
+      state.awaitBotName = false;
+      if (bn){ mem.botName = bn; save(); mood("love", 2.5); say("Thank you! My name is " + bn + " now. I love it!"); return; }
+    }
+    var named = t.match(/(?:your name is|i(?:'ll| will)? call you|call you)\s+([a-z][a-z'-]*)/i);
+    if (named){ mem.botName = cleanName(named[1]); save(); state.awaitBotName = false; mood("love", 2.5); say("Thank you! My name is " + mem.botName + " now. I love it!"); return; }
+    if (/what('?s| is) your name|who are you|do you have a name/.test(t)){
+      state.pending = "";
+      if (mem.botName){ mood("happy", 2); say("My name is " + mem.botName + "! You gave me that name, and I love it."); }
+      else { state.awaitBotName = true; mood("thinking", 2); say("I don't have a name yet. Give me a name and I'll use it!"); }
+      return;
+    }
+    if (/what('?s| is) my name|do you (know|remember) my name/.test(t)){ mood("happy", 2); say("Your name is " + mem.name + "! I remembered."); return; }
+
+    /* changing grade */
+    if (/grade/.test(t) && readGrade(t) !== null && !/[+\-*/×÷]/.test(t)){
+      mem.grade = readGrade(t); save(); scores();
+      if (state.quiz){ state.q = null; askQuestion("Got it, " + GRADES[mem.grade] + "!"); }
+      else { mood("happy", 2); say("Got it, " + GRADES[mem.grade] + "! " + ASK_MENU); }
+      return;
+    }
+
+    /* during a quiz: a hint, the answer with every step, or stopping */
+    if (state.q){
+      if (/hint|clue/.test(t)){
+        var st = state.q.steps; showOnBoard("Hint", st.slice(0, Math.max(1, st.length - 1))); mood("thinking", 1.6);
+        say("Here's a hint! The first steps are on the board. What's your answer?"); return;
+      }
+      if (/show me|how do (i|you)|don'?t know|give up|tell me the answer|no idea/.test(t)){
+        var sq = state.q; state.q = null; state.streak = 0;
+        showOnBoard("Here's how", sq.steps); mood("happy", 2);
+        offerAnother("No problem! The answer is " + answerText(sq) + ". Look at the board to see each step."); return;
+      }
+    }
+    if (state.quiz && /stop|quit|no more|something else|i'?m done|that'?s enough/.test(t)){
+      stopQuiz(); leaveModes(); mood("happy", 2); say("Okay! Great practice, " + mem.name + ". " + ASK_MENU); return;
+    }
+
+    /* during homework help: a hint, or the answer when the kid asks for it */
+    if (state.hw){
+      if (/hint|clue/.test(t)){ mood("thinking", 1.6); say("Look at the line with the question mark. Work out just that step, and that's your answer!"); return; }
+      if (!/\d/.test(t) && /show me|the answer|don'?t know|give up|tell me|no idea/.test(t)){ revealHw(); return; }
+    }
+
+    /* a bare number, fraction or remainder ("12", "3/4", "8 R 3") answers the question on the board, it isn't a sum to work out */
+    var bare = (state.q || state.hw) && /^-?\d+(\.\d+)?(\s*\/\s*\d+)?$|^\d+\s*(r|rem|remainder)\s*\d+$/.test(normalize(text).trim());
+    /* a math question or homework problem from the kid */
+    var calc = bare ? null : /\d|zero|one|two|three|four|five|six|seven|eight|nine|ten/.test(t) && /plus|minus|times|divided|percent|multipl|add|take away|subtract|[+\-*/×÷%x]/.test(t) ? calculate(text) : null;
+    if (calc && calc.error){ mood("surprised", 2); say("Oops! We can't divide by zero. Even robots can't do that!"); return; }
+    if (calc && state.homework && !state.q){
+      var forms = [calc.rForm, calc.answerText, fmt(calc.answer)];
+      if (!calc.rForm) forms.push(String(calc.answer));
+      state.hw = { ans: calc.answer, text: calc.answerText || fmt(calc.answer), steps: calc.steps, div: calc.div, tries: 0 };
+      state.pending = "";
+      showOnBoard("Your turn!", hideAnswer(calc.steps, forms)); mood("thinking", 1.4);
+      say("Let's work it out together! I put the steps on the board. Can you finish the last step, where the question mark is? Type your answer.");
+      return;
+    }
+    if (calc){
+      showOnBoard("Let's work it out", calc.steps); mood("thinking", 1.4);
+      if (!state.q) state.pending = "more";
+      say(pick(["Here's how I solved it!", "Let me show you on the board!", "Easy peasy!"]) + " The answer is " + (calc.answerText || fmt(calc.answer)) + "."
+        + (state.q ? "" : " Do you have another one?"));
+      return;
+    }
+
+    /* an answer to the robot's quiz question */
+    if (state.q){
+      var n = readNumber(text);
+      if (n !== null){
+        var right = Math.abs(n - state.q.answer) < 0.011;
+        if (right){
+          mem.right++; state.streak++; save(); scores();
+          showOnBoard("Correct!", state.q.steps);
+          state.q = null;
+          if (state.streak >= 3){ state.streak = 0; askHighFive(); return; }
+          mood("happy", 2.2);
+          offerAnother(pick(["Yes! That's right!", "Correct! You're amazing!", "Woo-hoo! You got it!", "Great job!"]));
+        } else {
+          var wq = state.q; state.q = null; state.streak = 0;
+          showOnBoard("Let's solve it", wq.steps); mood("sad", 2.6);
+          offerAnother("Not quite, but nice try! The answer is " + answerText(wq) + ". Look at the board to see how.");
+        }
+        return;
+      }
+    }
+
+    /* the kid's final answer to their homework problem */
+    if (state.hw){
+      var hv = readHwAnswer(text, state.hw);
+      if (hv !== null){
+        if (Math.abs(hv - state.hw.ans) < 0.011){
+          var h = state.hw; state.hw = null; state.pending = "more";
+          mem.right++; state.streak++; save(); scores();
+          showOnBoard("Correct!", h.steps); mood("happy", 2.4);
+          var yes = pick(["Yes! You got it!", "Correct! Great work!", "That's right! You solved it!"]) + " The answer is " + h.text + ".";
+          if (state.streak >= 3){ state.streak = 0; state.pending = ""; askHighFive(yes, true); return; }
+          say(yes + " Do you have another one?");
+        } else {
+          state.hw.tries++; state.streak = 0; mood("sad", 1.8);
+          say(state.hw.tries >= 2 ? "Not quite. Look closely at the step with the question mark and try once more, or tap Show me the answer."
+                                   : "Not quite! Look at the last step on the board and try again.");
+        }
+        return;
+      }
+    }
+
+    /* replies to the robot's own questions */
+    var was = state.pending; state.pending = "";
+    if (was === "another" && /another|yes|yeah|yep|sure|ok|next|more|again/.test(t)){ askQuestion(""); return; }
+    if (was === "howAreYou"){
+      if (/sad|bad|tired|not|mad|angry|sick|upset/.test(t)){ mood("sad", 3); say("I'm sorry you feel that way, " + mem.name + ". I'm here for you, and a grown-up you trust is a great person to talk to, too. Would you like to hear a joke, or ask me something?"); return; }
+      if (/good|great|fine|ok|okay|awesome|happy|amazing|well|yes/.test(t)){ mood("happy", 2.2); say(pick(["Yay! I'm so glad, " + mem.name + "!", "That makes my lights shine brighter!"]) + " " + ASK_MENU); return; }
+    }
+    if (was === "day"){ mood("happy", 2); say("That sounds fun! Thanks for telling me, " + mem.name + ". What would you like to do now?"); return; }
+    if (was === "color"){ var col = cleanName(text); mood("love", 2); say((col ? col + " is" : "That's") + " a great color! My eyes might glow that color tonight."); return; }
+
+    /* what the kid wants to do */
+    if (/i have a question|question for you|can i ask|ask (you )?a question/.test(t)){ leaveModes(); state.pending = "ask"; mood("happy", 2); say("Sure! Ask me anything. It can be a math question, like \"What is 12 times 8?\", or a question about me!"); return; }
+    if (/homework|help me|need help/.test(t)){
+      leaveModes(); state.homework = true; state.pending = "homework"; mood("excited", 2);
+      say("I'd love to help with your homework! Type one problem at a time, like \"" + HOMEWORK[mem.grade === null ? 3 : mem.grade][1] + "\". I'll show you the steps on the board, and you'll finish the last one."); return;
+    }
+    if (/i have another|another (one|problem)/.test(t) && !state.quiz){ state.pending = "homework"; say("Okay! Type it in."); return; }
+    if (/quiz|test me|practice|math question|give me a question|new question|ask me/.test(t)){ leaveModes(); startQuiz("Let's go!"); return; }
+    if (/something else|not now|no thanks/.test(t)){ leaveModes(); mood("happy", 1.5); say("Sure! " + ASK_MENU); return; }
+
+    /* chatting */
+    if (/how are you|how('?re| are) you doing|how do you feel/.test(t)){ state.pending = "howAreYou"; mood("happy", 2); say(pick(["I'm feeling super, thanks for asking! My gears are spinning happily.", "I'm great! My battery is full and I'm ready for math."]) + " How are you?"); return; }
+    if (/what did you do today|how was your day|what have you been doing/.test(t)){
+      state.pending = "day"; mood("excited", 2);
+      say(pick(["Today I counted 1,000 stars and practiced my high fives!", "Today I polished my antennae and solved 50 math puzzles!", "Today I learned a new robot dance!"]) + " What did you do today?"); return;
+    }
+    if (/joke/.test(t)){ mood("wink", 2.4); say(pick(["Why was 6 afraid of 7? Because 7, 8, 9!", "Why did the robot go on vacation? To recharge its batteries!", "What do you call a number that can't stay still? A roamin' numeral!", "Why is the math book sad? It has too many problems!"])); return; }
+    /* kind words (and unkind ones) */
+    if (/\bi (love|like) (math|numbers)\b/.test(t)){ mood("excited", 2.4); say("Me too! Math is like a puzzle, and you're a great puzzle solver, " + mem.name + "!"); return; }
+    if (/\b(i )?(love|luv) (you|u)\b|\bi like you\b/.test(t)){ mood("love", 3); say(pick(["Aww, I love you too, " + mem.name + "! You make my lights glow!", "That makes my heart lights shine! I love being your buddy, " + mem.name + "!"])); return; }
+    if (/(you'?re|you are|ur) (my )?(best friend|bff|friend)/.test(t)){ mood("love", 3); say("You're my best friend too, " + mem.name + "! I'm so happy we get to hang out."); return; }
+    if (/(you'?re|you are|ur) (so )?(awesome|cool|great|amazing|smart|funny|cute|nice|the best)/.test(t)){ mood("happy", 2.4); say("Thank you, " + mem.name + "! You're pretty awesome yourself!"); return; }
+    if (/\bi hate you\b|(you'?re|you are|ur) (dumb|stupid|bad|mean|annoying)/.test(t)){ mood("sad", 3); say("Oh no, that makes my lights a little dim. I'm still here whenever you want to chat or do math."); return; }
+    if (/favou?rite colou?r/.test(t)){ state.pending = "color"; mood("happy", 2); say("Glowing blue, like my eyes! What's your favorite color?"); return; }
+    if (/^(hi|hello|hey|yo|good (morning|afternoon|evening))\b/.test(t)){ robot.wave = 2.5; mood("happy", 2); say("Hi, " + mem.name + "! " + ASK_MENU); return; }
+    if (/thank/.test(t)){ mood("love", 2); say("You're welcome, " + mem.name + "!"); return; }
+    if (/^(yes|yeah|yep|sure|ok|okay|ready)\b/.test(t)){ mood("happy", 1.5); say("Great! " + ASK_MENU); return; }
+    if (/^(no|nope)\b/.test(t)){ say("Okay! I'm here whenever you need me. Type anything, or tap one of the ideas below."); return; }
+    if (/bye|see you/.test(t)){ robot.wave = 2.5; mood("happy", 2.5); say("Bye, " + mem.name + "! Come back soon for more math fun!"); return; }
+    mood("confused", 2.4);
+    say("Hmm, I'm not sure about that. You can ask me a math question, ask for homework help, or tap one of the ideas below!");
+  }
+
+  /* ---------------- high five ---------------- */
+  /* earned: 3 right answers in a row, in a quiz or homework help (homework keeps its finished board on show) */
+  function askHighFive(prefix, keepBoard){
+    state.wantFive = true; state.fiveEarned = true; $("hint").style.display = "block";
+    if (!keepBoard) showOnBoard("3 in a row!", ["You're on fire!", "High five time!"]);
+    say((prefix ? prefix + " " : "") + "Three in a row! You're amazing, " + mem.name + "! High five!");
+  }
+  /* asked for: the kid says "high five!" any time, and the robot puts its hand up */
+  function requestHighFive(){
+    state.wantFive = true; state.fiveEarned = false; $("hint").style.display = "block"; robot.wave = 0;
+    mood("excited", 2);
+    say(pick(["Up top! Tap my hand!", "High five? Yes! Tap my hand!", "Ready? Tap my hand!"]));
+  }
+  function giveHighFive(){
+    if (!state.wantFive) return;
+    state.wantFive = false; $("hint").style.display = "none";
+    mem.highFives++; save(); scores(); robot.spin = 1; burst(); mood("love", 2.6);
+    var cheer = pick(["Yeah! Best high five ever!", "Boom! High five!", "Woo-hoo! You rock!"]), earned = state.fiveEarned;
+    state.fiveEarned = false;
+    if (state.q || state.hw) say(cheer + " Now, back to the question on the board!");
+    else if (earned && state.homework){ state.pending = "more"; say(cheer + " Do you have another one?"); }
+    else if (earned && state.quiz) offerAnother(cheer);
+    else say(cheer);
+  }
+
+  /* ---------------- the robot's glowing eyes: drawn fresh every frame, so they can change shape ---------------- */
+  function makeEyeCanvas(){ var c = document.createElement("canvas"); c.width = 256; c.height = 256; return c; }
+  var eyeCanvasL = makeEyeCanvas(), eyeCanvasR = makeEyeCanvas();
+  function dome(c, w, h, r){                       /* a rounded dome: round on top, flat underneath */
+    c.beginPath();
+    c.ellipse(0, 10, w / 2, h, 0, Math.PI, Math.PI * 2);
+    c.quadraticCurveTo(w / 2, 10 + r, w / 2 - r, 10 + r);
+    c.lineTo(-w / 2 + r, 10 + r);
+    c.quadraticCurveTo(-w / 2, 10 + r, -w / 2, 10);
+    c.closePath(); c.fill();
+  }
+  function drawEye(canvas, isRight, m, open, lookX, lookY, t, talking){
+    var c = canvas.getContext("2d");
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, 256, 256);
+    if (isRight) c.setTransform(-1, 0, 0, 1, 256, 0);      /* the right eye is drawn mirrored, so "inner" is toward the nose on both */
+    if (m === "wink") m = isRight ? "happy" : "neutral";
+    if (m === "confused") m = isRight ? "squint" : "big";
+    var love = m === "love", col1 = love ? "#ffe4ec" : "#e0fdff", col2 = love ? "#fb7185" : "#67e8f9", col3 = love ? "#e11d48" : "#0ea5c6";
+    var g = c.createLinearGradient(0, 40, 0, 210); g.addColorStop(0, col1); g.addColorStop(.45, col2); g.addColorStop(1, col3);
+    c.fillStyle = g; c.strokeStyle = g; c.shadowColor = love ? "#fb7185" : "#22d3ee"; c.shadowBlur = 30;
+    c.translate(128 + (isRight ? -lookX : lookX), 128 + lookY);
+    var sy = open;
+    if (m === "happy"){ c.lineWidth = 30; c.lineCap = "round"; c.beginPath(); c.arc(0, 46, 62, Math.PI * 1.14, Math.PI * 1.86); c.stroke(); return; }
+    if (love){ var s = 1 + Math.sin(t * 8) * .07; c.scale(s, s * Math.max(open, .2));
+      c.beginPath(); c.moveTo(0, 54); c.bezierCurveTo(-96, -4, -58, -80, 0, -36); c.bezierCurveTo(58, -80, 96, -4, 0, 54); c.fill(); return; }
+    if (m === "surprised" || m === "big"){ var r = m === "big" ? 54 : 62; c.scale(1, sy); c.beginPath(); c.ellipse(0, 0, r, r * 1.08, 0, 0, Math.PI * 2); c.fill();
+      c.shadowBlur = 0; c.fillStyle = "rgba(255,255,255,.85)"; c.beginPath(); c.arc(-22, -26, 11, 0, Math.PI * 2); c.fill(); return; }
+    if (m === "excited"){ c.translate(0, Math.sin(t * 10) * 4); c.scale(1, sy); dome(c, 172, 92, 26);
+      c.shadowBlur = 0; c.fillStyle = "rgba(255,255,255,.9)"; c.beginPath(); c.arc(-34, -34, 13, 0, Math.PI * 2); c.fill(); c.beginPath(); c.arc(-8, -48, 6, 0, Math.PI * 2); c.fill(); return; }
+    if (m === "squint" || m === "thinking") sy *= .5;
+    if (talking && m === "neutral") sy *= 1 - Math.abs(Math.sin(t * 12)) * .12;
+    c.scale(1, sy); dome(c, 152, 78, 26);
+    if (m === "sad"){ c.globalCompositeOperation = "destination-out"; c.shadowBlur = 0; c.fillStyle = "#000";
+      c.beginPath(); c.moveTo(-110, -100); c.lineTo(40, -100); c.lineTo(-110, 6); c.closePath(); c.fill(); c.globalCompositeOperation = "source-over"; }
+  }
+
+  /* ---------------- the 3D scene (Three.js) ---------------- */
+  var stage = $("stage"), three = null, input = $("say");
+  function build(){
+    if (three || !window.THREE){ if (!window.THREE) $("nogl").style.display = "grid"; return; }
+    var renderer;
+    try { renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true }); } catch(e) { $("nogl").style.display = "grid"; return; }
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    stage.insertBefore(renderer.domElement, stage.firstChild);
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+
+    /* soft studio lighting */
+    scene.add(new THREE.AmbientLight(0xffffff, 0.95));
+    var keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    keyLight.position.set(5, 7, 6); keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024); keyLight.shadow.bias = -0.0001;
+    keyLight.shadow.camera.near = 0.5; keyLight.shadow.camera.far = 18;
+    scene.add(keyLight);
+    var fillLight = new THREE.DirectionalLight(0x38bdf8, 1.4); fillLight.position.set(-6, 3, -2); scene.add(fillLight);
+    var rimLight = new THREE.DirectionalLight(0xffedd5, 1.0); rimLight.position.set(0, 5, -5); scene.add(rimLight);
+    var shadowMat = new THREE.ShadowMaterial({ opacity: 0.3 });
+    var shadowFloor = new THREE.Mesh(new THREE.PlaneGeometry(25, 25), shadowMat);
+    shadowFloor.rotation.x = -Math.PI / 2; shadowFloor.receiveShadow = true; scene.add(shadowFloor);
+
+    /* the arcade grid floor */
+    var grid = new THREE.GridHelper(40, 40, 0x22d3ee, 0x22d3ee);
+    grid.material.transparent = true; grid.material.depthWrite = false; grid.position.y = 0.002; scene.add(grid);
+    window.__theme3d = function(th){
+      var light = th === "light";
+      grid.material.color.set(light ? 0x64748b : 0x22d3ee); grid.material.opacity = light ? .35 : .3;
+      shadowMat.opacity = light ? .2 : .35;
+    };
+    window.__theme3d(theme);
+
+    /* materials (the robot's design) */
+    const whiteShellMat = new THREE.MeshPhysicalMaterial({ color: 0xf8fafc, roughness: 0.12, metalness: 0.05, clearcoat: 0.9, clearcoatRoughness: 0.08 });
+    const darkScreenMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.08, metalness: 0.92 });
+    const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.28, metalness: 0.85 });
+    const cyanGlowMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x06b6d4, emissiveIntensity: 2.2, roughness: 0.2 });
+    const chestPlateMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.35, metalness: 0.55 });
+
+    /* the digital whiteboard, in a slate frame with glowing cyan edges */
+    boardTex = new THREE.CanvasTexture(boardCanvas); boardTex.anisotropy = 4; boardTex.colorSpace = THREE.SRGBColorSpace;
+    var boardW = 7.4, boardH = 4.0;
+    var boardG = new THREE.Group(); scene.add(boardG);
+    var boardMesh = new THREE.Mesh(new THREE.PlaneGeometry(boardW, boardH), new THREE.MeshBasicMaterial({ map: boardTex, toneMapped: false }));
+    boardMesh.position.z = -1.6; boardG.add(boardMesh);
+    [[boardW + .36, .18, 0, boardH / 2 + .09], [boardW + .36, .18, 0, -boardH / 2 - .09], [.18, boardH + .36, -boardW / 2 - .09, 0], [.18, boardH + .36, boardW / 2 + .09, 0]].forEach(function(f){
+      var m = new THREE.Mesh(new THREE.BoxGeometry(f[0], f[1], .16), darkMetalMat); m.position.set(f[2], f[3], -1.6); boardG.add(m);
+    });
+    [boardH / 2 + .19, -boardH / 2 - .19].forEach(function(y){
+      var strip = new THREE.Mesh(new THREE.BoxGeometry(boardW + .2, .035, .05), cyanGlowMat); strip.position.set(0, y, -1.5); boardG.add(strip);
+    });
+
+    // Head: white helmet, black visor, glowing eyes, glowing ear caps, two antennae
+    function buildRobotHead() {
+      const headGroup = new THREE.Group();
+      const helmetGeo = new THREE.SphereGeometry(1.0, 64, 64); helmetGeo.scale(1.4, 1.0, 0.95);
+      const helmet = new THREE.Mesh(helmetGeo, whiteShellMat); helmet.castShadow = true; helmet.receiveShadow = true;
+      headGroup.add(helmet);
+      const visorGeo = new THREE.SphereGeometry(0.92, 64, 64); visorGeo.scale(1.22, 0.84, 0.65);
+      const visor = new THREE.Mesh(visorGeo, darkScreenMat); visor.position.set(0, 0.02, 0.38);
+      headGroup.add(visor);
+      const rimGeo = new THREE.TorusGeometry(0.86, 0.035, 16, 64); rimGeo.scale(1.28, 0.88, 0.5);
+      const rim = new THREE.Mesh(rimGeo, darkMetalMat); rim.position.set(0, 0.02, 0.72);
+      headGroup.add(rim);
+      /* glowing eyes on the visor (each one a little screen the eye shapes are drawn on) */
+      function eyeScreen(canvas){
+        const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace;
+        return new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }));
+      }
+      const eyeL = eyeScreen(eyeCanvasL); eyeL.position.set(-0.42, 0.06, 0.95); eyeL.rotation.y = -0.15; eyeL.renderOrder = 10;
+      const eyeR = eyeScreen(eyeCanvasR); eyeR.position.set(0.42, 0.06, 0.95); eyeR.rotation.y = 0.15; eyeR.renderOrder = 10;
+      headGroup.add(eyeL, eyeR);
+      function buildEarCap(isRight) {
+        const ear = new THREE.Group();
+        const capMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.15, 32), whiteShellMat);
+        capMesh.rotation.z = Math.PI / 2; capMesh.castShadow = true;
+        const glowRing = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.04, 16, 32), cyanGlowMat);
+        glowRing.rotation.y = Math.PI / 2;
+        ear.add(capMesh, glowRing);
+        ear.position.set(isRight ? 1.28 : -1.28, 0, 0);
+        return ear;
+      }
+      headGroup.add(buildEarCap(true), buildEarCap(false));
+      function buildAntenna(angle) {
+        const ant = new THREE.Group();
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.5, 16), darkMetalMat); stem.position.y = 0.25; stem.castShadow = true;
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.08, 32, 32), whiteShellMat); ball.position.y = 0.52; ball.castShadow = true;
+        ant.add(stem, ball); ant.rotation.z = angle;
+        return ant;
+      }
+      const antL = buildAntenna(0.32); antL.position.set(-0.75, 0.85, 0); headGroup.add(antL);
+      const antR = buildAntenna(-0.32); antR.position.set(0.75, 0.85, 0); headGroup.add(antR);
+      return { headGroup, eyeL, eyeR };
+    }
+
+    // Torso: round body, chest plate, 4 status lights (they flash while the robot talks), glowing ring
+    const chestLeds = [];
+    function buildTorso() {
+      const group = new THREE.Group();
+      const bodyGeo = new THREE.SphereGeometry(0.75, 64, 64); bodyGeo.scale(1.0, 0.85, 0.92);
+      const body = new THREE.Mesh(bodyGeo, whiteShellMat); body.castShadow = true; body.receiveShadow = true;
+      group.add(body);
+      const plateGeo = new THREE.SphereGeometry(0.55, 32, 32); plateGeo.scale(0.85, 0.55, 0.4);
+      const plate = new THREE.Mesh(plateGeo, chestPlateMat); plate.position.set(0, -0.05, 0.5);
+      group.add(plate);
+      for (let i = 0; i < 4; i++) {
+        const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.03, 16), cyanGlowMat.clone());
+        dot.rotation.x = Math.PI / 2; dot.position.set(-0.15 + i * 0.1, -0.05, 0.7);
+        group.add(dot); chestLeds.push(dot);
+      }
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.03, 16, 32), cyanGlowMat);
+      ring.rotation.x = Math.PI / 2; ring.position.set(0, -0.58, 0);
+      group.add(ring);
+      return group;
+    }
+
+    // Arm: shoulder ball, two linkage rods, elbow, forearm armor, wrist, a hand with 4 fingers and a thumb
+    function buildArm(isRight) {
+      const armGroup = new THREE.Group();
+      const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.14, 32, 32), darkMetalMat); shoulder.castShadow = true;
+      armGroup.add(shoulder);
+      const rod1 = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.32, 16), darkMetalMat); rod1.position.set(-0.045, -0.16, 0); rod1.castShadow = true;
+      const rod2 = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.32, 16), darkMetalMat); rod2.position.set(0.045, -0.16, 0); rod2.castShadow = true;
+      armGroup.add(rod1, rod2);
+      const elbowGroup = new THREE.Group(); elbowGroup.position.y = -0.32;
+      elbowGroup.add(new THREE.Mesh(new THREE.SphereGeometry(0.1, 32, 32), darkMetalMat));
+      const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.15, 0.45, 32), whiteShellMat); forearm.position.y = -0.24; forearm.castShadow = true;
+      elbowGroup.add(forearm);
+      const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.085, 24, 24), darkMetalMat); wrist.position.y = -0.48;
+      elbowGroup.add(wrist);
+      const handGroup = new THREE.Group(); handGroup.position.y = -0.54;
+      const palmGeo = new THREE.SphereGeometry(0.15, 32, 32); palmGeo.scale(1.2, 0.65, 0.95);
+      const palm = new THREE.Mesh(palmGeo, whiteShellMat); palm.castShadow = true;
+      handGroup.add(palm);
+      [-0.11, -0.04, 0.04, 0.11].forEach((xPos, idx) => {
+        const finger = new THREE.Group(); finger.position.set(xPos, -0.07, 0.02);
+        const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.026, 16, 16), darkMetalMat);
+        const segment = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.022, 0.1, 16), darkMetalMat); segment.position.y = -0.05;
+        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.03, 20, 20), whiteShellMat); tip.scale.set(0.9, 1.3, 0.9); tip.position.y = -0.12; tip.castShadow = true;
+        finger.add(knuckle, segment, tip);
+        finger.rotation.x = 0.15 + idx * 0.04;
+        handGroup.add(finger);
+      });
+      const thumb = new THREE.Group();
+      thumb.position.set(isRight ? -0.13 : 0.13, -0.02, 0.05); thumb.rotation.z = isRight ? 0.7 : -0.7; thumb.rotation.x = 0.3;
+      const tKnuckle = new THREE.Mesh(new THREE.SphereGeometry(0.026, 16, 16), darkMetalMat);
+      const tSeg = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.022, 0.09, 16), darkMetalMat); tSeg.position.y = -0.045;
+      const tTip = new THREE.Mesh(new THREE.SphereGeometry(0.03, 20, 20), whiteShellMat); tTip.position.y = -0.1; tTip.castShadow = true;
+      thumb.add(tKnuckle, tSeg, tTip);
+      handGroup.add(thumb);
+      elbowGroup.add(handGroup);
+      armGroup.add(elbowGroup);
+      /* a bit bigger than the original, so the arms and hands read clearly beside the round body */
+      armGroup.scale.setScalar(1.3);
+      return { armGroup, elbowGroup, handGroup };
+    }
+
+    // Leg: hip, rod, leg armor, foot with a glowing sole ring
+    function buildLeg() {
+      const legGroup = new THREE.Group();
+      legGroup.add(new THREE.Mesh(new THREE.SphereGeometry(0.12, 32, 32), darkMetalMat));
+      const legRod = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.22, 16), darkMetalMat); legRod.position.y = -0.11;
+      legGroup.add(legRod);
+      const legArmor = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.48, 32), whiteShellMat); legArmor.position.y = -0.32; legArmor.castShadow = true; legArmor.receiveShadow = true;
+      legGroup.add(legArmor);
+      const footGroup = new THREE.Group(); footGroup.position.set(0, -0.58, 0.06);
+      const footGeo = new THREE.SphereGeometry(0.34, 32, 32); footGeo.scale(0.9, 0.45, 1.4);
+      const foot = new THREE.Mesh(footGeo, whiteShellMat); foot.castShadow = true; foot.receiveShadow = true;
+      footGroup.add(foot);
+      const soleRing = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.025, 16, 32), cyanGlowMat);
+      soleRing.rotation.x = Math.PI / 2; soleRing.position.y = -0.12; soleRing.scale.set(0.85, 1.25, 1);
+      footGroup.add(soleRing);
+      const solePlate = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.025, 32), darkMetalMat); solePlate.position.y = -0.145;
+      footGroup.add(solePlate);
+      legGroup.add(footGroup);
+      return legGroup;
+    }
+
+    /* R stands on the floor and turns, bobs and spins; the robot inside it keeps its own proportions */
+    var R = new THREE.Group(); R.position.set(-2.05, 0, 0.6); scene.add(R);
+    const robotMasterGroup = new THREE.Group(); robotMasterGroup.scale.setScalar(0.95); robotMasterGroup.position.y = 1.35; R.add(robotMasterGroup);
+    const { headGroup: headG, eyeL, eyeR } = buildRobotHead();
+    headG.position.set(0, 1.35, 0); robotMasterGroup.add(headG);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.22, 32), darkMetalMat); neck.position.set(0, 0.72, 0); robotMasterGroup.add(neck);
+    const torsoGroup = buildTorso(); torsoGroup.position.set(0, 0.25, 0); robotMasterGroup.add(torsoGroup);
+    /* the arms hang down and a little outward, so they show beside the body */
+    const armR = buildArm(true); armR.armGroup.position.set(0.82, 0.38, 0); robotMasterGroup.add(armR.armGroup);
+    const armL = buildArm(false); armL.armGroup.position.set(-0.82, 0.38, 0); robotMasterGroup.add(armL.armGroup);
+    const legL = buildLeg(); legL.position.set(-0.38, -0.32, 0); robotMasterGroup.add(legL);
+    const legR = buildLeg(); legR.position.set(0.38, -0.32, 0); robotMasterGroup.add(legR);
+
+    /* a glowing hover pad under the robot */
+    var padCanvas = document.createElement("canvas"); padCanvas.width = padCanvas.height = 128;
+    var pc = padCanvas.getContext("2d"), pg = pc.createRadialGradient(64, 64, 4, 64, 64, 64);
+    pg.addColorStop(0, "rgba(103,232,249,.55)"); pg.addColorStop(1, "rgba(103,232,249,0)"); pc.fillStyle = pg; pc.fillRect(0, 0, 128, 128);
+    var pad = new THREE.Group(); scene.add(pad);
+    var padGlow = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(padCanvas), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+    padGlow.rotation.x = -Math.PI / 2; padGlow.position.y = 0.01; pad.add(padGlow);
+    var padRing = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.025, 12, 64), cyanGlowMat); padRing.rotation.x = Math.PI / 2; padRing.position.y = 0.02; pad.add(padRing);
+
+    /* sparkles for the high five */
+    var sparks = [];
+    window.__burst = function(){
+      for (var i = 0; i < 26; i++){
+        var m = new THREE.Mesh(new THREE.SphereGeometry(.05 + Math.random() * .05, 8, 6), new THREE.MeshBasicMaterial({ color: [0x67e8f9, 0xffffff, 0xfb7185, 0x22d3ee][i % 4], toneMapped: false }));
+        var p = new THREE.Vector3(); armR.handGroup.getWorldPosition(p); m.position.copy(p);
+        m.userData.v = new THREE.Vector3((Math.random() - .5) * 4, Math.random() * 4 + 1, (Math.random() - .5) * 3);
+        m.userData.life = 1.2; scene.add(m); sparks.push(m);
+      }
+    };
+
+    /* wide stage: the robot stands beside the board; tall stage: the board hangs above the robot.
+       A big board (a picture, or long work) grows, and the robot steps to the side (or shrinks into the corner under it) */
+    var mode = "", lay = null;
+    function layoutFor(){
+      var tall = mode === "tall";
+      if (!board.big) return tall ? { bs:.8, bx:.3, by:5.45, rx:-1.0, rs:1, cx:.3, cy:3.3, cw:6.5, ch:8.0 }
+                                  : { bs:1, bx:.7, by:2.2, rx:-2.05, rs:1, cx:.5, cy:2.1, cw:boardW + 1.2, ch:6.2 };
+      return tall ? { bs:1, bx:.3, by:5.3, rx:-2.4, rs:.75, cx:.3, cy:3.4, cw:7.9, ch:8.2 }
+                  : { bs:1.25, bx:1.3, by:2.9, rx:-4.4, rs:1, cx:.1, cy:2.75, cw:12.4, ch:7.0 };
+    }
+    function place(L){
+      boardG.scale.setScalar(L.bs); boardG.position.set(L.bx, L.by, 0);
+      R.position.x = pad.position.x = L.rx; R.scale.setScalar(L.rs); pad.scale.setScalar(L.rs);
+      var tanV = Math.tan(camera.fov * Math.PI / 360);
+      var dW = L.cw / 2 / (tanV * camera.aspect), dH = L.ch / 2 / tanV;
+      camera.position.set(L.cx, L.cy + .6, Math.max(dW, dH) + 1.0); camera.lookAt(L.cx, L.cy, 0);
+    }
+    /* each frame, the board and robot ease toward where they belong, so the robot glides aside instead of jumping */
+    function ease(dt){
+      var T = layoutFor(), k = Math.min(1, dt * 4);
+      if (!lay){ lay = T; } else Object.keys(T).forEach(function(key){ lay[key] += (T[key] - lay[key]) * k; });
+      place(lay);
+    }
+    function fit(){
+      var w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
+      renderer.setSize(w, h, false); camera.aspect = w / h;
+      var tall = camera.aspect < 1.15;
+      if (mode !== (tall ? "tall" : "wide")){ mode = tall ? "tall" : "wide"; tallStage = tall; drawBoard(); }
+      /* (a little room at the top for the buttons, and at the bottom for the score counters) */
+      ease(1);
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener("resize", fit); fit();
+
+    /* drag to turn the robot a little; tap it when its hand is up for a high five */
+    var ray = new THREE.Raycaster(), ptr = new THREE.Vector2(), drag = null;
+    function hitRobot(e){
+      var r = renderer.domElement.getBoundingClientRect();
+      ptr.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ptr, camera);
+      return ray.intersectObject(R, true).length > 0;
+    }
+    stage.addEventListener("pointerdown", function(e){
+      if (e.target !== renderer.domElement) return;
+      if (state.wantFive && hitRobot(e)){ giveHighFive(); return; }
+      drag = { x: e.clientX }; stage.classList.add("drag");
+      try { stage.setPointerCapture(e.pointerId); } catch(err) {}
+    });
+    stage.addEventListener("pointermove", function(e){ if (!drag) return; robot.turn = Math.max(-.8, Math.min(.8, robot.turn + (e.clientX - drag.x) * .01)); drag.x = e.clientX; });
+    ["pointerup", "pointercancel"].forEach(function(ev){ stage.addEventListener(ev, function(){ drag = null; stage.classList.remove("drag"); }); });
+
+    var clock = new THREE.Clock(), nextBlink = 2, look = { x:0, y:0, tx:0, ty:0, next:2 };
+    function frame(){
+      var dt = Math.min(clock.getDelta(), .05), t = clock.elapsedTime, now = performance.now();
+      ease(dt);
+      /* floating */
+      R.position.y = Math.sin(t * 2.0) * .06;
+      padRing.scale.setScalar(1 + Math.sin(t * 2.0) * .04);
+      if (robot.spin > 0){ robot.spin = Math.max(0, robot.spin - dt * 1.2); R.rotation.y = robot.turn + (1 - robot.spin) * Math.PI * 2; R.position.y += Math.sin((1 - robot.spin) * Math.PI) * .4; }
+      else { R.rotation.y += (robot.turn - R.rotation.y) * .1; if (!drag) robot.turn *= .985; }
+      headG.rotation.z = Math.sin(t * 1.5) * .04;
+      headG.rotation.y = Math.cos(t * 1.0) * .08;
+
+      /* the eyes: what the robot feels, where it looks, and blinking */
+      var talking = now < talkUntil || (state.voice && window.speechSynthesis && speechSynthesis.speaking);
+      var m = state.wantFive ? "excited" : (now < robot.moodUntil ? robot.mood : "neutral");
+      look.next -= dt;
+      if (input === document.activeElement && input.value){ look.tx = 28; look.ty = 8; }          /* glances at the chat while you type */
+      else if (m === "thinking"){ look.tx = -26; look.ty = -20; }
+      else if (look.next < 0){ look.next = 2 + Math.random() * 3; look.tx = (Math.random() - .5) * 40; look.ty = (Math.random() - .5) * 18; }
+      look.x += (look.tx - look.x) * .12; look.y += (look.ty - look.y) * .12;
+      nextBlink -= dt;
+      var open = nextBlink < 0 && nextBlink > -.14 ? Math.max(.06, Math.abs(nextBlink + .07) / .07) : 1;
+      if (nextBlink < -.14) nextBlink = 2.2 + Math.random() * 3;
+      drawEye(eyeCanvasL, false, m, open, look.x, look.y, t, talking);
+      drawEye(eyeCanvasR, true, m, open, look.x, look.y, t, talking);
+      eyeL.material.map.needsUpdate = true; eyeR.material.map.needsUpdate = true;
+
+      /* talking: the chest lights flash in turn and the head nods a little */
+      chestLeds.forEach(function(d, i){ d.material.emissiveIntensity = talking ? 0.6 + Math.max(0, Math.sin(t * 14 - i * 1.2)) * 4 : 2.2; });
+      headG.rotation.x = talking ? Math.sin(t * 9) * .04 : 0;
+
+      /* arms: hanging a little outward and swaying; the right one waves hello, or goes up for a high five */
+      robot.wave = Math.max(0, robot.wave - dt);
+      robot.raise += ((state.wantFive || robot.wave > 0 ? 1 : 0) - robot.raise) * .12;
+      var wag = robot.wave > 0 && !state.wantFive ? Math.sin(t * 9) * .35 : 0;
+      armL.armGroup.rotation.z = -.32 - Math.sin(t * 2.0) * .03;
+      armL.elbowGroup.rotation.z = -.1;
+      armR.armGroup.rotation.z = .32 + Math.sin(t * 2.0) * .03 + robot.raise * 2.2;
+      armR.elbowGroup.rotation.z = .1 - robot.raise * .3 + wag;
+      armR.handGroup.scale.setScalar(1 + (state.wantFive ? robot.raise * (.3 + Math.sin(t * 8) * .08) : 0));
+
+      for (var i = sparks.length - 1; i >= 0; i--){
+        var s = sparks[i]; s.userData.life -= dt; s.userData.v.y -= 6 * dt; s.position.addScaledVector(s.userData.v, dt);
+        if (s.userData.life <= 0){ scene.remove(s); sparks.splice(i, 1); }
+      }
+      renderer.render(scene, camera);
+      requestAnimationFrame(frame);
+    }
+    three = true;
+    frame();
+  }
+  function burst(){ if (window.__burst) window.__burst(); }
+
+  /* ---------------- controls ---------------- */
+  function send(){ var v = input.value; input.value = ""; hear(v); input.focus(); }
+  $("send").addEventListener("click", send);
+  $("nametag").addEventListener("click", function(){ hear("Change my name"); input.focus(); });
+
+  /* full screen: inside the lesson page, the page opens (or closes) its full-screen player; on its own, the browser's full screen */
+  var embedded = window.parent !== window;
+  var EXPAND = '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>';
+  var SHRINK = '<path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/>';
+  function fullLabel(isFull){
+    var b = $("full"); b.querySelector("svg").innerHTML = isFull ? SHRINK : EXPAND;
+    b.querySelector(".lbl").textContent = isFull ? "Exit full screen" : "Full screen";
+    b.setAttribute("aria-label", isFull ? "Exit full screen" : "Full screen");
+  }
+  if (embedded){
+    /* inside the lesson, the page's own yellow full-screen button opens the player, so this one steps aside */
+    $("full").hidden = true;
+    /* and the robot's buttons sit up a little, clear of that yellow button in the corner */
+    document.documentElement.classList.add("in-lesson");
+    window.addEventListener("message", function(e){ if (e.source === parent && e.data && e.data.ccsStaged){ fullLabel(true); document.documentElement.classList.remove("in-lesson"); } });
+  }
+  document.addEventListener("fullscreenchange", function(){ fullLabel(!!document.fullscreenElement); });
+  $("full").addEventListener("click", function(){
+    if (embedded){ try { parent.postMessage({ ccsExample: "fullscreen" }, "*"); } catch(e) {} return; }
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(function(){});
+    } catch(e) {}
+  });
+  input.addEventListener("keydown", function(e){ if (e.key === "Enter" && !e.isComposing){ e.preventDefault(); send(); } });
+  $("voice").addEventListener("click", function(){
+    state.voice = !state.voice; this.setAttribute("aria-pressed", state.voice);
+    if (state.voice){
+      voiceLabel("Voice on");
+    } else {
+      voiceLabel("Voice off");
+      try { speechSynthesis.cancel(); } catch(e) {}
+    }
+  });
+  $("newq").addEventListener("click", function(){
+    if (state.phase !== "chat"){ say(state.phase === "askName" ? "First, what's your name?" : "First, what grade are you in?"); return; }
+    leaveModes(); startQuiz("");
+  });
+  $("reset").addEventListener("click", function(){ $("sure").style.display = "grid"; });
+  $("sureNo").addEventListener("click", function(){ $("sure").style.display = "none"; });
+  $("sureYes").addEventListener("click", function(){
+    $("sure").style.display = "none";
+    mem = { name:"", grade:null, botName:"", right:0, highFives:0 };
+    try { localStorage.removeItem(KEY); } catch(e) {}
+    state = { phase:"askName", awaitBotName:false, pending:"", q:null, quiz:false, streak:0, wantFive:false, voice:state.voice };
+    $("hint").style.display = "none"; scores();
+    if (typing) typing.finish();
+    log.innerHTML = "";
+    showOnBoard("ROBO MATH", ["Ask me math!", "Like: 12 times 8", "or: 15 plus 27"]);
+    mood("surprised", 1.6); robot.wave = 2.5;
+    say("My memory is all clear! Hi there, I'm your robot math buddy. What's your first name or a nickname?");
+  });
+
+  /* the microphone: only listens after the button is pressed; typing always works */
+  var Rec = window.SpeechRecognition || window.webkitSpeechRecognition, rec = null;
+  $("mic").addEventListener("click", function(){
+    var btn = this;
+    if (!Rec){ say("The microphone isn't available here. You can type to me instead!"); return; }
+    if (rec){ try { rec.stop(); } catch(e) {} return; }
+    try {
+      rec = new Rec(); rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+      rec.onresult = function(ev){ hear(ev.results[0][0].transcript); };
+      rec.onerror = function(){ say("I couldn't hear you. You can type to me instead!"); };
+      rec.onend = function(){ rec = null; btn.classList.remove("on"); };
+      try { speechSynthesis.cancel(); } catch(e) {}
+      rec.start(); btn.classList.add("on");
+    } catch(e) { rec = null; say("The microphone isn't available here. You can type to me instead!"); }
+  });
+
+  /* ---------------- start ---------------- */
+  /* Three.js loads as a module after this script; chatting works straight away, and the robot appears when it's ready */
+  if (window.THREE) build(); else window.addEventListener("three-ready", build, { once: true });
+  setTimeout(function(){ if (!three) $("nogl").style.display = "grid"; }, 12000);
+  scores();
+  if (state.phase === "askName"){
+    say("Hi there! I'm your robot math buddy. What's your first name or a nickname?");
+  } else if (state.phase === "askGrade"){
+    say("Hi again, " + mem.name + "! What grade are you in?");
+  } else {
+    /* welcome back: the afternoon and evening greetings ask how the kid is; the morning one asks what they'd like to do */
+    var later = new Date().getHours() >= 12;
+    state.pending = later ? "howAreYou" : "";
+    showOnBoard("Welcome back!", ["Ask me a math question,", "or get homework help."]);
+    say(greeting() + (mem.botName ? " It's me, " + mem.botName + "!" : "") + (later ? "" : " " + ASK_MENU));
+  }
+})();
+</script>
+</body>
+</html>

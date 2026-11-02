@@ -362,21 +362,24 @@ describe("how the site wires the portal in", () => {
     expect(actions).toContain('href="https://gemini.google.com/app"');
     expect(actions.indexOf("Copy prompt")).toBeLessThan(actions.indexOf("Open Gemini"));
     expect(box.split('Open Gemini</a>').length - 1).toBe(1);
-    expect(html).toContain(".pprompt__box .pprompt__text{ padding-top:78px; }");
+    expect(html).toContain(".pprompt__box .pprompt__text{ padding-top:60px; }");
+    expect(html).toContain(".pprompt__actions .btn{ min-height:32px; padding:5px 12px; font-size:.8rem; gap:6px; }");   /* small, so all four fit */
     expect(html).toContain(".pprompt__text{ background:#1E2226; color:#F5F1E6; border:3px dashed #8B96A3;");   /* light words on a dark box */   /* the words start below the corner buttons, never under them */
     expect(html).toContain("  .pprompt__box .pprompt__text{ padding-top:16px; }");   /* on a phone the buttons sit above the box */
     expect(box).toContain('href="https://gemini.google.com/app"');
     expect(box).toContain('rel="noopener noreferrer"');
     /* the grown-up message comes first, on every prompt box, before the steps */
     expect(box).toContain("Ask a grown-up first!");
-    expect(box).toContain("not affiliated with, endorsed by, or sponsored by Google Gemini, Anthropic’s Claude or any other AI platform");
-    // Gemini or Claude, everywhere in the box: the heading, the grown-up note, the steps, a button each, and the file note
-    expect(box).toContain('E(e.aiPromptTitle || "Make your own with AI")');   // the heading says AI; the box below names Gemini and Claude
-    expect(box).toContain("Then use Gemini or Claude together, on the grown-up’s account.");
-    expect(box).toContain("Open <b>Gemini</b> or <b>Claude</b> and paste the words in the box.");
+    expect(box).toContain("not affiliated with, endorsed by, or sponsored by Google Gemini, Anthropic’s Claude, OpenAI’s ChatGPT or any other AI platform");
+    // Gemini, Claude or ChatGPT, everywhere in the box: the heading, the grown-up note, the steps, a button each, and the file note
+    expect(box).toContain('E(e.aiPromptTitle || "Make your own with AI")');   // the heading says AI; the box below names Gemini, Claude and ChatGPT
+    expect(box).toContain("Then use Gemini, Claude or ChatGPT together, on the grown-up’s account.");
+    expect(box).toContain("Open <b>Gemini</b>, <b>Claude</b> or <b>ChatGPT</b> and paste the words in the box.");
     expect(box).toContain('href="https://claude.ai/new" target="_blank" rel="noopener noreferrer">\' + ic("external-link") + \' Open Claude</a>');
+    expect(box).toContain('href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">\' + ic("external-link") + \' Open ChatGPT</a>');
     expect(box.indexOf("Open Gemini</a>")).toBeLessThan(box.indexOf("Open Claude</a>"));
-    expect(box).toContain("If Gemini or Claude gives you a file, a grown-up can help you save it");
+    expect(box.indexOf("Open Claude</a>")).toBeLessThan(box.indexOf("Open ChatGPT</a>"));
+    expect(box).toContain("If Gemini, Claude or ChatGPT gives you a file, a grown-up can help you save it");
     expect(box).toContain("any website that can collect information");
     expect(box).toContain('role="note"');
     expect(box.indexOf("pprompt__ask")).toBeLessThan(box.indexOf("pprompt__steps"));

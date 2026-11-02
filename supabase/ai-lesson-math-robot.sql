@@ -66,6 +66,8 @@ Make a fun, friendly 3D robot math buddy in one HTML file that I can use in my b
 • A cute, shiny white 3D robot standing on a glowing hover pad: a big round helmet head with a black visor screen, glowing blue rings on its round ear caps, and two little antennae with balls on top. A round body with a gray chest plate and 4 glowing lights that flash while it talks. Two arms with hands and fingers that hang beside its body (not hidden behind it), and short legs with round feet. It gently floats up and down, and waves hello when I say hi or bye.
 • Two glowing cyan eyes on the black visor, shaped like little rounded domes (not human eyes, no pupils). They work like little screens, so they change shape to show feelings: they blink, look around, glance at the chat while I type, turn into happy arches when I'm right, droop when I'm wrong, grow big and sparkly for a high five, turn into pink hearts after a high five, wink after a joke, and squint when the robot is thinking.
 • A big digital whiteboard behind the robot (white, with a dark header bar and glowing cyan edges), where the math steps appear in clear dark writing, one step per line, like "12 × 8 = 96", with the answer line in blue.
+• Pictures on the board beside the steps, for kids who learn by seeing: shiny balls to count for adding and taking away (the taken-away ones crossed out), rows of balls for small times tables, a pie cut into equal slices with balls in each slice for sharing (dividing), pies with shaded slices for fractions, and small hundreds, tens and ones blocks (flats, rods and little cubes, with a key) for bigger numbers. Only where a picture helps; very big numbers just get the steps.
+• When the work is long or has a picture, the board grows bigger and the robot glides to the side, so nothing hides behind it.
 • Big, easy-to-tap buttons that work on phones, tablets and computers.
 
 💾 What it remembers:
@@ -81,7 +83,7 @@ Make a fun, friendly 3D robot math buddy in one HTML file that I can use in my b
     'message', 'Our newest AI lesson is here! Kids write one detailed prompt and AI builds a friendly 3D robot that greets them, learns their name and grade, helps with math homework, quizzes them when they ask, and gives a high five for great work.' || chr(10) || chr(10) || 'It is a fun way to learn why clear, detailed instructions help AI build exactly what you want. Come and take a look!',
     'button', 'Take a look'),
   'howToPlay', '[]'::jsonb, 'gallery', '[]'::jsonb, 'coverStill', '',
-  'gameId', '', 'gamePath', '', 'gameMode', 'launch', 'gameLabel', '', 'privateGameId', 'pg-math-robot', 'privateGameKb', 86,
+  'gameId', '', 'gamePath', '', 'gameMode', 'launch', 'gameLabel', '', 'privateGameId', 'pg-math-robot', 'privateGameKb', 101,
   'bookId', '', 'bookMode', 'launch', 'bookPath', '', 'videoUrl', '',
   'buttonLabel', '', 'buttonUrl', '', 'textFirst', 'after', 'adminNote', '',
   'createdAt', '2026-11-01T12:00:00.000Z', 'updatedAt', '2026-11-01T12:00:00.000Z'))

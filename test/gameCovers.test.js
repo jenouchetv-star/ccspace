@@ -49,8 +49,8 @@ describe("the offline game page", () => {
 
 describe("the Business page photo", () => {
   it("shows a teacher helping a student under the intro text, with alt text", () => {
-    expect(existsSync(root("assets/about/teacher-helping-student.jpg"))).toBe(true);
-    expect(index).toContain('<figure class="bizphoto"><img src="assets/about/teacher-helping-student.jpg"');
-    expect(credits).toContain("assets/about/teacher-helping-student.jpg");
+    expect(existsSync(root("assets/about/teacher-reading-with-student.jpg"))).toBe(true);
+    expect(index).toContain('<figure class="bizphoto"><img src="assets/about/teacher-reading-with-student.jpg"');
+    expect(credits).toContain("assets/about/teacher-reading-with-student.jpg");
   });
 });
