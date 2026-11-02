@@ -5,7 +5,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   findYoutubeIds, extractHtml, chooseIntent, analyzeGameHtml, gameDigest, gameSlug, MAX_GAME_BYTES,
-  copilotSystem, chatMessages, episodeMessages, parseEpisode, gameMessages, parseGame, newsletterMessages, parseNewsletter,
+  copilotSystem, chatMessages, episodeMessages, parseEpisode, gameMessages, parseGame, newsletterMessages, parseNewsletter, newsletterMissing,
   storyMessages, parseStory, storyPagesFrom, whereLabel, quickFixes, planFix, FIXABLE, recordFacts, fixMessages, parseFix, findItemInText, pickField, TEXT_FIELDS, altTargets, altMessages, parseAlt, tagTargets, existingTags, tagMessages, parseTags,
   portalLayoutFor, portalAsk, isEntryFollowUp,
 } from "../assets/lib/copilot.js";
@@ -51,6 +51,11 @@ describe("what the admin gave us", () => {
     expect(chooseIntent("newsletter about our new book").kind).toBe("newsletter");
     expect(chooseIntent("Zech and Mateo build a lighthouse", "story").kind).toBe("story");   // answering "what is the story about?"
     expect(chooseIntent("Doodle Dash", "newsletter").kind).toBe("newsletter");
+    /* answering "What is the newsletter about?" is a newsletter, even when it talks about AI lessons and the portal */
+    expect(chooseIntent("write and announcement about our 5 AI lessons in the subscriber's portal. Give a summary for each one.", "newsletter").kind).toBe("newsletter");
+    expect(chooseIntent("write an announcement about our 5 AI lessons in the subscriber's portal").kind).toBe("newsletter");
+    expect(chooseIntent("tell everyone about the new AI lessons").kind).toBe("newsletter");
+    expect(chooseIntent("write an AI lesson about robots").kind).toBe("portal");          // a new lesson is still a portal entry
   });
 
   it("treats code as code even when it mentions a video, and caps a flood of links", () => {
@@ -580,9 +585,44 @@ describe("keeping newsletter text true to the site", () => {
 
   it("finds the page a pasted link points to, even when the link's words match nothing else", () => {
     const m = newsletterMessages({ brand, items: site, request: "on this page http://localhost:4321/newsletter/chike-s-creative-space-is-here-explore-our-new-website" })[1].content;
-    expect(m).toContain("Archive entry");
+    expect(m).toContain("Subscriber news");
     expect(m).toContain("Check out the latest adventure with Chike and Zech in space!");
     expect(m).not.toContain("Doodle Dash [");
+  });
+
+  it("gives every lesson when asked about the AI lessons, names them as lessons, and links only to real pages", () => {
+    const withLessons = siteItems({
+      portalEntries: [1, 2, 3, 4, 5].map((n) => ({ id: "l" + n, slug: "lesson-" + n, layout: "lesson", title: "AI Lesson 0" + n + ": Make thing " + n, description: "Kids use AI to build thing " + n + ".", vocabWord: "word " + n, status: "published" })),
+      activities: [
+        { id: "act-ai-lesson-1", kind: "members", portalSlug: "lesson-1", title: "AI Lesson 01: Make thing 1", summary: "A card.", status: "published" },
+        { id: "act-recycled-robot", title: "The Recycled Robot Friend", summary: "Make a robot from old boxes.", status: "published" }
+      ],
+      stories: [{ id: "story-book", kind: "members", portalSlug: "lesson-5", title: "How Computers See", blurb: "A book.", status: "published" }]
+    });
+    const m = newsletterMessages({ brand, items: withLessons, request: "write an email about our 5 AI lessons" })[1].content;
+    expect(m).toContain("There are 5 AI lessons on the site.");
+    for (let n = 1; n <= 5; n++) expect(m).toContain("AI lesson (a step-by-step lesson in the Subscriber’s Portal where kids use AI to build something, with a grown-up): AI Lesson 0" + n);
+    expect(m).not.toContain("Recycled Robot");
+    expect(m).toMatch(/never add a lesson, game, book, episode or activity that is not in it/);
+    expect(withLessons.find((it) => it.id === "act-ai-lesson-1")).toBeUndefined();
+    expect(withLessons.find((it) => it.id === "story-book").path).toBe("/newsletter/lesson-5");
+  });
+
+  it("points the button at the first thing the email is about when the model gives an address that isn't a real page", () => {
+    const n = parseNewsletter(JSON.stringify({ subject: "Hi", paragraphs: ["One."], buttonPath: "/lessons" }), ["/newsletter/lesson-1"], "/newsletter/lesson-1");
+    expect(n.buttonPath).toBe("/newsletter/lesson-1");
+    expect(parseNewsletter(JSON.stringify({ subject: "Hi", paragraphs: ["One."], buttonPath: "/newsletter" }), [], "/x").buttonPath).toBe("/newsletter");
+  });
+
+  it("says which items a draft left out when the owner asked about each one", () => {
+    const lessons = siteItems({ portalEntries: [1, 2, 3].map((n) => ({ id: "l" + n, slug: "l" + n, layout: "lesson", title: "AI Lesson 0" + n + ": Thing " + n, description: "d", status: "published" })) });
+    const email = { subject: "Lessons", headline: "Three lessons", paragraphs: ["AI Lesson 01: Thing 1 is fun.", "AI Lesson 02 builds thing 2."] };
+    expect(newsletterMissing(email, lessons, "a summary of each of our AI lessons")).toEqual(["AI Lesson 03: Thing 3"]);
+    expect(newsletterMissing(email, lessons, "tell people about our AI lessons")).toEqual([]);   // not asked for each one
+  });
+
+  it("knows how the site is organized", () => {
+    expect(newsletterMessages({ brand, items: site, request: "hello" })[0].content).toContain("HOW THE SITE IS ORGANIZED:");
   });
 
   it("admits when nothing matched instead of inventing", () => {

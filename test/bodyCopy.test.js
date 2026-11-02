@@ -46,6 +46,13 @@ describe("formatting body copy", () => {
     expect(html).toContain("if (!area && f.pages) return;");
   });
 
+  it("keeps simple layout tables and image sizes (an email's thumbnail beside its text), with numbers and known words only", () => {
+    expect(html).toContain('a:["href","title"], img:["src","alt","width","height"],');
+    expect(html).toContain('table:["role","width","cellpadding","cellspacing","border"], tbody:[], tr:[], td:["width","valign","align"]');
+    expect(html).toContain('["width","height","cellpadding","cellspacing","border"].forEach(a => { if (child.hasAttribute(a) && !/^\\d{1,4}%?$/.test(child.getAttribute(a))) child.removeAttribute(a); });');
+    expect(html).not.toMatch(/td:\[[^\]]*"style"/);
+  });
+
   it("shows formatting readably when a change is reviewed", () => {
     expect(html).toContain("return copyIsHTML(v) ? quReadableCopy(v) : String(v);");
     expect(html).toContain('.replace(/<(strong|b)>([\\s\\S]*?)<\\/\\1>/gi, "**$2**")');

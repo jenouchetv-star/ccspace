@@ -183,16 +183,28 @@ export function siteItems(data, opts) {
   const live = (opts && opts.drafts) ? ((r) => r && r.status !== "archived") : liveOnly;   // drafts too, when finding a page to edit
   const out = [];
   const add = (kind, col, rows, map) => (rows || []).filter(live).forEach((r) => { const it = map(r); if (it && it.title) out.push(Object.assign({ kind, col, id: r.id, draft: r.status === "draft" }, it)); });
-  add("Game", "games", d.games, (r) => ({ title: r.title, text: [r.summary, r.kind === "embed" ? "playable in the browser" : "", r.players ? "players: " + r.players : ""].filter(Boolean).join("; "), facts: (r.rules || []).join(" "), path: "/play/" + r.id }));
+  add("Game", "games", d.games, (r) => ({ title: r.title, text: [r.summary, r.kind === "embed" ? "playable in the browser" : "", r.kind === "members" ? "subscribers only (it opens in the Subscriber’s Portal)" : "", r.players ? "players: " + r.players : ""].filter(Boolean).join("; "), facts: (r.rules || []).join(" "), path: "/play/" + r.id }));
   add("Episode", "videos", d.videos, (r) => ({ title: r.title, text: "Episode " + (r.episode || "") + ". " + (r.description || ""), path: "/watch/" + r.id }));
-  add("Book or story", "stories", d.stories, (r) => ({ title: r.title, text: [r.blurb, (r.pages || []).length ? (r.pages.length + "-page picture book read on the site") : "", r.learning].filter(Boolean).join(" "), path: "/stories/" + r.id }));
-  add("Activity", "activities", d.activities, (r) => ({ title: r.title, text: [r.summary, r.ageMin ? "ages " + r.ageMin + "-" + r.ageMax : "", r.timeMinutes ? r.timeMinutes + " minutes" : ""].filter(Boolean).join("; "), path: "/activity/" + r.id }));
+  /* a subscribers-only book lives in its AI lesson, so that's where its link goes */
+  add("Book or story", "stories", d.stories, (r) => r.kind === "members"
+    ? { title: r.title, text: [r.blurb, "a subscribers-only book on the Read page; it opens in its AI lesson in the Subscriber’s Portal"].filter(Boolean).join(" "), path: "/newsletter/" + (r.portalSlug || "") }
+    : { title: r.title, text: [r.blurb, (r.pages || []).length ? (r.pages.length + "-page picture book read on the site") : "", r.learning].filter(Boolean).join(" "), path: "/stories/" + r.id });
+  /* a subscribers-only AI lesson's card on the Create page has no page of its own: the lesson itself is listed below */
+  add("Activity", "activities", (d.activities || []).filter((r) => r.kind !== "members"), (r) => ({ title: r.title, text: [r.summary, r.ageMin ? "ages " + r.ageMin + "-" + r.ageMax : "", r.timeMinutes ? r.timeMinutes + " minutes" : ""].filter(Boolean).join("; "), path: "/activity/" + r.id }));
   add("Character", "characters", d.characters, (r) => ({ title: r.name, text: [r.tagline, r.strength].filter(Boolean).join(" - "), path: "/characters/" + (r.slug || r.id) }));
   add("Shop book", "amazonProducts", d.amazonProducts, (r) => ({ title: r.title, text: r.why, path: "/shop/amazon" }));
   add("Printable", "products", d.products, (r) => ({ title: r.title, text: r.blurb, path: "/shop/printables/" + r.id }));
   add("Collection", "collections", d.collections, (r) => ({ title: r.title, text: r.blurb, path: "/collection/" + r.id }));
   add("Article", "articles", d.articles, (r) => ({ title: r.title, text: r.blurb, path: "/article/" + r.id }));
-  add("Archive entry", "portalEntries", d.portalEntries, (r) => ({ title: r.title, text: r.description, path: "/newsletter/" + (r.slug || r.id) }));
+  /* the Subscriber's Portal, named by what each entry is (an AI lesson, a game, a video, news) rather than "archive entry" */
+  const PORTAL_KIND = { lesson: "AI lesson", game: "Subscribers-only game", video: "Subscriber video", ebook: "Subscribers-only book" };
+  (d.portalEntries || []).filter(live).forEach((r) => {
+    if (!r.title) return;
+    const kind = PORTAL_KIND[r.layout] || "Subscriber news";
+    const text = [r.description, "in the Subscriber’s Portal, free for mailing-list subscribers",
+      r.vocabWord ? "word to know: " + r.vocabWord : "", r.publishedAt ? "published " + r.publishedAt : ""].filter(Boolean).join("; ");
+    out.push({ kind, col: "portalEntries", id: r.id, draft: r.status === "draft", title: r.title, text, path: "/newsletter/" + (r.slug || r.id) });
+  });
   (d.newsletters || []).filter((n) => n && n.status === "sent" && n.subject).slice(0, 8).forEach((n) => out.push({ kind: "Past email", title: n.subject, text: n.previewText || "", path: "" }));
   return out;
 }
@@ -249,6 +261,7 @@ export function systemPrompt(brand, digest, detail, who) {
     "Tone: gentle invitations, never pressure. Do not use urgent or pushy phrases like \"now\", \"hurry\", \"don't miss out\", \"act fast\" or \"limited time\". Say things like \"come and see\" or \"take a look\".",
     "Rules: Only mention games, books, episodes or activities that appear in the site list below, and only use page addresses from that list. Never invent facts, dates, prices, quotes or links. If you do not know something, leave a clear [placeholder] for the writer to fill. Write plain text with no markdown, no asterisks and no headings.",
     "Some pages are drafts or unpublished and are not in the list below. If the owner names a page that is not listed, say it may be a draft you cannot see here, rather than saying it does not exist.",
+    "HOW THE SITE IS ORGANIZED: Create has hands-on activities to do away from the screen (and cards for the AI lessons). Read has picture books kids read in the site's own page-turning reader. Watch has short animated episodes. Play has games played in the browser or with no screen at all. Meet Chike introduces the characters. Grown-Ups has guides, news and articles, help and contact. The Subscriber's Portal is free for anyone who joins the mailing list: it has the AI lessons (step by step, kids use AI to build something, with an example to try), subscribers-only games, a subscribers-only book, and videos and news. Anything marked subscribers only opens in the Subscriber's Portal.",
     "WHAT IS ON THE SITE RIGHT NOW:",
     digest || "(nothing yet)",
     detail && detail.length ? "MOST RELEVANT DETAILS:\n" + detail.map((d) => "- " + d.kind + ": " + d.title + (d.path ? " [" + d.path + "]" : "") + (d.text ? " - " + clip(d.text, 220) : "")).join("\n") : "",

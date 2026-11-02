@@ -84,9 +84,17 @@ export function chooseIntent(text, expecting, items) {
   const html = extractHtml(t);
   if (html) return { kind: "game", html };
   const ids = findYoutubeIds(t);
+  /* the answer to the Copilot's own question ("What is the newsletter about?") is that job, whatever words it uses */
+  if (expecting === "newsletter") return { kind: "newsletter", request: t };
+  if (expecting === "story") return { kind: "story", request: t };
+  /* announcing something, or writing about things already on the site ("our 5 AI lessons"), is an email, not a new entry */
+  const asking0 = /\?\s*$/.test(t);
+  const announce = !asking0 && /\b(?:announcement|announce|announcing|tell (?:everyone|people|our subscribers|subscribers|families|parents))\b/i.test(t);
+  const aboutExisting = /\babout (?:our|the|all|these|those|each of)\b|\bour (?:\d+|five|four|three|new) /i.test(t);
   /* content for the members-only Subscriber’s Portal: it may name a video link or something already on the site */
   /* an AI lesson lives only in the portal, so asking for one is a portal job even when the portal is not named */
-  const aiLesson = !/\?\s*$/.test(t) && !/\b(?:newsletter|email)\b/i.test(t) && /\b(?:write|draft|make|create|add|put together|prepare|build|plan)\b[^.?\n]{0,40}\b(?:AI|A\.I\.)(?:[- ][\w-]+){0,3}[- ]lessons?\b/i.test(t);   // "an AI lesson", "an AI coding lesson"
+  const aiLesson = !asking0 && !announce && !aboutExisting && !/\b(?:newsletter|email)\b/i.test(t) && /\b(?:write|draft|make|create|add|put together|prepare|build|plan)\b[^.?\n]{0,40}\b(?:AI|A\.I\.)(?:[- ][\w-]+){0,3}[- ]lessons?\b/i.test(t);   // "an AI lesson", "an AI coding lesson"
+  if (announce && expecting !== "portal") return { kind: "newsletter", request: t };
   if (expecting === "portal" || PORTAL_RE.test(t) || aiLesson) return { kind: "portal", request: t, layout: portalLayoutFor(t), youtubeIds: ids.slice(0, 1), item: items ? findItemInText(items, t) : null };
   if (ids.length) return { kind: "youtube", ids: ids.slice(0, 5), extra: ids.length - Math.min(ids.length, 5) };
   if (/\b(?:alt text|alt tags?|image tags?|image descriptions?|picture descriptions?|describe (?:(?:all|the|my|our) )*(?:images|pictures|photos))\b/i.test(t)) return { kind: "alt" };
@@ -478,15 +486,45 @@ export function parseGame(text) {
   return out.title || out.summary ? out : null;
 }
 
-const KIND_MEANS = { Game: "a game kids play on the site (not a video)", Episode: "a video episode kids watch", "Book or story": "a picture book kids read on the site", Activity: "a hands-on activity to do away from the screen", "Archive entry": "an entry in the Subscriber’s Portal" };
+const KIND_MEANS = { Game: "a game kids play on the site (not a video)", Episode: "a video episode kids watch", "Book or story": "a picture book kids read on the site", Activity: "a hands-on activity to do away from the screen",
+  "AI lesson": "a step-by-step lesson in the Subscriber’s Portal where kids use AI to build something, with a grown-up", "Subscribers-only game": "a game in the Subscriber’s Portal",
+  "Subscriber video": "a video in the Subscriber’s Portal", "Subscribers-only book": "a book in the Subscriber’s Portal", "Subscriber news": "news in the Subscriber’s Portal" };
 
-/** What the email may say: the site's own words about each thing the request names (by title or by its page link), nothing else. */
+/* "the AI lessons", "our games", "new episodes": a request about a whole group gets every item in it, not just a few */
+const GROUPS = [
+  { re: /\b(?:ai\s+)?lessons?\b/i, kinds: ["AI lesson"] },
+  { re: /\bgames\b/i, kinds: ["Game", "Subscribers-only game"] },
+  { re: /\b(?:episodes|videos)\b/i, kinds: ["Episode", "Subscriber video"] },
+  { re: /\b(?:books|stories|ebooks)\b/i, kinds: ["Book or story", "Subscribers-only book"] },
+  { re: /\barticles\b/i, kinds: ["Article"] },
+  { re: /\b(?:subscriber'?s?\s+portal|portal|subscribers?[- ]only|members?[- ]only|exclusive)\b/i, kinds: ["AI lesson", "Subscribers-only game", "Subscriber video", "Subscribers-only book", "Subscriber news"] }
+];
+
+/** What the email may say: the site's own words about each thing the request names (by its page link, by title, or as
+    a whole group like "the AI lessons"), nothing else. */
+export function newsletterPicks(items, request) {
+  const text = String(request || "");
+  const all = items || [];
+  const paths = (text.match(/\/(?:play|watch|stories|activity|characters|newsletter|article|collection)\/[A-Za-z0-9_-]+/g) || []);
+  const byLink = all.filter((it) => it.path && paths.indexOf(it.path) >= 0);
+  const kinds = [];
+  GROUPS.forEach((g) => { if (g.re.test(text)) g.kinds.forEach((k) => { if (kinds.indexOf(k) < 0) kinds.push(k); }); });
+  const byGroup = all.filter((it) => kinds.indexOf(it.kind) >= 0)
+    .sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { numeric: true }));   // AI Lesson 01, 02, 03...
+  const picked = [];
+  byLink.concat(byGroup, byLink.length || byGroup.length ? [] : relevantItems(all, text.replace(/https?:\/\/\S+/g, " "), 4))
+    .forEach((it) => { if (picked.indexOf(it) < 0) picked.push(it); });
+  return picked;
+}
+
 export function newsletterFacts(items, request) {
   const text = String(request || "");
-  const paths = (text.match(/\/(?:play|watch|stories|activity|characters|newsletter|article|collection)\/[A-Za-z0-9_-]+/g) || []);
-  const byLink = (items || []).filter((it) => it.path && paths.indexOf(it.path) >= 0);
-  const picked = byLink.length ? byLink : relevantItems(items, text.replace(/https?:\/\/\S+/g, " "), 3);
-  return picked.map((it) => "- " + it.kind + " (" + (KIND_MEANS[it.kind] || it.kind) + "): " + it.title + (it.path ? " [" + it.path + "]" : "") + (it.text ? ". " + clipText(it.text, 400) : "") + (it.facts ? " How it works: " + clipText(it.facts, 500) : "")).join("\n");
+  const all = items || [];
+  const kinds = [];
+  GROUPS.forEach((g) => { if (g.re.test(text)) g.kinds.forEach((k) => { if (kinds.indexOf(k) < 0) kinds.push(k); }); });
+  const picked = newsletterPicks(all, text);
+  const counts = kinds.map((k) => { const n = all.filter((it) => it.kind === k).length; return n ? "There " + (n === 1 ? "is 1 " + k : "are " + n + " " + k + (/s$/.test(k) ? "" : "s")) + " on the site." : ""; }).filter(Boolean);
+  return counts.concat(picked.slice(0, 14).map((it) => "- " + it.kind + " (" + (KIND_MEANS[it.kind] || it.kind) + "): " + it.title + (it.path ? " [" + it.path + "]" : "") + (it.text ? ". " + clipText(it.text, 320) : "") + (it.facts ? " How it works: " + clipText(it.facts, 400) : ""))).join("\n");
 }
 
 export function newsletterMessages(ctx) {
@@ -495,20 +533,36 @@ export function newsletterMessages(ctx) {
     { role: "system", content: copilotSystem(ctx.brand, ctx.items, ctx.where, ctx.request, ctx.who) },
     { role: "user", content: "Write a newsletter email for our mailing list.\nThe owner asks: " + ctx.request
       + "\nFACTS YOU MAY USE (from the site itself):\n" + (facts || "(none found; use only what the owner wrote and leave a [placeholder] for anything else)")
+      + "\nThis email goes to people who are already on the mailing list: never ask them to sign up, join or subscribe; invite them to open the Subscriber’s Portal or the page instead."
+      + "\nMention only the things in that list, by their exact titles; never add a lesson, game, book, episode or activity that is not in it, and never change what one is about. If the list has several of one kind, you may mention each of them."
       + "\nSay only what those facts and the owner's words support. Do not say who guides it, how it was made, whether it is new or back, how long it takes or that there is a timer or a prize unless a fact says so. A game is played, never watched; an episode is watched, never played. You cannot open links, so rely on the facts above."
-      + "\nWhen you mention something from the site, use its page address from the site list for the button. If nothing fits, use /."
-      + "\nReturn JSON with keys: subject (under 8 words), preview (one line), label (2 to 4 words in capitals, like NEW EPISODE), headline (under 9 words), paragraphs (an array of 2 to 4 short paragraphs), buttonLabel (2 to 3 words, a gentle invitation), buttonPath (a page address from the site list)." + JSON_ONLY },
+      + "\nFor the button, use the page address of the thing the email is about, from the facts list (for several, the newest one or the first). Use / only if the facts list is empty."
+      + "\nReturn JSON with keys: subject (under 8 words), preview (one line), label (2 to 4 words in capitals, like NEW EPISODE), headline (under 9 words), paragraphs (an array of 2 to 4 short paragraphs; when the owner asks about each one, an opening paragraph and then one short paragraph per item, up to 8), buttonLabel (2 to 3 words, a gentle invitation), buttonPath (a page address from the site list)." + JSON_ONLY },
   ];
 }
 
-export function parseNewsletter(text, validPaths) {
+/** When the owner asks about each (or all) of a group, the titles the draft never mentions. A title is found by its
+    short name before a colon ("AI Lesson 05") or by the whole title. */
+export function newsletterMissing(email, items, request) {
+  if (!email || !/\b(?:each|every|all)\b/i.test(String(request || ""))) return [];
+  const body = [email.subject, email.headline].concat(email.paragraphs || []).join(" ").toLowerCase();
+  const kinds = [];
+  GROUPS.forEach((g) => { if (g.re.test(String(request))) g.kinds.forEach((k) => { if (kinds.indexOf(k) < 0) kinds.push(k); }); });
+  return newsletterPicks(items, request).filter((it) => kinds.indexOf(it.kind) >= 0)
+    .filter((it) => { const short = String(it.title).split(":")[0].trim().toLowerCase(); return body.indexOf(short) < 0 && body.indexOf(String(it.title).toLowerCase()) < 0; })
+    .map((it) => it.title);
+}
+
+export function parseNewsletter(text, validPaths, fallbackPath) {
   const j = parseJson(text);
   if (!j) return null;
   const str = (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim();
-  const paragraphs = (Array.isArray(j.paragraphs) ? j.paragraphs : String(j.paragraphs || j.body || "").split(/\n\s*\n/)).map(str).filter(Boolean).slice(0, 5);
+  const paragraphs = (Array.isArray(j.paragraphs) ? j.paragraphs : String(j.paragraphs || j.body || "").split(/\n\s*\n/)).map(str).filter(Boolean).slice(0, 9);
   const path = str(j.buttonPath);
-  const ok = path === "/" || (validPaths || []).indexOf(path) >= 0;
-  const out = { subject: str(j.subject), preview: str(j.preview), label: str(j.label).toUpperCase(), headline: str(j.headline), paragraphs, buttonLabel: str(j.buttonLabel) || "Take a look", buttonPath: ok ? path : "/" };
+  const real = path === "/newsletter" || (validPaths || []).indexOf(path) >= 0;
+  /* an address that isn't a real page (or just "/") falls back to the first thing the email is about, when there is one */
+  const out = { subject: str(j.subject), preview: str(j.preview), label: str(j.label).toUpperCase(), headline: str(j.headline), paragraphs, buttonLabel: str(j.buttonLabel) || "Take a look",
+    buttonPath: real ? path : (fallbackPath || "/") };
   return out.subject && paragraphs.length ? out : null;
 }
 

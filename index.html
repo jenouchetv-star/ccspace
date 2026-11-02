@@ -13491,9 +13491,13 @@ async function cpGame(intent){
 async function cpNewsletter(request){
   cpPush({ role: "note", text: "Writing the email…" });
   const text = await cpAsk(CopilotLib.newsletterMessages(cpCtx({ request: request })), { json: true, maxTokens: 800 });
-  const n = CopilotLib.parseNewsletter(text, cpPaths());
+  const first = CopilotLib.newsletterPicks(WriterLib.siteItems(db.get()), request).find(it => it.path);
+  const n = CopilotLib.parseNewsletter(text, cpPaths(), first ? first.path : "/");
   if (!n){ cpPush({ role: "assistant", text: "That didn’t come out right. Try again, with a little more about what the email should say." }); return; }
   cpPush({ role: "card", card: { type: "newsletter", state: "draft", data: Object.assign({}, n, { paragraphs: n.paragraphs.join("\n\n") }) } });
+  /* asked about each one (or all of them)? say plainly if the draft skipped any, rather than let it go out short */
+  const missing = CopilotLib.newsletterMissing(n, WriterLib.siteItems(db.get()), request);
+  if (missing.length) cpPush({ role: "assistant", text: "Heads up: this draft leaves out " + missing.join(", ") + ". Add " + (missing.length === 1 ? "it" : "them") + " in the message above, or ask me to try again." });
 }
 
 async function cpStory(request){
@@ -20680,7 +20684,9 @@ function cmsBody(key){
 const RICH_TEXT_TAGS = {
   p:[], br:[], strong:[], b:[], em:[], i:[], u:[], s:[],
   h2:[], h3:[], h4:[], ul:[], ol:[], li:[], blockquote:[], hr:[], code:[], pre:[],
-  a:["href","title"], img:["src","alt"]
+  a:["href","title"], img:["src","alt","width","height"],
+  /* simple layout tables (an email's thumbnail beside its text): plain layout attributes only, never style or scripts */
+  table:["role","width","cellpadding","cellspacing","border"], tbody:[], tr:[], td:["width","valign","align"]
 };
 const SAFE_LINK = /^(https?:\/\/|mailto:|\/|#)/i;
 const SAFE_IMAGE = /^(assets\/|games\/|https?:\/\/|\/)/i;
@@ -20733,6 +20739,11 @@ function sanitizeHTML(dirty){
           child.setAttribute("target", "_blank");
         }
       }
+      /* layout attributes hold plain numbers and known words only */
+      ["width","height","cellpadding","cellspacing","border"].forEach(a => { if (child.hasAttribute(a) && !/^\d{1,4}%?$/.test(child.getAttribute(a))) child.removeAttribute(a); });
+      if (child.hasAttribute("valign") && !/^(top|middle|bottom)$/i.test(child.getAttribute("valign"))) child.removeAttribute("valign");
+      if (child.hasAttribute("align") && !/^(left|center|right)$/i.test(child.getAttribute("align"))) child.removeAttribute("align");
+      if (child.hasAttribute("role") && child.getAttribute("role") !== "presentation") child.removeAttribute("role");
       if (tag === "img"){
         const src = child.getAttribute("src") || "";
         if (!SAFE_IMAGE.test(src)){ child.remove(); return; }
