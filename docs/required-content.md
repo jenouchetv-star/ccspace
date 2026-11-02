@@ -91,7 +91,8 @@ The six offline games: The Bridge Challenge, Draw What I Say, Freeze and Swap, M
 
 - [x] The site change: a step can have its own small picture (left of the words) that opens large, with arrows
   to move through the steps. An activity record takes them as `stepPictures` (`[{ src, full, alt }]`, one per step).
-- [x] Stacey's Rubber Band Sound Lab (finder activity) has a main picture and a picture for every step
+- [x] Stacey's Water-Glass Xylophone (finder activity, rewritten from the Rubber Band Sound Lab so it no longer
+  repeats The Rubber-Band Guitar) has a main picture and a picture for every step
 - [ ] Pictures for the steps of the 22 published activities (130 steps). The Rubber-Band Guitar is first.
 
 ## 8. Draft activities to finish
