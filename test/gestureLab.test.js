@@ -23,7 +23,10 @@ describe("Hands-Free Reader", () => {
     expect(page).toContain('id="start-mouse"');
     expect(page).toContain("You won't see your video, only your digital hand.");
     expect(page).toContain('e.name === "NotAllowedError"');
-    expect(page).not.toContain("drawImage");
+    /* the only picture drawn is into the AI's own canvas, which is never put on the page */
+    expect(page.match(/drawImage/g)).toHaveLength(1);
+    expect(page).toContain('c.getContext("2d").drawImage(bmp, 0, 0);');
+    expect(page).not.toMatch(/appendChild\(relay\.canvas\)|camCtx\.drawImage|xctx\.drawImage/);
   });
 
   it("gives every gesture a job, with a kind", () => {
@@ -76,6 +79,23 @@ describe("Hands-Free Reader look", () => {
   it("has no emojis and none of Chike's branding", () => {
     expect(page).not.toMatch(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
     for (const brand of ["Chike", "Plus Jakarta", "#F2C230", "#BC3229", "4px 4px 0"]) expect(page).not.toContain(brand);
+  });
+});
+
+describe("the camera in a sealed frame", () => {
+  it("has the lesson page turn the camera on and pass pictures in, one at a time", () => {
+    expect(index).toContain("const CamRelay = { stream: null, video: null, win: null, frame: null, timer: 0, waiting: false };");
+    expect(index).toContain('win.postMessage({ ccsCameraFrame: bmp }, "*", [bmp]);');
+    expect(index).toContain('if (!frame || /allow-same-origin/.test(frame.getAttribute("sandbox") || "")) return;');
+    expect(index).toContain("if (!CamRelay.frame || !CamRelay.frame.isConnected || CamRelay.frame.contentWindow !== win){ camRelayStop(); return; }");
+    expect(page).toContain('window.parent.postMessage({ ccsCamera:"start" }, "*");');
+    expect(page).toContain('Promise.resolve(hands.send({ image:c })).catch(function(){}).then(next);');
+  });
+
+  it("shows the book as a preview in the lesson's example box, opening the full-screen player", () => {
+    expect(page).toContain('<div class="preview hidden" id="preview" role="button" tabindex="0"');
+    expect(page).toContain('function openFull(){ try { window.parent.postMessage({ ccsExample:"fullscreen" }, "*"); } catch(_e){} }');
+    expect(page).toContain("if (e.source === window.parent && e.data && e.data.ccsStaged)");
   });
 });
 

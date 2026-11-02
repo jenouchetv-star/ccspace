@@ -76,7 +76,7 @@ Make a web page I control with hand gestures, in one HTML file called hands-free
     'message', 'Our newest AI lesson is here! Kids write one clear prompt and AI builds a page they control without touching anything: swipe to turn the pages of a book, point to scroll, pinch to change the text size, and more.' || chr(10) || chr(10) || 'It is a hands-on way to learn about computer vision and how to design controls that are easy to use, and why it is smart to ask that a camera''s video stays on your own computer. Come and take a look!',
     'button', 'Take a look'),
   'howToPlay', '[]'::jsonb, 'gallery', '[]'::jsonb, 'coverStill', '',
-  'gameId', '', 'gamePath', '', 'gameMode', 'launch', 'gameLabel', '', 'privateGameId', 'pg-gesture-lab', 'privateGameKb', 69,
+  'gameId', '', 'gamePath', '', 'gameMode', 'launch', 'gameLabel', '', 'privateGameId', 'pg-gesture-lab', 'privateGameKb', 74,
   'bookId', '', 'bookMode', 'launch', 'bookPath', '', 'videoUrl', '',
   'buttonLabel', '', 'buttonUrl', '', 'textFirst', 'after', 'adminNote', '',
   'createdAt', '2026-11-01T22:00:00.000Z', 'updatedAt', '2026-11-02T00:00:00.000Z'))

@@ -206,6 +206,15 @@
 
   /* the start box */
   .start{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(10,12,14,.42); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); z-index:50; padding:16px; }
+  /* inside a lesson's example box the book is a preview: the whole box opens the full-screen player, where the camera works */
+  .preview{ position:fixed; inset:0; z-index:55; display:grid; place-items:center; padding:16px; cursor:pointer;
+    background:linear-gradient(180deg, rgba(10,12,14,.05), rgba(10,12,14,.38)); }
+  .preview .box{ max-width:400px; padding:20px 22px; border-radius:18px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); text-align:center; }
+  .preview .mark{ margin:0 auto; }
+  .preview h2{ margin:10px 0 6px; font-family:var(--serif); font-weight:500; font-size:24px; line-height:1.15; }
+  .preview p{ margin:0 0 14px; font-size:14px; line-height:1.5; color:var(--muted); }
+  .preview:hover .btn--primary, .preview:focus-visible .btn--primary{ filter:brightness(1.08); }
+  .preview:focus-visible{ outline:3px solid var(--accent); outline-offset:-3px; }
   .start .box{ max-width:500px; padding:26px; border-radius:20px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); }
   .start h2{ margin:10px 0 8px; font-family:var(--serif); font-weight:500; font-size:28px; letter-spacing:-.01em; line-height:1.15; }
   .start p{ margin:0 0 12px; font-size:14.5px; line-height:1.55; color:var(--muted); }
@@ -289,6 +298,15 @@
 <canvas id="xray" aria-hidden="true"></canvas>
 <div class="xlabel" id="xlabel">X-ray</div>
 <div class="toast" id="toast" role="status"></div>
+
+<div class="preview hidden" id="preview" role="button" tabindex="0" aria-label="Open the Hands-Free Reader full screen">
+  <div class="box">
+    <div class="mark" id="mark3" aria-hidden="true"></div>
+    <h2>Read it full screen</h2>
+    <p>Turn the pages with your hand: the camera and hand gestures work in full screen.</p>
+    <span class="btn btn--primary">Open full screen</span>
+  </div>
+</div>
 
 <div class="start" id="start">
   <div class="box">
@@ -719,20 +737,62 @@
     $("btn-camera").innerHTML = icon(on ? "cameraOff" : "camera") + (on ? "Turn camera off" : "Turn camera on");
   }
 
+  /* Inside the lesson page, this book runs in a sealed frame with no web address of its own, and browsers never
+     show a camera prompt for one. So it asks the lesson page, which turns the camera on (the browser's normal
+     prompt, for the site) and passes in one picture at a time, in memory only. Opened on its own, it uses the
+     camera directly. */
+  var embedded = window.parent !== window;
+  var relay = { on:false, w:640, h:480, canvas:document.createElement("canvas") };
+  function askPage(){
+    return new Promise(function(ok, no){
+      var heard = false;
+      function onMsg(e){
+        if (e.source !== window.parent || !e.data || typeof e.data.ccsCamera !== "string") return;
+        if (e.data.ccsCamera === "asking"){ heard = true; return; }
+        if (e.data.ccsCamera === "started"){ window.removeEventListener("message", onMsg); ok(e.data); }
+        if (e.data.ccsCamera === "error"){ window.removeEventListener("message", onMsg); var er = new Error("camera"); er.name = e.data.name || "NotAllowedError"; no(er); }
+      }
+      window.addEventListener("message", onMsg);
+      window.parent.postMessage({ ccsCamera:"start" }, "*");
+      /* a page that can't pass the camera in doesn't answer at all: then try the camera here */
+      setTimeout(function(){ if (!heard){ window.removeEventListener("message", onMsg); var er = new Error("no relay"); er.name = "NoRelay"; no(er); } }, 1500);
+    });
+  }
+  function cameraDirect(){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject(Object.assign(new Error("nocam"), { name:"NotFoundError" }));
+    return navigator.mediaDevices.getUserMedia({ video:{ width:{ ideal:640 }, height:{ ideal:480 }, facingMode:"user" }, audio:false });
+  }
+  /* each picture from the lesson page: drawn into a canvas the AI reads, then the page is told to send the next */
+  window.addEventListener("message", function(e){
+    if (e.source !== window.parent || !e.data) return;
+    if (e.data.ccsCamera === "stopped" && relay.on){ relay.on = false; stopCamera(); return; }
+    var bmp = e.data.ccsCameraFrame;
+    if (!bmp) return;
+    var next = function(){ try { window.parent.postMessage({ ccsCamera:"next" }, "*"); } catch(_e){} };
+    if (!relay.on || !running || !hands){ if (bmp.close) bmp.close(); next(); return; }
+    var c = relay.canvas;
+    if (c.width !== bmp.width || c.height !== bmp.height){ c.width = bmp.width; c.height = bmp.height; relay.w = bmp.width; relay.h = bmp.height; }
+    c.getContext("2d").drawImage(bmp, 0, 0); if (bmp.close) bmp.close();
+    Promise.resolve(hands.send({ image:c })).catch(function(){}).then(next);
+  });
+
   async function startCamera(){
     var err = $("start-err"); err.classList.add("hidden");
     $("g-name").textContent = "Starting the camera…"; $("g-does").textContent = "Your browser may ask if this page can use the camera";
+    relay.on = false;
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("nocam");
-      stream = await navigator.mediaDevices.getUserMedia({ video:{ width:{ ideal:640 }, height:{ ideal:480 }, facingMode:"user" }, audio:false });
+      if (embedded){
+        try { var info = await askPage(); relay.on = true; relay.w = info.w || 640; relay.h = info.h || 480; }
+        catch(e){ if (e.name !== "NoRelay") throw e; stream = await cameraDirect(); }
+      } else stream = await cameraDirect();
     } catch(e){
       err.textContent = e && (e.name === "NotAllowedError" || e.name === "SecurityError")
-        ? "The camera is blocked, so the AI can't see your hand. You can allow it in your browser, or use the buttons and keys."
+        ? "The camera is blocked, so the AI can't see your hand. You can allow it in your browser (look for the camera icon in the address bar), or use the buttons and keys."
         : "We couldn't find a camera on this device. You can still use the buttons and keys.";
       err.classList.remove("hidden"); $("start").classList.remove("hidden"); showGesture(null); return;
     }
     $("start").classList.add("hidden");
-    video.srcObject = stream; await video.play();
+    if (stream){ video.srcObject = stream; await video.play(); }
     state.mode = "camera"; camButton(); setLive(false, "Loading");
     $("g-name").textContent = "Loading the hand-tracking AI…"; $("g-does").textContent = "This takes a few seconds the first time";
     try {
@@ -743,10 +803,11 @@
     } catch(e){
       $("g-name").textContent = "The AI couldn't load"; $("g-does").textContent = "Check your internet connection, then try again"; return;
     }
-    running = true; setLive(true, "Live"); showGesture(null); pump();
+    running = true; setLive(true, "Live"); showGesture(null); if (!relay.on) pump();
   }
   function stopCamera(){
     running = false; if (stream) stream.getTracks().forEach(function(t){ t.stop(); }); stream = null;
+    if (relay.on){ relay.on = false; try { window.parent.postMessage({ ccsCamera:"stop" }, "*"); } catch(_e){} }
     state.mode = "keys"; state.gesture = null; showGesture(null); setRing(0); hideCursor(); $("dial").classList.remove("on");
     camButton(); setLive(false, "Off"); drawCamIdle("Camera is off"); camNote("off");
     [].forEach.call($("fingers").children, function(s){ s.classList.remove("up"); });
@@ -777,7 +838,7 @@
 
   /* a picture-shaped box that fills the screen, cropping the edges like a phone camera does */
   function coverRect(W, H){
-    var vw = video.videoWidth || 640, vh = video.videoHeight || 480, s = Math.max(W / vw, H / vh);
+    var vw = relay.on ? relay.w : (video.videoWidth || 640), vh = relay.on ? relay.h : (video.videoHeight || 480), s = Math.max(W / vw, H / vh);
     return { x:(W - vw * s) / 2, y:(H - vh * s) / 2, w:vw * s, h:vh * s };
   }
 
@@ -908,6 +969,20 @@
     else if (k === "f" || k === "F") setFocus(!focus); else if (k === "x" || k === "X") setXray(!xray);
     else if (k === "+" || k === "=") setTextSize(textSize + 0.1); else if (k === "-") setTextSize(textSize - 0.1);
   });
+
+  /* In a lesson's example box (a frame the lesson page did not open full screen), the book is a preview of the
+     design: tapping it opens the full-screen player. The player tells the book it is full screen as it loads,
+     and then the book starts as normal, camera and all. */
+  $("mark3").innerHTML = handSVG("open");
+  function openFull(){ try { window.parent.postMessage({ ccsExample:"fullscreen" }, "*"); } catch(_e){} }
+  if (embedded){
+    $("start").classList.add("hidden"); $("preview").classList.remove("hidden");
+    $("preview").addEventListener("click", openFull);
+    $("preview").addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); openFull(); } });
+    window.addEventListener("message", function(e){
+      if (e.source === window.parent && e.data && e.data.ccsStaged){ $("preview").classList.add("hidden"); if (state.mode === "off") $("start").classList.remove("hidden"); }
+    });
+  }
 
   setTheme(!!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches), true);
   buildBook(); layoutBook(); setTextSize(1, true);

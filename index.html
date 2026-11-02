@@ -10850,6 +10850,58 @@ window.addEventListener("message", (ev) => {
   if (d.ccsExample === "fullscreen") ACTIONS["portal-play-private"](corner);
 });
 
+/* Camera relay for sealed games (the Hands-Free Reader). A sealed frame has no web address of its own, and browsers
+   never show a camera prompt for one, so the game can't turn the camera on itself. When it asks, this page does
+   (the browser's normal prompt, for this site) and hands the game one picture at a time - each sent only after the
+   game says it's ready for the next. The pictures stay in memory: nothing is recorded, saved or sent anywhere.
+   The camera turns off when the game says stop, or as soon as its frame leaves the page. Only a sealed frame on
+   this page (sandboxed, without access to the site's storage) can ask. */
+const CamRelay = { stream: null, video: null, win: null, frame: null, timer: 0, waiting: false };
+function camRelayStop(){
+  if (CamRelay.timer) clearInterval(CamRelay.timer);
+  /* a game that's still on the page (say, the small example once the full-screen player takes over) hears that its camera is off */
+  if (CamRelay.win && CamRelay.frame && CamRelay.frame.isConnected){ try { CamRelay.win.postMessage({ ccsCamera: "stopped" }, "*"); } catch(_e){ /* gone */ } }
+  if (CamRelay.stream) CamRelay.stream.getTracks().forEach(t => t.stop());
+  Object.assign(CamRelay, { stream: null, video: null, win: null, frame: null, timer: 0, waiting: false });
+}
+function camRelaySend(){
+  const v = CamRelay.video, win = CamRelay.win;
+  if (!CamRelay.frame || !CamRelay.frame.isConnected || CamRelay.frame.contentWindow !== win){ camRelayStop(); return; }
+  if (CamRelay.waiting || !v || v.readyState < 2 || !window.createImageBitmap) return;
+  CamRelay.waiting = true;
+  createImageBitmap(v).then(bmp => {
+    try { win.postMessage({ ccsCameraFrame: bmp }, "*", [bmp]); }
+    catch(_e){ CamRelay.waiting = false; }
+  }, () => { CamRelay.waiting = false; });
+}
+async function camRelayStart(frame){
+  camRelayStop();
+  const win = frame.contentWindow;
+  /* tell the game straight away that the page is asking, so it waits for the browser's prompt instead of giving up */
+  try { win.postMessage({ ccsCamera: "asking" }, "*"); } catch(_e){ return; }
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error("No camera"), { name: "NotFoundError" });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: false });
+    const video = document.createElement("video");
+    video.muted = true; video.playsInline = true; video.setAttribute("playsinline", ""); video.srcObject = stream;
+    await video.play();
+    Object.assign(CamRelay, { stream: stream, video: video, win: win, frame: frame });
+    win.postMessage({ ccsCamera: "started", w: video.videoWidth || 640, h: video.videoHeight || 480 }, "*");
+    CamRelay.timer = setInterval(camRelaySend, 33);
+  } catch(e){
+    try { win.postMessage({ ccsCamera: "error", name: (e && e.name) || "Error" }, "*"); } catch(_e){ /* the frame is gone */ }
+  }
+}
+window.addEventListener("message", (ev) => {
+  const d = ev.data;
+  if (!d || typeof d !== "object" || typeof d.ccsCamera !== "string") return;
+  const frame = Array.from(document.querySelectorAll("iframe[sandbox]")).find(f => f.contentWindow === ev.source);
+  if (!frame || /allow-same-origin/.test(frame.getAttribute("sandbox") || "")) return;
+  if (d.ccsCamera === "start") camRelayStart(frame);
+  else if (d.ccsCamera === "next" && CamRelay.win === ev.source){ CamRelay.waiting = false; }
+  else if (d.ccsCamera === "stop" && CamRelay.win === ev.source) camRelayStop();
+});
+
 function closeGameStage(){
   if (!$(".gamestage")) return false;
   const frame = $("#gamestage-frame");
