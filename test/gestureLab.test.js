@@ -79,6 +79,15 @@ describe("Hands-Free Reader look", () => {
   });
 });
 
+describe("Admins never have to join", () => {
+  it("opens subscribers-only lessons and games for an admin instead of the join box", () => {
+    expect(index).toContain("function portalHasAccess(){ return portalIsSubscriber() || portalIsAdmin(); }");
+    expect(index).toContain('if (next && portalIsAdmin()){ navigate("#" + next); return; }');
+    expect(index).toMatch(/function membersActivityCard\(a\)\{[\s\S]*?const sub = portalHasAccess\(\);/);
+    expect(index).toMatch(/function membersPoster\(g, what\)\{[\s\S]*?const sub = portalHasAccess\(\);/);
+  });
+});
+
 describe("Admins see every page", () => {
   it("opens archived and draft pages for admins, and only for them", () => {
     expect(index).toContain("function adminSeesAll(){ return isAuthed() && isActiveAdmin(); }");

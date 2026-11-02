@@ -27,7 +27,7 @@ describe("Gravity 4 on the Play page", () => {
   it("never plays the game on its own page: a subscriber goes to the portal entry", () => {
     const p = fn("membersPoster");
     expect(p).toContain('const to = "#/newsletter/" + slug;');
-    expect(p).toContain("portalIsSubscriber()");
+    expect(p).toContain("portalHasAccess()");
     expect(p).not.toContain("open-game");
     expect(p).not.toContain("srcdoc");
     expect(fn("viewGame")).toContain('if (g.kind === "members"){');

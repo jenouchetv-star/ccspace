@@ -51,7 +51,7 @@ Make a fun, friendly 3D robot math buddy in one HTML file that I can use in my b
 • I can ask for a high five any time by saying "High five!" or tapping the High five button. The robot says "Up top! Tap my hand!" and raises its hand for me to tap.
 
 👆 How to use it:
-• A chat window on the right side shows our whole conversation, like a text chat: the robot's messages on the left (they type out letter by letter, like an arcade game) and mine on the right. On a phone, the chat window goes under the robot.
+• A chat window on the left side shows our whole conversation, like a text chat: the robot's messages on the left (they type out letter by letter, like an arcade game) and mine on the right. On a phone, the chat window goes under the robot.
 • Type in a text box at the bottom of the chat window and press Enter or the Send button.
 • Press a big microphone button to talk instead (it uses the browser's speech recognition and only listens after I press it). If the microphone doesn't work, typing still works.
 • A Voice on / Voice off button. It starts on Voice off. Voice on: the robot also reads its words out loud. Voice off: its words only show in the chat window.
@@ -62,7 +62,7 @@ Make a fun, friendly 3D robot math buddy in one HTML file that I can use in my b
 • Drag the robot to turn it a little.
 
 🎨 How it looks:
-• An arcade-game look that matches the robot: a dark space-blue background with a glowing cyan grid floor in dark mode, and a soft silver background in light mode. Chunky glossy white buttons with a cyan glow, and arcade score counters at the top, like "RIGHT 003" and "HIGH 5 001". The Voice, New question, Reset robot and Full screen buttons sit in a row under the robot, as outlined buttons with glowing cyan icons, like the light mode / dark mode button.
+• An arcade-game look that matches the robot: a dark space-blue background with a glowing cyan grid floor in dark mode, and a soft silver background in light mode. Chunky glossy white buttons with a cyan glow, and arcade score counters in the bottom corner, like "RIGHT 003" and "HIGH 5 001". The Voice, New question, Reset robot and Full screen buttons sit in a row above the robot, as outlined buttons with glowing cyan icons, like the light mode / dark mode button.
 • A cute, shiny white 3D robot standing on a glowing hover pad: a big round helmet head with a black visor screen, glowing blue rings on its round ear caps, and two little antennae with balls on top. A round body with a gray chest plate and 4 glowing lights that flash while it talks. Two arms with hands and fingers that hang beside its body (not hidden behind it), and short legs with round feet. It gently floats up and down, and waves hello when I say hi or bye.
 • Two glowing cyan eyes on the black visor, shaped like little rounded domes (not human eyes, no pupils). They work like little screens, so they change shape to show feelings: they blink, look around, glance at the chat while I type, turn into happy arches when I'm right, droop when I'm wrong, grow big and sparkly for a high five, turn into pink hearts after a high five, wink after a joke, and squint when the robot is thinking.
 • A big digital whiteboard behind the robot (white, with a dark header bar and glowing cyan edges), where the math steps appear in clear dark writing, one step per line, like "12 × 8 = 96", with the answer line in blue.

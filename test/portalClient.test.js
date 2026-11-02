@@ -646,8 +646,9 @@ describe("an AI lesson's example of what its prompt makes", () => {
     const ex = body("portalExampleHTML");
     expect(ex).toContain('if (e.layout !== "lesson" || !e.privateGameId) return "";');
     expect(ex).toContain('sandbox="allow-scripts allow-popups"');
-    expect(ex).toContain('<button type="button" class="pexample__full" data-act="portal-play-private" data-title="\' + E(e.title) + \'" aria-label="Open the example full screen" title="Full screen">\' + ic("maximize-2") + \'</button></div>\'');
-    expect(html).toContain(".pexample__full{ position:absolute; right:12px; bottom:12px;");
+    expect(ex).toContain('<div class="pexample__corner"><span class="pexample__hint" aria-hidden="true">Best viewed in full screen</span>');
+    expect(ex).toContain('<button type="button" class="pexample__full" data-act="portal-play-private" data-title="\' + E(e.title) + \'" aria-label="Open the example full screen (best viewed in full screen)" title="Full screen">\' + ic("maximize-2") + \'</button></div></div>\'');
+    expect(html).toContain(".pexample__corner{ position:absolute; right:12px; bottom:12px;");
     expect(html).toContain(".pmedia--example{ position:relative; aspect-ratio:4/3; margin-bottom:10px; background:linear-gradient(");
     expect(ex).toContain("What this prompt can make");
     expect(body("portalFillExamples")).toContain("PORTAL_EXAMPLE_HTML[id] = (await loadPortalGameHtml(id)) || \"\";");
@@ -676,7 +677,7 @@ describe("an AI lesson's example of what its prompt makes", () => {
     expect(html).toContain('if (stage && ev.source === stage.contentWindow){');
     expect(html).toContain('if (d.ccsExample === "fullscreen") closeGameStage();');
     expect(html).toContain('const frame = Array.from(document.querySelectorAll(".pexample iframe")).find(f => f.contentWindow === ev.source);');
-    expect(html).toContain('if (d.ccsExample === "has-fullscreen") corner.style.display = "none";');
+    expect(html).toContain('if (d.ccsExample === "has-fullscreen") (corner.closest(".pexample__corner") || corner).style.display = "none";');
     expect(html).toContain('if (d.ccsExample === "fullscreen") ACTIONS["portal-play-private"](corner);');
     /* the player tells a sealed frame it's full screen, so the example can offer "Exit full screen" */
     expect(html).toContain('try { frame.contentWindow.postMessage({ ccsStaged: true }, "*"); } catch(_e){}');
