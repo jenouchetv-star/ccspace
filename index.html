@@ -1286,16 +1286,33 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
   font-weight:800; font-size:1.06rem; color:var(--cyan-deep);
 }
 .steps li:first-child::before{ top:0; }
-/* a step with its own small picture: the words, then the picture beside them */
-.steps li.steps__pic{ display:grid; grid-template-columns:minmax(0,1fr) 128px; gap:18px; align-items:start; }
+/* a step with its own small picture: its number, the picture, then the words */
+.steps li.steps__pic{ display:grid; grid-template-columns:128px minmax(0,1fr); gap:18px; align-items:start; }
+.steps li.steps__pic > .steps__zoom{ order:-1; }
+.steps__zoom{
+  display:block; padding:0; margin:0; border:0; background:none; cursor:zoom-in;
+  border-radius:var(--r, 14px); transition:transform .15s ease;
+}
+.steps__zoom:hover{ transform:scale(1.04); }
+.steps__zoom:focus-visible{ outline:3px solid var(--cyan); outline-offset:3px; }
 .steps__pic img{
   width:128px; aspect-ratio:1; object-fit:cover; display:block;
   border:var(--line-thin); border-radius:var(--r, 14px); background:var(--paper-3);
 }
 @media (max-width:520px){
-  .steps li.steps__pic{ grid-template-columns:minmax(0,1fr) 92px; gap:12px; }
+  .steps li.steps__pic{ grid-template-columns:92px minmax(0,1fr); gap:12px; }
   .steps__pic img{ width:92px; }
 }
+@media (prefers-reduced-motion: reduce){ .steps__zoom{ transition:none; } .steps__zoom:hover{ transform:none; } }
+/* a step's picture opened large (the step-zoom action) */
+.modal--zoom{ width:min(720px,100%); }
+.zoomview{ margin:0; }
+.zoomview img{ display:block; width:100%; height:auto; max-height:68vh; object-fit:contain; border:var(--line); border-radius:var(--r-lg); background:var(--paper-3); }
+.zoomview figcaption{ margin-top:14px; font-size:1.06rem; font-weight:600; line-height:1.5; }
+.zoomview__foot{ justify-content:space-between; align-items:center; }
+.zoomview__nav{ display:flex; align-items:center; gap:12px; }
+.zoomview__arrow{ width:44px; height:44px; min-height:44px; padding:0; justify-content:center; border-radius:999px; }
+.zoomview__arrow[disabled]{ opacity:.35; cursor:default; }
 .checklist{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:9px; }
 .checklist li{ display:flex; gap:12px; align-items:flex-start; font-size:1.02rem; }
 .checklist svg{ width:20px; height:20px; flex:none; margin-top:5px; color:var(--leaf-deep); }
@@ -9758,19 +9775,20 @@ const FIND_CATALOG = (function(){
 })();
 
 /* Our own pictures for an activity (made in Higgsfield from the character sheets). `main` leads the activity's
-   page and its finder card; `steps` sit beside its numbered steps, one per step, in order. An activity without
-   any keeps its theme plate. */
+   page and its finder card; `steps` sit beside its numbered steps, one per step, in order (step-N.jpg small,
+   step-N-large.jpg for the enlarged view). An activity without any keeps its theme plate. */
+const findStepPics = (dir, alts) => alts.map((alt, i) => ({ src: dir + "step-" + (i + 1) + ".jpg", full: dir + "step-" + (i + 1) + "-large.jpg", alt: alt }));
 const FIND_PICTURES = {
   A14: {
     main: { src:"assets/activities/a14-rubber-band-sound-lab/main.jpg", alt:"Stacey plucks a rubber band on her homemade shoebox instrument at the kitchen table while music notes float up" },
-    steps: [
-      { src:"assets/activities/a14-rubber-band-sound-lab/step-1.jpg", alt:"Stacey stretches rubber bands around an open shoebox with a round hole cut in the lid" },
-      { src:"assets/activities/a14-rubber-band-sound-lab/step-2.jpg", alt:"Stacey leans her ear close to the box and plucks one rubber band, listening" },
-      { src:"assets/activities/a14-rubber-band-sound-lab/step-3.jpg", alt:"Stacey pulls one rubber band tighter and plucks it, surprised by the higher sound" },
-      { src:"assets/activities/a14-rubber-band-sound-lab/step-4.jpg", alt:"Stacey holds up a thick rubber band and a thin one side by side to compare them" },
-      { src:"assets/activities/a14-rubber-band-sound-lab/step-5.jpg", alt:"Rubber bands lined up across the box from loosest to tightest, like a tiny harp" },
-      { src:"assets/activities/a14-rubber-band-sound-lab/step-6.jpg", alt:"Stacey plays a little tune on her shoebox instrument for an audience of stuffed animals" }
-    ]
+    steps: findStepPics("assets/activities/a14-rubber-band-sound-lab/", [
+      "Stacey stretches rubber bands around an open shoebox with a round hole cut in the lid",
+      "Stacey leans her ear close to the box and plucks one rubber band, listening",
+      "Stacey pulls one rubber band tighter and plucks it, surprised by the higher sound",
+      "Stacey plucks a thick red band and a thin yellow band at the same time to compare their sounds",
+      "Rubber bands lined up across the box from loosest to tightest, like a tiny harp",
+      "Stacey plays a little tune on her shoebox instrument for an audience of stuffed animals"
+    ])
   }
 };
 FIND_CATALOG.forEach(a => {
@@ -10001,6 +10019,50 @@ function findCard(r){
     + '</article>';
 }
 
+/** A numbered list of steps (an activity's steps, a game's rules). A step with its own picture (`pics[i]`,
+    { src, alt, full }) shows it small beside the words; a click opens it large (`full`, or `src` when there is
+    no bigger copy) with the step's words under it. The rest stay text-only. */
+function stepsHTML(texts, pics){
+  const p = Array.isArray(pics) ? pics : [];
+  return '<ol class="steps">' + (texts || []).map((t, i) => p[i] && p[i].src
+    ? '<li class="steps__pic"><span>' + E(t) + '</span>'
+      + '<button type="button" class="steps__zoom" data-act="step-zoom" data-src="' + E(p[i].full || p[i].src) + '" data-alt="' + E(p[i].alt || "")
+      + '" data-caption="' + E((i + 1) + ". " + t) + '" aria-label="' + E("Enlarge the picture for step " + (i + 1)) + '">'
+      + '<img class="skel" src="' + E(p[i].src) + '" alt="' + E(p[i].alt || "") + '" loading="lazy"></button></li>'
+    : '<li>' + E(t) + '</li>').join("") + '</ol>';
+}
+
+/* The enlarged step pictures open from stepsHTML: every pictured step of that list, and the one showing. */
+let STEP_ZOOM = null;
+function stepZoomHTML(){
+  const z = STEP_ZOOM, it = z.items[z.i], n = z.items.length;
+  const arrow = (dir, icon, label, off) => '<button type="button" class="btn btn--sm btn--paper zoomview__arrow" data-act="step-zoom-go" data-dir="' + dir + '"'
+    + (off ? " disabled" : "") + ' aria-label="' + label + '">' + ic(icon) + '</button>';
+  return '<figure class="zoomview"><img src="' + E(it.src) + '" alt="' + E(it.alt) + '"><figcaption>' + E(it.caption) + '</figcaption></figure>'
+    + '<div class="modal__foot zoomview__foot">'
+    + (n > 1 ? '<div class="zoomview__nav">' + arrow(-1, "arrow-left", "Previous step", z.i === 0)
+        + '<span class="tiny mute" aria-live="polite">Step ' + (z.i + 1) + ' of ' + n + '</span>'
+        + arrow(1, "arrow-right", "Next step", z.i === n - 1) + '</div>' : "")
+    + '<button type="button" class="btn btn--ghost" data-act="close-modal">Close</button></div>';
+}
+function stepZoomGo(dir){
+  const body = $("#modal-root [data-modal-body]");
+  if (!STEP_ZOOM || !body || !body.querySelector(".zoomview")) return;
+  const next = STEP_ZOOM.i + dir;
+  if (next < 0 || next >= STEP_ZOOM.items.length) return;
+  STEP_ZOOM.i = next;
+  body.innerHTML = stepZoomHTML();
+  drawIcons();
+  const keep = body.querySelector('[data-dir="' + dir + '"]:not([disabled])') || body.querySelector('[data-dir="' + (-dir) + '"]');
+  if (keep) keep.focus();
+}
+document.addEventListener("keydown", ev => {
+  if ((ev.key === "ArrowLeft" || ev.key === "ArrowRight") && document.querySelector("#modal-root .zoomview")){
+    ev.preventDefault();
+    stepZoomGo(ev.key === "ArrowLeft" ? -1 : 1);
+  }
+});
+
 /** A finder activity, on a page of its own. */
 function viewFindActivity(id){
   const a = FIND_CATALOG.find(x => x.id === id);
@@ -10043,12 +10105,7 @@ function viewFindActivity(id){
 
     + (a.steps.length
         ? '<div class="section section--tight" style="margin-top:26px"><h2>How to make it</h2>'
-          + '<ol class="steps">' + a.steps.map((s, i) => {
-              const pic = a.stepPictures[i];
-              return pic
-                ? '<li class="steps__pic"><span>' + E(s) + '</span><img class="skel" src="' + E(pic.src) + '" alt="' + E(pic.alt) + '" loading="lazy"></li>'
-                : '<li>' + E(s) + '</li>';
-            }).join("") + '</ol></div>'
+          + stepsHTML(a.steps, a.stepPictures) + '</div>'
         : "")
     + '</div>'
 
@@ -10704,7 +10761,7 @@ function viewActivity(id){
     + '</div>'
 
     + '<div class="section section--tight" style="margin-top:26px"><h2>How to make it</h2>'
-    + quEditable("activity-steps", a.id, '<ol class="steps">' + (a.steps||[]).map(s => '<li>' + E(s) + '</li>').join("") + '</ol>') + '</div>'
+    + quEditable("activity-steps", a.id, stepsHTML(a.steps || [], a.stepPictures)) + '</div>'
     + '</div>'
     + '<div><div class="detail__cover">' + quEditable("activity-image", a.id, cover(a, a.type, t.label)) + '</div>'
     + (a.printable && a.printable.path
@@ -11112,7 +11169,12 @@ function viewGame(id){
     /* a subscribers-only game shows a visitor why joining is worth it; a subscriber, who can play it, sees How to play */
     + (g.kind === "members" && !portalHasAccess() ? membersValueHTML(g)
       : '<div class="panel panel--flat" style="margin-top:26px"><h3>' + ic("list-checks","i-lg") + ' How to play</h3>'
-        + '<ol class="steps">' + g.rules.map(r => '<li>' + E(r) + '</li>').join("") + '</ol></div>')
+        + stepsHTML(g.rules, g.rulePictures)
+        /* an offline game's printable (cards, a log, a checklist), the same button an activity has */
+        + (g.printable && g.printable.path
+            ? '<a class="btn btn--sun no-print" style="margin-top:18px" target="_blank" rel="noopener" href="' + E(g.printable.path) + '">' + ic("file-down") + " " + E(g.printable.label || "Printable") + '</a>'
+            : "")
+        + '</div>')
     + '<div style="margin-top:26px">' + portalWordHTML(g) + '</div>'
     + (leads ? '<div class="section section--tight"><span class="eyebrow">Then make this</span>'
         + '<div class="grid g-3">' + activityCard(leads) + '</div></div>' : "")
@@ -24078,6 +24140,15 @@ const ACTIONS = {
     } else fallbackCopy(text, done);
   },
 
+  /* a step's small picture, opened large with the step's words under it (stepsHTML); the arrows (or the
+     arrow keys) move through every pictured step in the same list */
+  "step-zoom": (el) => {
+    const all = Array.from((el.closest("ol.steps") || el.parentNode).querySelectorAll(".steps__zoom"));
+    STEP_ZOOM = { items: all.map(b => ({ src: b.getAttribute("data-src"), alt: b.getAttribute("data-alt") || "", caption: b.getAttribute("data-caption") || "" })),
+                  i: Math.max(0, all.indexOf(el)) };
+    openModal(stepZoomHTML(), null, "modal--zoom", el);
+  },
+  "step-zoom-go": (el) => stepZoomGo(Number(el.getAttribute("data-dir")) || 0),
   "share": (el) => {
     const url = el.getAttribute("data-url") || location.href;
     const title = el.getAttribute("data-title") || document.title;
