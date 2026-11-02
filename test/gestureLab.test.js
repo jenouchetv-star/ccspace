@@ -53,8 +53,11 @@ describe("Hands-Free Reader", () => {
     for (const k of ['k === "ArrowRight"', 'k === "l" || k === "L"', 'k === "d" || k === "D"', 'k === "f" || k === "F"', 'k === "x" || k === "X"']) expect(page).toContain(k);
   });
 
-  it("is a draft lesson whose email is off, with a draft Create card", () => {
-    expect(lessonSql).toContain("'status', 'draft'");
+  it("is a published lesson whose email is off, with a Create card that uses its cover", () => {
+    expect(lessonSql).toContain("'status', 'published'");
+    expect(lessonSql).toContain("hands-free-reader-cover.svg");
+    expect(createSql.slice(createSql.indexOf("act-ai-lesson-gesture-lab"))).toContain("'status', 'published'");
+    expect(createSql.slice(createSql.indexOf("act-ai-lesson-gesture-lab"))).toContain("hands-free-reader-cover.svg");
     expect(lessonSql).toContain("'email', jsonb_build_object('on', false");
     expect(lessonSql).toContain("'privateGameId', 'pg-gesture-lab'");
     expect(lessonSql).toContain("'slug', 'how-to-build-a-hands-free-reader'");

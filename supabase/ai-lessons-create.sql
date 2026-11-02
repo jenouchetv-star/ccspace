@@ -73,8 +73,8 @@ insert into activities (id, data) values ('act-ai-lesson-picture-puzzle', jsonb_
   'status', 'published', 'createdAt', '2026-11-01T12:00:00.000Z', 'updatedAt', '2026-11-01T13:00:00.000Z'))
 on conflict (id) do update set data = excluded.data, updated_at = now();
 
--- AI Lesson 05, beside its Subscriber's Portal lesson (supabase/ai-lesson-gesture-lab.sql); both are DRAFTS until the
--- lesson has a cover, which this card will use too.
+-- AI Lesson 05, beside its Subscriber's Portal lesson (supabase/ai-lesson-gesture-lab.sql); both are published, and the card uses the lesson's cover
+-- (our own drawing of the Reader's book cover).
 insert into activities (id, data) values ('act-ai-lesson-gesture-lab', jsonb_build_object(
   'id', 'act-ai-lesson-gesture-lab', 'slug', 'ai-lesson-gesture-lab',
   'kind', 'members', 'portalSlug', 'how-to-build-a-hands-free-reader',
@@ -86,7 +86,7 @@ insert into activities (id, data) values ('act-ai-lesson-gesture-lab', jsonb_bui
   'learning', jsonb_build_object('topic', 'structures', 'title', 'How computers learn to see', 'text', ''),
   'discussionPrompt', '', 'variation', '', 'value', 'curiosity',
   'printable', jsonb_build_object('label', '', 'path', ''), 'youtubeUrl', '',
-  'image', jsonb_build_object('src', '', 'alt', ''),
+  'image', jsonb_build_object('src', 'https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/uploads/media/1793593704712-hands-free-reader-cover.svg', 'alt', 'The teal book How Computers See, with a digital hand beside it swiping to turn the page'),
   'related', '[]'::jsonb, 'tags', '["ai", "coding", "computer vision", "subscribers"]'::jsonb, 'featured', false,
-  'status', 'draft', 'createdAt', '2026-11-01T22:00:00.000Z', 'updatedAt', '2026-11-01T22:00:00.000Z'))
+  'status', 'published', 'createdAt', '2026-11-01T22:00:00.000Z', 'updatedAt', '2026-11-01T22:00:00.000Z'))
 on conflict (id) do update set data = excluded.data, updated_at = now();

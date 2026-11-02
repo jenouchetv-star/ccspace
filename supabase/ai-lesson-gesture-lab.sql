@@ -1,22 +1,22 @@
--- Chike's Creative Space - AI Lesson 05: Control a Page with Hand Gestures (Subscriber's Portal, DRAFT).
+-- Chike's Creative Space - AI Lesson 05: Control a Page with Hand Gestures (Subscriber's Portal, published 2026-11-01).
 -- Built from the owner's webcam gesture concept, then turned (at the owner's request) from a ball game into a
 -- Hands-Free Reader: a book about computer vision whose pages you turn, scroll, like, resize and switch to dark mode
 -- with hand gestures. The example at the top of the lesson is portal_game_files row pg-gesture-lab (source
 -- supabase/private-games/gesture-lab.html, uploaded from the admin session; re-upload it whenever the file changes
 -- and update privateGameKb below). It never shows the camera picture, only the digital hand.
 -- Safe to re-run: it replaces the entry with this text, so edits made in the editor belong here too.
--- Nothing here sends an email: the entry is a draft and its email is switched off.
+-- Nothing here sends an email: the entry's email is switched off. The cover is our own drawing (assets/lessons/hands-free-reader-cover.svg), uploaded to the media library.
 
 insert into portal_entries (id, data) values ('port-ai-lesson-gesture-lab', jsonb_build_object(
   'id', 'port-ai-lesson-gesture-lab',
   'slug', 'how-to-build-a-hands-free-reader',
   'layout', 'lesson',
   'category', 'AI lessons',
-  'status', 'draft',
-  'publishedAt', '',
+  'status', 'published',
+  'publishedAt', '2026-11-01',
   'title', 'AI Lesson 05: Control a Page with Hand Gestures',
   'description', 'Use AI to build a page you control without touching anything: swipe to turn the pages of a book, point to scroll, pinch to change the text size, and more.',
-  'cover', jsonb_build_object('src', '', 'alt', ''),
+  'cover', jsonb_build_object('src', 'https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/uploads/media/1793593704712-hands-free-reader-cover.svg', 'alt', 'The teal book How Computers See, with a digital hand beside it swiping to turn the page'),
   'body', $b$<h3>Your hand is the remote control</h3><p>This time, you are going to ask AI to build a page you can use without touching your computer. The computer looks through the camera, finds 21 points on your hand (your wrist, every knuckle and every fingertip) and works out which gesture you are making. This is called <b>computer vision</b>. Then each gesture does a job: turn a page, scroll, change the text size, switch to dark mode and more.</p><h3>Four kinds of gestures</h3><p>Try the example above and you will notice that gestures work in different ways. A <b>pose</b>, like thumbs up, is a shape you hold still. A <b>motion</b>, like a swipe, is about how your hand moves. A <b>slider</b>, like pinching for text size, turns how far you move into a number. A <b>pointer</b> uses your fingertip like a mouse. Headsets and smart TVs that you control with your hands mix these same kinds of gestures.</p><h3>Good controls avoid mistakes</h3><p>A page that reacts to every wiggle would be hard to use. That's why you hold a pose until a ring fills up, why moving your hand restarts the ring, and why a fist is a resting hand that does nothing. Thinking about mistakes like these is a big part of designing anything people use.</p><h3>Only your digital hand</h3><p>The prompt asks for a page that never shows or saves your video. It only draws your digital hand: the 21 dots and the lines between them. Ask a grown-up before you turn on a camera, and it is always OK to say no and use the buttons and keys instead.</p><h3>Be the gesture tester</h3><p>When AI has built your page, try every gesture. If it mixes two of them up, tell AI exactly what happens, like "When I swipe with my open hand, it turns on focus mode. Only count the open hand when my hand is still."</p>$b$,
   'steps', jsonb_build_array(
     'Does the page ask before it turns on the camera, and can you use buttons and keys instead?',
@@ -78,6 +78,6 @@ Make a web page I control with hand gestures, in one HTML file called hands-free
   'howToPlay', '[]'::jsonb, 'gallery', '[]'::jsonb, 'coverStill', '',
   'gameId', '', 'gamePath', '', 'gameMode', 'launch', 'gameLabel', '', 'privateGameId', 'pg-gesture-lab', 'privateGameKb', 69,
   'bookId', '', 'bookMode', 'launch', 'bookPath', '', 'videoUrl', '',
-  'buttonLabel', '', 'buttonUrl', '', 'textFirst', 'after', 'adminNote', 'Draft: needs a cover image. The email is switched off.',
+  'buttonLabel', '', 'buttonUrl', '', 'textFirst', 'after', 'adminNote', '',
   'createdAt', '2026-11-01T22:00:00.000Z', 'updatedAt', '2026-11-02T00:00:00.000Z'))
 on conflict (id) do update set data = excluded.data, updated_at = now();
