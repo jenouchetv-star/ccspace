@@ -93,7 +93,9 @@ The six offline games: The Bridge Challenge, Draw What I Say, Freeze and Swap, M
   to move through the steps. An activity record takes them as `stepPictures` (`[{ src, full, alt }]`, one per step).
 - [x] Stacey's Water-Glass Xylophone (finder activity, rewritten from the Rubber Band Sound Lab so it no longer
   repeats The Rubber-Band Guitar) has a main picture and a picture for every step
-- [ ] Pictures for the steps of the 22 published activities (130 steps). The Rubber-Band Guitar is first.
+- [x] Pictures for the steps of the 22 published activities (130 steps), cartoons made in Higgsfield from the
+  character sheets; the main photos stay real (assets/activities/<slug>/, applied by
+  supabase/activity-step-pictures.sql once live)
 
 ## 8. Draft activities to finish
 
