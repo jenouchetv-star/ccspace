@@ -23,9 +23,9 @@ describe("the Newest game section", () => {
   });
 
   it("lets Quick Update change the text under the Create page's heading", () => {
-    expect(html).toContain(`copyPara("create-finder-lede", createId, createLede, { cls:"lede" })`);
+    expect(html).toContain(`copyPara("create-finder-lede", createId, createLede, { cls:"lede", style:"margin-top:24px" })`);
     expect(html).toContain('"create-finder-lede":  { label:"Create page intro",      col:"pages",   fieldKey:"finderLede"');
-    expect(html).toContain('pageVal("create", "finderLede", "Tell us what you have, what you want to explore, and how much time you have. "');
+    expect(html).toContain('pageVal("create", "finderLede", "Choose your supplies, a theme and your time. "');
   });
 
   it("links the Help page's mention of the Privacy Policy", () => {
