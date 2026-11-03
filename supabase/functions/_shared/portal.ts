@@ -217,6 +217,21 @@ export function cleanSource(v: unknown): string {
   return /^[a-z0-9][a-z0-9 _\/-]*$/.test(s) ? s : "";
 }
 
+/** "How did you hear about us?" on the mailing-list forms: one of these answers, or nothing (it is optional). The
+    site's form shows the words for each (HEARD_FROM_LABELS in index.html). */
+export const HEARD_FROM = ["search", "instagram", "facebook", "tiktok", "youtube", "pinterest", "word-of-mouth",
+  "online-ad", "email", "article", "event", "print", "other"] as const;
+
+export function cleanHeard(v: unknown): string {
+  const s = String(v ?? "").trim().toLowerCase();
+  return (HEARD_FROM as readonly string[]).includes(s) ? s : "";
+}
+
+/** What someone typed after picking "Other": plain words only, 80 characters at most. */
+export function cleanHeardOther(v: unknown): string {
+  return String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
 /** How long an emailed link lasts, in words. */
 export function lastsFor(minutes: number): string {
   if (minutes >= 1440) {

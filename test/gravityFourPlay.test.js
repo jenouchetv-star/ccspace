@@ -59,7 +59,7 @@ describe("Gravity 4 on the Play page", () => {
     expect(modal).toContain('1789240884060-Gemini_Generated_Image_tri3mjtri3mjtri3.jpg" alt="Chike, Zech, and their 6 uniquely creative friends"');              // the whole crew, for a game
     expect(index).toContain('game || member ? "modal--narrow" : ""');          // and a smaller box
     expect(index).toContain(".modal--narrow{ width:min(520px,100%); }");
-    expect(modal).toContain('(back2 ? "" : adultCheckHTML("ml-adult"))');   // the tick box is for joining, not for "Welcome back"
+    expect(modal).toContain('(back2 ? "" : heardFromHTML("ml-heard") + adultCheckHTML("ml-adult"))');   // the tick box is for joining, not for "Welcome back"
     expect(modal).toContain('(back2 ? \'<input type="hidden" name="member" value="1">\' : "")');
     expect(index).toContain('openModal(mailingListModal(el && el.getAttribute("data-next"), game, member, el && el.getAttribute("data-what")), null, game || member ? "modal--narrow" : "");');
   });
@@ -127,7 +127,7 @@ describe("Welcome back (Already joined? Sign in)", () => {
   it("is offered under every Join form: the nav box, the footer and the Articles box", () => {
     // in the Join box: the Join free button first, then "Already joined? Sign in" as a plain text link, and no Cancel (the ✕ closes it)
     const modal = fn("mailingListModal");
-    expect(modal).toContain(`+ '<div class="modal__foot modal__foot--join">'\n    + '<button type="submit" class="btn btn--cyan' + (wide ? " joinbox__submit" : "") + '">' + ic("mail") + (back2 ? ' Send my code' : ' Join free') + '</button>'`);
+    expect(modal).toContain(`+ '<div class="modal__foot modal__foot--join">'\n    + '<button type="submit" class="btn btn--cyan joinbox__submit">' + ic("mail") + (back2 ? ' Send my code' : ' Join free') + '</button>'`);
     expect(modal).toContain(`'<p class="join-signin"><b>Already joined?</b> <button type="button" class="join-signin__link" data-act="open-mailing-list" data-member'`);
     expect(modal).not.toContain(">Cancel</button>");
     expect(index).toContain(".join-signin__link{ font:inherit; font-weight:800; color:var(--cyan); background:none; border:0;");

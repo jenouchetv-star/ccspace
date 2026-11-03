@@ -3079,6 +3079,12 @@ h1.admin-page-title{ font-size:1.7rem; }
 .foot__news .inp::placeholder{ color:rgba(251,242,224,.6); }
 /* The tick box every mailing-list form asks for: a grown-up is the one signing up. */
 .adultcheck{ display:flex; gap:10px; align-items:flex-start; margin:12px 0 0; font-size:.85rem; line-height:1.4; text-align:left; cursor:pointer; }
+/* "How did you hear about us?" (heardFromHTML), between the address and the grown-up tick box */
+.heard{ margin-top:12px; gap:6px; }
+.heard__opt{ font-weight:700; letter-spacing:0; text-transform:none; color:var(--ink-mute); margin-left:4px; }
+.heard .sel, .heard .inp{ min-height:44px; padding-block:8px; font-size:.92rem; }
+.heard__other[hidden]{ display:none; }
+.foot__news .heard label{ color:inherit; }
 .adultcheck input{ width:20px; height:20px; margin-top:0; accent-color:var(--cyan); flex:none; cursor:pointer; }
 /* the newsletter box under the articles: words on the left, the sign-up on the right */
 .nlbox{ margin-top:34px; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr); gap:clamp(20px,3.4vw,44px); align-items:center; }
@@ -3652,22 +3658,31 @@ body.portal-locked{ overflow:hidden; }
 /* The heavy blur is a courtesy. What actually keeps the archive private is that the
    page behind it only holds empty placeholder shapes, never the real entries. */
 .pgate__scrim{ position:fixed; inset:0; background:rgba(30,34,38,.46); -webkit-backdrop-filter:blur(26px) saturate(.8); backdrop-filter:blur(26px) saturate(.8); }
+/* laid out like the site's Join boxes (mailingListModal): picture, badge, heading, a line of text, the form in a panel */
 .pgate__dialog{
-  position:relative; width:min(500px,100%); margin:auto; background:var(--paper-card);
-  border:var(--line); border-radius:var(--r-lg); box-shadow:var(--hard);
-  padding:clamp(22px,4vw,34px); display:flex; flex-direction:column; gap:14px; text-align:left;
+  --pad:clamp(20px,3vw,32px);
+  position:relative; width:min(520px,100%); margin:auto; background:var(--paper-card);
+  border:var(--line); border-radius:var(--r-lg); box-shadow:var(--hard); overflow:hidden;
+  padding:var(--pad); display:flex; flex-direction:column; gap:12px; text-align:left;
 }
 .pgate__dialog--small{ align-items:center; text-align:center; width:min(380px,100%); }
-.pgate__dialog h2{ margin:0; font-size:clamp(1.6rem,4vw,2.1rem); line-height:1.15; }
+.pgate__pic{ margin:calc(-1 * var(--pad)) calc(-1 * var(--pad)) 8px; }
+.pgate__pic img{ display:block; width:100%; height:200px; object-fit:cover; object-position:center 35%; }
+.pgate__badge{ align-self:flex-start; background:var(--plum); color:#FFFFFF; }
+.pgate__badge svg{ width:13px; height:13px; color:currentColor; }
+.pgate__dialog h2{ margin:0; font-size:1.6rem; line-height:1.15; }
 .pgate__dialog h2:focus{ outline:none; }
-.pgate__text{ margin:0; color:var(--ink-soft); line-height:1.55; }
-.pgate__text--small{ font-size:.88rem; color:var(--ink-mute); }
+.pgate__text{ margin:0; color:var(--ink-mute); font-size:.95rem; line-height:1.55; }
+.pgate__text--small{ font-size:.86rem; }
+.pgate__panel{ display:flex; flex-direction:column; gap:12px; margin-top:4px; background:var(--paper-2); border:var(--line-thin); border-radius:18px; padding:clamp(16px,2.4vw,22px); }
 .pgate__form{ display:flex; flex-direction:column; gap:10px; }
-.pgate__label{ font-weight:800; font-size:.92rem; color:var(--label); }
+.pgate__label{ font-weight:800; font-size:.78rem; letter-spacing:.09em; text-transform:uppercase; color:var(--label); }
 .pgate__input{
-  font:inherit; font-size:1.05rem; padding:13px 15px; border:var(--line-thin); border-radius:var(--r);
-  background:#fff; color:var(--ink); width:100%; min-height:50px;
+  font:inherit; font-size:1rem; font-weight:600; padding:11px 13px; border:var(--line-thin); border-radius:10px;
+  background:var(--paper-card); color:var(--ink); width:100%; min-height:50px;
 }
+.pgate__back{ align-self:center; display:inline-flex; align-items:center; gap:6px; margin-top:2px; font-weight:800; font-size:.9rem; color:var(--ink); text-decoration:underline; text-underline-offset:3px; }
+.pgate__back svg{ width:16px; height:16px; }
 .pgate__input:focus-visible{ outline:3px solid var(--cyan); outline-offset:2px; }
 .pgate__input[aria-invalid="true"]{ border-color:var(--berry); }
 .pgate__check{ display:flex; gap:10px; align-items:flex-start; font-size:.95rem; line-height:1.45; cursor:pointer; }
@@ -7068,6 +7083,24 @@ const JOIN_ERRORS = {
 
 /** The tick box under every mailing-list address field: the person signing up says they are a grown-up. The
     confirmation email is what proves they own the inbox; this is the plain, on-the-record statement. */
+/** "How did you hear about us?" under the mailing-list address fields: optional, saved with the new subscriber (the
+    portal function accepts only these keys, see HEARD_FROM in supabase/functions/_shared/portal.ts). Picking
+    "Other" opens a short box to say where. */
+const HEARD_FROM_LABELS = {
+  search:"Google or another search engine", instagram:"Instagram", facebook:"Facebook", tiktok:"TikTok",
+  youtube:"YouTube", pinterest:"Pinterest", "word-of-mouth":"Friend, family member, or colleague", "online-ad":"Online ad",
+  email:"Email or newsletter", article:"Blog, article, or news story", event:"Event or conference",
+  print:"Flyer, sign, or printed ad", other:"Other (please specify)"
+};
+function heardFromHTML(id){
+  return '<div class="field heard"><label for="' + id + '">How did you hear about us? <span class="heard__opt">Optional</span></label>'
+    + '<select class="sel" id="' + id + '" name="heard"><option value="">Choose one</option>'
+    + Object.keys(HEARD_FROM_LABELS).map(k => '<option value="' + k + '">' + E(HEARD_FROM_LABELS[k]) + '</option>').join("")
+    + '</select>'
+    + '<input class="inp heard__other" name="heardOther" type="text" maxlength="80" placeholder="Where did you hear about us?" aria-label="Where did you hear about us?" hidden>'
+    + '</div>';
+}
+
 function adultCheckHTML(id){
   return '<label class="adultcheck" for="' + id + '"><input type="checkbox" id="' + id + '" name="adult" required>'
     + '<span>I confirm that I am a parent, guardian or educator aged 18 or over.</span></label>';
@@ -7114,7 +7147,8 @@ function mailingListModal(next, game, member, what){
         + '<li>' + ic("book-open") + '<span><b>The book <i>How Computers See</i>:</b> turn the pages with your hand.</span></li>'
         + '<li>' + ic("clapperboard") + '<span><b>Videos and news:</b> first looks at new games and episodes.</span></li>'
         + '</ul>';
-  const form = '<form data-act="newsletter-submit"' + (wide ? ' class="joinbox__form"' : "") + '>'
+  /* every Join box puts its form in the same panel (the Subscriber's Portal gate uses the same look) */
+  const form = '<form data-act="newsletter-submit" class="joinbox__form">'
     + (back ? '<input type="hidden" name="next" value="' + E(back) + '">' : "")
     + (play ? '<input type="hidden" name="code" value="1"><input type="hidden" name="game" value="' + E(play) + '">' : "")
     + (back2 ? '<input type="hidden" name="member" value="1">' : "")
@@ -7124,11 +7158,11 @@ function mailingListModal(next, game, member, what){
     + (wide ? '<p class="joinbox__free">It’s free, and you can unsubscribe at any time.</p>' : "")
     + '<div class="field"><label for="ml-email">Email address</label>'
     + '<input class="inp" id="ml-email" name="email" type="email" required placeholder="A grown-up’s email address"></div>'
-    /* a subscriber said they were a grown-up when they joined: "Welcome back" does not ask again */
-    + (back2 ? "" : adultCheckHTML("ml-adult"))
+    /* a subscriber said they were a grown-up when they joined: "Welcome back" does not ask again (or how they found us) */
+    + (back2 ? "" : heardFromHTML("ml-heard") + adultCheckHTML("ml-adult"))
     /* one row: the Join free button first, then "Already joined? Sign in" as a plain link (the ✕ closes the box) */
     + '<div class="modal__foot modal__foot--join">'
-    + '<button type="submit" class="btn btn--cyan' + (wide ? " joinbox__submit" : "") + '">' + ic("mail") + (back2 ? ' Send my code' : ' Join free') + '</button>'
+    + '<button type="submit" class="btn btn--cyan joinbox__submit">' + ic("mail") + (back2 ? ' Send my code' : ' Join free') + '</button>'
     + (back2 ? "" : '<p class="join-signin"><b>Already joined?</b> <button type="button" class="join-signin__link" data-act="open-mailing-list" data-member'
         + (back ? ' data-next="' + E(back) + '"' : "") + (play ? ' data-game="' + E(play) + '"' : "") + (what ? ' data-what="' + E(what) + '"' : "") + '>Sign in</button></p>')
     + '</div></form>';
@@ -9262,7 +9296,7 @@ function footer(){
         + '<div class="row" style="gap:9px;flex-wrap:nowrap">'
         + '<input class="inp" id="news-email" name="email" type="email" required placeholder="A grown-up\u2019s email address">'
         + '<button class="btn btn--sm btn--cyan" type="submit">' + ic("mail") + ' Join</button></div>'
-        + adultCheckHTML("news-adult")
+        + heardFromHTML("news-heard") + adultCheckHTML("news-adult")
         + '</form>'
         + signInLinkHTML("", "", "foot__signin"))
     + '</div>'
@@ -12310,7 +12344,7 @@ function viewGrownUps(sub){
       + '<div class="nlbox__row">'
       + '<input class="inp" name="email" type="email" required placeholder="A grown-up&#39;s email address" aria-label="Email address">'
       + '<button class="btn btn--cyan" type="submit">' + ic("mail") + ' Join</button></div>'
-      + adultCheckHTML("art-adult") + '</form>'
+      + heardFromHTML("art-heard") + adultCheckHTML("art-adult") + '</form>'
       + signInLinkHTML("", "", "nlbox__signin")
       + '</div></div>';
   }
@@ -12970,8 +13004,11 @@ async function portalSignOut(){
 function portalGateHTML(){
   const g = PortalState.gate;
   const msg = portalGateMessage(g.state, g.email);
-  const back = '<a class="btn btn--paper" href="' + E(Router.href("#/")) + '">' + ic("arrow-left") + ' Back to the public website</a>';
-  const head = '<span class="eyebrow">Subscribers only</span>';
+  /* the same look as the site's Join boxes: the crew picture on top, a "Subscribers only" badge, then the form in its
+     own panel; leaving is a quiet link rather than a second big button */
+  const back = '<a class="pgate__back" href="' + E(Router.href("#/")) + '">' + ic("arrow-left") + ' Back to the public website</a>';
+  const pic = '<div class="pgate__pic"><img src="https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/uploads/media-library/1789240884060-Gemini_Generated_Image_tri3mjtri3mjtri3.jpg" alt="Chike, Zech, and their 6 uniquely creative friends"></div>';
+  const head = '<span class="chip chip--members pgate__badge">' + ic("lock") + ' Subscribers only</span>';
 
   if (g.state === "loading" || g.state === "verifying"){
     return '<div class="pgate__dialog pgate__dialog--small" role="dialog" aria-modal="true" aria-labelledby="pg-title">'
@@ -12985,22 +13022,23 @@ function portalGateHTML(){
     const sentMsg = portalGateMessage(g.joining ? "consent_sent" : "sent", g.email);
     const problem = msg.tone === "assertive";
     return '<div class="pgate__dialog" role="dialog" aria-modal="true" aria-labelledby="pg-title">'
-      + head + '<div class="pgate__ok" aria-hidden="true">' + ic("mail-check", "i-lg") + '</div>'
+      + pic + head
       + '<h2 id="pg-title" tabindex="-1">' + E(sentMsg.title) + '</h2>'
       + '<p class="pgate__text">' + E(sentMsg.text) + '</p>'
       + (problem ? '<div class="pgate__msg pgate__msg--bad" id="pg-msg">' + ic("triangle-alert") + '<div><b>' + E(msg.title) + '</b><span>' + E(msg.text) + '</span></div></div>' : '<div id="pg-msg"></div>')
+      + '<div class="pgate__panel">'
       + '<form class="pgate__form" data-act="portal-code" novalidate>'
       + '<label class="pgate__label" for="pg-code">Your 6-digit code</label>'
       + '<input class="pgate__input" id="pg-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456" required data-autofocus'
       + ' style="font-size:1.6rem;font-weight:800;letter-spacing:.3em;text-align:center"' + (problem ? ' aria-invalid="true" aria-describedby="pg-msg"' : "") + '>'
-      + '<button class="btn btn--cyan btn--lg pgate__go" type="submit"' + (g.busy ? " disabled" : "") + '>'
+      + '<button class="btn btn--cyan pgate__go" type="submit"' + (g.busy ? " disabled" : "") + '>'
       + (g.busy ? '<span class="pgate__dots" aria-hidden="true"></span> Checking…' : ic("lock-open") + (g.joining ? " Verify and join" : " Verify and sign in"))
       + '</button></form>'
       + '<p class="pgate__text pgate__text--small">Nothing yet? Check your spam folder. The email also has a button you can tap instead.</p>'
       + '<div class="pgate__row">'
-      + '<button type="button" class="btn btn--paper" data-act="portal-resend"' + (g.busy ? " disabled" : "") + '>' + ic("refresh-cw") + ' Send a new code</button>'
-      + '<button type="button" class="btn btn--paper" data-act="portal-reset">Use a different email</button>'
-      + '</div><div class="pgate__row">' + back + '</div></div>';
+      + '<button type="button" class="btn btn--sm btn--paper" data-act="portal-resend"' + (g.busy ? " disabled" : "") + '>' + ic("refresh-cw") + ' Send a new code</button>'
+      + '<button type="button" class="btn btn--sm btn--paper" data-act="portal-reset">Use a different email</button>'
+      + '</div></div>' + back + '</div>';
   }
 
   const consent = g.step === "consent";
@@ -13011,12 +13049,13 @@ function portalGateHTML(){
     : '<div id="pg-msg"></div>';
 
   return '<div class="pgate__dialog" role="dialog" aria-modal="true" aria-labelledby="pg-title" aria-describedby="pg-desc">'
-    + head
+    + pic + head
     + '<h2 id="pg-title">Join our mailing list</h2>'
     + '<p id="pg-desc" class="pgate__text">Members get first looks at new games, ebooks, stories, videos and photos, plus creative tips and kid-friendly AI lessons. It’s free, and you can leave any time.</p>'
     + (consent ? "" : '<p class="pgate__text"><b>Already joined?</b> Enter your email to sign in.</p>')
     + note
     + (g.state === "error" ? '<button type="button" class="btn btn--paper" data-act="portal-retry" style="align-self:flex-start">' + ic("refresh-cw") + ' Try again</button>' : "")
+    + '<div class="pgate__panel">'
     + '<form class="pgate__form" data-act="portal-submit" novalidate>'
     + '<label class="pgate__label" for="pg-email">Email address</label>'
     + '<input class="pgate__input" id="pg-email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"'
@@ -13024,14 +13063,15 @@ function portalGateHTML(){
     + (consent
         ? '<label class="pgate__check"><input type="checkbox" name="consent"' + (g.consent ? " checked" : "") + '> <span>Yes, add me to the Chike’s Creative Space mailing list. I confirm that I am a parent, guardian or educator aged 18 or over, I agree to receive occasional emails, and I understand that I may unsubscribe at any time.</span></label>'
         : "")
-    + '<button class="btn btn--cyan btn--lg pgate__go" type="submit"' + (g.busy ? " disabled" : "") + '>'
+    + '<button class="btn btn--cyan pgate__go" type="submit"' + (g.busy ? " disabled" : "") + '>'
     + (g.busy ? '<span class="pgate__dots" aria-hidden="true"></span> Working…' : (consent ? ic("mail-plus") + " Join and send my code" : ic("arrow-right") + " Continue"))
     + '</button>'
     + '</form>'
     + '<p class="pgate__text pgate__text--small">' + (consent
         ? 'We’ll email a 6-digit code to confirm it’s you. You join the list once you type it in.'
         : 'We’ll email you a 6-digit code. No password needed.') + '</p>'
-    + '<div class="pgate__row">' + back + '</div>'
+    + '</div>'
+    + back
     + '</div>';
 }
 
@@ -15610,7 +15650,9 @@ const FIELDS = {
   ],
   subscribers: [
     { key:"email", label:"Email", type:"text", wide:true },
-    { key:"source", label:"Signed up from", type:"text" }
+    { key:"source", label:"Signed up from", type:"text" },
+    { key:"heardFrom", label:"How they heard about us", type:"select", options:() => [{ value:"", label:"Not given" }].concat(Object.keys(HEARD_FROM_LABELS).map(k => ({ value:k, label:HEARD_FROM_LABELS[k].replace(" (please specify)", "") }))) },
+    { key:"heardFromOther", label:"Their words, if Other", type:"text" }
   ],
   stories: [
     { key:"kind", label:"What is this?", type:"select", wide:true, options:() => [{ value:"", label:"A story or picture book" },{ value:"members", label:"A subscribers-only book that lives in an AI lesson (its card opens the lesson)" }], help:"A subscribers-only book only needs a title, blurb, cover image and the lesson below. Its card shows a lock; subscribers go to the lesson, and visitors are asked to join first." },
@@ -16479,6 +16521,8 @@ const LIST_COLS = {
     { key:"email", label:"Email", main:true },
     { key:"status", label:"Status", html:true, render:r => subscriberStatusBadge(r.status) },
     { key:"source", label:"From" },
+    { key:"heardFrom", label:"Heard about us", render:r => r.heardFrom
+        ? (r.heardFrom === "other" && r.heardFromOther ? "Other: " + r.heardFromOther : (HEARD_FROM_LABELS[r.heardFrom] || r.heardFrom)) : "" },
     { key:"at", label:"Joined", render:r => fmtDate(r.at) }
   ],
   characters: [
@@ -27178,9 +27222,12 @@ async function handleSubmit(form, act){
     const back = form.elements["next"] ? form.elements["next"].value : "";
     /* every sign-up confirms with a 6-digit code typed on the page (the email has a button too) */
     const game = form.elements["game"] ? form.elements["game"].value : "";
+    const heard = form.elements["heard"] ? form.elements["heard"].value : "";
+    const heardOther = heard === "other" && form.elements["heardOther"] ? String(form.elements["heardOther"].value || "").trim() : "";
     const sent = await portalCall("request", member
       ? { email: email, code: true, next: back || "/newsletter" }      /* signing back in: no consent is sent, so nobody new is added */
-      : { email: email, consent: true, join: true, code: true, source: (AppState.route && AppState.route.name) || "", next: back || "/newsletter" });
+      : { email: email, consent: true, join: true, code: true, source: (AppState.route && AppState.route.name) || "", next: back || "/newsletter",
+          heard: heard, heardOther: heardOther });
     if (joinBtn) joinBtn.disabled = false;
     if (!sent || !sent.ok){ toast(JOIN_ERRORS[sent && sent.error] || "We could not reach the sign-up just now. Check your connection and try again.", "bad"); return; }
     if (member && sent.status === "needs_consent"){
@@ -27627,6 +27674,12 @@ document.addEventListener("input", (ev) => {
   if (el.getAttribute && el.getAttribute("data-ehrow")){ ehEdit(el); return; }
   if (el.getAttribute && el.getAttribute("data-cpm")){ copilotEdit(el); return; }
   writerOnInput(el);
+  /* "How did you hear about us?": the "please specify" box shows only for Other */
+  if (el.name === "heard" && el.form){
+    const other = el.form.querySelector(".heard__other");
+    if (other){ other.hidden = el.value !== "other"; if (!other.hidden) other.focus(); }
+    return;
+  }
   if (act === "art-search"){
     AppState.articlesFilter = { q: el.value, page: 1, kind: AppState.articlesFilter.kind || "" };
     AppState.keepScroll = true;

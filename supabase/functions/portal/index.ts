@@ -55,6 +55,8 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
   cleanCode,
+  cleanHeard,
+  cleanHeardOther,
   cleanSource,
   CODE_MINUTES,
   CODE_TRIES,
@@ -194,6 +196,10 @@ Deno.serve(async (req) => {
       const consent = body.consent === true;
       const join = body.join === true;                       // from a mailing-list form, not the archive's own gate
       const source = cleanSource(body.source) || "mailing-list";
+      // "How did you hear about us?" (optional, Join forms only): kept with the subscriber for the admin
+      const heard = join ? cleanHeard(body.heard) : "";
+      const heardOther = heard === "other" ? cleanHeardOther(body.heardOther) : "";
+      const heardFields: Record<string, string> = heard ? { heardFrom: heard, ...(heardOther ? { heardFromOther: heardOther } : {}) } : {};
       const next = safeReturnPath(body.next);
 
       const ip = (req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0]).trim();
@@ -227,13 +233,13 @@ Deno.serve(async (req) => {
           subscriberId = "sub-" + randomToken(9);
           const { error } = await db.from("subscribers").insert({
             id: subscriberId,
-            data: { id: subscriberId, email, source: join ? source : "newsletter-portal", status: "pending", at: stamp, createdAt: stamp, updatedAt: stamp, consentAt: stamp },
+            data: { id: subscriberId, email, source: join ? source : "newsletter-portal", status: "pending", at: stamp, createdAt: stamp, updatedAt: stamp, consentAt: stamp, ...heardFields },
           });
           if (error) throw new Error(error.message);
         } else {
           const row = rows.find((r) => r.id === found.id)!;
           const { error } = await db.from("subscribers").update({
-            data: { ...row.data, status: "pending", consentAt: stamp, updatedAt: stamp },
+            data: { ...row.data, status: "pending", consentAt: stamp, updatedAt: stamp, ...heardFields },
           }).eq("id", found.id);
           if (error) throw new Error(error.message);
         }
