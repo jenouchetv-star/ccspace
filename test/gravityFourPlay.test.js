@@ -127,7 +127,7 @@ describe("Welcome back (Already joined? Sign in)", () => {
   it("is offered under every Join form: the nav box, the footer and the Articles box", () => {
     // in the Join box: the Join free button first, then "Already joined? Sign in" as a plain text link, and no Cancel (the ✕ closes it)
     const modal = fn("mailingListModal");
-    expect(modal).toContain(`+ '<div class="modal__foot modal__foot--join">'\n    + '<button type="submit" class="btn btn--cyan">' + ic("mail") + (back2 ? ' Send my code' : ' Join free') + '</button>'`);
+    expect(modal).toContain(`+ '<div class="modal__foot modal__foot--join">'\n    + '<button type="submit" class="btn btn--cyan' + (wide ? " joinbox__submit" : "") + '">' + ic("mail") + (back2 ? ' Send my code' : ' Join free') + '</button>'`);
     expect(modal).toContain(`'<p class="join-signin"><b>Already joined?</b> <button type="button" class="join-signin__link" data-act="open-mailing-list" data-member'`);
     expect(modal).not.toContain(">Cancel</button>");
     expect(index).toContain(".join-signin__link{ font:inherit; font-weight:800; color:var(--cyan); background:none; border:0;");

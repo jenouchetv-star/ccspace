@@ -6,7 +6,8 @@ Photos from [Unsplash](https://unsplash.com), used under the [Unsplash License](
 | File | Used for | Photo | Photographer |
 | --- | --- | --- | --- |
 | `assets/about/teacher-reading-with-student.jpg` | Business inquiries page | [Woman and child reading in library](https://unsplash.com/photos/7fF0iei80AQ) | Adam Winger |
-| `assets/about/kids-3d-printer.jpg` | Our mission page | [Children gathered around a 3D printer](https://unsplash.com/photos/2fr56H6rgJk) | Adam Winger |
+| `assets/about/kids-makerspace.jpg` | Our mission page | Children designing and 3D printing in a makerspace (AI-generated with Gemini for this site) | Chike's Creative Space |
+| `assets/about/kids-3d-printer.jpg` | No longer shown (was the Our mission page photo) | [Children gathered around a 3D printer](https://unsplash.com/photos/2fr56H6rgJk) | Adam Winger |
 | `assets/games/draw-what-i-say.jpg` | Draw What I Say card | [Two young girls sitting at a table with markers and crayons](https://unsplash.com/photos/N17Nkbsc-zY) | Alan Rodriguez |
 | `assets/games/freeze-and-swap.jpg` | Freeze and Swap card | [Girl twirling around room](https://unsplash.com/photos/dEVHukGkHq4) | Laura Fuhrman |
 | `assets/games/materials-mashup.jpg` | Materials Mashup card | [A child gluing colorful paper scraps onto a drawing of a rainbow](https://unsplash.com/photos/g7dUm6lRvtQ) | Taylor Heery |
