@@ -457,6 +457,11 @@ p:last-child{ margin-bottom:0; }
   border-radius:999px; background:var(--berry); color:#fff;
   font-size:.8rem; font-weight:800; line-height:22px; text-align:center;
 }
+/* how many times a page has been shared (decorateShareCounts): beside the word on a Share button, or in the corner
+   of an icon-only one */
+.sharecount{ display:inline-grid; place-items:center; min-width:24px; height:24px; padding:0 7px; border-radius:999px;
+  background:var(--ink); color:var(--paper); font-size:.76rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+.btn--icon .sharecount{ position:absolute; top:-8px; right:-8px; min-width:22px; height:22px; padding:0 6px; font-size:.72rem; }
 /* ============================================================ TAGS (read-only) */
 /* Deliberately flat and square-shouldered so they never read as pressable. */
 .chip{
@@ -6945,8 +6950,46 @@ function recordShare(url, title, method){
   try {
     if (isActiveAdmin() || location.protocol === "file:" || /^(localhost|127\.|\[::1\])/.test(location.hostname)) return;
     const row = shareEvent(url, title, method, location.origin);
-    if (row) sb.from("share_events").insert(row).then(() => {}, () => {});
+    if (row) sb.from("share_events").insert(row).then(res => {
+      /* counted: the page's Share buttons show the new total straight away */
+      if (res && !res.error && AppState.shareCounts){
+        AppState.shareCounts[row.path] = (AppState.shareCounts[row.path] || 0) + 1;
+        decorateShareCounts();
+      }
+    }, () => {});
   } catch(_e){ /* counting is a nice-to-have; sharing must always work */ }
+}
+
+/** How many times each page has been shared, as a small number on its Share buttons (left off at zero). The totals
+    come from the share_counts() database function (supabase/share-counts.sql), which returns page addresses and
+    numbers only, once per visit; every render then marks the buttons on the page. */
+function shareCountPath(url){
+  try {
+    const u = new URL(String(url || ""), location.origin);
+    return u.pathname.length > 1 ? u.pathname.replace(/\/+$/, "") : "/";
+  } catch(_e){ return ""; }
+}
+function loadShareCounts(){
+  if (AppState.shareCounts) return;
+  AppState.shareCounts = {};
+  try {
+    sb.rpc("share_counts").then(res => {
+      if (!res || res.error || !Array.isArray(res.data)) return;
+      res.data.forEach(r => { AppState.shareCounts[r.path] = Number(r.shares) || 0; });
+      decorateShareCounts();
+    }, () => {});
+  } catch(_e){ /* no counts is fine */ }
+}
+function decorateShareCounts(){
+  const counts = AppState.shareCounts || {};
+  $$('[data-act="share"][data-url]').forEach(btn => {
+    const n = counts[shareCountPath(btn.getAttribute("data-url"))] || 0;
+    let badge = btn.querySelector(".sharecount");
+    if (!n){ if (badge) badge.remove(); return; }
+    if (!badge){ badge = document.createElement("span"); badge.className = "sharecount"; btn.appendChild(badge); }
+    badge.textContent = n >= 1000 ? (Math.floor(n / 100) / 10) + "k" : String(n);
+    badge.title = n === 1 ? "Shared once" : "Shared " + n + " times";
+  });
 }
 
 /** The in-app share sheet, opened for any "data-act=share" control - a
@@ -7786,6 +7829,8 @@ const AppState = {
   articlesFilter: { q:"", page:1, kind:"" },
   /* "Most read" on News & Articles: [{ id, views }] from the most-read-articles function, fetched once per visit */
   mostRead: null,
+  /* { "/page/path": shares } for the counts on Share buttons, from share_counts(), fetched once per visit */
+  shareCounts: null,
   articlesView: (() => { try { return localStorage.getItem("ccs_articles_view") === "list" ? "list" : "cards"; } catch(e){ return "cards"; } })(),
   /* A staged copy edited inside the mobile filter sheet - null when the
      sheet is closed, so nothing here touches the applied filters (and the
@@ -24645,6 +24690,8 @@ function render(){
   }
   rootAssetPaths($("#app"));
   leadInit();
+  loadShareCounts();
+  decorateShareCounts();
   /* A cached image can already be complete before its load event would
      fire, which the capture-phase listener above would otherwise miss.
      readyState >= 2 (HAVE_CURRENT_DATA) is a video's equivalent of

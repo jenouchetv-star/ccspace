@@ -149,8 +149,18 @@ describe("share counting in index.html", () => {
     expect(r).toContain("isActiveAdmin()");
     expect(r).toContain('location.protocol === "file:"');
     expect(r).toContain("localhost");
-    expect(r).toContain('sb.from("share_events").insert(row).then(() => {}, () => {});');
+    // still never waited on: the only follow-up is bumping the count shown on the page's Share buttons
+    expect(r).toContain('sb.from("share_events").insert(row).then(res => {');
+    expect(r).toContain("AppState.shareCounts[row.path] = (AppState.shareCounts[row.path] || 0) + 1;");
+    expect(r).toContain("}, () => {});");
     expect(r).toContain("catch(_e)");
+  });
+  it("shows each page's share count on its Share buttons, from a function that returns only paths and numbers", () => {
+    expect(html).toContain('sb.rpc("share_counts")');
+    expect(body("decorateShareCounts")).toContain("if (!n){ if (badge) badge.remove(); return; }");
+    const countsSql = readFileSync(new URL("../supabase/share-counts.sql", import.meta.url), "utf8");
+    expect(countsSql).toContain("returns table (path text, shares bigint)");
+    expect(countsSql).toContain("grant execute on function public.share_counts() to anon, authenticated;");
   });
 
   it("shows the counts at the top of the admin Analytics page, loaded alongside the traffic", () => {
