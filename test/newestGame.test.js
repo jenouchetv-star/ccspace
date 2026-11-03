@@ -59,7 +59,8 @@ describe("the Newest game section", () => {
   });
 
   it("gives News & Articles a count, a search, pages, and a remembered cards / list switch", () => {
-    expect(html).toContain(`'<span class="hl">' + list.length + '</span> ' + (list.length === 1 ? "article" : "articles")`);
+    expect(html).toContain(`topicBtn("", "All", list.length)`);
+    expect(html).toContain(`placeholder="Search ' + E(plural(list.length, "article")) + '"`);
     expect(html).toContain('id="art-search" type="search" data-act="art-search"');
     expect(html).toContain('data-act="art-page" data-page="');
     expect(html).toContain('try { localStorage.setItem("ccs_articles_view", AppState.articlesView); } catch(e) {}');

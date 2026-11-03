@@ -8,7 +8,7 @@ const nav = index.split("function navBar(isAdmin){")[1].split("\n}\n")[0];
 
 describe("the Admin link in the public navigation", () => {
   it("points at the portal and has an accessible name", () => {
-    expect(nav).toContain('<a class="btn btn--sm btn--ink" href="#/admin" aria-label="Admin portal">');
+    expect(nav).toContain('<a class="btn btn--sm btn--plum" href="#/admin" aria-label="Admin portal">');
   });
 
   it("shows only for a signed-in, active (second-factor) admin", () => {

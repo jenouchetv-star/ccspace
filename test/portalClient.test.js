@@ -744,9 +744,9 @@ describe("the footer for a subscriber signed in on this device", () => {
     const nav = html.split("function navBar(")[1].split("\nfunction ")[0];
     expect(nav).toMatch(/> Subscriber’s Portal<\/span><\/a>'\r?\n\s+\+ '<button class="btn btn--sm btn--paper" type="button" data-act="portal-signout"/);
     expect(html).toContain('"portal-signout": () => {');
-    expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--icon btn--paper nav__only-xs" type="button" data-act="open-mailing-list"`);
-    expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--sm btn--paper nav__hide-sm" type="button" data-act="open-mailing-list"`);
-    expect(nav).toContain(`: '<button class="btn btn--sm btn--paper" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join our mailing list</button>')`);
+    expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--icon btn--cyan nav__only-xs" type="button" data-act="open-mailing-list"`);
+    expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--sm btn--cyan nav__hide-sm" type="button" data-act="open-mailing-list"`);
+    expect(nav).toContain(`: '<button class="btn btn--sm btn--cyan" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join our mailing list</button>')`);
   });
   it("leaves out Already joined? Sign in", () => {
     expect(body("signInLinkHTML")).toContain('if (portalIsSubscriber()) return "";');
