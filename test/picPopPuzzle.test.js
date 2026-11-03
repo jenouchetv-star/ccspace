@@ -72,7 +72,8 @@ describe("Pic-a-Puzzle", () => {
     const view = index.split("function viewGame(")[1].split("\nfunction ")[0];
     expect(view).toContain('(g.kind === "members" && !portalHasAccess() ? membersValueHTML(g)');
     const card = index.split("function membersValueHTML(")[1].split("\nfunction ")[0];
-    expect(card).toContain("Why join our free mailing list?");
+    expect(card).toContain('slot("templates/game", "membersTitle")');
+    expect(index).toContain('fb:"Why join our free mailing list?"');
     for (const perk of ["Members-only games", "Kid-friendly AI lessons", "First looks", "Creative tips", "Free, with no spam"]) expect(card).toContain(perk);
     expect(card).toContain('data-act="open-mailing-list" data-next="/newsletter/');
     expect(card).toContain("Already joined? Sign in");

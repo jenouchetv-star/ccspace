@@ -2737,6 +2737,17 @@ h1.admin-page-title{ font-size:1.7rem; }
 
 /* -- Tables -- */
 .admin-table-wrap{ overflow-x:auto; border:1px solid var(--admin-border); border-radius:10px; background:var(--admin-surface); }
+/* Pages as a site map: one card per menu section, a row per page with its two ways to edit */
+.sitemap-admin{ display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr)); gap:16px; align-items:start; }
+.sitemap-admin__list{ list-style:none; margin:10px 0 0; padding:0; display:grid; }
+.sitemap-admin__row, .sitefind__row{ display:flex; gap:12px; align-items:center; justify-content:space-between; padding:10px 0; border-top:1px solid var(--admin-border); flex-wrap:wrap; }
+.sitemap-admin__row:first-child{ border-top:0; }
+.sitefind{ list-style:none; margin:12px 0 0; padding:0; max-height:460px; overflow:auto; }
+.sitefind__snip{ font-size:.82rem; color:var(--admin-mute); margin-top:2px; overflow-wrap:anywhere; }
+.sitefind__snip mark{ background:var(--sun, #F6C945); color:inherit; border-radius:3px; padding:0 2px; }
+/* a page form's "Words and pictures on this page", one box per section */
+.slotfields__group{ border:1px solid var(--admin-border); border-radius:10px; padding:10px 14px 4px; margin:12px 0 0; }
+.slotfields__group > legend{ font-weight:800; font-size:.8rem; padding:0 6px; }
 .admin-table{ width:100%; border-collapse:collapse; font-size:.86rem; }
 .admin-table th{
   text-align:left; font-size:.68rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
@@ -4302,6 +4313,7 @@ async function uploadToStorage(file, folder){
    see LOCAL_ONLY_COLLECTIONS below. */
 const COLLECTION_TABLE = {
   amazonProducts: "amazon_products",
+  finderActivities: "finder_activities",
   homepageModules: "homepage_modules",
   mediaAssets: "media_assets",
   supportTickets: "support_tickets",
@@ -4323,7 +4335,7 @@ const LOCAL_ONLY_COLLECTIONS = ["dismissedAnnouncements", "recentlyViewed", "car
 /* Readable by anyone, signed in or not - the actual site content. */
 const PUBLIC_COLLECTIONS = ["activities","pages","articles","games","videos","stories",
   "characters","products","amazonProducts","collections","announcements",
-  "homepageModules","mediaAssets"];
+  "homepageModules","mediaAssets","finderActivities"];
 /* Readable only by an authenticated, active admin (see isActiveAdmin()) -
    the newsletter list, support/story inboxes, and internal admin-only
    records. Fetched and realtime-subscribed only once someone is actually
@@ -4449,13 +4461,14 @@ const COLLECTION_PLURALS = {
   pages:"Pages", articles:"Articles", subscribers:"Subscribers",
   activities:"Activities", games:"Games", videos:"Episodes", stories:"Stories", characters:"Characters",
   products:"Digital products", amazonProducts:"Recommendations", collections:"Collections",
+  finderActivities:"Finder activities",
   homepageModules:"Homepage modules", mediaAssets:"Media references", supportTickets:"Support tickets",
   issues:"Issues", meta:"Database", users:"Users", portalEntries:"Subscriber’s Portal"
 };
 const COLLECTION_LABELS = {
   announcements:"Announcement", pages:"Page", articles:"Article", subscribers:"Subscriber",
   activities:"Activity", games:"Game", videos:"Episode", stories:"Story", characters:"Character",
-  products:"Digital product", amazonProducts:"Recommendation", collections:"Collection",
+  products:"Digital product", amazonProducts:"Recommendation", collections:"Collection", finderActivities:"Finder activity",
   homepageModules:"Homepage module", mediaAssets:"Media reference", supportTickets:"Support ticket",
   issues:"Issue", meta:"Database", users:"User", portalEntries:"Entry"
 };
@@ -7520,6 +7533,8 @@ function buildSeedDatabase(){
     products: seedProducts(),
     amazonProducts: seedAmazon(),
     collections: seedCollections(),
+    /* empty until the finder_activities table is filled; the finder uses its built-in catalog meanwhile */
+    finderActivities: [],
     announcements: seedAnnouncements(),
     homepageModules: seedHomepage(),
     mediaAssets: seedMedia(),
@@ -8002,6 +8017,7 @@ const ADMIN_NAV = [
   { hash:"#/admin/announcements",  label:"Announcements",   icon:"megaphone",    col:"announcements" },
   { hash:"#/admin/pages",          label:"Pages",           icon:"file-pen",     col:"pages" },
   { hash:"#/admin/activities",     label:"Activities",      icon:"hammer",       col:"activities" },
+  { hash:"#/admin/finderActivities", label:"Finder activities", icon:"wand-sparkles", col:"finderActivities" },
   { hash:"#/admin/games",          label:"Games",           icon:"dices",        col:"games" },
   { hash:"#/admin/videos",         label:"Episodes",        icon:"clapperboard", col:"videos" },
   { hash:"#/admin/stories",        label:"Stories",         icon:"book-open",    col:"stories" },
@@ -9826,12 +9842,37 @@ function createActivities(){
   return db.list("activities").filter(a => a.status === "published");
 }
 
+/* The finder's activities live in the database (finder_activities), so admins edit them like any other content.
+   FIND_CATALOG above is the built-in copy: it filled that table once, and the finder uses it until the table has
+   any rows (offline, or before it has loaded). An admin also sees drafts, so a new one can be checked in place. */
+function findCatalog(){
+  const rows = db.list("finderActivities");
+  if (!rows.length) return FIND_CATALOG;
+  return rows.filter(a => a.status === "published" || (a.status !== "archived" && adminSeesAll()))
+    .map(a => Object.assign({ themes:[], materials:[], steps:[], safety:[], stepPictures:[], guide:null, access:"free" }, a,
+      { picture: a.picture && a.picture.src ? a.picture : null, guide: a.guide && a.guide.url ? a.guide : null }))
+    .sort((x, y) => String(x.id).localeCompare(String(y.id), undefined, { numeric:true }));
+}
+/** A finder activity's form, tidied before saving: "path | what it shows" lines back into step pictures (with the
+    -large copy beside each), and an empty outside guide or picture stored as none. */
+function finderRecordFromForm(rec){
+  rec.stepPictures = (rec.stepPicturesLines || []).map(line => {
+    const i = line.indexOf("|");
+    const src = (i >= 0 ? line.slice(0, i) : line).trim();
+    return { src: src, full: src.replace(/(\.[a-z0-9]+)$/i, "-large$1"), alt: (i >= 0 ? line.slice(i + 1) : "").trim() };
+  }).filter(p => p.src);
+  delete rec.stepPicturesLines;
+  if (!rec.guide || !String(rec.guide.url || "").trim()) rec.guide = null;
+  if (rec.picture && !String(rec.picture.src || "").trim()) rec.picture = { src:"", alt:"" };
+  return rec;
+}
+
 /** Thin wrapper around the imported findTopMatches() - the real charName/
     topicMeta (both look a live record up in the database) are supplied
     here, at the one call site that renders to an actual visitor; the
     module itself only ever sees id-based fallbacks, in tests. */
 function runFind(){
-  return findTopMatches(FIND_CATALOG, AppState.finder, { charName, topicMeta });
+  return findTopMatches(findCatalog(), AppState.finder, { charName, topicMeta });
 }
 
 function findAnswered(){
@@ -9852,7 +9893,7 @@ function findExamples(m){
 function finderStepMarkup(){
   const f = AppState.finder;
 
-  const step1 = '<div class="field"><label id="lbl-have">What materials do you have.</label>'
+  const step1 = '<div class="field"><label id="lbl-have">' + E(slotText("templates/finder", "step1Question")) + '</label>'
     + '<div class="opts" role="group" aria-labelledby="lbl-have">'
     + FIND_MATERIALS.map(m => '<button type="button" class="opt opt--stack" data-act="find-multi" data-key="materials"'
         + ' data-value="' + E(m.id) + '"'
@@ -9860,9 +9901,9 @@ function finderStepMarkup(){
         + '<span class="opt__name">' + E(m.label) + '</span>'
         + '<span class="opt__eg">' + E(findExamples(m)) + '</span>'
         + '</button>').join("")
-    + '</div><span class="hint">Pick as many as you like, or Surprise me.</span></div>';
+    + '</div><span class="hint">' + E(slotText("templates/finder", "step1Hint")) + '</span></div>';
 
-  const step2 = '<div class="field"><label id="lbl-explore">2. What do you want to explore?</label>'
+  const step2 = '<div class="field"><label id="lbl-explore">' + E(slotText("templates/finder", "step2Question")) + '</label>'
     + '<div class="themecards" role="group" aria-labelledby="lbl-explore">'
     + FIND_THEMES.map(t => '<button type="button" class="themecard" data-act="find-set" data-key="theme"'
         + ' data-value="' + E(t.id) + '" aria-pressed="' + (f.theme === t.id ? "true" : "false") + '">'
@@ -9870,7 +9911,7 @@ function finderStepMarkup(){
         + '<span>' + E(t.label) + '</span></button>').join("")
     + '</div></div>';
 
-  const step3 = '<div class="field"><label id="lbl-when">3. How much time do you have?</label>'
+  const step3 = '<div class="field"><label id="lbl-when">' + E(slotText("templates/finder", "step3Question")) + '</label>'
     + '<div class="opts" role="group" aria-labelledby="lbl-when">'
     + FIND_TIMES.map(t => '<button type="button" class="opt opt--sm opt--sun" data-act="find-set" data-key="time"'
         + ' data-value="' + E(t.id) + '" aria-pressed="' + (f.time === t.id ? "true" : "false") + '">'
@@ -9901,7 +9942,7 @@ function finderStepMarkup(){
         : '<span></span>')
     + (step < 3
         ? '<button class="btn btn--sm btn--cyan" data-act="find-step-next"' + (stepAnswered ? "" : " disabled") + '>Next' + ic("arrow-right") + '</button>'
-        : '<button class="btn btn--sm btn--cyan" data-act="find-run">' + ic("wand-sparkles") + ' Find 3 Activities</button>')
+        : '<button class="btn btn--sm btn--cyan" data-act="find-run">' + ic("wand-sparkles") + ' ' + E(slotText("templates/finder", "findButton")) + '</button>')
     + '</div>';
 
   return { dots, stepName: stepNames[step - 1], stepContent: steps[step - 1], nav, step };
@@ -9919,11 +9960,12 @@ function finderPanel(mode){
   const createLede = pageTop ? pageVal("create", "finderLede", "Choose your supplies, a theme and your time. "
       + "We’ll find three activities to build and test.") : "";
   if (createId) CMS_HEADER_FALLBACKS[createId + "::finderLede"] = createLede;
-  const finderPic = '<div class="taped" style="margin-top:30px"><img class="skel" src="assets/hero/what-should-we-create.jpg" alt="Chike resting his chin on his hand with a large question mark floating beside his head" loading="lazy"></div>';
+  const finderPic = '<div class="taped" style="margin-top:30px">' + slotImgHTML("create", "finderPicture") + '</div>';
   /* on the Create page the text sits under the picture */
   const copy = pageTop
-    ? '<span class="eyebrow">Create</span>'
-      + '<h1 style="font-size:clamp(2.1rem,5vw,3.4rem);margin-bottom:.3em">What should we <span class="hl-cyan">create</span> today?</h1>'
+    ? '<span class="eyebrow">' + slot("create", "finderEyebrow") + '</span>'
+      + '<h1 style="font-size:clamp(2.1rem,5vw,3.4rem);margin-bottom:.3em">'
+      + quEditable(slotRegionId("create", "finderHeading"), createId, headingHTML(slotText("create", "finderHeading"), slotText("create", "finderHighlight"), "cyan")) + '</h1>'
       + finderPic
       + copyPara("create-finder-lede", createId, createLede, { cls:"lede", style:"margin-top:24px" })
     : '<span class="eyebrow">' + E(sec.eyebrow) + '</span>'
@@ -9978,13 +10020,12 @@ function findResults(results){
   const shown  = scored.length ? scored : results;
   return '<div class="findresults" id="finder-results">'
     + '<div class="section-head" style="margin-bottom:20px"><div>'
-    + '<span class="eyebrow">Your matches</span>'
-    + '<h3 style="font-size:1.9rem;margin:0">' + (scored.length ? "The three that fit best" : "Nothing matched well. These are the closest.") + '</h3></div>'
+    + '<span class="eyebrow">' + slot("templates/finder", "resultsEyebrow") + '</span>'
+    + '<h3 style="font-size:1.9rem;margin:0">' + slot("templates/finder", scored.length ? "resultsHeading" : "resultsHeadingWeak") + '</h3></div>'
     + '<button class="btn btn--sm btn--ghost" data-act="find-clear">' + ic("rotate-ccw") + ' Start over</button></div>'
     + '<div class="grid findresults__grid" style="align-items:start">' + shown.map(r => findCard(r)).join("") + '</div>'
     + '<details class="more" style="margin-top:14px"><summary>' + ic("calculator") + ' How these were picked</summary>'
-    + '<div class="more__body"><p style="margin:0">Each answer is worth a fixed number of points and the three highest scores win. '
-    + 'No one character fills more than two of the three. Nothing is personalized, and nothing is remembered after you leave.</p>'
+    + '<div class="more__body"><p style="margin:0">' + slot("templates/finder", "howPicked") + '</p>'
     + '<ul style="margin:0;padding-left:20px">'
     + FINDER_RULES.map(r => '<li><b>' + E(r.label) + '</b>: ' + E(r.points) + ' points</li>').join("")
     + '</ul></div></details>'
@@ -10018,7 +10059,7 @@ function findCard(r){
         : "")
     + '<div class="row" style="margin-top:18px">'
     + '<a class="btn btn--sm btn--cyan" href="#/find/' + E(a.id) + '">'
-    + ic("arrow-right") + ' Start creating</a>'
+    + ic("arrow-right") + ' ' + E(slotText("templates/finder", "startButton")) + '</a>'
     + '<span class="btn btn--sm btn--ghost" aria-disabled="true" title="Coming with our own printables" aria-label="Printable guide coming soon">'
     + ic("file-down") + '</span>'
     + '</div>'
@@ -10071,11 +10112,12 @@ document.addEventListener("keydown", ev => {
 
 /** A finder activity, on a page of its own. */
 function viewFindActivity(id){
-  const a = FIND_CATALOG.find(x => x.id === id);
+  const catalog = findCatalog();
+  const a = catalog.find(x => x.id === id);
   if (!a) return notFound("activity");
   const who = db.list("characters").find(c => c.slug === a.character);
   const time = a.mins + (a.plus ? "+ min" : " min");
-  const related = FIND_CATALOG
+  const related = catalog
     .filter(x => x.id !== a.id && x.themes.some(t => a.themes.indexOf(t) >= 0))
     .slice(0, 3);
 
@@ -10104,13 +10146,13 @@ function viewFindActivity(id){
     + (who
         ? '<div class="row" style="margin-top:22px">'
           + charAvatarHTML(who, 52, "border:var(--line-thin)")
-          + '<div><div class="tiny mute" style="line-height:1.2">Brought to you by</div>'
+          + '<div><div class="tiny mute" style="line-height:1.2">' + slot("templates/activity", "broughtBy") + '</div>'
           + '<a href="#/characters/' + E(who.slug) + '" style="font-weight:800;text-decoration:none;border-bottom:2px solid var(--sun)">'
           + E(who.name) + '</a></div></div>'
         : "")
 
     + (a.steps.length
-        ? '<div class="section section--tight" style="margin-top:26px"><h2>How to make it</h2>'
+        ? '<div class="section section--tight" style="margin-top:26px"><h2>' + slot("templates/activity", "stepsTitle") + '</h2>'
           + stepsHTML(a.steps, a.stepPictures) + '</div>'
         : "")
     + '</div>'
@@ -10122,14 +10164,14 @@ function viewFindActivity(id){
           + '<div class="plate__mark">' + ic(theme.icon) + '</div></div>')
     + '</div>'
     + '<div class="grid" style="grid-template-columns:1fr;gap:16px;margin-top:16px">'
-    + '<div class="panel panel--flat"><h3 style="margin-bottom:.4em">' + ic("package","i-lg") + ' What you need</h3>'
+    + '<div class="panel panel--flat"><h3 style="margin-bottom:.4em">' + ic("package","i-lg") + ' ' + slot("templates/activity", "needTitle") + '</h3>'
     + '<ul class="checklist" style="margin:0">'
     + a.materials.map(m => '<li>' + ic("check") + '<span>' + E(findMaterial(m).label)
         + (findMaterial(m).eg ? '<span class="tiny mute" style="display:block">' + E(findMaterial(m).eg) + '</span>' : "")
         + '</span></li>').join("")
     + '</ul></div>'
     + (a.safety.length
-        ? '<div class="panel panel--flat" style="border-left:8px solid var(--berry)"><h3 style="margin-bottom:.4em">' + ic("shield-alert","i-lg") + ' Before you start</h3>'
+        ? '<div class="panel panel--flat" style="border-left:8px solid var(--berry)"><h3 style="margin-bottom:.4em">' + ic("shield-alert","i-lg") + ' ' + slot("templates/activity", "safetyTitle") + '</h3>'
           + '<ul class="checklist checklist--warn" style="margin:0">' + a.safety.map(s => '<li>' + ic("alert-circle") + '<span>' + E(s) + '</span></li>').join("") + '</ul></div>'
         : "")
     + '</div></div>'
@@ -10138,11 +10180,11 @@ function viewFindActivity(id){
     + '<div class="divider"></div>'
 
     + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(290px,1fr))">'
-    + '<div class="nugget"><span class="eyebrow">Learn</span>'
+    + '<div class="nugget"><span class="eyebrow">' + slot("templates/activity", "learnEyebrow") + '</span>'
     + '<p style="margin:0;font-weight:700">' + E(a.discover) + '</p></div>'
-    + '<div class="grow-box"><span class="eyebrow">Grow</span>'
+    + '<div class="grow-box"><span class="eyebrow">' + slot("templates/activity", "growEyebrow") + '</span>'
     + '<p style="margin:0">' + E(a.growPrompt) + '</p></div>'
-    + '<div class="share-box"><span class="eyebrow">Share</span>'
+    + '<div class="share-box"><span class="eyebrow">' + slot("templates/activity", "shareEyebrow") + '</span>'
     + '<p style="margin:0">' + E(findTryNext(a)) + '</p></div>'
     + '</div>'
 
@@ -10169,15 +10211,15 @@ function viewFindActivity(id){
         ? '<a class="btn btn--lg btn--cyan" href="' + E(a.guide.url) + '" target="_blank" rel="noopener noreferrer">'
           + ic("external-link") + ' ' + (a.steps.length ? 'See the original on ' : 'Open the instructions on ') + E(a.guide.name) + '</a>'
         : "")
-    + '<a class="btn btn--paper" href="#/create">' + ic("arrow-left") + ' Back to the finder</a>'
+    + '<a class="btn btn--paper" href="#/create">' + ic("arrow-left") + ' ' + E(slotText("templates/finder", "backButton")) + '</a>'
     + '</div>'
 
     + '<div class="divider"></div>'
 
     + (related.length
         ? '<div class="section section--tight"><div class="section-head" style="margin-bottom:22px"><div>'
-          + '<span class="eyebrow">More like this</span>'
-          + '<h2 style="font-size:1.9rem">Same kind of exploring</h2></div></div>'
+          + '<span class="eyebrow">' + slot("templates/finder", "moreEyebrow") + '</span>'
+          + '<h2 style="font-size:1.9rem">' + slot("templates/finder", "moreHeading") + '</h2></div></div>'
           + '<div class="grid g-3">' + related.map(r => findMiniCard(r)).join("") + '</div></div>'
         : "")
     + '</div></section>';
@@ -10708,7 +10750,7 @@ function viewCreate(){
     + '</div>'
     + (pageList.length ? '<div class="grid g-3 grid--compact">' + pageList.map(a => activityCard(a)).join("") + '</div>'
         : '<div class="empty">' + ic("search-x","i-lg")
-          + '<p style="margin-top:12px">Nothing matches all of those at once.</p>'
+          + '<p style="margin-top:12px">' + slot("create", "emptyList") + '</p>'
           + '<button class="btn btn--sm btn--paper" data-act="cf-clear" style="margin-top:14px">' + ic("rotate-ccw") + ' Start the filter again</button></div>')
     + (totalPages > 1
         ? '<nav class="pager" aria-label="Results pages">'
@@ -10759,14 +10801,14 @@ function viewActivity(id){
     + E((SETTINGS.find(x=>x.id===a.setting)||{}).label) + ' &middot; '
     + E((SUPPORT.find(x=>x.id===a.adultSupport)||{}).label) + '</p>'
     + (ch ? '<div class="row" style="margin-top:22px">' + charAvatarHTML(ch, 52, "border:var(--line-thin)")
-        + '<div><div class="tiny mute" style="line-height:1.2">Brought to you by</div>'
+        + '<div><div class="tiny mute" style="line-height:1.2">' + slot("templates/activity", "broughtBy") + '</div>'
         + '<a href="#/characters/' + E(ch.slug) + '" style="font-weight:800;text-decoration:none;border-bottom:2px solid var(--sun)">' + E(ch.name) + '</a></div></div>' : "")
     + '<div class="row no-print" style="margin-top:26px">'
     + '<button class="btn btn--paper" data-act="print">' + ic("printer") + ' Print</button>'
     + '<button class="btn btn--paper" data-act="share" data-url="' + E(location.origin + "/activity/" + a.id) + '" data-title="' + E(a.title) + '">' + ic("share-2") + ' Share</button>'
     + '</div>'
 
-    + '<div class="section section--tight" style="margin-top:26px"><h2>How to make it</h2>'
+    + '<div class="section section--tight" style="margin-top:26px"><h2>' + slot("templates/activity", "stepsTitle") + '</h2>'
     + quEditable("activity-steps", a.id, stepsHTML(a.steps || [], a.stepPictures)) + '</div>'
     + '</div>'
     + '<div><div class="detail__cover">' + quEditable("activity-image", a.id, cover(a, a.type, t.label)) + '</div>'
@@ -10775,12 +10817,12 @@ function viewActivity(id){
         : "")
     + '<div class="grid" style="grid-template-columns:1fr;gap:16px;margin-top:16px">'
     + '<div class="panel panel--flat"><div class="row" style="justify-content:space-between;align-items:center;gap:10px">'
-    + '<h3 style="margin:0">' + ic("package","i-lg") + ' What you need</h3>'
+    + '<h3 style="margin:0">' + ic("package","i-lg") + ' ' + slot("templates/activity", "needTitle") + '</h3>'
     + '<button class="btn btn--paper btn--sm no-print" data-act="copy-materials" data-id="' + E(a.id) + '">' + ic("copy") + ' Copy list</button>'
     + '</div>'
     + quEditable("activity-materials", a.id, '<ul class="checklist">' + (a.materialsDetail||[]).map(m => '<li>' + ic("square-check") + '<span>' + E(m) + '</span></li>').join("") + '</ul>')
     + '</div>'
-    + '<div class="panel panel--flat" style="border-left:8px solid var(--berry)"><h3>' + ic("shield-alert","i-lg") + ' Before you start</h3>'
+    + '<div class="panel panel--flat" style="border-left:8px solid var(--berry)"><h3>' + ic("shield-alert","i-lg") + ' ' + slot("templates/activity", "safetyTitle") + '</h3>'
     + quEditable("activity-safety", a.id, '<ul class="checklist checklist--warn">' + (a.safetyNotes||[]).map(s => '<li>' + ic("alert-circle") + '<span>' + E(s) + '</span></li>').join("") + '</ul>')
     + '</div></div>'
     + (linkedGames.length
@@ -10789,24 +10831,24 @@ function viewActivity(id){
     + '</div></div>'
 
     + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(290px,1fr));margin-top:26px">'
-    + '<div class="nugget"><span class="eyebrow">Learn</span><h3 style="margin-bottom:.4em">' + quEditable("activity-learning-title", a.id, E(a.learning.title)) + '</h3><p style="margin:0">' + quEditable("activity-learning-text", a.id, E(a.learning.text)) + '</p>'
+    + '<div class="nugget"><span class="eyebrow">' + slot("templates/activity", "learnEyebrow") + '</span><h3 style="margin-bottom:.4em">' + quEditable("activity-learning-title", a.id, E(a.learning.title)) + '</h3><p style="margin:0">' + quEditable("activity-learning-text", a.id, E(a.learning.text)) + '</p>'
     + '<div class="tagrow" style="margin-top:14px"><span class="chip">' + E(topicMeta(a.learning.topic).label) + '</span></div></div>'
-    + '<div class="grow-box"><span class="eyebrow">Grow</span><h3 style="margin-bottom:.4em">Ask this afterwards</h3><p style="margin:0">' + E(a.discussionPrompt) + '</p>'
+    + '<div class="grow-box"><span class="eyebrow">' + slot("templates/activity", "growEyebrow") + '</span><h3 style="margin-bottom:.4em">' + slot("templates/activity", "growTitle") + '</h3><p style="margin:0">' + E(a.discussionPrompt) + '</p>'
     + '<div class="tagrow" style="margin-top:14px"><span class="chip">' + E(titleCase(a.value)) + '</span></div></div>'
-    + '<div class="share-box"><span class="eyebrow">Share</span><h3 style="margin-bottom:.4em">Try it another way</h3><p style="margin:0">' + E(a.variation) + '</p>'
-    + '<p class="tiny" style="margin-top:14px;font-weight:700">Then show a grown-up what you made.</p></div>'
+    + '<div class="share-box"><span class="eyebrow">' + slot("templates/activity", "shareEyebrow") + '</span><h3 style="margin-bottom:.4em">' + slot("templates/activity", "shareTitle") + '</h3><p style="margin:0">' + E(a.variation) + '</p>'
+    + '<p class="tiny" style="margin-top:14px;font-weight:700">' + slot("templates/activity", "shareNote") + '</p></div>'
     + '</div>'
 
     + '<div class="divider"></div>'
 
     + (related.length ? '<div class="section section--tight no-print"><div class="section-head" style="margin-bottom:22px"><div>'
-        + '<h2 style="font-size:1.9rem">Similar activities</h2></div></div>'
+        + '<h2 style="font-size:1.9rem">' + slot("templates/activity", "similarTitle") + '</h2></div></div>'
         + '<div class="grid g-3">' + related.map(r => activityCard(r)).join("") + '</div></div>' : "")
 
     + (ep && isVideoId(ep.youtubeId)
-        ? '<div class="no-print" style="max-width:640px;margin-top:26px"><h3>Watch the episode</h3>' + embed(ep)
+        ? '<div class="no-print" style="max-width:640px;margin-top:26px"><h3>' + slot("templates/activity", "episodeTitle") + '</h3>' + embed(ep)
           + '<a class="btn btn--block btn--paper" style="margin-top:10px" href="#/watch/' + E(ep.id) + '">' + ic("arrow-right") + ' About episode ' + E(ep.episode) + '</a></div>'
-        : ep ? '<div class="no-print" style="margin-top:26px"><a class="btn btn--block btn--berry" href="#/watch/' + E(ep.id) + '">' + ic("play") + ' Watch the episode</a></div>' : "")
+        : ep ? '<div class="no-print" style="margin-top:26px"><a class="btn btn--block btn--berry" href="#/watch/' + E(ep.id) + '">' + ic("play") + ' ' + E(slotText("templates/activity", "episodeTitle")) + '</a></div>' : "")
 
     + '</div></section>';
 }
@@ -10814,9 +10856,9 @@ function viewActivity(id){
 function notFound(what){
   return '<section class="section"><div class="shell"><div class="empty">'
     + ic("compass","i-lg")
-    + '<h2 style="margin-top:14px">That ' + E(what) + ' is not here</h2>'
-    + '<p>It may have been archived or deleted in the admin portal.</p>'
-    + '<a class="btn" href="#/">' + ic("home") + ' Back to the studio</a>'
+    + '<h2 style="margin-top:14px">' + slot("system", "notFoundTitle", { thing: what }) + '</h2>'
+    + '<p>' + slot("system", "notFoundText") + '</p>'
+    + '<a class="btn" href="#/">' + ic("home") + ' ' + E(slotText("system", "notFoundButton")) + '</a>'
     + '</div></div></section>';
 }
 
@@ -10847,7 +10889,7 @@ function viewPlay(sub){
     + '<p class="mute" style="margin-bottom:22px">' + E(plural(list.length, "game")) + '</p>'
     + (list.length
         ? '<div class="grid grid--games">' + list.map(g => gameCard(g)).join("") + '</div>'
-        : '<div class="empty">No games published in this group yet.</div>')
+        : '<div class="empty">' + slot("templates/game", "emptyList") + '</div>')
     + '</div></section>';
 }
 
@@ -10885,7 +10927,7 @@ function gamePoster(g){
     + '<button class="btn btn--lg btn--cyan" data-act="open-game" data-id="' + E(g.id) + '">'
     + ic("play") + ' Play ' + nameHTML(g.title) + '</button>'
     + '</div>'
-    + '<span class="gameposter__note">Opens in the full window. Press &quot;Close&quot; to come back.</span>'
+    + '<span class="gameposter__note">' + E(slotText("templates/game", "posterNote")) + '</span>'
     + '</div>';
 }
 
@@ -10905,7 +10947,7 @@ function membersValueHTML(g){
     ["palette", "Creative tips", "Fresh ideas for making things together at home."],
     ["heart", "Free, with no spam", "It costs nothing, and you can unsubscribe any time."]
   ];
-  return '<div class="panel panel--flat membersvalue" style="margin-top:26px"><h3>' + ic("gift","i-lg") + ' Why join our free mailing list?</h3>'
+  return '<div class="panel panel--flat membersvalue" style="margin-top:26px"><h3>' + ic("gift","i-lg") + ' ' + slot("templates/game", "membersTitle") + '</h3>'
     + '<ul class="membersvalue__list">' + perks.map(p => '<li>' + ic(p[0]) + '<span><b>' + E(p[1]) + '.</b> ' + nameHTML(p[2]) + '</span></li>').join("") + '</ul>'
     + '<div class="row no-print" style="margin-top:18px">'
     + '<button type="button" class="btn btn--sun" data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '">' + ic("mail") + ' Join free</button>'
@@ -10927,7 +10969,7 @@ function membersPoster(g, what){
           : '<button type="button" class="btn btn--lg btn--sun" data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '" data-what="lesson">' + ic("lock") + ' Join free to see it</button>'
             + '<button type="button" class="btn btn--sm btn--paper" data-act="open-mailing-list" data-member data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '" data-what="lesson">' + ic("log-in") + ' Already joined? Sign in</button>')
       + '</div>'
-      + '<span class="gameposter__note gameposter__note--wrap">' + (sub ? "Opens in the Subscriber’s Portal." : "Free for mailing-list subscribers.") + '</span>'
+      + '<span class="gameposter__note gameposter__note--wrap">' + (sub ? "Opens in the Subscriber’s Portal." : E(slotText("templates/game", "membersNote"))) + '</span>'
       + '</div>';
   }
   return '<div class="gameposter gameposter--low" style="--p1:' + E(g.p1 || "#D9C2E3") + ';--p2:' + E(g.p2 || "#7A4A86") + '">'
@@ -10940,7 +10982,7 @@ function membersPoster(g, what){
         : '<button type="button" class="btn btn--lg btn--sun" data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '">' + ic("lock") + ' Join free to play</button>'
           + '<button type="button" class="btn btn--sm btn--paper" data-act="open-mailing-list" data-member data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '">' + ic("log-in") + ' Already joined? Sign in</button>')
     + '</div>'
-    + '<span class="gameposter__note gameposter__note--wrap">' + (sub ? "Opens in the Subscriber’s Portal." : "Free for mailing-list subscribers.") + '</span>'
+    + '<span class="gameposter__note gameposter__note--wrap">' + (sub ? "Opens in the Subscriber’s Portal." : E(slotText("templates/game", "membersNote"))) + '</span>'
     + '</div>';
 }
 
@@ -11174,7 +11216,7 @@ function viewGame(id){
     + (!board && g.cover && g.cover.src ? '<figure class="gamephoto"><img src="' + E(g.cover.src) + '" width="1280" height="800" alt="' + E(g.cover.alt || "") + '" loading="lazy"></figure>' : "")
     /* a subscribers-only game shows a visitor why joining is worth it; a subscriber, who can play it, sees How to play */
     + (g.kind === "members" && !portalHasAccess() ? membersValueHTML(g)
-      : '<div class="panel panel--flat" style="margin-top:26px"><h3>' + ic("list-checks","i-lg") + ' How to play</h3>'
+      : '<div class="panel panel--flat" style="margin-top:26px"><h3>' + ic("list-checks","i-lg") + ' ' + slot("templates/game", "howToPlay") + '</h3>'
         + stepsHTML(g.rules, g.rulePictures)
         /* an offline game's printable (cards, a log, a checklist), the same button an activity has */
         + (g.printable && g.printable.path
@@ -11182,7 +11224,7 @@ function viewGame(id){
             : "")
         + '</div>')
     + '<div style="margin-top:26px">' + portalWordHTML(g) + '</div>'
-    + (leads ? '<div class="section section--tight"><span class="eyebrow">Then make this</span>'
+    + (leads ? '<div class="section section--tight"><span class="eyebrow">' + slot("templates/game", "thenMake") + '</span>'
         + '<div class="grid g-3">' + activityCard(leads) + '</div></div>' : "")
     + '</div></section>';
 }
@@ -11195,14 +11237,14 @@ function viewWatch(){
   const eps = db.list("videos").filter(v => v.status === "published" && v.videoState === "live").sort((a,b) => b.episode - a.episode);
   const latest = eps.find(v => isVideoId(v.youtubeId));
   const feature = latest
-    ? '<span class="eyebrow">Newest episode</span>'
+    ? '<span class="eyebrow">' + slot("watch", "newestEyebrow") + '</span>'
       + '<h2>' + E(latest.title) + '</h2>'
       + embed(latest)
     : "";
   return cmsHeader("watch", "Watch", "Enjoy our animated shorts, then share the episodes with a friend.",
       "Each episode shows how one spark of creativity turns into an adventure and a discovery, then links to the activity so you can try it yourself.",
-      '<a class="btn btn--berry btn--lg" href="' + E(BRAND.youtube) + '" target="_blank" rel="noopener noreferrer">' + ic("youtube") + ' Open the channel</a>'
-      + '<p class="tiny mute" style="margin-top:12px">Like, share, and subscribe on YouTube so new episodes reach you first.</p>',
+      '<a class="btn btn--berry btn--lg" href="' + E(BRAND.youtube) + '" target="_blank" rel="noopener noreferrer">' + ic("youtube") + ' ' + E(slotText("watch", "channelButton")) + '</a>'
+      + '<p class="tiny mute" style="margin-top:12px">' + slot("watch", "channelNote") + '</p>',
       { aside: feature })
     + '<section class="section"><div class="shell">'
     + cmsBody("watch")
@@ -11210,8 +11252,8 @@ function viewWatch(){
     + (DONATE_LINKS_ENABLED
         ? '<div class="panel" style="margin-top:20px;background-image:var(--halftone-lite),linear-gradient(140deg,#EAF6F3 0%,#D7EDE8 45%,#C2E2DA 100%);background-size:7px 7px,100% 100%">'
           + '<div class="row-between"><div>'
-          + '<h3 style="font-size:1.35rem;margin-bottom:.3em">Help keep the series rolling</h3>'
-          + '<p style="margin:0;max-width:60ch">Every bit of support goes toward our media team, helping them keep making new, child-friendly episodes like these.</p></div>'
+          + '<h3 style="font-size:1.35rem;margin-bottom:.3em">' + slot("watch", "supportHeading") + '</h3>'
+          + '<p style="margin:0;max-width:60ch">' + slot("watch", "supportText") + '</p></div>'
           + '<a class="btn btn--lg btn--teal" href="#/donate">' + ic("heart-handshake") + ' Support</a></div></div>'
         : '')
     + '</div></section>'
@@ -11271,13 +11313,13 @@ function viewVideo(id){
     + '<p class="lede" style="margin-top:30px;font-weight:500">'
     + quEditable("video-desc", v.id, E(String(v.description || "").trim()
         || [v.creation, v.adventure].filter(x => String(x || "").trim()).join(" "))) + '</p>'
-    + (live ? '<p><strong>Like, share, and subscribe on YouTube so new episodes reach you first.</strong></p>' : "")
+    + (live ? '<p><strong>' + slot("templates/episode", "subscribeNote") + '</strong></p>' : "")
     + (videoLearnedHTML(v) ? '<div style="margin-top:26px">' + videoLearnedHTML(v) + '</div>' : "")
     + (cast.length ? '<div class="section section--tight"><div class="section-head" style="margin-bottom:22px"><div>'
-        + '<span class="eyebrow">The cast</span><h2 style="font-size:1.9rem">Who is in it</h2></div></div>'
+        + '<span class="eyebrow">' + slot("templates/episode", "castEyebrow") + '</span><h2 style="font-size:1.9rem">' + slot("templates/episode", "castHeading") + '</h2></div></div>'
         + '<div class="grid cast-grid">' + cast.map(c => characterCard(c, true)).join("") + '</div></div>' : "")
     + (act ? '<div class="section section--tight"><div class="section-head" style="margin-bottom:22px"><div>'
-        + '<span class="eyebrow">Then make this</span><h2 style="font-size:1.9rem">Make it yourself</h2></div></div>'
+        + '<span class="eyebrow">' + slot("templates/episode", "makeEyebrow") + '</span><h2 style="font-size:1.9rem">' + slot("templates/episode", "makeHeading") + '</h2></div></div>'
         + '<div class="grid g-3">' + activityCard(act) + '</div></div>' : "")
     + '</div></section>';
 }
@@ -11287,7 +11329,7 @@ function viewVideo(id){
    ============================================================ */
 function viewStories(){
   const feature = '<div class="bookfeature">'
-    + '<img class="bookfeature__cover skel" src="assets/hero/kids-reading-together.webp" alt="Three kids lying on the floor together, reading a picture book" loading="lazy">'
+    + slotImgHTML("stories", "bannerPicture", "", "bookfeature__cover skel")
     + '</div>';
 
   const f = AppState.storyFilter;
@@ -11323,7 +11365,7 @@ function viewStories(){
     + '</div></div>'
     + (list.length ? '<div class="grid g-3 grid--compact">' + list.map(s => storyCard(s)).join("") + '</div>'
         : '<div class="empty">' + ic("search-x","i-lg")
-          + '<p style="margin-top:12px">Nothing matches that yet.</p>'
+          + '<p style="margin-top:12px">' + slot("stories", "emptyList") + '</p>'
           + '<button class="btn btn--sm btn--paper" data-act="sf-clear" style="margin-top:14px">' + ic("rotate-ccw") + ' Start the filter again</button></div>')
     + '</div></div>'
     + '</div></section>';
@@ -11446,7 +11488,7 @@ function viewStory(id){
     + '<p class="lede">' + E(s.blurb) + '</p>'
     + '<button class="btn btn--paper no-print" data-act="share" data-url="' + E(location.origin + "/stories/" + s.id) + '" data-title="' + E(s.title) + '">' + ic("share-2") + ' Share</button>'
     + (act ? '<div class="section section--tight"><div class="section-head" style="margin-bottom:22px"><div>'
-        + '<span class="eyebrow">Then make this</span><h2 style="font-size:1.9rem">Make it yourself</h2></div></div>'
+        + '<span class="eyebrow">' + slot("templates/story", "makeEyebrow") + '</span><h2 style="font-size:1.9rem">' + slot("templates/story", "makeHeading") + '</h2></div></div>'
         + '<div class="grid g-3">' + activityCard(act) + '</div></div>' : "")
     + '</div></section>';
 }
@@ -11456,9 +11498,7 @@ function viewStory(id){
    ============================================================ */
 function viewCharacters(){
   const list = castInOrder();
-  const feature = '<div class="taped"><img src="assets/hero/porch-crew.jpg"'
-    + ' alt="Eight children leaning on the treehouse porch rail at golden hour"'
-    + ' loading="lazy"></div>';
+  const feature = '<div class="taped">' + slotImgHTML("characters", "bannerPicture", "", "") + '</div>';
 
   return cmsHeader("characters", "", 'Meet Chike, Zech, and their six <span class="hl">creative friends</span>.',
         "Chike, Zech, and their friends are a creative ensemble. Each character has their own distinct creative outlet, which shows there is no single \u201Cright\u201D kind of creativity. Tap a friend to see their activities, episodes, and story.",
@@ -11466,7 +11506,7 @@ function viewCharacters(){
         { aside: bannerAside("characters", feature) })
     + '<section class="section"><div class="shell">'
     + '<div class="section-head" style="margin-bottom:20px"><div>'
-    + '<h2 style="font-size:1.9rem">Tap a friend to see what they make.</h2></div></div>'
+    + '<h2 style="font-size:1.9rem">' + slot("characters", "listHeading") + '</h2></div></div>'
     + cmsBody("characters")
     + '<div class="grid char-grid">'
     + list.map(c => characterCard(c)).join("")
@@ -11488,9 +11528,9 @@ function viewCharacter(slug){
     + '<div><div class="panel">'
     + '<span class="eyebrow">' + quEditable("character-relationship", c.id, E(c.relationship)) + '</span>'
     + '<h1 style="font-size:clamp(2.3rem,5vw,3.6rem);margin-bottom:.2em">' + quEditable("character-name", c.id, E(c.name)) + '</h1>'
-    + '<span class="eyebrow" style="margin-top:20px">Creative outlet</span>'
+    + '<span class="eyebrow" style="margin-top:20px">' + slot("templates/character", "outletLabel") + '</span>'
     + '<p style="margin:0 0 22px;font-weight:700">' + quEditable("character-outlet", c.id, E(c.outlet || c.strength)) + '</p>'
-    + '<span class="eyebrow">About ' + E(c.name) + '</span>'
+    + '<span class="eyebrow">' + slot("templates/character", "aboutLabel", { name: c.name }) + '</span>'
     + '<p style="margin:0 0 22px">' + quEditable("character-story-value", c.id, E(c.storyValue)) + '</p>'
     + '</div></div>'
     + '<div class="detail__cover" style="aspect-ratio:4/5;--p1:' + t.p1 + ';--p2:' + t.p2 + '">'
@@ -11498,15 +11538,15 @@ function viewCharacter(slug){
     + '</div>'
     + '</div>'
     + (acts.length ? '<div class="section section--tight"><div class="section-head" style="margin-bottom:22px"><div>'
-        + '<span class="eyebrow">Make it ' + E(c.name) + '&#39;s way</span><h2 style="font-size:1.9rem">' + plural(acts.length,"activity","activities") + '</h2></div></div>'
+        + '<span class="eyebrow">' + slot("templates/character", "activitiesEyebrow", { name: c.name }) + '</span><h2 style="font-size:1.9rem">' + plural(acts.length,"activity","activities") + '</h2></div></div>'
         + '<div class="grid g-3">' + acts.map(a => activityCard(a)).join("") + '</div></div>' : "")
     + (eps.length ? '<div class="section section--tight"><div class="section-head" style="margin-bottom:22px"><div>'
-        + '<span class="eyebrow">On screen</span>'
-        + '<h2 style="font-size:1.9rem">Featuring ' + E(c.name) + '</h2></div></div>'
+        + '<span class="eyebrow">' + slot("templates/character", "episodesEyebrow") + '</span>'
+        + '<h2 style="font-size:1.9rem">' + slot("templates/character", "episodesHeading", { name: c.name }) + '</h2></div></div>'
         + '<div class="grid ep-grid">' + eps.map(v => episodeRow(v)).join("") + '</div></div>' : "")
     + (story ? '<div class="section section--tight"><div class="section-head" style="margin-bottom:22px"><div>'
-        + '<span class="eyebrow">In print</span>'
-        + '<h2 style="font-size:1.9rem">Read about ' + E(c.name) + '</h2></div></div>'
+        + '<span class="eyebrow">' + slot("templates/character", "storyEyebrow") + '</span>'
+        + '<h2 style="font-size:1.9rem">' + slot("templates/character", "storyHeading", { name: c.name }) + '</h2></div></div>'
         + '<div class="grid g-3">' + storyCard(story) + '</div></div>' : "")
     + '</div></section>';
 }
@@ -11518,10 +11558,10 @@ function viewCollection(id){
   const c = db.find("collections", id);
   if (!c || (c.status === "archived" && !adminSeesAll())) return notFound("collection");
   const acts = c.items.map(i => db.find("activities", i)).filter(a => a && a.status === "published");
-  return pageHeader("Collection", E(c.title), c.blurb)
+  return pageHeader(slotText("system", "collectionEyebrow"), E(c.title), c.blurb)
     + '<section class="section"><div class="shell">'
     + (acts.length ? '<div class="grid g-3">' + acts.map(a => activityCard(a)).join("") + '</div>'
-        : '<div class="empty">Nothing published in this collection yet.</div>')
+        : '<div class="empty">' + slot("system", "collectionEmpty") + '</div>')
     + '</div></section>';
 }
 
@@ -11587,12 +11627,12 @@ function viewAbout(sub){
         extra: copyPara("mission-extra-1", missionId, missionExtra1)
           + copyPara("mission-extra-2", missionId, missionExtra2)
           + copyPara("mission-extra-3", missionId, missionExtra3, { bold:true }),
-        /* the page's Banner picture, once an admin has set one in the editor; the 3D-printer photo until then */
+        /* the page's Banner picture, once an admin has set one in the editor; its photo slot until then */
         aside: (missionRec && missionRec.image && missionRec.image.src
             ? '<div class="taped missionphoto"><img class="skel" src="' + E(missionRec.image.src) + '" alt="' + E(missionRec.image.alt || "") + '" loading="lazy"></div>'
-            : '<div class="taped missionphoto"><img src="assets/about/kids-3d-printer.jpg" width="1200" height="750" alt="A group of children crowd around a 3D printer, pointing at it and watching closely as it works" loading="lazy"></div>')
+            : '<div class="taped missionphoto">' + slotImgHTML("about/mission", "photo", ' width="1200" height="750"', "") + '</div>')
           + '<div class="panel">'
-          + '<h3 style="font-size:1.3rem">What we believe</h3>'
+          + '<h3 style="font-size:1.3rem">' + slot("about/mission", "beliefsHeading") + '</h3>'
           + quEditable("mission-promise-list", missionId, '<ul class="checklist" style="margin-top:14px">'
               + pageListItems("about/mission", "promises").map(x => '<li>' + ic("check") + '<span>' + E(x) + '</span></li>').join("")
               + '</ul>')
@@ -11637,15 +11677,15 @@ function viewAbout(sub){
     }
     const cards = pageListItems("about/vision", "visionCards");
     body = '<div style="margin-bottom:34px">'
-      + '<span class="eyebrow">How confidence grows</span>'
-      + copyPara("vision-confidence-text", visionId, confidenceText, { style:"font-size:1.15rem", prefix:"<b>Confidence grows through four simple steps:</b>" })
+      + '<span class="eyebrow">' + slot("about/vision", "confidenceEyebrow") + '</span>'
+      + copyPara("vision-confidence-text", visionId, confidenceText, { style:"font-size:1.15rem", prefix:"<b>" + E(slotText("about/vision", "confidenceLead")) + "</b>" })
       + copyPara("vision-confidence-note", visionId, confidenceNote)
       + chain
       + '</div>'
       + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">'
       + cards.map((c,i) => quEditable("vision-card", visionId, '<div class="panel"><span class="eyebrow">' + E(c.eyebrow) + '</span>'
           + '<h3 style="font-size:1.3rem">' + E(c.heading) + '</h3>'
-          + (i === 0 ? '<div class="taped" style="margin-top:12px"><img class="skel" src="assets/activities/community-computer-lab.webp" alt="A teacher helping a class of children working at a row of computers in a school library" loading="lazy"></div>' : "")
+          + (i === 0 ? '<div class="taped" style="margin-top:12px"><img class="skel" src="' + E(slotImg("about/vision", "cardPicture").src) + '" alt="' + E(slotImg("about/vision", "cardPicture").alt || "") + '" loading="lazy"></div>' : "")
           + (i === 0 ? '<div style="margin-top:18px">' + copyText(c.text) + '</div>' : copyText(c.text))
           + '</div>', i)).join("")
       + '</div>';
@@ -11708,21 +11748,21 @@ function viewAbout(sub){
     /* what the team makes, counted from what is published right now, so the numbers stay true */
     const published = col => db.list(col).filter(r => r.status === "published");
     const makes = [
-      { n: publishedActivities().length, one: "hands-on activity", many: "hands-on activities", icon: "hammer", href: "#/create", text: "Things to build, test, and make with everyday materials." },
-      { n: published("games").length, one: "game", many: "games", icon: "gamepad-2", href: "#/play", text: "Online and offline games, each with a Word to know." },
-      { n: published("stories").length, one: "story", many: "stories", icon: "book-open", href: "#/read", text: "Picture stories with Chike and his friends." },
-      { n: published("videos").length, one: "animated episode", many: "animated episodes", icon: "clapperboard", href: "#/watch", text: "Short adventures that lead to something to make." }
+      { n: publishedActivities().length, one: "hands-on activity", many: "hands-on activities", icon: "hammer", href: "#/create", text: slotText("about/team", "makesActivities") },
+      { n: published("games").length, one: "game", many: "games", icon: "gamepad-2", href: "#/play", text: slotText("about/team", "makesGames") },
+      { n: published("stories").length, one: "story", many: "stories", icon: "book-open", href: "#/read", text: slotText("about/team", "makesStories") },
+      { n: published("videos").length, one: "animated episode", many: "animated episodes", icon: "clapperboard", href: "#/watch", text: slotText("about/team", "makesEpisodes") }
     ].filter(m => m.n > 0);
     body = (makes.length
-        ? '<div class="section-head" style="margin:6px 0 22px"><div><span class="eyebrow">What we make</span>'
-          + '<h2 style="font-size:2rem">Made for kids to <span class="hl">create</span>, not just watch.</h2></div></div>'
+        ? '<div class="section-head" style="margin:6px 0 22px"><div><span class="eyebrow">' + slot("about/team", "makesEyebrow") + '</span>'
+          + '<h2 style="font-size:2rem">' + quEditable(slotRegionId("about/team", "makesHeading"), teamId, headingHTML(slotText("about/team", "makesHeading"), slotText("about/team", "makesHighlight"))) + '</h2></div></div>'
           + '<div class="grid makes">' + makes.map(m => '<a class="panel panel--flat makes__card" href="' + m.href + '">'
               + '<span class="makes__icon">' + ic(m.icon) + '</span>'
               + '<span class="makes__num">' + m.n + '</span>'
               + '<span class="makes__label">' + E(m.n === 1 ? m.one : m.many) + '</span>'
               + '<span class="tiny mute">' + E(m.text) + '</span></a>').join("") + '</div>'
         : "")
-      + '<div class="panel" style="margin-top:30px"><span class="eyebrow">Get in touch</span>'
+      + '<div class="panel" style="margin-top:30px"><span class="eyebrow">' + slot("about/team", "touchEyebrow") + '</span>'
       + '<h3 style="font-size:1.3rem">' + quEditable("team-working-heading", teamId, E(workingHeading)) + '</h3>'
       + copyPara("team-working-text", teamId, workingText)
       + '<div class="row" style="margin-top:14px;flex-wrap:wrap">'
@@ -11742,7 +11782,7 @@ function viewAbout(sub){
       + '</div>';
     head = cmsHeader("about/business", "About", 'Business <span class="hl">inquiries</span>.',
       "Partnerships, licensing, press, and wholesale, answered by a real person.", "", {
-        extra: '<p class="tiny mute" style="margin:0 0 4px;font-weight:800;letter-spacing:.04em;text-transform:uppercase">Write to us about</p>' + asksGrid
+        extra: '<p class="tiny mute" style="margin:0 0 4px;font-weight:800;letter-spacing:.04em;text-transform:uppercase">' + slot("about/business", "asksLabel") + '</p>' + asksGrid
       });
     const businessLedeLead = pageVal("about/business", "ledeLead", "Tell us which of the above this is and a little about it. General questions from parents and educators belong on the");
     const businessLedeTrail = pageVal("about/business", "ledeTrail", "instead - this form goes to the business inbox.");
@@ -11753,7 +11793,7 @@ function viewAbout(sub){
     body = '<div class="finder__grid" style="align-items:start">'
       + '<div><p class="lede">' + quEditable("business-lede-lead", businessId, E(businessLedeLead)) + ' '
       + '<a href="#/grown-ups/contact">Grown-Ups contact page</a> ' + quEditable("business-lede-trail", businessId, E(businessLedeTrail)) + '</p>'
-      + '<figure class="bizphoto"><img src="assets/about/teacher-reading-with-student.jpg" width="1200" height="775" alt="A teacher sits beside a young boy in a school library and points to the words in a book as they read it together" loading="lazy"></figure>'
+      + '<figure class="bizphoto">' + slotImgHTML("about/business", "photo", ' width="1200" height="775"', "") + '</figure>'
       + '</div>'
       + businessContactForm()
       + '</div>';
@@ -11849,10 +11889,10 @@ function viewGrownUps(sub){
             + '</details>', qa[2])).join("")
         + '</div></div>').join("")
       + '<div class="panel" style="text-align:center">'
-      + '<h3>Still stuck?</h3>'
-      + '<p class="lede" style="margin-inline:auto">Tell us which activity and which step, and we will write back.</p>'
+      + '<h3>' + slot("grown-ups/help", "stuckHeading") + '</h3>'
+      + '<p class="lede" style="margin-inline:auto">' + slot("grown-ups/help", "stuckText") + '</p>'
       + '<div class="row" style="justify-content:center;margin-top:18px">'
-      + '<a class="btn btn--cyan" href="#/grown-ups/contact">' + ic("send") + ' Send a message</a>'
+      + '<a class="btn btn--cyan" href="#/grown-ups/contact">' + ic("send") + ' ' + E(slotText("grown-ups/help", "stuckButton")) + '</a>'
       + '</div></div>';
   }
   else if (sub === "articles"){
@@ -11912,7 +11952,7 @@ function viewGrownUps(sub){
       /* two columns: what the newsletter is on the left, the sign-up on the right (stacked on a phone) */
       + '<div class="panel nlbox">'
       + '<div class="nlbox__copy">'
-      + '<span class="eyebrow">Newsletter</span>'
+      + '<span class="eyebrow">' + slot("grown-ups/articles", "newsletterEyebrow") + '</span>'
       + '<h3>' + quEditable("newsletter-heading", siteId, E(newsletterHeading)) + '</h3>'
       + copyPara("newsletter-note", siteId, newsletterNote, { cls:"tiny mute nlbox__note" }) + '</div>'
       + '<div class="nlbox__form">'
@@ -12174,7 +12214,7 @@ function viewArticle(id){
   const sources = articleSources(a);
   const shareBtn = '<button class="btn btn--paper no-print" data-act="share" data-url="' + E(location.origin + "/article/" + a.id) + '" data-title="' + E(a.title) + '">' + ic("share-2") + ' Share</button>';
   /* the way back to the list, at the top and again at the end of the article */
-  const backBtn = '<a class="btn btn--paper no-print" href="#/grown-ups/articles">' + ic("arrow-left") + ' Back to News &amp; Articles</a>';
+  const backBtn = '<a class="btn btn--paper no-print" href="#/grown-ups/articles">' + ic("arrow-left") + ' ' + E(slotText("templates/article", "backButton")) + '</a>';
   /* the same full-width banner as the other pages, with the cover picture beside the title */
   const head = pageHeader("", quEditable("article-title", a.id, E(a.title)), "", backBtn + shareBtn, {
     ledeHTML: '<p class="lede">' + quEditable("article-blurb", a.id, E(a.blurb)) + '</p>'
@@ -12192,12 +12232,12 @@ function viewArticle(id){
     + '<div class="row no-print" style="margin-top:30px;flex-wrap:wrap">' + backBtn + '</div></div>'
     + '<aside class="article__aside">'
     + (sources.length
-        ? '<span class="eyebrow">Sources</span><ol class="article__sources">' + sources.map(s => '<li>'
+        ? '<span class="eyebrow">' + slot("templates/article", "sourcesLabel") + '</span><ol class="article__sources">' + sources.map(s => '<li>'
             + (s.url ? '<a href="' + E(s.url) + '" target="_blank" rel="noopener noreferrer">' + E(s.label) + '</a>' : E(s.label)) + '</li>').join("") + '</ol>'
         : "")
     + '<div class="no-print" style="margin-top:' + (sources.length ? "22px" : "0") + '">' + shareBtn + '</div>'
     + '</aside></div>'
-    + (others.length ? '<div class="section-head" style="margin:56px 0 22px"><div><span class="eyebrow">Read next</span></div></div>'
+    + (others.length ? '<div class="section-head" style="margin:56px 0 22px"><div><span class="eyebrow">' + slot("templates/article", "readNext") + '</span></div></div>'
         + '<div class="grid g-3">' + others.map(o => articleCard(o)).join("") + '</div>' : "")
     + '</div></section>';
 }
@@ -12216,18 +12256,18 @@ function viewArticle(id){
     unsubscribe_newsletter(), instead. */
 function viewUnsubscribe(id){
   return '<section class="section"><div class="shell" style="max-width:520px;text-align:center;padding:80px 20px">'
-    + '<span class="eyebrow">Newsletter</span>'
-    + '<h1 style="margin:.3em 0" id="unsub-heading">Unsubscribe from the mailing list?</h1>'
-    + '<p class="lede" id="unsub-copy">You will stop receiving emails from ' + E(BRAND.name) + '. You can always join again later.</p>'
-    + '<button class="btn btn--cyan" id="unsub-btn" type="button" data-act="confirm-unsubscribe" data-id="' + E(id) + '" style="margin-top:20px">' + ic("mail") + ' Unsubscribe</button>'
+    + '<span class="eyebrow">' + slot("system", "unsubEyebrow") + '</span>'
+    + '<h1 style="margin:.3em 0" id="unsub-heading">' + slot("system", "unsubHeading") + '</h1>'
+    + '<p class="lede" id="unsub-copy">' + slot("system", "unsubText", { name: BRAND.name }) + '</p>'
+    + '<button class="btn btn--cyan" id="unsub-btn" type="button" data-act="confirm-unsubscribe" data-id="' + E(id) + '" style="margin-top:20px">' + ic("mail") + ' ' + E(slotText("system", "unsubButton")) + '</button>'
     + '</div></section>';
 }
 
 function shopPrintablesUnavailable(){
   return '<section class="section"><div class="shell" style="max-width:560px;text-align:center;padding:80px 20px">'
     + '<span class="eyebrow">Shop</span>'
-    + '<h1 style="margin:.3em 0">Printable packs aren&#39;t available right now.</h1>'
-    + '<p class="lede">Check back soon, or see what else is in the shop.</p>'
+    + '<h1 style="margin:.3em 0">' + slot("system", "packsOffHeading") + '</h1>'
+    + '<p class="lede">' + slot("system", "packsOffText") + '</p>'
     + '<a class="btn btn--cyan" href="#/shop/amazon" style="margin-top:20px">' + ic("arrow-left") + ' Back to Shop</a>'
     + '</div></section>';
 }
@@ -12618,9 +12658,9 @@ function viewNewsletter(){
   const shown = cat ? list.filter(e => e.category === cat) : list;
   return (admin ? portalAdminBar() : portalMemberBar())
     + '<section class="section"><div class="shell">'
-    + '<span class="eyebrow">Subscribers only</span>'
-    + '<h1 style="font-size:clamp(2.2rem,5vw,3.6rem);margin:6px 0 10px">Subscriber’s Portal</h1>'
-    + '<p class="lede">Stories, videos, new games, ebooks, photos, creative tips and kid-friendly AI lessons for our mailing list.</p>'
+    + '<span class="eyebrow">' + slot("system", "portalEyebrow") + '</span>'
+    + '<h1 style="font-size:clamp(2.2rem,5vw,3.6rem);margin:6px 0 10px">' + slot("system", "portalHeading") + '</h1>'
+    + '<p class="lede">' + slot("system", "portalText") + '</p>'
     + (cats.length > 1
         ? '<div class="tagrow pfilters" role="group" aria-label="Filter by category" style="margin:22px 0 4px">'
           + '<button type="button" class="chip pfilter" data-act="portal-cat" data-cat="" aria-pressed="' + (!cat) + '">All</button>'
@@ -12628,7 +12668,7 @@ function viewNewsletter(){
           + '</div>' : "")
     + (shown.length
         ? '<div class="grid g-3" style="margin-top:26px">' + shown.map(portalCard).join("") + '</div>'
-        : '<div class="empty" style="margin-top:26px"><h2>Nothing here yet</h2><p>' + (admin ? "Add your first entry from Manage entries." : "New stories, videos and launches land here. Check back soon.") + '</p></div>')
+        : '<div class="empty" style="margin-top:26px"><h2>Nothing here yet</h2><p>' + (admin ? "Add your first entry from Manage entries." : E(slotText("system", "portalEmpty"))) + '</p></div>')
     + '</div></section>';
 }
 
@@ -14565,23 +14605,22 @@ function viewShop(sub){
       + '</div></div>'
       + (ours.length
           ? '<div class="grid g-3">' + ours.map(r => recCard(r)).join("") + '</div>'
-          : '<div class="empty">No titles listed yet.</div>')
+          : '<div class="empty">' + slot("shop/amazon", "emptyTitles") + '</div>')
       + '<div class="divider"></div>'
-      + '<div class="section-head"><div><span class="eyebrow">Recommended supplies</span>'
-      + '<h2 style="font-size:1.9rem">Materials our activities use</h2>'
-      + '<p class="lede">These are things we suggest, not things we sell. The links open an ordinary Amazon search, '
-      + 'not an affiliate link, and nothing here is bought through this site.</p></div></div>'
+      + '<div class="section-head"><div><span class="eyebrow">' + slot("shop/amazon", "suppliesEyebrow") + '</span>'
+      + '<h2 style="font-size:1.9rem">' + slot("shop/amazon", "suppliesHeading") + '</h2>'
+      + '<p class="lede">' + slot("shop/amazon", "suppliesText") + '</p></div></div>'
       + (rest.length
           ? '<ul class="shop-materials-list">' + rest.map(r => recListRow(r)).join("") + '</ul>'
-          : '<div class="empty">No supplies listed yet.</div>')
+          : '<div class="empty">' + slot("shop/amazon", "emptySupplies") + '</div>')
     : '<div class="callout callout--warn" style="margin-bottom:28px">' + ic("triangle-alert")
       + ' Prototype build: there is no checkout here and nothing can take a payment. Prices are shown so the layout can be reviewed.</div>'
-      + '<div class="section-head"><div><span class="eyebrow">Print at home</span>'
+      + '<div class="section-head"><div><span class="eyebrow">' + slot("shop/printables", "packsEyebrow") + '</span>'
       + '<h2 style="font-size:1.9rem">' + E(plural(prods.length, "activity pack")) + '</h2>'
-      + '<p class="lede">Every pack is a PDF you print yourself, with the activity cards, a materials list, and the questions to ask afterwards.</p></div></div>'
+      + '<p class="lede">' + slot("shop/printables", "packsText") + '</p></div></div>'
       + (prods.length
           ? '<div class="grid g-3">' + prods.map(p => productCard(p)).join("") + '</div>'
-          : '<div class="empty">No packs published yet.</div>');
+          : '<div class="empty">' + slot("shop/printables", "emptyList") + '</div>');
 
   return head
     + '<section class="section"><div class="shell">'
@@ -14668,7 +14707,7 @@ function viewProduct(id){
     + '<span class="eyebrow">' + (p.access === "free" ? "Free" : "$" + p.priceUSD.toFixed(2)) + '</span>'
     + '<h1 style="font-size:clamp(2rem,4.6vw,3rem);margin-bottom:.2em">' + quEditable("product-title", p.id, E(p.title)) + '</h1>'
     + '<p class="lede">' + quEditable("product-blurb", p.id, E(p.blurb)) + '</p>'
-    + '<span class="eyebrow" style="margin-top:20px">What is included</span>'
+    + '<span class="eyebrow" style="margin-top:20px">' + slot("templates/printable", "includedLabel") + '</span>'
     + quEditable("product-includes", p.id, '<ul class="checklist" style="margin-top:8px">' + p.includes.map(i => '<li>' + ic("check") + '<span>' + E(i) + '</span></li>').join("") + '</ul>')
     + '<div class="row" style="gap:16px;margin-top:22px;flex-wrap:wrap;font-size:.9rem;color:var(--ink-mute)">'
     + '<span>' + ic("file-text") + ' ' + E(p.pages) + ' pages</span>'
@@ -14684,7 +14723,7 @@ function viewProduct(id){
     + '<div class="detail__cover" style="aspect-ratio:4/5">' + quEditable("product-image", p.id, cover(p, "story", p.access === "free" ? "Free" : "Printable pack")) + '</div>'
     + '</div>'
     + (others.length ? '<div class="section section--tight"><div class="section-head" style="margin-bottom:22px"><div>'
-        + '<span class="eyebrow">More packs</span><h2 style="font-size:1.9rem">Other printable packs</h2></div></div>'
+        + '<span class="eyebrow">' + slot("templates/printable", "moreEyebrow") + '</span><h2 style="font-size:1.9rem">' + slot("templates/printable", "moreHeading") + '</h2></div></div>'
         + '<div class="grid g-3">' + others.map(o => productCard(o)).join("") + '</div></div>' : "")
     + '</div></section>';
 }
@@ -15088,6 +15127,32 @@ const FIELDS = {
     { key:"featured", label:"Featured", type:"bool" },
     { key:"isNew", label:"Show a “New” badge", type:"bool", help:"Marks a recent addition. Untick it once it is no longer new." }
   ],
+  /* The activity finder's own activities (Create page > What should we create today?) - each has a page at
+     /find/<id>. Materials, theme, time, age, place, support and challenge are what the finder scores against. */
+  finderActivities: [
+    { key:"picture", label:"Main picture", type:"media", wide:true, help:"Leads the activity's page and its finder card. Leave empty for a theme pattern." },
+    { key:"title", label:"Title", type:"text", wide:true },
+    { key:"character", label:"Character", type:"select", options:characterOptions },
+    { key:"themes", label:"Themes", type:"chips", options:() => FIND_THEMES.map(t => ({ value:t.id, label:t.label })), wide:true, help:"The first one decides the page's crumb and pattern." },
+    { key:"materials", label:"What you need", type:"chips", options:() => FIND_MATERIALS.map(m => ({ value:m.id, label:m.label })), wide:true },
+    { key:"mins", label:"Minutes", type:"number" },
+    { key:"plus", label:"Or more (“20+ min”)", type:"bool" },
+    { key:"ageMin", label:"Age from", type:"number" },
+    { key:"ageMax", label:"Age to", type:"number" },
+    { key:"place", label:"Where", type:"select", options:() => FIND_PLACES.map(p => ({ value:p.id, label:p.label })) },
+    { key:"support", label:"Grown-up support", type:"select", options:() => FIND_SUPPORT.map(s => ({ value:s.id, label:s.label })) },
+    { key:"challenge", label:"Challenge", type:"select", options:() => FIND_CHALLENGE.map(c => ({ value:c.id, label:c.label })) },
+    { key:"topic", label:"Learning topic", type:"select", options:() => opt(TOPICS) },
+    { key:"access", label:"Access", type:"select", options:() => FIND_ACCESS.map(a => ({ value:a.id, label:a.label })) },
+    { key:"steps", label:"Numbered steps", type:"lines", wide:true, help:"One step per line." },
+    { key:"stepPicturesLines", label:"Step pictures", type:"lines", wide:true, help:"One line per step, in order: the picture's path, a |, then what it shows. For example: assets/activities/a14/step-1.jpg | Stacey lines up six glasses. A larger copy named step-1-large.jpg is used when it exists." },
+    { key:"safety", label:"Before you start", type:"lines", wide:true, help:"One safety note per line." },
+    { key:"discover", label:"Learn (what they discover)", type:"textarea", wide:true },
+    { key:"grow", label:"Grow (the habit it builds)", type:"textarea", wide:true },
+    { key:"growPrompt", label:"Question to ask afterwards", type:"textarea", wide:true },
+    { key:"guide.name", label:"Outside guide name (optional)", type:"text" },
+    { key:"guide.url", label:"Outside guide link (optional)", type:"text", wide:true }
+  ],
   collections: [
     { key:"title", label:"Title", type:"text", wide:true },
     { key:"blurb", label:"Blurb", type:"textarea", wide:true },
@@ -15163,6 +15228,9 @@ const BLANKS = {
   products:   () => ({ title:"", slug:"", format:"PDF", pages:0, priceUSD:0, blurb:"", includes:[], ageRange:"5-10", access:"paid", file:{label:"",path:""}, image:{src:"",alt:""}, status:"draft", featured:false }),
   amazonProducts: () => ({ title:"", category:"materials", why:"", forActivities:[], priceBand:"$", url:"https://www.amazon.com/s?k=", linkType:"search-placeholder", cover:"", status:"draft", featured:false, ours:false }),
   collections:() => ({ title:"", slug:"", blurb:"", icon:"layers", items:[], status:"draft", featured:false }),
+  finderActivities: () => ({ title:"", character:"chike", themes:[], materials:[], mins:15, plus:false, ageMin:5, ageMax:10, place:"indoors",
+                             support:"nearby", challenge:"easy", topic:"structures", access:"free", discover:"", grow:"", guide:null,
+                             steps:[], stepPictures:[], safety:[], growPrompt:"", picture:{ src:"", alt:"" }, status:"draft" }),
   mediaAssets:() => ({ path:"", folder:"", alt:"", usage:"", kind:"illustration", status:"draft", sizeBytes:0 }),
   portalEntries: () => ({ coverStill:"", vocabWord:"", vocabSay:"", vocabMeaning:"", vocabExample:"", howToPlay:[], steps:[],aiPrompt:"", aiPromptTitle:"", aiPromptTip:"", gameId:"", privateGameId:"", privateGameKb:0, bookId:"", bookMode:"launch", bookPath:"", email:{ on:true, subject:"", preview:"", message:"", button:"" }, buttonLabel:"", buttonUrl:"", textFirst:"after", title:"", slug:"", description:"", category:"Updates", layout:"article", publishedAt:nowISO().slice(0, 10), cover:{src:"",alt:""}, body:"", videoUrl:"", gameMode:"embed", gameLabel:"", gamePath:"", gallery:[], adminNote:"", status:"draft" }),
   issues:     () => ({ title:"", area:"platform", severity:"normal", state:"open", detail:"", status:"published" })
@@ -15404,6 +15472,8 @@ function openEditor(col, id, overlay){
      paragraphs here too, matching how it now renders on the public page,
      instead of one run-on line with no visible breaks. */
   if (col === "pages" && rec.intro) rec.intro = introRichHTML(rec.intro);
+  /* a finder activity's step pictures are edited as "path | what it shows" lines */
+  if (col === "finderActivities") rec.stepPicturesLines = (rec.stepPictures || []).map(p => p.src + " | " + (p.alt || ""));
   if (overlay) Object.keys(overlay).forEach(k => setPath(rec, k, overlay[k]));
   EDITING = { col:col, id:id || "" };
   const label = COLLECTION_LABELS[col] || col;
@@ -15422,6 +15492,7 @@ function openEditor(col, id, overlay){
     + '<div data-valbox>' + (problems.length ? validationBox(problems, { fix: true }) : "") + '</div>'
     + ehCardHTML(col, rec)
     + '<div class="admin-form-grid">' + (FIELDS[col] || []).filter(f => !f.pages || f.pages.indexOf(rec.key) >= 0).map(f => fieldControl(f, rec)).join("") + '</div>'
+    + (col === "pages" ? slotFieldsHTML(rec) : "")
     + '<div class="admin-field col-2" style="margin-top:18px"><label for="f-status">Workflow status</label>'
     + '<select class="admin-select" id="f-status" name="__status">'
     + STATUSES.map(s => '<option value="' + s.id + '"' + (rec.status === s.id ? " selected" : "") + '>' + E(s.label) + '</option>').join("")
@@ -15888,6 +15959,13 @@ const LIST_COLS = {
     { key:"title", label:"Title", main:true },
     { key:"items", label:"Items", render:r => (r.items||[]).length }
   ],
+  finderActivities: [
+    { key:"thumb", label:"", html:true, render:r => thumbCell(r.picture && r.picture.src) },
+    { key:"id", label:"Code" },
+    { key:"title", label:"Title", main:true },
+    { key:"character", label:"Character", render:r => charName(r.character) },
+    { key:"mins", label:"Time", render:r => r.mins + (r.plus ? "+" : "") + " min" }
+  ],
   portalEntries: [
     { key:"thumb", label:"", html:true, render:r => thumbCell(r.cover && r.cover.src) },
     { key:"title", label:"Title", main:true },
@@ -15912,6 +15990,7 @@ const LIST_COLS = {
 
 const PREVIEW_HASH = {
   activities: r => "#/activity/" + r.id,
+  finderActivities: r => "#/find/" + r.id,
   games:      r => "#/play/" + r.id,
   videos:     r => "#/watch/" + r.id,
   stories:    r => "#/stories/" + r.id,
@@ -16096,6 +16175,138 @@ function quEditable(regionId, entityId, html, itemIndex, block){
     + html + '<span class="qu-editable__tag">' + ic("pencil","i") + E(region.label) + '</span></' + tag + '>';
 }
 
+/* ---- Pages: the whole site, laid out the way visitors see it ---------------------------------------------------
+   Every page record, grouped under the menu it lives in, each with "Edit on page" (opens the live page with Quick
+   Update on, so you click what you want to change) and "Edit fields" (its full form). Above it, "Find any text"
+   searches every page's words, the shared titles and the content records, and jumps straight to the right editor. */
+const SITE_MAP_GROUPS = [
+  { name:"Home", icon:"home", keys:["home"] },
+  { name:"Create", icon:"hammer", keys:["create", "templates/finder", "templates/activity"] },
+  { name:"Read", icon:"book-open", keys:["stories", "templates/story"] },
+  { name:"Watch", icon:"clapperboard", keys:["watch", "templates/episode"] },
+  { name:"Play", icon:"gamepad-2", keys:["play/online", "play/offline", "templates/game"] },
+  { name:"Meet Chike", icon:"smile", keys:["characters", "templates/character"] },
+  { name:"Grown-Ups", icon:"users", keys:["grown-ups", "grown-ups/help", "grown-ups/articles", "templates/article", "grown-ups/contact"] },
+  { name:"About", icon:"info", keys:["about/team", "about/mission", "about/vision", "about/partners", "about/business"] },
+  { name:"Shop", icon:"shopping-bag", keys:["shop/amazon", "shop/printables", "templates/printable"] },
+  { name:"Support", icon:"heart-handshake", keys:["donate"] },
+  { name:"Site-wide and system", icon:"layers", keys:["site", "system"] },
+  { name:"Legal", icon:"scale", keys:["privacy", "terms", "templates/legal"] }
+];
+/** Where "Edit on page" opens each page: its own address, or for shared wording, an example page that uses it. */
+function sitePageHref(key){
+  /* a subscribers-only lesson, book or game has no ordinary page, so it never stands in as the example */
+  const first = (col, pre) => { const r = db.list(col).find(x => x.status === "published" && x.kind !== "members"); return r ? pre + r.id : ""; };
+  const special = {
+    home:"/", stories:"/stories", "templates/finder":"/create",
+    "templates/activity": first("activities", "/activity/"), "templates/game": first("games", "/play/"),
+    "templates/episode": first("videos", "/watch/"), "templates/story": first("stories", "/stories/"),
+    "templates/character": (db.list("characters").find(c => c.status === "published") || {}).slug ? "/characters/" + db.list("characters").find(c => c.status === "published").slug : "",
+    "templates/article": first("articles", "/article/"), "templates/printable": first("products", "/shop/printables/"),
+    "templates/legal":"/privacy", site:"/grown-ups/articles", system:"/activity/page-not-found-example"
+  };
+  return special[key] !== undefined ? special[key] : "/" + key;
+}
+function sitePageTitle(key, rec){
+  const d = PAGE_DEFS.find(p => p.key === key);
+  return (d && d.title) || (rec && rec.title) || key;
+}
+/** Every editable piece of text, for "Find any text": the page's own fields, its lists, its slots, and the
+    content records (activities, games, episodes, books, characters, articles, packs). */
+function siteTextIndex(){
+  const out = [];
+  const plain = v => quPlainTextFromHTML(String(v || ""));
+  db.list("pages").filter(r => r.status !== "archived").forEach(r => {
+    const where = sitePageTitle(r.key, r);
+    (FIELDS.pages || []).filter(f => !f.pages || f.pages.indexOf(r.key) >= 0)
+      .filter(f => ["eyebrow","heading","intro","body"].indexOf(f.key) >= 0 || f.pages)
+      .forEach(f => { const t = plain(getPath(r, f.key)); if (t) out.push({ kind:"page", key:r.key, id:r.id, where:where, label:f.label, text:t }); });
+    (PAGE_LIST_BLOCKS[r.key] || []).forEach(b => {
+      const items = pageListItems(r.key, b.field);
+      items.forEach(it => { const t = plain(typeof it === "string" ? it : Object.values(it).filter(v => typeof v === "string").join(" · "));
+        if (t) out.push({ kind:"page", key:r.key, id:r.id, where:where, label:b.label || b.field, text:t }); });
+    });
+    (PAGE_SLOTS[r.key] || []).forEach(s => {
+      const t = s.type === "image" ? (slotImg(r.key, s.key).alt || "") : slotText(r.key, s.key);
+      if (t) out.push({ kind:"page", key:r.key, id:r.id, where:where, label:s.label, text:t, slot:s.key });
+    });
+  });
+  [["activities","Activity"],["games","Game"],["videos","Episode"],["stories","Book"],["characters","Character"],["articles","Article"],["products","Printable pack"]].forEach(([col, noun]) => {
+    db.list(col).filter(r => r.status !== "archived").forEach(r => {
+      const strings = [];
+      /* the words people read, not addresses, dates, or ids and tags like "make-a-clay-volcano" */
+      const walk = v => { if (typeof v === "string"){ if (v.length > 1 && !/^(https?:|assets\/|#\/|\/)/.test(v) && !/^\d{4}-\d\d-\d\d/.test(v) && !/^[a-z0-9-]+$/.test(v)) strings.push(v); }
+        else if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === "object") Object.keys(v).forEach(k => { if (k !== "id" && k !== "status") walk(v[k]); }); };
+      walk(r);
+      out.push({ kind:"record", col:col, id:r.id, where:noun + ": " + (r.title || r.name || r.id), label:noun, text:plain(strings.join(" · ")) });
+    });
+  });
+  return out;
+}
+function siteTextResults(q){
+  const needle = q.toLowerCase();
+  const hits = siteTextIndex().filter(e => e.text.toLowerCase().indexOf(needle) >= 0).slice(0, 40);
+  const snippet = t => {
+    const at = t.toLowerCase().indexOf(needle);
+    const start = Math.max(0, at - 60), end = Math.min(t.length, at + needle.length + 80);
+    return (start ? "…" : "") + E(t.slice(start, at)) + '<mark>' + E(t.slice(at, at + needle.length)) + '</mark>' + E(t.slice(at + needle.length, end)) + (end < t.length ? "…" : "");
+  };
+  if (!hits.length) return '<p class="admin-meta" style="margin:10px 0 0">No page or content has “' + E(q) + '” in it.</p>';
+  return '<ul class="sitefind">' + hits.map(h => '<li class="sitefind__row">'
+      + '<div style="min-width:0"><div style="font-weight:700">' + E(h.where) + ' <span class="admin-meta">· ' + E(h.label) + '</span></div>'
+      + '<div class="sitefind__snip">' + snippet(h.text) + '</div></div>'
+      + '<div class="row" style="gap:6px;flex:none">'
+      + (h.kind === "page"
+          ? (sitePageHref(h.key) ? '<button type="button" class="admin-btn admin-btn--sm admin-btn--ghost" data-act="page-edit-live" data-href="' + E(sitePageHref(h.key)) + '">' + ic("mouse-pointer-click") + ' Edit on page</button>' : "")
+            + '<button type="button" class="admin-btn admin-btn--sm admin-btn--primary" data-act="edit-record" data-col="pages" data-id="' + E(h.id) + '">' + ic("pencil") + ' Edit fields</button>'
+          : (PREVIEW_HASH[h.col] ? '<button type="button" class="admin-btn admin-btn--sm admin-btn--ghost" data-act="page-edit-live" data-href="' + E(PREVIEW_HASH[h.col](db.find(h.col, h.id)).replace(/^#/, "")) + '">' + ic("mouse-pointer-click") + ' Edit on page</button>' : "")
+            + '<button type="button" class="admin-btn admin-btn--sm admin-btn--primary" data-act="edit-record" data-col="' + E(h.col) + '" data-id="' + E(h.id) + '">' + ic("pencil") + ' Edit</button>')
+      + '</div></li>').join("") + '</ul>';
+}
+function adminPagesMap(){
+  const st = AppState.admin;
+  const q = String(st.pagesFind || "").trim();
+  const recs = db.list("pages");
+  const listed = new Set();
+  const row = key => {
+    const r = recs.find(p => p.key === key && p.status !== "archived");
+    listed.add(key);
+    const href = sitePageHref(key);
+    const shared = key.indexOf("templates/") === 0 || key === "site" || key === "system";
+    return '<li class="sitemap-admin__row">'
+      + '<div style="min-width:0"><div style="font-weight:700">' + E(sitePageTitle(key, r)) + (shared ? ' <span class="admin-chip">Shared</span>' : "") + '</div>'
+      + '<div class="admin-meta" style="margin:0">' + (shared ? "Used on " + E(href || "every page of this kind") : E(href)) + (r ? " · updated " + E(relTime(r.updatedAt)) : "") + '</div></div>'
+      + '<div class="row" style="gap:6px;flex:none;align-items:center">'
+      + (r ? statusPill(r.status) : '<span class="admin-chip admin-chip--bad">No record yet</span>')
+      + (href ? '<button type="button" class="admin-btn admin-btn--sm admin-btn--ghost" data-act="page-edit-live" data-href="' + E(href) + '">' + ic("mouse-pointer-click") + ' Edit on page</button>' : "")
+      + (r ? '<button type="button" class="admin-btn admin-btn--sm admin-btn--primary" data-act="edit-record" data-col="pages" data-id="' + E(r.id) + '">' + ic("pencil") + ' Edit fields</button>' : "")
+      + '</div></li>';
+  };
+  const groups = SITE_MAP_GROUPS.map(g => '<section class="admin-card sitemap-admin__group">'
+    + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon(g.icon) + E(g.name) + '</h3>'
+    + '<ul class="sitemap-admin__list">' + g.keys.map(row).join("") + '</ul></section>').join("");
+  /* any page an admin added that isn't in the map yet still gets a place */
+  const extra = recs.filter(r => r.status !== "archived" && !listed.has(r.key));
+  return '<div class="row-between" style="margin-bottom:20px;align-items:flex-start;flex-wrap:wrap;gap:12px">'
+    + '<div><span class="admin-eyebrow">Page manager</span>'
+    + '<h1 class="admin-page-title" style="text-transform:none;font-size:1.5rem">Pages</h1>'
+    + '<p class="admin-meta" style="margin:4px 0 0">Every page, in the order of the site menu. Use <b>Edit on page</b> to click what you want to change, or <b>Edit fields</b> for the whole page.</p></div>'
+    + '<div class="row" style="gap:8px">'
+    + '<button class="admin-btn admin-btn--ghost" data-act="pages-view" data-view="list">' + ic("list") + ' Show as a table</button>'
+    + '<button class="admin-btn admin-btn--primary" data-act="new-record" data-col="pages">' + ic("plus") + ' New page</button>'
+    + '</div></div>'
+    + '<div class="admin-card" style="margin-bottom:20px">'
+    + '<label class="admin-section-title" for="pages-find" style="font-size:1rem;display:block">' + sectionIcon("search") + 'Find any text on the site</label>'
+    + '<p class="admin-meta" style="margin:2px 0 10px">Type a few words you can see on a page. Every match is listed with a way to edit it.</p>'
+    + '<input class="admin-input" id="pages-find" type="search" value="' + E(st.pagesFind || "") + '" placeholder="For example: Still stuck?" data-act="pages-find" autocomplete="off">'
+    + (q.length >= 2 ? siteTextResults(q) : "")
+    + '</div>'
+    + '<div class="sitemap-admin">' + groups
+    + (extra.length ? '<section class="admin-card sitemap-admin__group"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("file-plus") + 'Other pages</h3>'
+        + '<ul class="sitemap-admin__list">' + extra.map(r => row(r.key)).join("") + '</ul></section>' : "")
+    + '</div>';
+}
+
 function adminList(col){
   const st = AppState.admin;
   if (st.selected.col !== col) st.selected = { col: col, ids: [] };
@@ -16138,6 +16349,7 @@ function adminList(col){
     + '<h1 class="admin-page-title" style="text-transform:none;font-size:1.5rem">' + E(COLLECTION_PLURALS[col] || label) + '</h1>'
     + '</div>'
     + '<div class="row">'
+        + (col === "pages" ? '<button class="admin-btn admin-btn--ghost" data-act="pages-view" data-view="map">' + ic("layout-list") + ' Show as a site map</button>' : "")
         + '<button class="admin-btn admin-btn--primary" data-act="new-record" data-col="' + E(col) + '">' + ic("plus") + ' New ' + E(label.toLowerCase()) + '</button>'
         + '</div>'
     + '</div>'
@@ -16222,7 +16434,7 @@ function adminList(col){
 /* ============================================================
    26. ADMIN DASHBOARD + SPECIAL SECTIONS
    ============================================================ */
-const CONTENT_COLS = ["announcements","pages","activities","games","videos","stories","articles","characters","products","amazonProducts","collections","mediaAssets","portalEntries"];
+const CONTENT_COLS = ["announcements","pages","activities","finderActivities","games","videos","stories","articles","characters","products","amazonProducts","collections","mediaAssets","portalEntries"];
 
 function countAll(pred){
   return CONTENT_COLS.reduce((n,c) => n + db.list(c).filter(r => pred(r,c)).length, 0);
@@ -16853,6 +17065,8 @@ function renderAnalyticsLoaded(data){
     + statTile("activity", "Daily average", avgPerDay.toLocaleString(), "views per day over " + plural(days, "day"))
     + '</div>'
 
+    + topContentCard(data)
+
     + adminSharesCard()
 
     + '<div class="grid" style="grid-template-columns:1fr 1.4fr;gap:20px;align-items:start">'
@@ -16913,6 +17127,58 @@ function renderAnalyticsLoaded(data){
 
     + '</div>'
     + '</div>';
+}
+/* The most visited article, activity, ebook, game and character in the chosen range, from page views of each
+   item's own page (an ebook's story page and a game's page, since the reader and the games do not report reads
+   or plays themselves). Each tile names the leader, its views, and the next two. */
+const TOP_CONTENT_KINDS = [
+  { key:"articles",   label:"Most read article",      icon:"newspaper" },
+  { key:"activities", label:"Most visited activity",  icon:"scissors" },
+  { key:"ebooks",     label:"Most read ebook",        icon:"book-open" },
+  { key:"games",      label:"Most played game",       icon:"gamepad-2" },
+  { key:"characters", label:"Most visited character", icon:"smile" }
+];
+function topContentItem(kind, id){
+  if (kind === "activities"){
+    const a = db.find("activities", id);
+    if (a) return { title: a.title, href: "/activity/" + id };
+    const f = findCatalog().find(x => x.id === id);
+    return { title: f ? f.title : id, href: "/find/" + id };
+  }
+  if (kind === "characters"){
+    const c = db.list("characters").find(x => x.slug === id || x.id === id);
+    return { title: c ? (c.name || c.title || id) : id, href: "/characters/" + id };
+  }
+  const coll = { articles:"articles", ebooks:"stories", games:"games" }[kind];
+  const r = db.find(coll, id);
+  return { title: r ? r.title : id, href: ({ articles:"/article/", ebooks:"/stories/", games:"/play/" })[kind] + id };
+}
+function topContentCard(data){
+  const head = '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("trophy") + 'Most popular</h3>'
+    + '<p class="admin-meta" style="margin:2px 0 14px">The pages visited most in this range. Ebooks and games are counted by visits to their pages.</p>';
+  if (!data.topContent){
+    return '<div class="admin-card" style="margin-bottom:20px">' + head
+      + '<p class="admin-meta">' + (data.topContentError ? "Could not load these rankings: " + E(data.topContentError) : "These rankings are not available yet.") + '</p></div>';
+  }
+  return '<div class="admin-card" style="margin-bottom:20px">' + head
+    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px">'
+    + TOP_CONTENT_KINDS.map(k => {
+        const rows = (data.topContent[k.key] || []);
+        const lead = rows[0];
+        const item = lead ? topContentItem(k.key, lead.id) : null;
+        return '<div style="border:1px solid var(--admin-border);border-radius:12px;padding:14px">'
+          + '<div class="row-between" style="align-items:flex-start;gap:8px">'
+          + '<span class="admin-meta" style="text-transform:uppercase;letter-spacing:.07em;font-size:.62rem;font-weight:800;margin:0">' + E(k.label) + '</span>'
+          + '<span class="admin-badge admin-badge--md admin-badge--brand">' + ic(k.icon) + '</span></div>'
+          + (lead
+            ? '<a href="' + E(item.href) + '" target="_blank" rel="noopener" style="display:block;margin-top:8px;font-weight:800;line-height:1.3;color:var(--admin-ink)">' + E(item.title) + '</a>'
+              + '<div class="t-mono" style="font-size:.8rem;margin-top:4px;color:var(--admin-mute)">' + plural(lead.views, "view") + '</div>'
+              + (rows.length > 1 ? '<ol style="margin:10px 0 0;padding:10px 0 0 18px;border-top:1px solid var(--admin-border);font-size:.78rem;line-height:1.5;color:var(--admin-mute)" start="2">'
+                  + rows.slice(1, 3).map(r => '<li>' + E(topContentItem(k.key, r.id).title) + ' <span class="t-mono">(' + r.views + ')</span></li>').join("") + '</ol>' : "")
+            : '<p class="admin-meta" style="margin:8px 0 0">No visits in this range yet.</p>')
+          + '</div>';
+      }).join("")
+    + '</div></div>';
 }
 function adminAnalytics(){
   const a = AppState.admin.analytics;
@@ -19766,6 +20032,7 @@ function viewAdmin(section, id, sub){
   else if (section === "notifications") body = adminNotifications();
   else if (section === "subscribers") body = adminList(section);
   else if (section === "stories" && id && sub === "build") body = adminStoryBuilder(id);
+  else if (section === "pages" && AppState.admin.pagesView !== "list") body = adminPagesMap();
   else if (CONTENT_COLS.indexOf(section) >= 0) body = adminList(section);
   else body = '<div class="empty">Unknown admin section.</div>';
   if ((section === "portalEntries" || section === "subscribers" || (section === "send-newsletter" && !id))) body = newsletterTabs(section) + body;
@@ -20343,7 +20610,22 @@ const PAGE_DEFS = [
 
   { key:"terms", title:"Terms and Conditions", nav:"Legal",
     eyebrow:"Terms", heading:"Terms and conditions.", highlight:"Terms", tone:"cyan",
-    intro:"What you may do with the material here, and what we do and do not promise." }
+    intro:"What you may do with the material here, and what we do and do not promise." },
+
+  /* Shared wording, not pages of their own: the titles every activity, game, episode, book, character, article and
+     printable-pack page uses, the finder's questions, the legal pages' closing panel, and small system pages
+     (page not found, unsubscribe, the Subscriber's Portal heading). Their words are PAGE_SLOTS entries. */
+  { key:"site", title:"Site-wide: newsletter box and support banner", nav:"Shared" },
+  { key:"templates/finder", title:"Activity finder", nav:"Shared" },
+  { key:"templates/activity", title:"Every activity page", nav:"Shared" },
+  { key:"templates/game", title:"Every game page", nav:"Shared" },
+  { key:"templates/episode", title:"Every episode page", nav:"Shared" },
+  { key:"templates/story", title:"Every book page", nav:"Shared" },
+  { key:"templates/character", title:"Every character page", nav:"Shared" },
+  { key:"templates/article", title:"Every article page", nav:"Shared" },
+  { key:"templates/printable", title:"Every printable pack page", nav:"Shared" },
+  { key:"templates/legal", title:"Privacy and Terms closing panel", nav:"Shared" },
+  { key:"system", title:"System pages", nav:"Shared" }
 ];
 
 const PAGE_SEED_BODY = {
@@ -20389,6 +20671,272 @@ function headingHTML(text, highlight, tone){
   if (at < 0) return safe;
   const cls = tone === "cyan" ? "hl-cyan" : "hl";
   return safe.slice(0, at) + '<span class="' + cls + '">' + safe.slice(at, at + target.length) + '</span>' + safe.slice(at + target.length);
+}
+
+/* ------------------------------------------------------------
+   Page text slots: the smaller words and pictures on a page that used to be fixed in the code - section titles,
+   eyebrows, notes under a heading, empty-list messages, a page's built-in photo. Each one is listed here with the
+   wording the site shows until an admin changes it, so nothing on the site changes until someone edits it. An edit
+   is kept on that page's own record, under texts.<key> (pictures as { src, alt }), and the same entry makes it
+   clickable in Quick Update and shows it, grouped by section, in the page's "Edit fields" form.
+   Shared pages like "templates/activity" hold the titles every activity page uses, so they change in one place.
+   A slot's text may name {name} or {thing}; the page fills those in (a character's name, "episode", ...). */
+const PAGE_SLOTS = {
+  "create": [
+    { key:"finderEyebrow", section:"Finder", label:"Eyebrow over the finder", fb:"Create" },
+    { key:"finderHeading", section:"Finder", label:"Finder heading", fb:"What should we create today?" },
+    { key:"finderHighlight", section:"Finder", label:"Highlighted word in the finder heading", fb:"create" },
+    { key:"finderPicture", section:"Finder", label:"Finder picture", type:"image",
+      fb:{ src:"assets/hero/what-should-we-create.jpg", alt:"Chike resting his chin on his hand with a large question mark floating beside his head" } },
+    { key:"emptyList", section:"Activity list", label:"When no activity matches the filters", fb:"Nothing matches all of those at once." }
+  ],
+  "templates/finder": [
+    { key:"step1Question", section:"Questions", label:"Question 1", fb:"What materials do you have." },
+    { key:"step1Hint", section:"Questions", label:"Hint under question 1", fb:"Pick as many as you like, or Surprise me." },
+    { key:"step2Question", section:"Questions", label:"Question 2", fb:"2. What do you want to explore?" },
+    { key:"step3Question", section:"Questions", label:"Question 3", fb:"3. How much time do you have?" },
+    { key:"findButton", section:"Questions", label:"Button on the last step", fb:"Find 3 Activities" },
+    { key:"resultsEyebrow", section:"Results", label:"Eyebrow over the results", fb:"Your matches" },
+    { key:"resultsHeading", section:"Results", label:"Results heading", fb:"The three that fit best" },
+    { key:"resultsHeadingWeak", section:"Results", label:"Results heading when nothing matched well", fb:"Nothing matched well. These are the closest." },
+    { key:"howPicked", section:"Results", label:"“How these were picked” explanation", type:"para",
+      fb:"Each answer is worth a fixed number of points and the three highest scores win. No one character fills more than two of the three. Nothing is personalized, and nothing is remembered after you leave." },
+    { key:"startButton", section:"Results", label:"Button on each match", fb:"Start creating" },
+    { key:"moreEyebrow", section:"Finder activity pages", label:"Eyebrow over related activities", fb:"More like this" },
+    { key:"moreHeading", section:"Finder activity pages", label:"Related activities heading", fb:"Same kind of exploring" },
+    { key:"backButton", section:"Finder activity pages", label:"Back button", fb:"Back to the finder" }
+  ],
+  "templates/activity": [
+    { key:"broughtBy", section:"Top of the page", label:"Line above the character's name", fb:"Brought to you by" },
+    { key:"stepsTitle", section:"Section titles", label:"Steps heading", fb:"How to make it" },
+    { key:"needTitle", section:"Section titles", label:"Materials heading", fb:"What you need" },
+    { key:"safetyTitle", section:"Section titles", label:"Safety heading", fb:"Before you start" },
+    { key:"learnEyebrow", section:"Learn, Grow and Share boxes", label:"Learn box label", fb:"Learn" },
+    { key:"growEyebrow", section:"Learn, Grow and Share boxes", label:"Grow box label", fb:"Grow" },
+    { key:"growTitle", section:"Learn, Grow and Share boxes", label:"Grow box heading", fb:"Ask this afterwards" },
+    { key:"shareEyebrow", section:"Learn, Grow and Share boxes", label:"Share box label", fb:"Share" },
+    { key:"shareTitle", section:"Learn, Grow and Share boxes", label:"Share box heading", fb:"Try it another way" },
+    { key:"shareNote", section:"Learn, Grow and Share boxes", label:"Note at the end of the Share box", fb:"Then show a grown-up what you made." },
+    { key:"similarTitle", section:"Further down", label:"Similar activities heading", fb:"Similar activities" },
+    { key:"episodeTitle", section:"Further down", label:"Episode heading", fb:"Watch the episode" }
+  ],
+  "templates/game": [
+    { key:"howToPlay", section:"Section titles", label:"Rules heading", fb:"How to play" },
+    { key:"thenMake", section:"Section titles", label:"Eyebrow over the activity it leads to", fb:"Then make this" },
+    { key:"posterNote", section:"Game poster", label:"Note on the poster", fb:"Opens in the full window. Press “Close” to come back." },
+    { key:"membersNote", section:"Subscribers-only games", label:"Note on a subscribers-only poster", fb:"Free for mailing-list subscribers." },
+    { key:"membersTitle", section:"Subscribers-only games", label:"Why-join heading", fb:"Why join our free mailing list?" },
+    { key:"emptyList", section:"Play pages", label:"When a list has no games", fb:"No games published in this group yet." }
+  ],
+  "watch": [
+    { key:"newestEyebrow", section:"Newest episode", label:"Eyebrow over the newest episode", fb:"Newest episode" },
+    { key:"channelButton", section:"Newest episode", label:"Channel button", fb:"Open the channel" },
+    { key:"channelNote", section:"Newest episode", label:"Note under the channel button", fb:"Like, share, and subscribe on YouTube so new episodes reach you first." },
+    { key:"supportHeading", section:"Support panel", label:"Support panel heading", fb:"Help keep the series rolling" },
+    { key:"supportText", section:"Support panel", label:"Support panel text", type:"para", fb:"Every bit of support goes toward our media team, helping them keep making new, child-friendly episodes like these." }
+  ],
+  "templates/episode": [
+    { key:"subscribeNote", section:"Under the description", label:"Subscribe reminder", fb:"Like, share, and subscribe on YouTube so new episodes reach you first." },
+    { key:"castEyebrow", section:"Cast", label:"Cast eyebrow", fb:"The cast" },
+    { key:"castHeading", section:"Cast", label:"Cast heading", fb:"Who is in it" },
+    { key:"makeEyebrow", section:"Activity", label:"Activity eyebrow", fb:"Then make this" },
+    { key:"makeHeading", section:"Activity", label:"Activity heading", fb:"Make it yourself" }
+  ],
+  "stories": [
+    { key:"bannerPicture", section:"Banner", label:"Banner picture (used when the Banner picture field is empty)", type:"image",
+      fb:{ src:"assets/hero/kids-reading-together.webp", alt:"Three kids lying on the floor together, reading a picture book" } },
+    { key:"emptyList", section:"Book list", label:"When no book matches the filters", fb:"Nothing matches that yet." }
+  ],
+  "templates/story": [
+    { key:"makeEyebrow", section:"Activity", label:"Activity eyebrow", fb:"Then make this" },
+    { key:"makeHeading", section:"Activity", label:"Activity heading", fb:"Make it yourself" }
+  ],
+  "characters": [
+    { key:"listHeading", section:"Cast", label:"Heading over the cast", fb:"Tap a friend to see what they make." },
+    { key:"bannerPicture", section:"Banner", label:"Banner picture (used when the Banner picture field is empty)", type:"image",
+      fb:{ src:"assets/hero/porch-crew.jpg", alt:"Eight children leaning on the treehouse porch rail at golden hour" } }
+  ],
+  "templates/character": [
+    { key:"outletLabel", section:"Profile", label:"Creative outlet label", fb:"Creative outlet" },
+    { key:"aboutLabel", section:"Profile", label:"About label", fb:"About {name}" },
+    { key:"activitiesEyebrow", section:"Lists", label:"Activities eyebrow", fb:"Make it {name}’s way" },
+    { key:"episodesEyebrow", section:"Lists", label:"Episodes eyebrow", fb:"On screen" },
+    { key:"episodesHeading", section:"Lists", label:"Episodes heading", fb:"Featuring {name}" },
+    { key:"storyEyebrow", section:"Lists", label:"Story eyebrow", fb:"In print" },
+    { key:"storyHeading", section:"Lists", label:"Story heading", fb:"Read about {name}" }
+  ],
+  "about/mission": [
+    { key:"beliefsHeading", section:"What we believe", label:"Heading over the beliefs list", fb:"What we believe" },
+    { key:"photo", section:"Banner", label:"Photo (used when the Banner picture field is empty)", type:"image",
+      fb:{ src:"assets/about/kids-3d-printer.jpg", alt:"A group of children crowd around a 3D printer, pointing at it and watching closely as it works" } }
+  ],
+  "about/vision": [
+    { key:"confidenceEyebrow", section:"How confidence grows", label:"Eyebrow", fb:"How confidence grows" },
+    { key:"confidenceLead", section:"How confidence grows", label:"Bold opening line", fb:"Confidence grows through four simple steps:" },
+    { key:"cardPicture", section:"Closing cards", label:"Picture in the first card", type:"image",
+      fb:{ src:"assets/activities/community-computer-lab.webp", alt:"A teacher helping a class of children working at a row of computers in a school library" } }
+  ],
+  "about/team": [
+    { key:"makesEyebrow", section:"What we make", label:"Eyebrow", fb:"What we make" },
+    { key:"makesHeading", section:"What we make", label:"Heading", fb:"Made for kids to create, not just watch." },
+    { key:"makesHighlight", section:"What we make", label:"Highlighted word in the heading", fb:"create" },
+    { key:"makesActivities", section:"What we make", label:"Activities card text", fb:"Things to build, test, and make with everyday materials." },
+    { key:"makesGames", section:"What we make", label:"Games card text", fb:"Online and offline games, each with a Word to know." },
+    { key:"makesStories", section:"What we make", label:"Stories card text", fb:"Picture stories with Chike and his friends." },
+    { key:"makesEpisodes", section:"What we make", label:"Episodes card text", fb:"Short adventures that lead to something to make." },
+    { key:"touchEyebrow", section:"Get in touch", label:"Eyebrow over “Working with us”", fb:"Get in touch" }
+  ],
+  "about/business": [
+    { key:"asksLabel", section:"Write to us about", label:"Label over the cards", fb:"Write to us about" },
+    { key:"photo", section:"Beside the form", label:"Photo", type:"image",
+      fb:{ src:"assets/about/teacher-reading-with-student.jpg", alt:"A teacher sits beside a young boy in a school library and points to the words in a book as they read it together" } }
+  ],
+  "grown-ups/help": [
+    { key:"stuckHeading", section:"Still stuck?", label:"Heading", fb:"Still stuck?" },
+    { key:"stuckText", section:"Still stuck?", label:"Text", type:"para", fb:"Tell us which activity and which step, and we will write back." },
+    { key:"stuckButton", section:"Still stuck?", label:"Button", fb:"Send a message" }
+  ],
+  "grown-ups/articles": [
+    { key:"newsletterEyebrow", section:"Newsletter box", label:"Eyebrow", fb:"Newsletter" }
+  ],
+  "templates/article": [
+    { key:"backButton", section:"Buttons", label:"Back button", fb:"Back to News & Articles" },
+    { key:"sourcesLabel", section:"Beside the article", label:"Sources label", fb:"Sources" },
+    { key:"readNext", section:"Further down", label:"Read next label", fb:"Read next" }
+  ],
+  "shop/amazon": [
+    { key:"suppliesEyebrow", section:"Recommended supplies", label:"Eyebrow", fb:"Recommended supplies" },
+    { key:"suppliesHeading", section:"Recommended supplies", label:"Heading", fb:"Materials our activities use" },
+    { key:"suppliesText", section:"Recommended supplies", label:"Text", type:"para",
+      fb:"These are things we suggest, not things we sell. The links open an ordinary Amazon search, not an affiliate link, and nothing here is bought through this site." },
+    { key:"emptyTitles", section:"Empty lists", label:"When no titles are listed", fb:"No titles listed yet." },
+    { key:"emptySupplies", section:"Empty lists", label:"When no supplies are listed", fb:"No supplies listed yet." }
+  ],
+  "shop/printables": [
+    { key:"packsEyebrow", section:"Packs", label:"Eyebrow", fb:"Print at home" },
+    { key:"packsText", section:"Packs", label:"Text", type:"para", fb:"Every pack is a PDF you print yourself, with the activity cards, a materials list, and the questions to ask afterwards." },
+    { key:"emptyList", section:"Packs", label:"When no packs are published", fb:"No packs published yet." }
+  ],
+  "templates/printable": [
+    { key:"includedLabel", section:"Pack details", label:"Contents label", fb:"What is included" },
+    { key:"moreEyebrow", section:"Further down", label:"More packs eyebrow", fb:"More packs" },
+    { key:"moreHeading", section:"Further down", label:"More packs heading", fb:"Other printable packs" }
+  ],
+  "donate": [
+    { key:"amountPrompt", section:"Giving", label:"Line above the amounts", fb:"Choose an amount below, then select Give to continue." },
+    { key:"customLabel", section:"Giving", label:"Custom amount button", fb:"Custom amount" },
+    { key:"giveButton", section:"Giving", label:"Give button", fb:"Give" },
+    { key:"photo", section:"Beside the amounts", label:"Photo", type:"image",
+      fb:{ src:"assets/activities/stem-workshop.jpg", alt:"Students working together on an electronics project at a classroom table" } },
+    { key:"touchButton", section:"Other ways to help", label:"Button", fb:"Get in touch" }
+  ],
+  "templates/legal": [
+    { key:"questionsHeading", section:"Bottom of the page", label:"Questions panel heading", fb:"Questions about this page" },
+    { key:"questionsButton", section:"Bottom of the page", label:"Questions panel button", fb:"Get in touch" }
+  ],
+  "system": [
+    { key:"notFoundTitle", section:"Page not found", label:"Heading", fb:"That {thing} is not here" },
+    { key:"notFoundText", section:"Page not found", label:"Text", fb:"It may have been archived or deleted in the admin portal." },
+    { key:"notFoundButton", section:"Page not found", label:"Button", fb:"Back to the studio" },
+    { key:"unsubEyebrow", section:"Unsubscribe page", label:"Eyebrow", fb:"Newsletter" },
+    { key:"unsubHeading", section:"Unsubscribe page", label:"Heading", fb:"Unsubscribe from the mailing list?" },
+    { key:"unsubText", section:"Unsubscribe page", label:"Text", fb:"You will stop receiving emails from {name}. You can always join again later." },
+    { key:"unsubButton", section:"Unsubscribe page", label:"Button", fb:"Unsubscribe" },
+    { key:"packsOffHeading", section:"Printable packs switched off", label:"Heading", fb:"Printable packs aren’t available right now." },
+    { key:"packsOffText", section:"Printable packs switched off", label:"Text", fb:"Check back soon, or see what else is in the shop." },
+    { key:"portalEyebrow", section:"Subscriber’s Portal", label:"Eyebrow", fb:"Subscribers only" },
+    { key:"portalHeading", section:"Subscriber’s Portal", label:"Heading", fb:"Subscriber’s Portal" },
+    { key:"portalText", section:"Subscriber’s Portal", label:"Text", type:"para", fb:"Stories, videos, new games, ebooks, photos, creative tips and kid-friendly AI lessons for our mailing list." },
+    { key:"portalEmpty", section:"Subscriber’s Portal", label:"When there is nothing new yet", fb:"New stories, videos and launches land here. Check back soon." },
+    { key:"collectionEyebrow", section:"Collection pages", label:"Eyebrow", fb:"Collection" },
+    { key:"collectionEmpty", section:"Collection pages", label:"When a collection is empty", fb:"Nothing published in this collection yet." }
+  ]
+};
+function slotDef(page, key){ return (PAGE_SLOTS[page] || []).find(s => s.key === key) || null; }
+/** A page's slots in its "Edit fields" form, grouped the way they sit on the page. A blank box keeps the built-in
+    wording (shown greyed inside it); a picture left empty keeps the built-in picture (shown beside it). */
+function slotFieldsHTML(rec){
+  const defs = PAGE_SLOTS[rec.key] || [];
+  if (!defs.length) return "";
+  const texts = rec.texts || {};
+  const sections = [];
+  defs.forEach(s => { if (sections.indexOf(s.section) < 0) sections.push(s.section); });
+  return '<div class="slotfields">'
+    + '<h4 class="admin-section-title" style="font-size:.95rem;margin:22px 0 4px">Words and pictures on this page</h4>'
+    + '<p class="admin-meta" style="margin:0 0 6px">Leave a box empty to keep the built-in wording, shown in grey.</p>'
+    + sections.map(sec => '<fieldset class="slotfields__group"><legend>' + E(sec) + '</legend><div class="admin-form-grid">'
+      + defs.filter(s => s.section === sec).map(s => {
+          const id = "slot-" + s.key;
+          if (s.type === "image"){
+            const has = texts[s.key] && texts[s.key].src;
+            const shown = Object.assign({}, rec, { texts: Object.assign({}, texts, { [s.key]: has ? texts[s.key] : { src:"", alt:"" } }) });
+            return '<div class="admin-field col-2"><label>' + E(s.label) + '</label>'
+              + mediaControl({ key:"texts." + s.key }, shown)
+              + (has ? "" : '<span class="admin-hint">Showing the built-in picture: <a href="' + E(s.fb.src) + '" target="_blank" rel="noopener">' + E(s.fb.src) + '</a></span>')
+              + '</div>';
+          }
+          const val = typeof texts[s.key] === "string" ? texts[s.key] : "";
+          return '<div class="admin-field' + (s.type === "para" ? " col-2" : "") + '"><label for="' + id + '">' + E(s.label) + '</label>'
+            + (s.type === "para"
+                ? '<textarea class="admin-textarea" id="' + id + '" name="slot__' + E(s.key) + '" rows="3" placeholder="' + E(s.fb) + '" spellcheck="true">' + E(val) + '</textarea>'
+                : '<input class="admin-input" id="' + id + '" name="slot__' + E(s.key) + '" value="' + E(val) + '" placeholder="' + E(s.fb) + '" spellcheck="true">')
+            + (/\{(name|thing)\}/.test(s.fb) ? '<span class="admin-hint">{' + E(s.fb.match(/\{(name|thing)\}/)[1]) + '} is filled in on each page.</span>' : "")
+            + '</div>';
+        }).join("")
+      + '</div></fieldset>').join("")
+    + '</div>';
+}
+/** Reads a page form's slot boxes back into the page's texts. Blank, or the built-in wording unchanged, removes
+    the edit so the page goes back to its built-in words. */
+function readSlotFields(form, key, texts){
+  const out = Object.assign({}, texts || {});
+  (PAGE_SLOTS[key] || []).forEach(s => {
+    if (s.type === "image"){
+      const src = form.querySelector('[name="texts.' + s.key + '.src"]');
+      const alt = form.querySelector('[name="texts.' + s.key + '.alt"]');
+      if (!src) return;
+      if (src.value.trim()) out[s.key] = { src: src.value.trim(), alt: alt ? alt.value.trim() : "" };
+      else delete out[s.key];
+      return;
+    }
+    const el = form.elements["slot__" + s.key];
+    if (!el) return;
+    const v = String(el.value || "").trim();
+    if (!v || v === s.fb) delete out[s.key]; else out[s.key] = v;
+  });
+  return out;
+}
+function slotRegionId(page, key){ return "slot:" + page + ":" + key; }
+/* each slot is one Quick Update region: a plain text field, or a picture */
+Object.keys(PAGE_SLOTS).forEach(page => PAGE_SLOTS[page].forEach(s => {
+  QU_EDITABLE_REGIONS[slotRegionId(page, s.key)] = { label: s.label, col:"pages", fieldKey:"texts." + s.key, contentType: s.type === "image" ? "image" : "text" };
+}));
+/** A slot's words: the edited text, or the built-in wording, with {name}/{thing} filled in. */
+function slotText(page, key, vars){
+  const d = slotDef(page, key), r = pageRec(page);
+  const edited = r && r.texts && typeof r.texts[key] === "string" ? r.texts[key].trim() : "";
+  let t = edited || (d && typeof d.fb === "string" ? d.fb : "");
+  if (vars) Object.keys(vars).forEach(k => { t = t.split("{" + k + "}").join(vars[k]); });
+  return t;
+}
+/** A slot's words, escaped and clickable in Quick Update. */
+function slot(page, key, vars){
+  const r = pageRec(page), d = slotDef(page, key);
+  if (r && d) CMS_HEADER_FALLBACKS[r.id + "::texts." + key] = d.fb;
+  return quEditable(slotRegionId(page, key), r ? r.id : null, E(slotText(page, key, vars)));
+}
+/** A slot's picture: { src, alt }, the edited one or the built-in one. */
+function slotImg(page, key){
+  const d = slotDef(page, key), r = pageRec(page);
+  const edited = r && r.texts && r.texts[key] && r.texts[key].src ? r.texts[key] : null;
+  if (r && d && !edited) CMS_HEADER_FALLBACKS[r.id + "::texts." + key] = d.fb;
+  return edited || (d && d.fb) || { src:"", alt:"" };
+}
+/** A slot's picture as a clickable <img>; `attrs` adds width/height/style. */
+function slotImgHTML(page, key, attrs, cls){
+  const img = slotImg(page, key), r = pageRec(page);
+  return quEditable(slotRegionId(page, key), r ? r.id : null,
+    '<img class="' + (cls || "skel") + '" src="' + E(img.src) + '" alt="' + E(img.alt || "") + '"' + (attrs || "") + ' loading="lazy">');
 }
 
 /** The page header, using edited copy where it exists. */
@@ -23234,7 +23782,7 @@ function viewDonate(){
     + '<button class="seg__opt' + (freq === "monthly" ? ' is-on" aria-checked="true"' : '" aria-checked="false"') + ' role="radio" data-act="donate-freq" data-freq="monthly">Monthly</button>'
     + '</div>'
 
-    + '<p style="margin:18px 0 12px;font-weight:700;color:var(--ink)">Choose an amount below, then select Give to continue.</p>'
+    + '<p style="margin:18px 0 12px;font-weight:700;color:var(--ink)">' + slot("donate", "amountPrompt") + '</p>'
     + '<div class="stack" style="gap:20px">'
     + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:10px">'
     + amounts.map(a => {
@@ -23248,7 +23796,7 @@ function viewDonate(){
         const picked = AppState.donateAmount === "custom";
         return '<button type="button" class="panel panel--flat" style="position:relative;text-align:center;cursor:pointer;padding:20px 8px' + (picked ? ";background:var(--teal);color:#F2FBF9" : "") + '" data-act="donate-pick-amount" data-amount="custom" aria-pressed="' + picked + '">'
           + (picked ? '<div style="position:absolute;top:8px;right:8px;line-height:0">' + ic("check") + '</div>' : "")
-          + '<div style="font-weight:800;font-size:1.05rem;line-height:1.2">Custom amount</div>'
+          + '<div style="font-weight:800;font-size:1.05rem;line-height:1.2">' + E(slotText("donate", "customLabel")) + '</div>'
           + '</button>';
       })()
     + '</div>'
@@ -23257,17 +23805,17 @@ function viewDonate(){
           + '<div class="row" style="gap:6px;align-items:center"><span style="font-weight:800">$</span>'
           + '<input class="inp" id="donate-custom" type="number" min="1" step="1" inputmode="numeric" placeholder="Any amount" style="max-width:140px" autofocus></div></div>'
         : "")
-    + '<button class="btn btn--cyan btn--lg btn--block" data-act="mock-donate-give" data-freq="' + freq + '">' + ic("heart-handshake") + ' Give</button>'
+    + '<button class="btn btn--cyan btn--lg btn--block" data-act="mock-donate-give" data-freq="' + freq + '">' + ic("heart-handshake") + ' ' + E(slotText("donate", "giveButton")) + '</button>'
     + '</div>'
     + '</div>'
     + '<div>'
-    + '<div class="taped"><img class="skel" src="assets/activities/stem-workshop.jpg" alt="Students working together on an electronics project at a classroom table" loading="lazy"></div>'
+    + '<div class="taped">' + slotImgHTML("donate", "photo") + '</div>'
     + '<div class="panel" style="margin-top:24px"><h3 style="font-size:1.2rem">' + quEditable("donate-labels", donateId, E(donateLabels[1] || "Other Ways to Help")) + '</h3>'
     + '<p class="tiny mute" style="margin:6px 0 0">' + quEditable("donate-labels", donateId, E(donateLabels[2] || "You can support Chike’s Creative Space in ways that do not require a direct financial gift.")) + '</p>'
     + '<ul class="checklist" style="margin-top:12px">'
     + other.map((o,i) => '<li>' + ic(o.icon) + quEditable("donate-other", donateId, '<span class="tiny">' + E(o.text) + '</span>', i) + '</li>').join("")
     + '</ul>'
-    + '<a class="btn btn--paper" style="margin-top:16px" href="#/grown-ups">' + ic("send") + ' Get in touch</a>'
+    + '<a class="btn btn--paper" style="margin-top:16px" href="#/grown-ups">' + ic("send") + ' ' + E(slotText("donate", "touchButton")) + '</a>'
     + '</div></div>'
     + '</div>'
     + '</div></section>'
@@ -23352,8 +23900,8 @@ function legalPage(key, eyebrow, title, intro){
     + '<p class="tiny mute" style="margin-top:0">Last updated ' + E(lastUpdated) + '</p>'
     + cmsBody(key)
     + '</div>'
-    + '<div class="panel" style="margin-top:40px"><h3>Questions about this page</h3>'
-    + '<a class="btn btn--sm btn--paper" style="margin-top:12px" href="#/grown-ups">' + ic("send") + ' Get in touch</a></div>'
+    + '<div class="panel" style="margin-top:40px"><h3>' + slot("templates/legal", "questionsHeading") + '</h3>'
+    + '<a class="btn btn--sm btn--paper" style="margin-top:12px" href="#/grown-ups">' + ic("send") + ' ' + E(slotText("templates/legal", "questionsButton")) + '</a></div>'
     + '</div></section>';
 }
 
@@ -23659,9 +24207,9 @@ function routeTitle(){
     return "Grown-Ups" + (item && item.sub ? " - " + item.label : "");
   }
   if (map[r.name]) return map[r.name];
-  if (r.name === "admin") return "Admin · " + titleCase(r.params.section || "dashboard");
+  if (r.name === "admin") return "Admin · " + (COLLECTION_PLURALS[r.params.section] || titleCase(r.params.section || "dashboard"));
   if (r.name === "find-detail"){
-    const found = FIND_CATALOG.find(x => x.id === r.params.id);
+    const found = findCatalog().find(x => x.id === r.params.id);
     return found ? found.title : "Not found";
   }
   const rec = r.params.id && (db.find("activities", r.params.id) || db.find("videos", r.params.id)
@@ -25356,6 +25904,18 @@ const ACTIONS = {
     const entry = quFindEntry(el);
     if (entry && (entry.status === "pending" || entry.status === "draft_saved")){ entry.status = "discarded"; rerender(); }
   },
+  /* Pages: the site map or the plain table */
+  "pages-view": (el) => { AppState.admin.pagesView = el.getAttribute("data-view") === "list" ? "list" : "map"; rerender(); },
+  /* Opens a live page with Quick Update already on, so everything editable on it is outlined and clickable */
+  "page-edit-live": (el) => {
+    const href = el.getAttribute("data-href");
+    if (!href) return;
+    AppState.admin.quickUpdate.panelOpen = true;
+    AppState.admin.quickUpdate.selectedRegion = null;
+    if (CopilotState.open){ CopilotState.open = false; copilotRender(); }
+    navigate(href);
+    renderQuickUpdatePanel();
+  },
   "qu-toggle-panel": () => {
     AppState.admin.quickUpdate.panelOpen = !AppState.admin.quickUpdate.panelOpen;
     if (AppState.admin.quickUpdate.panelOpen && CopilotState.open){ CopilotState.open = false; copilotRender(); }
@@ -25865,6 +26425,9 @@ async function handleSubmit(form, act){
     const patch = readForm(form, col);
     const wanted = form.elements["__status"] ? form.elements["__status"].value : (existing ? existing.status : "draft");
     const candidate = Object.assign({}, existing || BLANKS[col](), patch, { status: wanted });
+    /* a page's words and pictures from its "Words and pictures on this page" boxes */
+    if (col === "pages" && PAGE_SLOTS[candidate.key]) candidate.texts = readSlotFields(form, candidate.key, candidate.texts);
+    if (col === "finderActivities") finderRecordFromForm(candidate);
 
     if (!candidate.slug && (candidate.title || candidate.name)) candidate.slug = slugify(candidate.title || candidate.name);
     if (col === "videos"){
@@ -26493,6 +27056,9 @@ document.addEventListener("input", (ev) => {
   } else if (act === "admin-search"){
     AppState.admin.q = el.value;
     restoreFocusAfter(() => rerender(), "#admin-q");
+  } else if (act === "pages-find"){
+    AppState.admin.pagesFind = el.value;
+    restoreFocusAfter(() => rerender(), "#pages-find");
   } else if (act === "launch-search"){
     AppState.launchFilter.q = el.value;
     restoreFocusAfter(() => rerender(), "#launch-q");

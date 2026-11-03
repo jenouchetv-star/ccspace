@@ -51,7 +51,8 @@ describe("the Newest game section", () => {
     /* an article keeps the Grown-Ups tab row and menu highlight, with a way back to the list */
     expect(html).toContain('if (r.name === "article-detail") return { items: GROWNUP_NAV, current: "articles"');
     expect(html).toContain('"grown-ups": ["grown-ups","help","article-detail"],');
-    expect(view).toContain(' Back to News &amp; Articles</a>');
+    expect(view).toContain('slotText("templates/article", "backButton")');
+    expect(html).toContain('fb:"Back to News & Articles"');
     /* drafts are for admins only: on the list (marked Draft) and on their own page */
     expect(html).toContain('a.status === "published" || (showDrafts && a.status === "draft")');
     expect(view).toContain('(a.status !== "published" && !adminSeesAll())) return notFound("article")');

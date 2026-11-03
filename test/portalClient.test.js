@@ -533,7 +533,9 @@ describe("what the portal calls its readers", () => {
   it("labels the archive and the sign-in screen 'Subscribers only', not 'Members only'", () => {
     expect(html).not.toContain("Members only");
     expect(body("portalGateHTML")).toContain('<span class="eyebrow">Subscribers only</span>');
-    expect(html).toContain('<span class="eyebrow">Subscribers only</span>\'\n    + \'<h1');
+    /* the archive's eyebrow is an editable page slot whose built-in wording is "Subscribers only" */
+    expect(html).toMatch(/\{ key:"portalEyebrow", section:"[^"]+", label:"Eyebrow", fb:"Subscribers only" \}/);
+    expect(body("viewNewsletter")).toContain('<span class="eyebrow">\' + slot("system", "portalEyebrow") + \'</span>\'\n    + \'<h1');
   });
 });
 

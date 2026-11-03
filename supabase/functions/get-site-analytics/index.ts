@@ -110,8 +110,70 @@ const QUERY = `
   }
 `;
 
+// The most visited page of each kind - articles, activities (their own pages
+// and the finder's), ebooks, games and characters - for the admin's "Most
+// popular" card. A second request, so a problem with these path filters can
+// only blank that card, never the traffic numbers above.
+const TOP_CONTENT_QUERY = `
+  query($accountTag: String!, $siteTag: String!, $since: Date!, $until: Date!) {
+    viewer {
+      accounts(filter: { accountTag: $accountTag }) {
+        articles: rumPageloadEventsAdaptiveGroups(
+          filter: { siteTag: $siteTag, date_geq: $since, date_leq: $until, bot: 0, requestPath_like: "/article/%" }
+          limit: 5
+          orderBy: [count_DESC]
+        ) { count dimensions { requestPath } }
+        activities: rumPageloadEventsAdaptiveGroups(
+          filter: { siteTag: $siteTag, date_geq: $since, date_leq: $until, bot: 0, requestPath_like: "/activity/%" }
+          limit: 5
+          orderBy: [count_DESC]
+        ) { count dimensions { requestPath } }
+        finderActivities: rumPageloadEventsAdaptiveGroups(
+          filter: { siteTag: $siteTag, date_geq: $since, date_leq: $until, bot: 0, requestPath_like: "/find/%" }
+          limit: 5
+          orderBy: [count_DESC]
+        ) { count dimensions { requestPath } }
+        ebooks: rumPageloadEventsAdaptiveGroups(
+          filter: { siteTag: $siteTag, date_geq: $since, date_leq: $until, bot: 0, requestPath_like: "/stories/%" }
+          limit: 5
+          orderBy: [count_DESC]
+        ) { count dimensions { requestPath } }
+        games: rumPageloadEventsAdaptiveGroups(
+          filter: { siteTag: $siteTag, date_geq: $since, date_leq: $until, bot: 0, requestPath_like: "/play/%" }
+          limit: 8
+          orderBy: [count_DESC]
+        ) { count dimensions { requestPath } }
+        characters: rumPageloadEventsAdaptiveGroups(
+          filter: { siteTag: $siteTag, date_geq: $since, date_leq: $until, bot: 0, requestPath_like: "/characters/%" }
+          limit: 5
+          orderBy: [count_DESC]
+        ) { count dimensions { requestPath } }
+      }
+    }
+  }
+`;
+
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
+}
+
+/** "/article/art-early-start" -> "art-early-start", or "" for anything that is not one item's own page. */
+function itemIdFromPath(path: string | undefined, prefix: string) {
+  const rest = String(path || "").slice(prefix.length).replace(/\/+$/, "");
+  return rest && !rest.includes("/") ? decodeURIComponent(rest) : "";
+}
+
+interface TopItem { id: string; views: number }
+
+/** Each kind's pages as [{ id, views }], most visited first. Pages that are lists rather than one item
+    (/play/online, /play/offline) are left out, and an id that shows up under two paths is added together. */
+function topItems(groups: (CfPageloadGroup[] | undefined)[], prefixes: string[], skip: string[] = []): TopItem[] {
+  const views = new Map<string, number>();
+  groups.forEach((rows, i) => (rows || []).forEach((r) => {
+    const id = itemIdFromPath(r.dimensions?.requestPath, prefixes[i]);
+    if (id && !skip.includes(id)) views.set(id, (views.get(id) || 0) + r.count);
+  }));
+  return [...views.entries()].map(([id, n]) => ({ id, views: n })).sort((a, b) => b.views - a.views).slice(0, 5);
 }
 
 // Shapes for the one GraphQL response this function reads - narrow enough to
@@ -246,6 +308,34 @@ Deno.serve(async (req) => {
     p99: msFromMicros(r.quantiles?.pageLoadTimeP99),
   }));
 
+  // Step 5: the most visited article, activity, ebook, game and character. Null when Cloudflare refuses or
+  // cannot answer, so the dashboard can say so instead of showing empty rankings.
+  let topContent: Record<string, TopItem[]> | null = null;
+  let topContentError = "";
+  try {
+    const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${CF_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: TOP_CONTENT_QUERY,
+        variables: { accountTag: CF_ACCOUNT_ID, siteTag: CF_SITE_TAG, since: isoDate(since), until: isoDate(until) },
+      }),
+    });
+    const top: { data?: { viewer?: { accounts?: Record<string, CfPageloadGroup[]>[] } }; errors?: { message: string }[] } = await res.json();
+    const t = top?.data?.viewer?.accounts?.[0];
+    if (top.errors) topContentError = top.errors.map((e) => e.message).join("; ");
+    else if (!res.ok) topContentError = `HTTP ${res.status}`;
+    if (res.ok && !top.errors && t) {
+      topContent = {
+        articles: topItems([t.articles], ["/article/"]),
+        activities: topItems([t.activities, t.finderActivities], ["/activity/", "/find/"]),
+        ebooks: topItems([t.ebooks], ["/stories/"]),
+        games: topItems([t.games], ["/play/"], ["online", "offline"]),
+        characters: topItems([t.characters], ["/characters/"]),
+      };
+    }
+  } catch (err) { topContentError = (err as Error).message; }
+
   const wvSum = account.webVitals?.[0]?.sum || {};
   const vitalBreakdown = (prefix: string) => ({
     good: wvSum[prefix + "Good"] || 0,
@@ -263,7 +353,7 @@ Deno.serve(async (req) => {
     prevTotalViews: prevTotals.count,
     prevTotalVisits: prevTotals.sum?.visits || 0,
     byDate, byPath, byReferer, byCountry,
-    pageLoadTimeMs, pageLoadTimeByDate,
+    pageLoadTimeMs, pageLoadTimeByDate, topContent, topContentError,
     webVitals: { lcp: vitalBreakdown("lcp"), inp: vitalBreakdown("inp"), cls: vitalBreakdown("cls") },
   });
 });

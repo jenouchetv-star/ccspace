@@ -27,8 +27,8 @@ describe("the What did they learn? card on an episode page", () => {
   it("sits on the episode page between the Like and share line and the cast", () => {
     const v = body("viewVideo");
     const at = v.indexOf("videoLearnedHTML(v)");
-    expect(at).toBeGreaterThan(v.indexOf("Like, share, and subscribe"));
-    expect(at).toBeLessThan(v.indexOf("Who is in it"));
+    expect(at).toBeGreaterThan(v.indexOf('"subscribeNote"'));
+    expect(at).toBeLessThan(v.indexOf('"castHeading"'));
   });
 
   it("wears the same green as the Word to know card, and stacks on a phone", () => {
