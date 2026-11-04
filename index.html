@@ -297,6 +297,13 @@ p:last-child{ margin-bottom:0; }
   padding:0 .08em;
 }
 .hl-cyan{ background:linear-gradient(180deg,transparent 58%, #8FE3F0 58%, #8FE3F0 92%, transparent 92%); padding:0 .08em; }
+/* a highlighted phrase in a banner heading stays on one line ("side by side", not "side by / side") */
+.pagehead h1 .hl, .pagehead h1 .hl-cyan{ white-space:nowrap; }
+/* the bold heading over a list ("9 books", "10 episodes available", "15 games",
+   "Tap a friend…", "12 titles on Amazon"): one size and one spacing everywhere,
+   and the same height whether or not a button sits beside it */
+.listhead{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; min-height:64px; margin:0 0 24px; }
+.listhead > h2{ font-size:1.9rem; margin:0; }
 
 /* ============================================================ LAYOUT */
 .shell{ width:min(var(--shell), 100% - var(--gut)*2); margin-inline:auto; }
@@ -321,14 +328,15 @@ p:last-child{ margin-bottom:0; }
 .pagehead__aside .eyebrow{ margin-bottom:6px; }
 .pagehead__aside h2{ font-size:clamp(1.1rem,1.7vw,1.35rem); margin:0 0 12px; line-height:1.2; }
 @media (max-width:900px){ .pagehead__grid{ grid-template-columns:1fr; } }
-/* The Grown-Ups banner: its photo a little narrower than pagehead--split's
-   usual 1:1.08, but large enough to read beside the longer intro there. */
-.pagehead--narrow-aside .pagehead__grid{ grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); }
-/* Play's banners: a smaller picture beside the heading */
+/* The two standard banner pictures, so every page's picture is one of two
+   sizes whatever shape the file is:
+   large (Meet Chike, Grown-Ups): the 1:1.08 column, a 16:9 picture;
+   small (Play, Read): the narrower .85 column, a wide 7:3 picture. */
+.pagehead--split .pagehead__aside > .taped img{ aspect-ratio:16/9; object-fit:cover; object-position:50% 35%; }
 .pagehead--small-aside .pagehead__grid{ grid-template-columns:minmax(0,1.5fr) minmax(0,.85fr); }
+.pagehead--small-aside .pagehead__aside > .taped img{ aspect-ratio:7/3; object-position:50% 25%; }
 @media (max-width:900px){ .pagehead--small-aside .pagehead__grid{ grid-template-columns:1fr; } }
 @media (max-width:900px){
-  .pagehead--narrow-aside .pagehead__grid{ grid-template-columns:1fr; }
   /* Photo first, then the read - on a stacked single column, source order
      (copy, then aside) put the photo last, well below the fold. */
   .pagehead--narrow-aside .pagehead__grid > :first-child{ order:2; }
@@ -3316,6 +3324,9 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 .artfilters .opt, .artfilters .opt:hover, .artfilters .opt[aria-pressed="true"]{ box-shadow:none; }
 .artfilters__right{ display:flex; align-items:center; gap:10px; flex:0 1 460px; min-width:min(100%,300px); }
 .artfilters .arttools__search{ flex:1 1 auto; }
+/* one height for the topic chips, the search box and the Cards/List buttons */
+.artfilters .opt, .artfilters .arttools__search .inp{ height:48px; min-height:48px; box-sizing:border-box; padding-top:0; padding-bottom:0; }
+.artfilters .opt{ display:inline-flex; align-items:center; }
 /* Latest beside Most read and Editor's choice, then the rest three to a row */
 .artsplit{ display:grid; grid-template-columns:minmax(0,2fr) minmax(280px,1fr); gap:clamp(22px,3vw,40px); align-items:start; margin-top:24px; }
 .artsplit--solo{ grid-template-columns:minmax(0,1fr); }
@@ -10514,8 +10525,7 @@ function finderPanel(mode){
   const finderPic = '<div class="taped" style="margin-top:30px">' + slotImgHTML("create", "finderPicture") + '</div>';
   /* on the Create page the text sits under the picture */
   const copy = pageTop
-    ? '<span class="eyebrow">' + slot("create", "finderEyebrow") + '</span>'
-      + '<h1 style="font-size:clamp(2.1rem,5vw,3.4rem);margin-bottom:.3em">'
+    ? '<h1 style="font-size:clamp(2.1rem,5vw,3.4rem);margin-bottom:.3em">'
       + quEditable(slotRegionId("create", "finderHeading"), createId, headingHTML(slotText("create", "finderHeading"), slotText("create", "finderHighlight"), "cyan")) + '</h1>'
       + finderPic
       + copyPara("create-finder-lede", createId, createLede, { cls:"lede", style:"margin-top:24px" })
@@ -11375,7 +11385,6 @@ function viewCreateStudio(){
   /* the heading sits in the gradient header band, the studios below it */
   return '<section class="section band-grad"><div class="shell">'
     + (STUDIO_LIVE ? "" : '<p class="chip" style="margin:0 0 18px">' + ic("eye-off") + ' Hidden: only admins can see this page until the first studio works</p>')
-    + '<span class="eyebrow">' + slot(C, "studioEyebrow") + '</span>'
     + '<h1 style="font-size:clamp(2.1rem,5vw,3.4rem);margin-bottom:.3em">' + slot(C, "studioHeading") + '</h1>'
     + '<p class="lede" style="margin:0">' + slot(C, "studioLede") + '</p>'
     + '</div></section>'
@@ -11511,7 +11520,7 @@ function viewPlay(sub){
       "", { asideSmall: true, gradient: true })
     + '<section class="section"><div class="shell">'
     + cmsBody(key)
-    + '<p class="mute" style="margin-bottom:22px">' + E(plural(list.length, "game")) + '</p>'
+    + '<div class="listhead"><h2>' + E(plural(list.length, "game")) + '</h2></div>'
     + (list.length
         ? '<div class="grid grid--games">' + list.map(g => gameCard(g)).join("") + '</div>'
         : '<div class="empty">' + slot("templates/game", "emptyList") + '</div>')
@@ -11866,11 +11875,11 @@ function viewWatch(){
       + '<h2>' + E(latest.title) + '</h2>'
       + embed(latest)
     : "";
-  return cmsHeader("watch", "Watch", "Enjoy our animated shorts, then share the episodes with a friend.",
+  return cmsHeader("watch", "", "Enjoy our animated shorts, then share the episodes with a friend.",
       "Each episode shows how one spark of creativity turns into an adventure and a discovery, then links to the activity so you can try it yourself.",
       '<a class="btn btn--berry" href="' + E(BRAND.youtube) + '" target="_blank" rel="noopener noreferrer">' + ic("youtube") + ' ' + E(slotText("watch", "channelButton")) + '</a>'
       + '<p class="tiny mute" style="margin-top:12px">' + slot("watch", "channelNote") + '</p>',
-      { aside: feature })
+      { aside: feature, gradient:true })
     + '<section class="section"><div class="shell">'
     + cmsBody("watch")
     + episodeGridHTML(eps)
@@ -11893,8 +11902,8 @@ function episodeGridHTML(eps){
   const page = Math.min(totalPages, Math.max(1, AppState.watchPage || 1));
   const pageEps = eps.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const playable = playAllOrder(eps).length;
-  return '<div class="section-head" style="margin-bottom:20px;gap:14px;flex-wrap:wrap"><h2 style="font-size:1.9rem">' + E(plural(eps.length,"episode","episodes")) + ' available</h2>'
-    + (playable ? '<button type="button" class="btn btn--cyan" data-act="playall-open">' + ic("play") + ' Play all</button>' : "")
+  return '<div class="listhead"><h2>' + E(plural(eps.length,"episode","episodes")) + ' available</h2>'
+    + (playable ? '<button type="button" class="btn btn--cyan" data-act="playall-open">' + ic("play") + ' Play all episodes</button>' : "")
     + '</div>'
     + '<div class="grid ep-grid grid--compact">' + pageEps.map(v => episodeRow(v)).join("") + '</div>'
     + (totalPages > 1
@@ -11953,8 +11962,9 @@ function viewVideo(id){
    15. PUBLIC VIEW: STORIES
    ============================================================ */
 function viewStories(){
-  const feature = '<div class="bookfeature">'
-    + slotImgHTML("stories", "bannerPicture", "", "bookfeature__cover skel")
+  /* the same banner as Play: a taped picture on the gradient band */
+  const feature = '<div class="taped">'
+    + slotImgHTML("stories", "bannerPicture", "", "skel")
     + '</div>';
 
   const f = AppState.storyFilter;
@@ -11969,9 +11979,9 @@ function viewStories(){
 
   const activeCount = (f.q ? 1 : 0) + (f.character ? 1 : 0);
 
-  return cmsHeader("stories", "Read", 'Stories to read <span class="hl">together</span>.',
+  return cmsHeader("stories", "", 'Stories to read <span class="hl">together</span>.',
       "Explore our growing collection of picture books for curious readers and creative families. Each story invites children to imagine, wonder, and see the world in a new way. Some books may include a creative activity, project, or space to write and draw their own ending.",
-      "", { aside: bannerAside("stories", feature) })
+      "", { aside: bannerAside("stories", feature), asideSmall: true, gradient: true })
     + '<section class="section"><div class="shell">'
     + cmsBody("stories")
     + '<div class="create-layout">'
@@ -11980,8 +11990,8 @@ function viewStories(){
     + storyFilterFieldsHTML(f, "sf")
     + '</div></div>'
     + '<div class="create-layout__results">'
-    + '<div class="row-between" style="margin-bottom:20px;align-items:center;gap:14px">'
-    + '<p class="mute" style="margin:0">' + E(plural(list.length,"book")) + '</p>'
+    + '<div class="listhead">'
+    + '<h2>' + E(plural(list.length,"book")) + '</h2>'
     + '<div class="row" style="gap:10px">'
     + '<button type="button" class="btn btn--paper filter-icon-btn" data-act="sf-modal-open" aria-label="Filter">'
     + ic("sliders-horizontal")
@@ -12128,10 +12138,9 @@ function viewCharacters(){
   return cmsHeader("characters", "", 'Meet Chike, Zech, and their six <span class="hl">creative friends</span>.',
         "Chike, Zech, and their friends are a creative ensemble. Each character has their own distinct creative outlet, which shows there is no single \u201Cright\u201D kind of creativity. Tap a friend to see their activities, episodes, and story.",
         '<button type="button" class="btn btn--paper no-print" data-act="share" data-url="' + E(location.origin + "/characters") + '" data-title="Meet Chike, Zech, and their six creative friends">' + ic("share-2") + ' Share</button>',
-        { aside: bannerAside("characters", feature) })
+        { aside: bannerAside("characters", feature), gradient:true })
     + '<section class="section"><div class="shell">'
-    + '<div class="section-head" style="margin-bottom:20px"><div>'
-    + '<h2 style="font-size:1.9rem">' + slot("characters", "listHeading") + '</h2></div></div>'
+    + '<div class="listhead"><h2>' + slot("characters", "listHeading") + '</h2></div>'
     + cmsBody("characters")
     + '<div class="grid char-grid">'
     + list.map(c => characterCard(c)).join("")
@@ -12703,7 +12712,8 @@ function viewGrownUps(sub){
       '<a class="btn btn--cyan" href="#/create">' + ic("search") + ' ' + slot("grown-ups", "findButton") + '</a>'
       + '<button type="button" class="btn btn--paper" data-act="scroll-to" data-target="guide-try">' + ic("arrow-down") + ' ' + slot("grown-ups", "exampleButton") + '</button>', {
         aside: bannerAside("grown-ups", '<div class="taped"><img src="assets/activities/grownup-blocks.jpg" alt="An adult and a child building together with colored wooden blocks at a table" loading="lazy"></div>'),
-        asideNarrow: true
+        asideNarrow: true,
+        gradient: true
       });
     const tipsHeading = pageVal("grown-ups", "tipsHeading", "While they make");
     if (grownupsId0) CMS_HEADER_FALLBACKS[grownupsId0 + "::tipsHeading"] = tipsHeading;
@@ -12738,7 +12748,7 @@ function viewGrownUps(sub){
       + photo("classPhoto") + '</div>'
 
       /* its own section: the heading sits outside the card, at the size of the others, and the card is light blue */
-      + '<div class="section-head"><div><span class="eyebrow">' + slot(G, "storyEyebrow") + '</span>'
+      + '<div class="section-head"><div>'
       + '<h2 style="font-size:2rem">' + slot(G, "storyTitle") + '</h2></div></div>'
       /* two columns - what to do and the episode note, then the questions - with the buttons along the bottom */
       + '<div class="panel guide__story"><div class="guide__storycols"><div>'
@@ -15594,10 +15604,10 @@ function viewShop(sub){
   const shareBtn = '<button class="btn btn--paper no-print" data-act="share" data-url="' + E(location.origin + "/" + shopKey) + '" data-title="Shop">' + ic("share-2") + ' Share</button>';
   const wholeStoreBtn = '<a class="btn btn--ink" href="' + E(BRAND.amazon) + '" target="_blank" rel="noopener noreferrer">' + ic("shopping-bag") + ' The whole store</a>';
   const head = amazon
-    ? cmsHeader(shopKey, "Shop", 'Checkout our books<br>on <span class="hl">Amazon</span>.',
+    ? cmsHeader(shopKey, "", 'Checkout our books<br>on <span class="hl">Amazon</span>.',
         "Workbooks, drawing books, and notebooks we've published, each one ready to buy on its own Amazon page.",
         '<div class="row no-print" style="gap:10px">' + wholeStoreBtn + shareBtn + '</div>')
-    : cmsHeader(shopKey, "Shop", 'Printable packs<br>you print at <span class="hl">home</span>.',
+    : cmsHeader(shopKey, "", 'Printable packs<br>you print at <span class="hl">home</span>.',
         "Activity cards, materials lists, and discussion prompts, ready to print.", shareBtn);
   const prods = db.list("products").filter(p => p.status === "published");
   const recs  = db.list("amazonProducts").filter(r => r.status === "published");
@@ -15608,9 +15618,7 @@ function viewShop(sub){
   const rest  = recs.filter(r => !r.ours);
 
   const body = amazon
-    ? '<div class="section-head"><div>'
-      + '<h2 style="font-size:1.9rem">' + E(plural(ours.length, "title")) + ' on Amazon</h2>'
-      + '</div></div>'
+    ? '<div class="listhead"><h2>' + E(plural(ours.length, "title")) + ' on Amazon</h2></div>'
       + (ours.length
           ? '<div class="grid g-3">' + ours.map(r => recCard(r)).join("") + '</div>'
           : '<div class="empty">' + slot("shop/amazon", "emptyTitles") + '</div>')
@@ -21705,7 +21713,6 @@ const PAGE_SLOTS = {
     { key:"announceLink", section:"Announcement bar", label:"Where the link goes, like /create or a full https:// address", fb:"" }
   ],
   "create": [
-    { key:"finderEyebrow", section:"Finder", label:"Eyebrow over the finder", fb:"Create" },
     { key:"finderHeading", section:"Finder", label:"Finder heading", fb:"What should we create today?" },
     { key:"finderHighlight", section:"Finder", label:"Highlighted word in the finder heading", fb:"create" },
     { key:"finderPicture", section:"Finder", label:"Finder picture", type:"image",
@@ -21718,7 +21725,6 @@ const PAGE_SLOTS = {
     { key:"techHeading", section:"Computer Activities", label:"Heading", fb:"Make it on a screen." },
     { key:"techLede", section:"Computer Activities", label:"Text under the heading", type:"para",
       fb:"Write, film, record and build with a computer or tablet. The free activities use only what is already on any device; the AI lessons are for subscribers, with a grown-up at the keyboard and your child giving the directions." },
-    { key:"studioEyebrow", section:"Chike’s Creative Studio", label:"Eyebrow", fb:"Chike’s Creative Studio" },
     { key:"studioHeading", section:"Chike’s Creative Studio", label:"Heading", fb:"Write, design and make it yours." },
     { key:"studioLede", section:"Chike’s Creative Studio", label:"Text under the heading", type:"para",
       fb:"Creative tools built for kids, right here on the site, each with short lessons that end in something finished. Nothing to install and no account for your child: their work stays on your device." },
@@ -21783,7 +21789,7 @@ const PAGE_SLOTS = {
   ],
   "stories": [
     { key:"bannerPicture", section:"Banner", label:"Banner picture (used when the Banner picture field is empty)", type:"image",
-      fb:{ src:"assets/hero/kids-reading-together.webp", alt:"Three kids lying on the floor together, reading a picture book" } },
+      fb:{ src:"assets/hero/kids-reading-story.webp", alt:"Three kids at a computer desk, smiling over a story they just printed" } },
     { key:"emptyList", section:"Book list", label:"When no book matches the filters", fb:"Nothing matches that yet." }
   ],
   "templates/story": [
@@ -21868,7 +21874,6 @@ const PAGE_SLOTS = {
       fb:"Choose an activity that fits your group’s time and materials. Introduce the challenge, explain any safety rules, and give students room to try different approaches." },
     { key:"classAsks", section:"At home and in class", label:"Class questions, one per line", type:"para",
       fb:"What did you try first?\nWhat did you change, and why?\nWhat would you do next time?" },
-    { key:"storyEyebrow", section:"Stories", label:"Eyebrow", fb:"Stories & episodes" },
     { key:"storyTitle", section:"Stories", label:"Heading", fb:"Turn a story into a starting point" },
     { key:"storyText", section:"Stories", label:"Text", type:"para", fb:"After a story or an episode, invite them to take the idea somewhere new." },
     { key:"storyLearn", section:"Stories", label:"Note about the episodes’ What did they learn? box", type:"para",
@@ -23926,7 +23931,7 @@ const TEST_SUITE = [
     box.innerHTML = viewStories();
     const opener = box.querySelector('[data-act="open-book"][data-id="' + b.id + '"]');
     if (!opener) return T.fail("There is no way to open the book on the Read page");
-    if (!box.querySelector(".bookfeature__cover[alt]")) return T.fail("The cover has no description");
+    if (!box.querySelector(".pagehead__aside img[alt]")) return T.fail("The banner picture has no description");
 
     if (location.protocol !== "http:" && location.protocol !== "https:") return T.skip("Serve the site over http to check the book file");
     return loadBookDoc(b.path).then(doc => {
