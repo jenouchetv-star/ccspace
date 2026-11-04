@@ -375,6 +375,39 @@ p:last-child{ margin-bottom:0; }
 .tips-grid{ grid-template-columns:repeat(3,minmax(0,1fr)); }
 @media (max-width:900px){ .tips-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:560px){ .tips-grid{ grid-template-columns:1fr; } }
+/* Grown-Ups guide: Choose / Prepare / Support, Try this, home and class, stories, the end */
+.guide__steps{ grid-template-columns:repeat(3,minmax(0,1fr)); margin-bottom:44px; }
+.guide__steptitle{ display:flex; align-items:flex-start; gap:10px; margin:0 0 .35em; font-size:1.35rem; }
+.guide__steptitle .i{ flex:none; margin-top:.15em; }
+/* the example and the home / class rows: a card and its taped photo, both columns the same width */
+.guide__try, .guide__pair{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:36px; align-items:center; margin-bottom:44px; }
+.guide__trypic{ display:block; }
+.guide__trypic img, .guide__photo img{ aspect-ratio:3/2; object-fit:cover; background:var(--paper-2); }
+/* a light line between the rows, so each fact reads as its own line */
+/* no column gap, so each line runs unbroken under the label and its text; the label's line is as tall as the text's
+   first line, which keeps the two side by side */
+.findcard__facts.guide__facts{ gap:0; }
+.findcard__facts.guide__facts dt, .findcard__facts.guide__facts dd{ margin:0; padding:9px 0; border-top:1px solid rgba(30,34,38,.12); }
+.findcard__facts.guide__facts dt{ padding-right:18px; line-height:calc(.97rem * 1.5); }
+.findcard__facts.guide__facts dt:first-of-type, .findcard__facts.guide__facts dd:first-of-type{ border-top:0; padding-top:2px; }
+@media (max-width:560px){
+  .findcard__facts.guide__facts dt{ padding-bottom:0; }
+  .findcard__facts.guide__facts dd{ border-top:0; padding-top:0; }
+}
+.guide__asklabel{ margin:18px 0 6px; font-size:.78rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--ink); }
+.guide__asks{ list-style:none; margin:10px 0 0; padding:0; display:grid; gap:8px; }
+.guide__asks li{ display:flex; gap:10px; align-items:flex-start; font-weight:700; }
+.guide__asks .i{ flex:none; margin-top:3px; color:var(--cyan); }
+.guide__story{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:24px; align-items:center; margin-bottom:44px; }
+.guide__story h3{ margin:0 0 .3em; }
+.guide__storybtns{ flex-direction:column; align-items:stretch; }
+.guide__end{ text-align:center; margin-top:44px; }
+@media (max-width:900px){
+  .guide__steps{ grid-template-columns:1fr; }
+  .guide__try, .guide__pair, .guide__story{ grid-template-columns:1fr; }
+  .guide__try .guide__trypic, .guide__pair .guide__photo{ order:-1; margin-top:14px; }
+  .guide__storybtns{ flex-direction:row; flex-wrap:wrap; }
+}
 /* The cast is four to a row on purpose: the running order is set as two rows
    of four, and an auto-fitting grid would reflow them into fives. */
 .char-grid{ grid-template-columns:repeat(4,minmax(0,1fr)); }
@@ -8353,7 +8386,7 @@ const ABOUT_NAV = [
 const FREE_PRINTABLES_LIVE = false;
 
 const GROWNUP_NAV = [
-  { hash:"#/grown-ups",          sub:"",         label:"Parents & Teachers" },
+  { hash:"#/grown-ups",          sub:"",         label:"Parent & Teacher Guide" },
   { hash:"#/grown-ups/articles", sub:"articles", label:"News & Articles" },
   { hash:"#/grown-ups/printables", sub:"printables", label:"Free Printables" },
   { hash:"#/grown-ups/help",     sub:"help",     label:"Help and support" },
@@ -10464,6 +10497,8 @@ function findCard(r){
         ? '<div class="findcard__media"><img class="skel" src="' + E(thumbSrc(a.picture.src)) + '" alt="' + E(a.picture.alt) + '" loading="lazy"></div>'
         : "")
     + '<div class="tagrow" style="margin-bottom:12px">'
+    /* only an admin is ever shown a draft here; the chip says why visitors will not see it */
+    + (a.status === "draft" ? '<span class="chip chip--ink">' + ic("eye-off") + ' Draft</span>' : "")
     + '<span class="chip">' + E(time) + '</span>'
     + '<span class="chip">' + E(findLabel(FIND_SUPPORT, a.support)) + '</span>'
     + '<span class="chip chip--leaf">' + E(findLabel(FIND_ACCESS, a.access)) + '</span>'
@@ -10925,7 +10960,7 @@ function viewHome(){
           + '<h2 style="margin-bottom:.3em">' + headingHTML(sec.heading, sec.highlight, sec.tone) + '</h2>'
           + copyText(sec.lede, { cls:"lede" }))
       + '<div class="row" style="margin-top:24px">'
-      + '<a class="btn btn--cyan" href="#/grown-ups">' + ic("book-open") + ' Read the guide</a></div></div>'
+      + '<a class="btn btn--cyan" href="#/grown-ups">' + ic("book-open") + ' ' + slot("home", "grownupsButton") + '</a></div></div>'
       + '<div class="taped">' + quEditable("home-grownups-photo", homeId,
           '<img class="skel" src="' + E((homeRec && homeRec.grownupsPhoto && homeRec.grownupsPhoto.src) || "assets/activities/grownup-blocks.jpg")
           + '" alt="' + E((homeRec && homeRec.grownupsPhoto && homeRec.grownupsPhoto.alt) || "An adult and a child building together with colored wooden blocks at a table") + '" loading="lazy">') + '</div>'
@@ -12496,22 +12531,66 @@ function viewGrownUps(sub){
   else {
     const grownupsRec0 = pageRec("grown-ups");
     const grownupsId0 = grownupsRec0 ? grownupsRec0.id : null;
-    head = cmsHeader("grown-ups", "Grown-Ups", 'A guide for parents<br>and <span class="hl">teachers</span>.',
-      "How to set up an activity, what to say when it does not go as planned, and how to keep your child with it until it is finished.",
-      "", {
+    head = cmsHeader("grown-ups", "Grown-Ups", 'Help kids get started.<br>Give their <span class="hl">ideas</span> room to grow.',
+      "Find an activity that fits their interests, your materials, and the time you have. Then use the instructions and safety notes to get ready, and give children room to make, test, and try again.\n\nPractical guidance for parents, caregivers, and educators.",
+      '<a class="btn btn--cyan" href="#/create">' + ic("search") + ' ' + slot("grown-ups", "findButton") + '</a>'
+      + '<button type="button" class="btn btn--paper" data-act="scroll-to" data-target="guide-try">' + ic("arrow-down") + ' ' + slot("grown-ups", "exampleButton") + '</button>', {
         aside: bannerAside("grown-ups", '<div class="taped"><img src="assets/activities/grownup-blocks.jpg" alt="An adult and a child building together with colored wooden blocks at a table" loading="lazy"></div>'),
         asideNarrow: true
       });
-    const tipsHeading = pageVal("grown-ups", "tipsHeading", "What to do while they make");
+    const tipsHeading = pageVal("grown-ups", "tipsHeading", "While they make");
     if (grownupsId0) CMS_HEADER_FALLBACKS[grownupsId0 + "::tipsHeading"] = tipsHeading;
-    body = '<div class="section-head"><div>'
+    const G = "grown-ups";
+    /* a list slot is one line per item: questions to ask, shown with a speech bubble */
+    const asks = key => '<ul class="guide__asks">' + slotText(G, key).split("\n").map(s => s.trim()).filter(Boolean)
+      .map(q => '<li>' + ic("message-circle") + '<span>' + E(q) + '</span></li>').join("") + '</ul>';
+    const photo = key => { const p = slotImg(G, key);
+      return p && p.src ? '<div class="taped guide__photo"><img class="skel" src="' + E(p.src) + '" alt="' + E(p.alt || "") + '" loading="lazy"></div>' : ""; };
+    /* pick, get ready, start then step back: the order an adult does them in, so they are numbered */
+    /* each card takes one of the soft colors from the Create / Discover / Learn cards */
+    const steps = [["search", "choose", "#FFF6E2"], ["package", "prepare", "#DFF3F8"], ["hand-heart", "support", "#EDE3F8"]];
+    body = '<div class="section-head"><div><span class="eyebrow">' + slot(G, "stepsEyebrow") + '</span>'
+      + '<h2 style="font-size:2rem">' + slot(G, "stepsHeading") + '</h2></div></div>'
+      + '<div class="grid guide__steps">' + steps.map((s, i) => '<div class="panel panel--flat" style="background:' + s[2] + '">'
+          + '<div class="chip chip--ink" style="margin-bottom:12px">' + (i + 1) + '</div>'
+          + '<h3 class="guide__steptitle">' + ic(s[0]) + ' ' + slot(G, s[1] + "Title") + '</h3>'
+          + '<p class="mute" style="margin:0">' + slot(G, s[1] + "Text") + '</p></div>').join("") + '</div>'
+
+      + guideTryHTML()
+
+      /* at home and in class: a card and a taped photo side by side; with Try this above, the photos run
+         right, left, right down the page */
+      + '<div class="guide__pair">'
+      + photo("homePhoto")
+      + '<div class="panel"><span class="eyebrow">' + ic("house") + ' ' + slot(G, "homeTitle") + '</span>'
+      + '<p style="margin:8px 0 0">' + slot(G, "homeText") + '</p><p class="guide__asklabel">' + slot(G, "asksLabel") + '</p>' + asks("homeAsks") + '</div>'
+      + '</div>'
+      + '<div class="guide__pair">'
+      + '<div class="panel"><span class="eyebrow">' + ic("school") + ' ' + slot(G, "classTitle") + '</span>'
+      + '<p style="margin:8px 0 0">' + slot(G, "classText") + '</p><p class="guide__asklabel">' + slot(G, "asksLabelClass") + '</p>' + asks("classAsks") + '</div>'
+      + photo("classPhoto") + '</div>'
+
+      + '<div class="panel guide__story"><div>'
+      + '<h3>' + slot(G, "storyTitle") + '</h3>'
+      + '<p style="margin:0">' + slot(G, "storyText") + '</p>' + asks("storyAsks") + '</div>'
+      + '<div class="row guide__storybtns">'
+      + '<a class="btn btn--paper" href="#/read">' + ic("book-open") + ' ' + slot(G, "storyRead") + '</a>'
+      + '<a class="btn btn--paper" href="#/watch">' + ic("play") + ' ' + slot(G, "storyWatch") + '</a></div></div>'
+
+      + '<div class="section-head"><div>'
       + '<h2 style="font-size:2rem">' + quEditable("grownups-tips-heading", grownupsId0, E(tipsHeading)) + '</h2></div></div>'
       + '<div class="grid tips-grid">'
       + pageListItems("grown-ups", "tips").map((t,i) => quEditable("grownup-tip", grownupsId0, '<div class="panel panel--flat">'
           + '<div class="chip chip--ink" style="margin-bottom:12px">' + (i+1) + '</div>'
           + '<h4 style="margin-bottom:.3em">' + E(t.title) + '</h4>'
           + copyText(t.text, { cls:"tiny mute", style:"margin:0" }) + '</div>', i)).join("")
-      + '</div>';
+      + '</div>'
+
+      + '<div class="panel guide__end">'
+      + '<h3>' + slot(G, "endTitle") + '</h3>'
+      + '<p class="lede" style="margin-inline:auto">' + slot(G, "endText") + '</p>'
+      + '<div class="row" style="justify-content:center;margin-top:18px">'
+      + '<a class="btn btn--cyan" href="#/create">' + ic("arrow-right") + ' ' + slot(G, "endButton") + '</a></div></div>';
   }
 
   const key = sub ? "grown-ups/" + sub : "grown-ups";
@@ -12519,6 +12598,34 @@ function viewGrownUps(sub){
     + '<section class="section"><div class="shell"' + (sub === "help" ? ' style="max-width:900px"' : "") + '>'
     + body + cmsBody(key)
     + donateStrip() + '</div></section>';
+}
+
+/** The Grown-Ups guide's "Try this" card: one published activity (its id is a page slot), with what an adult needs
+    to decide whether it fits - ages, time, the grown-up's part, the exact materials - and the question to ask after.
+    It uses a main activity rather than a finder one: those have a photograph of real children and a full materials list. */
+function guideTryHTML(){
+  const G = "grown-ups";
+  const a = db.find("activities", slotText(G, "tryId").trim());
+  if (!a || a.status !== "published") return "";
+  const fact = (label, value) => '<dt>' + E(label) + '</dt><dd>' + E(value) + '</dd>';
+  const href = "#/activity/" + a.id;
+  /* the card on the left, its picture taped up on its own to the right (above the card on a phone) */
+  const pic = a.image && a.image.src ? '<a class="taped guide__trypic" href="' + E(href) + '">'
+    + '<img class="skel" src="' + E(thumbSrc(a.image.src)) + '" alt="' + E(a.image.alt || a.title) + '" loading="lazy"></a>' : "";
+  const mats = (a.materialsDetail && a.materialsDetail.length ? a.materialsDetail : []).join(", ");
+  return '<article class="guide__try" id="guide-try">'
+    + '<div class="panel"><span class="eyebrow">' + slot(G, "tryEyebrow") + '</span>'
+    + '<h3 style="margin:.1em 0 .3em">' + E(a.title) + '</h3>'
+    + '<p style="margin:0 0 14px">' + E(a.summary) + '</p>'
+    + '<dl class="findcard__facts guide__facts">'
+    + (a.ageMin ? fact("Ages", a.ageMin + " to " + a.ageMax) : "")
+    + (a.timeMinutes ? fact("Time", "About " + a.timeMinutes + " minutes") : "")
+    + fact("Grown-up help", (SUPPORT.find(x => x.id === a.adultSupport) || {}).label || "")
+    + (mats ? fact("Materials", mats) : "")
+    + (a.discussionPrompt ? fact("Ask after", "“" + a.discussionPrompt + "”") : "")
+    + '</dl>'
+    + '<div class="row" style="margin-top:18px"><a class="btn btn--cyan" href="' + E(href) + '">' + ic("arrow-right") + ' ' + slot(G, "tryButton") + '</a></div>'
+    + '</div>' + pic + '</article>';
 }
 
 function contactForm(){
@@ -21530,6 +21637,52 @@ const PAGE_SLOTS = {
     { key:"photo", section:"Beside the form", label:"Photo", type:"image",
       fb:{ src:"assets/about/teacher-reading-with-student.jpg", alt:"A teacher sits beside a young boy in a school library and points to the words in a book as they read it together" } }
   ],
+  "home": [
+    { key:"grownupsButton", section:"For parents & teachers", label:"Button", fb:"Explore the Parent & Teacher Guide" }
+  ],
+  "grown-ups": [
+    { key:"findButton", section:"Top of the guide", label:"First button (opens the activity finder)", fb:"Find an activity" },
+    { key:"exampleButton", section:"Top of the guide", label:"Second button (jumps to Try this)", fb:"See an example" },
+    { key:"stepsEyebrow", section:"Your part", label:"Eyebrow", fb:"Your part" },
+    { key:"stepsHeading", section:"Your part", label:"Heading", fb:"How to help with any activity" },
+    { key:"chooseTitle", section:"Your part", label:"1. Title", fb:"Choose an activity that fits" },
+    { key:"chooseText", section:"Your part", label:"1. Text", type:"para",
+      fb:"Start with something they are curious about, or use the activity finder. Tell it what you have, what you want to explore and how much time you have, and it suggests three activities, each showing the ages, the time and how much grown-up help it needs." },
+    { key:"prepareTitle", section:"Your part", label:"2. Title", fb:"Prepare before you begin" },
+    { key:"prepareText", section:"Your part", label:"2. Text", type:"para",
+      fb:"Read through the steps, gather the materials and check the safety notes. Set up anything that needs a grown-up before you invite them to start." },
+    { key:"supportTitle", section:"Your part", label:"3. Title", fb:"Support without taking over" },
+    { key:"supportText", section:"Your part", label:"3. Text", type:"para",
+      fb:"Handle the steps marked for a grown-up, then leave the choices to them. If they get stuck, ask what they could try next. Finish with the question at the end of the activity." },
+    { key:"tryEyebrow", section:"Try this", label:"Eyebrow", fb:"Try this" },
+    { key:"tryId", section:"Try this", label:"Activity to show (the end of its web address, like act-rubber-band-guitar)", fb:"act-rubber-band-guitar" },
+    { key:"tryButton", section:"Try this", label:"Button", fb:"Open the activity" },
+    { key:"homePhoto", section:"At home and in class", label:"Photo beside At home", type:"image",
+      fb:{ src:"assets/grownups/at-home.jpg", alt:"A father and his young daughter smile as they build a small wooden airplane from craft sticks at the kitchen table" } },
+    { key:"classPhoto", section:"At home and in class", label:"Photo beside In a classroom or group", type:"image",
+      fb:{ src:"assets/grownups/in-class.jpg", alt:"A teacher kneels beside a table of second graders building towers from paper cups and craft sticks, listening to one girl explain her idea" } },
+    { key:"asksLabel", section:"At home and in class", label:"Label over the home questions", fb:"Try asking" },
+    { key:"homeTitle", section:"At home and in class", label:"Home title", fb:"At home" },
+    { key:"homeText", section:"At home and in class", label:"Home text", type:"para",
+      fb:"You don’t need to turn it into a lesson. Pick something they are curious about, make room to try it, and let them decide what to make or change." },
+    { key:"homeAsks", section:"At home and in class", label:"Home questions, one per line", type:"para",
+      fb:"What would you like to make?\nWhat could we use?\nWhat do you want to try differently?" },
+    { key:"asksLabelClass", section:"At home and in class", label:"Label over the class questions", fb:"To finish, ask" },
+    { key:"classTitle", section:"At home and in class", label:"Class title", fb:"In a classroom or group" },
+    { key:"classText", section:"At home and in class", label:"Class text", type:"para",
+      fb:"Choose an activity that fits your group’s time and materials. Introduce the challenge, explain any safety rules, and give students room to try different approaches." },
+    { key:"classAsks", section:"At home and in class", label:"Class questions, one per line", type:"para",
+      fb:"What did you try first?\nWhat did you change, and why?\nWhat would you do next time?" },
+    { key:"storyTitle", section:"Stories", label:"Heading", fb:"Turn a story into a starting point" },
+    { key:"storyText", section:"Stories", label:"Text", type:"para", fb:"After a story or an episode, invite them to take the idea somewhere new." },
+    { key:"storyAsks", section:"Stories", label:"Questions, one per line", type:"para",
+      fb:"What problem did the character face?\nWhat else could they have tried?\nWhat could you draw, build or invent from that idea?" },
+    { key:"storyRead", section:"Stories", label:"Read button", fb:"Read a story" },
+    { key:"storyWatch", section:"Stories", label:"Watch button", fb:"Watch an episode" },
+    { key:"endTitle", section:"End of the page", label:"Heading", fb:"Ready to try something?" },
+    { key:"endText", section:"End of the page", label:"Text", type:"para", fb:"Pick one activity, gather the supplies, and see where their ideas take it." },
+    { key:"endButton", section:"End of the page", label:"Button", fb:"Find your first activity" }
+  ],
   "grown-ups/help": [
     { key:"stuckHeading", section:"Still stuck?", label:"Heading", fb:"Still stuck?" },
     { key:"stuckText", section:"Still stuck?", label:"Text", type:"para", fb:"Tell us which activity and which step, and we will write back." },
@@ -21798,7 +21951,7 @@ const PAGE_LIST_BLOCKS = {
         { key:"collections", eyebrow:"Collections", heading:"Browse by time,\nplace, or materials.", highlight:"", lede:"Six ready-made shortlists, for when you know the constraint before you know the project." },
         { key:"characters", eyebrow:"Meet Chike", heading:"Meet Chike, Zech, and their six creative friends.", highlight:"creative friends", lede:"Chike, Zech, and their friends are a creative ensemble. Each character has their own distinct creative outlet, which shows there is no single “right” kind of creativity. Tap a friend to see the activities they lead." },
         { key:"finder", eyebrow:"The finder", heading:"What should we create today?", highlight:"create", tone:"cyan", lede:"Tell us what you have, what you want to explore, and how much time you have. We will find activities you can build, test, and make your own." },
-        { key:"grownups", eyebrow:"For the grown-ups", heading:"What parents and\nteachers get.", highlight:"", lede:"You get a materials list and safety notes before your child starts, numbered steps to follow together, and one question to ask once the making is done." }
+        { key:"grownups", eyebrow:"For parents & teachers", heading:"Help them start.\nLet their ideas lead.", highlight:"ideas", lede:"Learn how to choose an activity, get ready, and support kids without taking over, with practical tips for home and classroom use." }
       ],
       display: item => item.key }
   ],
@@ -25424,6 +25577,14 @@ const ACTIONS = {
   },
 
   "print": () => window.print(),
+
+  /* a button that jumps to a part of the same page (data-target is that element's id); a #id link would be read as a route */
+  "scroll-to": (el) => {
+    const t = document.getElementById(el.getAttribute("data-target") || "");
+    if (!t) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    t.scrollIntoView({ behavior: reduced ? "instant" : "smooth", block: "start" });
+  },
 
   "scroll-top": () => {
     const scroller = document.scrollingElement || document.documentElement;
