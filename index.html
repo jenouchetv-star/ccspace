@@ -8418,8 +8418,8 @@ const STUDIO_LIVE = false;
 
 const CREATE_NAV = [
   { hash:"#/create",        sub:"",       label:"What should we create today?" },
-  { hash:"#/create/browse", sub:"browse", label:"Browse Activities" },
-  { hash:"#/create/tech",   sub:"tech",   label:"Computer & Tablet" },
+  { hash:"#/create/browse", sub:"browse", label:"Art & Craft Activities" },
+  { hash:"#/create/tech",   sub:"tech",   label:"Computer Activities" },
   { hash:"#/create/studio", sub:"studio", label:"Chike’s Creative Studio" }
 ];
 /* the tabs shown: the studio's only to an admin until it is live */
@@ -9886,7 +9886,7 @@ const HERO_WORD_MS = 3000;
    (test/activityFinder.test.js) that runs the exact same code, not a copy
    of it. See that module's own header comment for why. */
 const FIND_PLACES    = [{id:"indoors",label:"Indoors"},{id:"outdoors",label:"Outdoors"},{id:"either",label:"Either"}];
-const FIND_ACCESS    = [{id:"free",label:"Free"},{id:"printable",label:"Printable included"}];
+const FIND_ACCESS    = [{id:"free",label:"Free"},{id:"printable",label:"Printable included"},{id:"members",label:"Subscribers only"}];
 
 /* Guide sources. Every link is public, parent-facing, and opens in a new tab. An activity with `null` here
    (the ones that used to point at PBS Kids) has no outside guide: its page shows only our own steps. */
@@ -10362,7 +10362,43 @@ function finderRecordFromForm(rec){
     here, at the one call site that renders to an actual visitor; the
     module itself only ever sees id-based fallbacks, in tests. */
 function runFind(){
-  return findTopMatches(findCatalog(), AppState.finder, { charName, topicMeta });
+  return findTopMatches(finderPool(), AppState.finder, { charName, topicMeta });
+}
+
+/** What the finder chooses from: every published finder activity plus every published library activity (art &
+    craft and computer alike), the library ones described in the finder's own terms by finderFromActivity(). Drafts
+    stay out even for an admin, so a suggestion is always one a visitor could get; a draft still opens by its address. */
+function finderPool(){
+  return findCatalog().filter(a => a.status !== "draft" && a.status !== "archived")
+    .concat(createActivities().map(finderFromActivity));
+}
+
+/* the library's words for an activity, in the finder's: kind of making -> what to explore, materials -> what you have */
+const FINDER_THEME_OF_TYPE = { build:"build", toyplay:"build", experiment:"mix", draw:"art", paper:"art", story:"art",
+  music:"music", dance:"music", ai:"tech" };
+const FINDER_MATERIAL_OF = { paper:"paper", markers:"paper", cardboard:"boxes", recyclables:"boxes", "tape-glue":"connect",
+  scissors:"cut", clay:"cut", toys:"toys", kitchen:"kitchen", outdoors:"outside", none:"basics" };
+function finderFromActivity(a){
+  const tags = (a.tags || []).join(" ");
+  const themes = [FINDER_THEME_OF_TYPE[a.type] || "build"];
+  /* a computer activity is also about thinking in steps; the topic tags add the finder's other themes */
+  if (isComputerActivity(a)) themes.push("code");
+  if (/\bspace\b/.test(tags)) themes.push("space");
+  if (/\b(nature|outdoor|seasonal)\b/.test(tags)) themes.push("nature");
+  if (/\b(light|music|sound)\b/.test(tags) && themes.indexOf("light") < 0) themes.push("light");
+  if (/\b(flight|physics)\b/.test(tags)) themes.push("fly");
+  const mats = isComputerActivity(a) ? ["computer"]
+    : (a.materials || []).map(m => FINDER_MATERIAL_OF[m]).filter((m, i, all) => m && all.indexOf(m) === i);
+  return {
+    id: a.id, source: "library", href: "#/activity/" + a.id,
+    title: a.title, character: a.character || "", themes: themes, materials: mats.length ? mats : ["basics"],
+    mins: a.timeMinutes || 20, plus: false, ageMin: a.ageMin || 4, ageMax: a.ageMax || 10,
+    place: a.setting === "indoor" ? "indoors" : a.setting === "outdoor" ? "outdoors" : "either",
+    support: a.adultSupport === "none" ? "kid" : (a.adultSupport || "nearby"),
+    challenge: a.difficulty === "medium" ? "stretch" : a.difficulty === "challenge" ? "big" : "easy",
+    access: a.access || "free", status: "published",
+    picture: a.image && a.image.src ? { src: a.image.src, alt: a.image.alt || a.title } : null
+  };
 }
 
 function findAnswered(){
@@ -10553,7 +10589,8 @@ function findCard(r){
           + '</ul>'
         : "")
     + '<div class="row" style="margin-top:18px">'
-    + '<a class="btn btn--sm btn--cyan" href="#/find/' + E(a.id) + '">'
+    /* a library activity (art & craft or computer) opens its own page; a subscribers-only lesson's page is its join notice */
+    + '<a class="btn btn--sm btn--cyan" href="' + E(a.href || ("#/find/" + a.id)) + '">'
     + ic("arrow-right") + ' ' + E(slotText("templates/finder", "startButton")) + '</a>'
     + '<span class="btn btn--sm btn--ghost" aria-disabled="true" title="Coming with our own printables" aria-label="Printable guide coming soon">'
     + ic("file-down") + '</span>'
@@ -10625,6 +10662,8 @@ function viewFindActivity(id){
     + '<div>'
 
     + '<div class="tagrow" style="margin-bottom:14px">'
+    /* only an admin can open a draft; the chip says visitors cannot */
+    + (a.status === "draft" ? '<span class="chip chip--ink">' + ic("eye-off") + ' Draft: only admins see this</span>' : "")
     + '<span class="chip chip--ink">' + E(charName(a.character)) + '</span>'
     + '<span class="chip">' + E(time) + '</span>'
     + '<span class="chip">' + E(findLabel(FIND_SUPPORT, a.support)) + '</span>'
@@ -11055,8 +11094,14 @@ function pageHeader(eyebrow, title, lede, actions, opts){
 /** How many activities each option would leave, with the other filters
     from `state` still applied - shared by the inline panel, the mobile
     filter sheet, and its live preview counts. */
+/* Computer Activities have their own tab, so Art & Craft Activities (the library and its filters) leaves them out */
+const COMPUTER_TYPES = ["ai"];
+function isComputerActivity(a){ return COMPUTER_TYPES.indexOf(a.type) >= 0; }
+function craftActivities(){ return createActivities().filter(a => !isComputerActivity(a)); }
+
 function createFilterMatches(state, over){
   return createActivities().filter(a => {
+    if (isComputerActivity(a)) return false;
     const q = ("q" in over ? over.q : state.q);
     if (("type" in over ? over.type : state.type) && a.type !== ("type" in over ? over.type : state.type)) return false;
     if (("access" in over ? over.access : state.access) && a.access !== ("access" in over ? over.access : state.access)) return false;
@@ -11083,7 +11128,7 @@ function createFilterFieldsHTML(state, prefix, opts){
   };
 
   const typeChips = chip("type", "", "Everything", !state.type)
-    + TYPES.map(t => chip("type", t.id, t.label, state.type === t.id)).join("");
+    + TYPES.filter(t => COMPUTER_TYPES.indexOf(t.id) < 0).map(t => chip("type", t.id, t.label, state.type === t.id)).join("");
   const accessChips = chip("access", "", "Any", !state.access)
     + ACCESS.map(t => chip("access", t.id, t.label, state.access === t.id)).join("");
 
@@ -11189,21 +11234,22 @@ function reopenStoryFilterModal(){
   drawIcons();
 }
 
-/** Create, by tab: "" is the finder, "browse" the whole library, "tech" the computer & tablet lessons, "studio"
-    Chike's Creative Studio. */
+/** Create, by tab: "" is the finder, "browse" Art & Craft Activities (the library), "tech" Computer Activities,
+    "studio" Chike's Creative Studio. */
 function viewCreate(sub){
   if (sub === "tech") return viewCreateTech();
   if (sub === "studio") return viewCreateStudio();
   if (sub !== "browse"){
-    /* the finder on its own, with a way on to the library and the computer & tablet lessons */
+    /* the finder on its own, with a way on to the art & craft library and the computer activities */
     return '<section class="section finder" id="finder"><div class="shell">' + finderPanel("page") + '</div></section>'
       + '<section class="section section--tight"><div class="shell"><div class="row create-next">'
-      + '<a class="btn btn--paper" href="#/create/browse">' + ic("layout-grid") + ' ' + E(slotText("create", "browseLink", { n: createActivities().length })) + '</a>'
+      + '<a class="btn btn--paper" href="#/create/browse">' + ic("palette") + ' ' + E(slotText("create", "browseLink", { n: craftActivities().length })) + '</a>'
       + '<a class="btn btn--paper" href="#/create/tech">' + ic("laptop") + ' ' + E(slotText("create", "techLink")) + '</a>'
       + '</div></div></section>';
   }
   const f = AppState.createFilter;
   let list = createActivities();
+  list = list.filter(a => !isComputerActivity(a));
   if (f.type)   list = list.filter(a => a.type === f.type);
   if (f.access) list = list.filter(a => a.access === f.access);
   if (f.q){
@@ -11225,7 +11271,7 @@ function viewCreate(sub){
   const createId = createRec ? createRec.id : null;
   const createHeading = (createRec && String(createRec.heading || "").trim())
     ? headingHTML(createRec.heading, createRec.highlight, createRec.tone)
-    : 'Or browse all ' + createActivities().length + '.';
+    : 'Browse all ' + craftActivities().length + ' art & craft activities.';
   const createIntro = pageVal("create", "intro", "Every one lists what you need, the steps to follow, safety notes, and one thing to learn.");
   if (createId){
     CMS_HEADER_FALLBACKS[createId + "::heading"] = quPlainTextFromHTML(createHeading);
@@ -11247,7 +11293,7 @@ function viewCreate(sub){
     + '<p class="mute" style="margin:0">'
     + (totalPages > 1
         ? "Showing " + ((page - 1) * PAGE_SIZE + 1) + "–" + Math.min(list.length, page * PAGE_SIZE) + " of " + E(plural(list.length,"activity","activities"))
-        : E(plural(list.length,"activity","activities")) + ' shown' + (list.length === createActivities().length ? ", which is all of them" : ""))
+        : E(plural(list.length,"activity","activities")) + ' shown' + (list.length === craftActivities().length ? ", which is all of them" : ""))
     + '</p>'
     /* a search box beside the filter button, the same as News & Articles', searching what the filter's own search does */
     + '<div class="create-tools">'
@@ -11282,7 +11328,7 @@ function viewCreate(sub){
     a visitor and open for a subscriber, with who does what at the keyboard. */
 function viewCreateTech(){
   const C = "create";
-  const lessons = createActivities().filter(a => a.type === "ai").sort((a, b) => a.title.localeCompare(b.title));
+  const lessons = createActivities().filter(a => isComputerActivity(a)).sort((a, b) => a.title.localeCompare(b.title));
   const member = portalIsSubscriber() || portalIsAdmin();
   return '<section class="section"><div class="shell">'
     + '<div class="techhead"><div>'
@@ -21640,16 +21686,16 @@ const PAGE_SLOTS = {
       fb:{ src:"assets/hero/what-should-we-create.jpg", alt:"Chike resting his chin on his hand with a large question mark floating beside his head" } },
     { key:"emptyList", section:"Activity list", label:"When no activity matches the filters", fb:"Nothing matches all of those at once." },
     { key:"searchPlaceholder", section:"Activity list", label:"Words inside the search box", fb:"Search activities" },
-    { key:"browseLink", section:"Under the finder", label:"Button to the library ({n} is the number of activities)", fb:"Browse all {n} activities" },
-    { key:"techLink", section:"Under the finder", label:"Button to Computer & Tablet", fb:"Computer & Tablet lessons" },
-    { key:"techEyebrow", section:"Computer & Tablet", label:"Eyebrow", fb:"Computer & Tablet" },
-    { key:"techHeading", section:"Computer & Tablet", label:"Heading", fb:"Make it on a screen." },
-    { key:"techLede", section:"Computer & Tablet", label:"Text under the heading", type:"para",
+    { key:"browseLink", section:"Under the finder", label:"Button to the library ({n} is the number of activities)", fb:"Art & craft activities ({n})" },
+    { key:"techLink", section:"Under the finder", label:"Button to Computer Activities", fb:"Computer activities" },
+    { key:"techEyebrow", section:"Computer Activities", label:"Eyebrow", fb:"Computer Activities" },
+    { key:"techHeading", section:"Computer Activities", label:"Heading", fb:"Make it on a screen." },
+    { key:"techLede", section:"Computer Activities", label:"Text under the heading", type:"para",
       fb:"Lessons that use a computer or tablet as a tool for making: build games and 3D models with AI, and see how the tools of the future work by using them." },
-    { key:"techWho", section:"Computer & Tablet", label:"Who does what (beside the heading)", type:"para",
+    { key:"techWho", section:"Computer Activities", label:"Who does what (beside the heading)", type:"para",
       fb:"These lessons are for subscribers. A grown-up sets up the tools and types; your child decides what to make, gives the instructions and checks what comes back." },
-    { key:"techJoin", section:"Computer & Tablet", label:"Join button (for visitors)", fb:"Join free to open them" },
-    { key:"techEmpty", section:"Computer & Tablet", label:"When there are no lessons yet", fb:"The first computer & tablet lessons are on their way." },
+    { key:"techJoin", section:"Computer Activities", label:"Join button (for visitors)", fb:"Join free to open them" },
+    { key:"techEmpty", section:"Computer Activities", label:"When there are no lessons yet", fb:"The first computer & tablet lessons are on their way." },
     { key:"studioEyebrow", section:"Chike’s Creative Studio", label:"Eyebrow", fb:"Chike’s Creative Studio" },
     { key:"studioHeading", section:"Chike’s Creative Studio", label:"Heading", fb:"Write, design and make it yours." },
     { key:"studioLede", section:"Chike’s Creative Studio", label:"Text under the heading", type:"para",

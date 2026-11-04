@@ -29,6 +29,7 @@ export const FIND_MATERIALS = [
   { id:"lightsnd", label:"Light & sound",        eg:"flashlight, mirror, clear cup, plastic wrap, rubber bands, rice, beans, empty containers" },
   { id:"outside",  label:"Outside discoveries",  eg:"leaves, sticks, rocks, pinecones, soil, flowers, seed pods, water, ice, sand" },
   { id:"toys",     label:"Toys",                 eg:"toy cars, figures, blocks, and the toys already on the floor" },
+  { id:"computer", label:"Computer or tablet",   eg:"a laptop, desktop, Chromebook, iPad or Android tablet" },
   { id:"basics",   label:"Basics only",          eg:"paper, pencil, tape, and common household objects" },
   { id:"surprise", label:"Surprise me",          eg:"any activity with easy-to-find materials" }
 ];
@@ -42,6 +43,10 @@ export const FIND_THEMES = [
   { id:"light",    label:"Light & Sound",    icon:"lightbulb",     bg:"#FBE3A8" },
   { id:"space",    label:"Space Explorer",   icon:"telescope",     bg:"#E7DAF6" },
   { id:"code",     label:"Code & Think",     icon:"binary",        bg:"#C6E1F2" },
+  /* the library's own activities and the computer lessons, which the finder now suggests too */
+  { id:"art",      label:"Draw & Tell",      icon:"pencil",        bg:"#EBD7F5" },
+  { id:"music",    label:"Music & Move",     icon:"music",         bg:"#F8BDB6" },
+  { id:"tech",     label:"Make with Tech",   icon:"laptop",        bg:"#D9C2E3" },
   { id:"surprise", label:"Surprise Me",      icon:"dices",         bg:"#F8C0B9" }
 ];
 export const findTheme = id => FIND_THEMES.find(t => t.id === id) || { id:id, label:id, icon:"dices" };
