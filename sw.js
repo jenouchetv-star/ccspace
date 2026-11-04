@@ -9,7 +9,7 @@
    the whole update mechanism: a new version number means a new cache name,
    which means install() re-fetches everything and activate() deletes the
    old caches, so nobody is left running stale HTML against a new build. */
-const CACHE_VERSION = "ccs-v99";
+const CACHE_VERSION = "ccs-v100";
 const SHELL_CACHE = CACHE_VERSION + "-shell";
 const RUNTIME_CACHE = CACHE_VERSION + "-runtime";
 
@@ -130,6 +130,11 @@ self.addEventListener("fetch", (event) => {
      (a network hiccup) would serve the game in place of the app shell on
      every route, /admin included. */
   if (request.mode === "navigate" && request.destination === "iframe") return;
+
+  /* Opening a first-party file directly (the Art Studio app at /assets/apps/art-studio.html, a game, a book)
+     is a navigation too, but it is not the app shell: hand it to the network untouched, so it is never stored
+     under INDEX_URL in place of index.html. */
+  if (request.mode === "navigate" && sameOrigin && isStaticAsset(url)) return;
 
   if (request.mode === "navigate" && sameOrigin) {
     event.respondWith(networkFirstNavigation(request));
