@@ -1223,7 +1223,8 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
 .findcard .btn[aria-disabled="true"]{ opacity:.5; cursor:not-allowed; }
 
 /* ============================================================ FINDER */
-.finder{
+/* the gradient header band: the finder's, and any page header given .band-grad */
+.finder, .band-grad{
   background:
     var(--halftone-lite),
     linear-gradient(152deg, #CFE4EC 0%, #F0E7D2 60%, #FFF6E2 100%);
@@ -8423,6 +8424,11 @@ const CREATE_NAV = [
   { hash:"#/create/tech",   sub:"tech",   label:"Computer Activities" },
   { hash:"#/create/studio", sub:"studio", label:"Chike’s Creative Studio" }
 ];
+/* "Create: Computer Activities" - the crumb back to a Create tab */
+function createCrumbLabel(sub){
+  const i = CREATE_NAV.find(x => x.sub === sub);
+  return "Create: " + (i ? i.label : "");
+}
 /* the tabs shown: the studio's only to an admin until it is live */
 function createNavItems(){
   return CREATE_NAV.filter(i => i.sub !== "studio" || STUDIO_LIVE || adminSeesAll());
@@ -9222,6 +9228,12 @@ function subNavData(){
   if (r.name === "article-detail") return { items: GROWNUP_NAV, current: "articles",          label: "Grown-up sections", title: "For Grown-Ups",                short: "Grown-Ups" };
   if (r.name === "play")       return { items: PLAY_NAV,    current: r.params.sub || "online",  label: "Game types",        title: "Play",                         short: "Play" };
   if (r.name === "create")     return { items: createNavItems(), current: r.params.sub || "", label: "Create sections",   title: "Create",                       short: "Create" };
+  /* an activity lives under its Create tab (Art & Craft or Computer), a finder activity under the finder */
+  if (r.name === "activity-detail" || r.name === "find-detail"){
+    const a = r.name === "activity-detail" ? db.find("activities", r.params.id) : null;
+    return { items: createNavItems(), current: r.name === "find-detail" ? "" : (a && isComputerActivity(a) ? "tech" : "browse"),
+      label: "Create sections", title: "Create", short: "Create", inside: true };
+  }
   if (r.name === "shop")       return SHOP_NAV.length ? { items: SHOP_NAV, current: r.params.sub || "amazon", label: "Shop sections", title: "Shop", short: "Shop" } : null;
   return null;
 }
@@ -9236,7 +9248,7 @@ function subNavBar(){
   const desktop = '<nav class="subnav" aria-label="' + E(d.label) + '"><div class="shell-wide subnav__in">'
     + d.items.map(i => '<a class="subnav__link" href="' + i.hash + '"'
         /* on a page inside a section (an article inside News & Articles), its tab is the current location, not the current page */
-        + ((i.sub === d.current) ? ' aria-current="' + (AppState.route.name === "article-detail" ? "location" : "page") + '"' : "") + '>' + E(i.label) + '</a>').join("")
+        + ((i.sub === d.current) ? ' aria-current="' + (AppState.route.name === "article-detail" || d.inside ? "location" : "page") + '"' : "") + '>' + E(i.label) + '</a>').join("")
     + '</div></nav>';
   return desktop + mobileSectionSwitch(d);
 }
@@ -10659,8 +10671,9 @@ function viewFindActivity(id){
   const theme = findTheme(a.themes[0]);
 
   return '<section class="section"><div class="shell">'
-    + '<div class="crumb"><a href="#/create">Create</a>' + ic("chevron-right")
-    + '<span>' + E(theme.label) + '</span></div>'
+    /* the crumb names the Create tab this lives under, the way a game's says Play: Online Games */
+    + '<div class="crumb"><a href="#/create">' + E(createCrumbLabel("")) + '</a>' + ic("chevron-right")
+    + '<span>' + E(a.title) + '</span></div>'
     + '<div class="detail__hero">'
     + '<div>'
 
@@ -11347,12 +11360,15 @@ function viewCreateStudio(){
   if (!STUDIO_LIVE && !adminSeesAll()) return notFound("page");
   const C = "create";
   const studios = [["book-open", "book", "#FFF6E2"], ["mail-open", "card", "#DFF3F8"], ["palette", "art", "#EDE3F8"]];
-  return '<section class="section"><div class="shell">'
+  /* the heading sits in the gradient header band, the studios below it */
+  return '<section class="section band-grad"><div class="shell">'
     + (STUDIO_LIVE ? "" : '<p class="chip" style="margin:0 0 18px">' + ic("eye-off") + ' Hidden: only admins can see this page until the first studio works</p>')
     + '<span class="eyebrow">' + slot(C, "studioEyebrow") + '</span>'
-    + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem);margin-bottom:.3em">' + slot(C, "studioHeading") + '</h1>'
-    + '<p class="lede">' + slot(C, "studioLede") + '</p>'
-    + '<div class="grid studio-grid" style="margin-top:30px">'
+    + '<h1 style="font-size:clamp(2.1rem,5vw,3.4rem);margin-bottom:.3em">' + slot(C, "studioHeading") + '</h1>'
+    + '<p class="lede" style="margin:0">' + slot(C, "studioLede") + '</p>'
+    + '</div></section>'
+    + '<section class="section"><div class="shell">'
+    + '<div class="grid studio-grid">'
     + studios.map(s => '<article class="panel panel--flat studio-card" style="background:' + s[2] + '">'
         + '<div class="plate__mark" style="position:static;transform:rotate(-4deg);width:56px;margin-bottom:14px">' + ic(s[0]) + '</div>'
         + '<h3 style="margin-bottom:.3em">' + slot(C, s[1] + "Title") + '</h3>'
@@ -11370,7 +11386,7 @@ function viewActivity(id){
   /* a subscribers-only AI lesson has no activity page: a shared link shows the same join notice as its card */
   if (a.kind === "members"){
     return '<section class="section"><div class="shell" style="max-width:860px">'
-      + '<div class="crumb no-print"><a href="#/create">Create</a>' + ic("chevron-right") + '<span>AI Lesson</span></div>'
+      + '<div class="crumb no-print"><a href="#/create/tech">' + E(createCrumbLabel("tech")) + '</a>' + ic("chevron-right") + '<span>' + E(a.title) + '</span></div>'
       + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem)">' + E(a.title) + '</h1><p class="lede">' + E(a.summary) + '</p>'
       + membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: "#D9C2E3", p2: "#7A4A86" }, "lesson")
       + '</div></section>';
@@ -11383,7 +11399,8 @@ function viewActivity(id){
   const linkedGames = db.list("games").filter(g => g.leadsTo === a.id && g.status === "published");
 
   return '<section class="section"><div class="shell">'
-    + '<div class="crumb no-print"><a href="#/create">Create</a>' + ic("chevron-right") + '<span>' + E(t.label) + '</span></div>'
+    + '<div class="crumb no-print"><a href="#/create/' + (isComputerActivity(a) ? "tech" : "browse") + '">' + E(createCrumbLabel(isComputerActivity(a) ? "tech" : "browse")) + '</a>'
+    + ic("chevron-right") + '<span>' + E(a.title) + '</span></div>'
     + '<div class="detail__hero">'
     + '<div>'
     + '<div class="tagrow" style="margin-bottom:14px">'
