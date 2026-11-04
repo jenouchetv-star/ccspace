@@ -374,16 +374,15 @@ p:last-child{ margin-bottom:0; }
 .tips-grid{ grid-template-columns:repeat(3,minmax(0,1fr)); }
 @media (max-width:900px){ .tips-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:560px){ .tips-grid{ grid-template-columns:1fr; } }
-/* Create's tabs: the links under the finder, Computer & Tablet's heading beside who does what, the studio cards */
+/* Create's tabs: the links under the finder, the library's search row, the studio cards */
 .create-next{ justify-content:center; }
 .create-tools{ display:flex; align-items:center; gap:12px; flex:1 1 360px; justify-content:flex-end; }
 .create-tools .arttools__search{ flex:0 1 380px; }
 /* our own clear button only, not the browser's as well */
 .create-tools input[type="search"]::-webkit-search-cancel-button{ -webkit-appearance:none; appearance:none; display:none; }
 @media (max-width:560px){ .create-tools{ flex-basis:100%; } .create-tools .arttools__search{ flex:1 1 auto; } }
-.techhead{ display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:clamp(24px,3.4vw,48px); align-items:center; }
 .studio-grid{ grid-template-columns:repeat(3,minmax(0,1fr)); }
-@media (max-width:900px){ .techhead{ grid-template-columns:1fr; } .studio-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:900px){ .studio-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:560px){ .studio-grid{ grid-template-columns:1fr; } }
 /* Grown-Ups guide: Choose / Prepare / Support, Try this, home and class, stories, the end */
 /* the same breathing room between every part of the guide */
@@ -4774,7 +4773,9 @@ const TYPES = [
   { id:"toyplay",   label:"Toy Play",   icon:"train-front",   p1:"#CFE7F7", p2:"#5D93C4" },
   { id:"experiment",label:"Experiment", icon:"flask-conical", p1:"#BFEDE3", p2:"#3FA894" },
   /* the Subscriber's Portal's AI lessons, listed on the Create page for subscribers (kind:"members") */
-  { id:"ai",        label:"AI Lesson",  icon:"bot",           p1:"#D9C2E3", p2:"#7A4A86" }
+  { id:"ai",        label:"AI Lesson",  icon:"bot",           p1:"#D9C2E3", p2:"#7A4A86" },
+  /* free activities made with what is already on any computer or tablet: a typing app, the camera, a voice recorder */
+  { id:"computer",  label:"Computer",   icon:"laptop",        p1:"#CFE1F5", p2:"#2D6FB5" }
 ];
 const typeMeta = id => TYPES.find(t => t.id === id) || TYPES[0];
 
@@ -4801,7 +4802,7 @@ const MATERIALS = [
   {id:"paper",label:"Paper"},{id:"cardboard",label:"Cardboard & boxes"},{id:"tape-glue",label:"Tape or glue"},
   {id:"markers",label:"Markers or crayons"},{id:"scissors",label:"Safety scissors"},{id:"clay",label:"Clay or dough"},
   {id:"recyclables",label:"Recyclables"},{id:"toys",label:"Toys you own"},{id:"kitchen",label:"Kitchen odds & ends"},
-  {id:"outdoors",label:"Things found outside"},{id:"none",label:"Nothing but us"}
+  {id:"outdoors",label:"Things found outside"},{id:"device",label:"A computer or tablet"},{id:"none",label:"Nothing but us"}
 ];
 const matLabel = id => (MATERIALS.find(m => m.id === id) || {label:id}).label;
 
@@ -8947,7 +8948,8 @@ function activityCard(a){
   const t = typeMeta(a.type);
   return '<article class="card" data-act="go" data-hash="#/activity/' + E(a.id) + '" tabindex="0" role="link">'
     + '<div class="card__media">' + cover(a, a.type, t.label, true)
-    + '<span class="card__badge chip chip--ink">' + E(t.label) + '</span>'
+    /* only an admin is shown a draft in a list; the badge says visitors cannot see it */
+    + '<span class="card__badge chip chip--ink">' + (a.status === "draft" ? ic("eye-off") + ' Draft · ' : "") + E(t.label) + '</span>'
     + '</div>'
     + '<div class="card__body">'
     + '<h3 class="card__title">' + E(a.title) + '</h3>'
@@ -10375,9 +10377,9 @@ function finderPool(){
 
 /* the library's words for an activity, in the finder's: kind of making -> what to explore, materials -> what you have */
 const FINDER_THEME_OF_TYPE = { build:"build", toyplay:"build", experiment:"mix", draw:"art", paper:"art", story:"art",
-  music:"music", dance:"music", ai:"tech" };
+  music:"music", dance:"music", ai:"tech", computer:"tech" };
 const FINDER_MATERIAL_OF = { paper:"paper", markers:"paper", cardboard:"boxes", recyclables:"boxes", "tape-glue":"connect",
-  scissors:"cut", clay:"cut", toys:"toys", kitchen:"kitchen", outdoors:"outside", none:"basics" };
+  scissors:"cut", clay:"cut", toys:"toys", kitchen:"kitchen", outdoors:"outside", device:"computer", none:"basics" };
 function finderFromActivity(a){
   const tags = (a.tags || []).join(" ");
   const themes = [FINDER_THEME_OF_TYPE[a.type] || "build"];
@@ -10387,8 +10389,9 @@ function finderFromActivity(a){
   if (/\b(nature|outdoor|seasonal)\b/.test(tags)) themes.push("nature");
   if (/\b(light|music|sound)\b/.test(tags) && themes.indexOf("light") < 0) themes.push("light");
   if (/\b(flight|physics)\b/.test(tags)) themes.push("fly");
-  const mats = isComputerActivity(a) ? ["computer"]
-    : (a.materials || []).map(m => FINDER_MATERIAL_OF[m]).filter((m, i, all) => m && all.indexOf(m) === i);
+  if (/(writing|story|comics|reading-aloud)/.test(tags) && themes.indexOf("art") < 0) themes.push("art");
+  const mats = (isComputerActivity(a) ? ["computer"] : [])
+    .concat((a.materials || []).map(m => FINDER_MATERIAL_OF[m])).filter((m, i, all) => m && all.indexOf(m) === i);
   return {
     id: a.id, source: "library", href: "#/activity/" + a.id,
     title: a.title, character: a.character || "", themes: themes, materials: mats.length ? mats : ["basics"],
@@ -11095,13 +11098,16 @@ function pageHeader(eyebrow, title, lede, actions, opts){
     from `state` still applied - shared by the inline panel, the mobile
     filter sheet, and its live preview counts. */
 /* Computer Activities have their own tab, so Art & Craft Activities (the library and its filters) leaves them out */
-const COMPUTER_TYPES = ["ai"];
+const COMPUTER_TYPES = ["ai", "computer"];
 function isComputerActivity(a){ return COMPUTER_TYPES.indexOf(a.type) >= 0; }
 function craftActivities(){ return createActivities().filter(a => !isComputerActivity(a)); }
+/* which of the two lists the library page is showing ("craft" or "computer"); its search and filters count only those */
+let CREATE_POOL = "craft";
+function createPoolActivities(){ return createActivities().filter(a => isComputerActivity(a) === (CREATE_POOL === "computer")); }
 
 function createFilterMatches(state, over){
   return createActivities().filter(a => {
-    if (isComputerActivity(a)) return false;
+    if (isComputerActivity(a) !== (CREATE_POOL === "computer")) return false;
     const q = ("q" in over ? over.q : state.q);
     if (("type" in over ? over.type : state.type) && a.type !== ("type" in over ? over.type : state.type)) return false;
     if (("access" in over ? over.access : state.access) && a.access !== ("access" in over ? over.access : state.access)) return false;
@@ -11128,7 +11134,7 @@ function createFilterFieldsHTML(state, prefix, opts){
   };
 
   const typeChips = chip("type", "", "Everything", !state.type)
-    + TYPES.filter(t => COMPUTER_TYPES.indexOf(t.id) < 0).map(t => chip("type", t.id, t.label, state.type === t.id)).join("");
+    + TYPES.filter(t => (COMPUTER_TYPES.indexOf(t.id) >= 0) === (CREATE_POOL === "computer")).map(t => chip("type", t.id, t.label, state.type === t.id)).join("");
   const accessChips = chip("access", "", "Any", !state.access)
     + ACCESS.map(t => chip("access", t.id, t.label, state.access === t.id)).join("");
 
@@ -11237,9 +11243,8 @@ function reopenStoryFilterModal(){
 /** Create, by tab: "" is the finder, "browse" Art & Craft Activities (the library), "tech" Computer Activities,
     "studio" Chike's Creative Studio. */
 function viewCreate(sub){
-  if (sub === "tech") return viewCreateTech();
   if (sub === "studio") return viewCreateStudio();
-  if (sub !== "browse"){
+  if (sub !== "browse" && sub !== "tech"){
     /* the finder on its own, with a way on to the art & craft library and the computer activities */
     return '<section class="section finder" id="finder"><div class="shell">' + finderPanel("page") + '</div></section>'
       + '<section class="section section--tight"><div class="shell"><div class="row create-next">'
@@ -11247,16 +11252,25 @@ function viewCreate(sub){
       + '<a class="btn btn--paper" href="#/create/tech">' + ic("laptop") + ' ' + E(slotText("create", "techLink")) + '</a>'
       + '</div></div></section>';
   }
+  /* Art & Craft Activities and Computer Activities are the same page over two lists; moving between them starts
+     the search and filters again, so one tab's choices never empty the other */
+  const pool = sub === "tech" ? "computer" : "craft";
+  if (CREATE_POOL !== pool){ CREATE_POOL = pool; AppState.createFilter = { type:"", access:"", collection:"", q:"", page:1 }; }
+  const tech = pool === "computer";
   const f = AppState.createFilter;
   let list = createActivities();
-  list = list.filter(a => !isComputerActivity(a));
+  /* an admin also sees the drafts here, marked Draft, so new ones can be checked in place before publishing */
+  if (adminSeesAll()) list = list.concat(db.list("activities").filter(a => a.status === "draft" && a.kind !== "members"));
+  list = list.filter(a => isComputerActivity(a) === tech);
   if (f.type)   list = list.filter(a => a.type === f.type);
   if (f.access) list = list.filter(a => a.access === f.access);
   if (f.q){
     const q = f.q.toLowerCase();
     list = list.filter(a => (a.title + " " + a.summary + " " + a.tags.join(" ") + " " + (a.learning.title||"")).toLowerCase().indexOf(q) >= 0);
   }
-  list = list.slice().sort((a,b) => a.title.localeCompare(b.title));
+  /* on Computer Activities the free ones come first, then the subscribers' lessons */
+  list = list.slice().sort((a,b) => (tech ? (a.access === "members") - (b.access === "members") : 0) || a.title.localeCompare(b.title));
+  const poolSize = createPoolActivities().length;
 
   /* Twelve to a page - four rows of the three-column grid - so a long
      catalog does not turn into one endless scroll. */
@@ -11277,6 +11291,12 @@ function viewCreate(sub){
     CMS_HEADER_FALLBACKS[createId + "::heading"] = quPlainTextFromHTML(createHeading);
     CMS_HEADER_FALLBACKS[createId + "::intro"] = createIntro;
   }
+  /* each tab has its own heading ("Make it with your hands." / "Make it on a screen."), both page slots; Art & Craft
+     keeps the page's own intro */
+  const headHTML = tech
+    ? '<h2 style="margin-bottom:.3em">' + slot("create", "techHeading") + '</h2><p class="lede">' + slot("create", "techLede") + '</p>'
+    : '<h2 style="margin-bottom:.3em">' + slot("create", "craftHeading") + '</h2>'
+      + '<div class="lede">' + quEditable("page-intro", createId, introRichHTML(createIntro)) + '</div>';
   return '<section class="section"><div class="shell">'
     + cmsBody("create")
     + '<div class="create-layout">'
@@ -11285,15 +11305,12 @@ function viewCreate(sub){
     + createFilterFieldsHTML(f, "cf")
     + '</div></div>'
     + '<div class="create-layout__results">'
-    + '<div style="margin-bottom:24px">'
-    + '<h2 style="margin-bottom:.3em">' + quEditable("page-heading", createId, createHeading) + '</h2>'
-    + '<div class="lede">' + quEditable("page-intro", createId, introRichHTML(createIntro)) + '</div>'
-    + '</div>'
+    + '<div style="margin-bottom:24px">' + headHTML + '</div>'
     + '<div class="row-between" style="margin-bottom:20px;gap:14px">'
     + '<p class="mute" style="margin:0">'
     + (totalPages > 1
         ? "Showing " + ((page - 1) * PAGE_SIZE + 1) + "–" + Math.min(list.length, page * PAGE_SIZE) + " of " + E(plural(list.length,"activity","activities"))
-        : E(plural(list.length,"activity","activities")) + ' shown' + (list.length === craftActivities().length ? ", which is all of them" : ""))
+        : E(plural(list.length,"activity","activities")) + ' shown' + (list.length === poolSize ? ", which is all of them" : ""))
     + '</p>'
     /* a search box beside the filter button, the same as News & Articles', searching what the filter's own search does */
     + '<div class="create-tools">'
@@ -11321,27 +11338,6 @@ function viewCreate(sub){
         : "")
     + '</div></div>'
     + cmsBody("create")
-    + '</div></section>';
-}
-
-/** Create > Computer & Tablet: the lessons made on a screen (the AI lessons today), each card already locked for
-    a visitor and open for a subscriber, with who does what at the keyboard. */
-function viewCreateTech(){
-  const C = "create";
-  const lessons = createActivities().filter(a => isComputerActivity(a)).sort((a, b) => a.title.localeCompare(b.title));
-  const member = portalIsSubscriber() || portalIsAdmin();
-  return '<section class="section"><div class="shell">'
-    + '<div class="techhead"><div>'
-    + '<span class="eyebrow">' + slot(C, "techEyebrow") + '</span>'
-    + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem);margin-bottom:.3em">' + slot(C, "techHeading") + '</h1>'
-    + '<p class="lede">' + slot(C, "techLede") + '</p></div>'
-    + '<div class="panel panel--flat techhead__who">'
-    + '<span class="chip chip--ink">' + ic("lock") + ' Subscribers only</span>'
-    + '<p style="margin:12px 0 0">' + slot(C, "techWho") + '</p>'
-    + (member ? "" : '<div class="row" style="margin-top:16px"><button type="button" class="btn btn--cyan" data-act="open-mailing-list" data-next="/create/tech" data-member data-what="lessons">' + ic("mail") + ' ' + slot(C, "techJoin") + '</button></div>')
-    + '</div></div>'
-    + (lessons.length ? '<div class="grid g-3 grid--compact" style="margin-top:34px">' + lessons.map(a => activityCard(a)).join("") + '</div>'
-        : '<div class="empty" style="margin-top:34px">' + ic("laptop","i-lg") + '<p style="margin-top:12px">' + slot(C, "techEmpty") + '</p></div>')
     + '</div></section>';
 }
 
@@ -21688,14 +21684,10 @@ const PAGE_SLOTS = {
     { key:"searchPlaceholder", section:"Activity list", label:"Words inside the search box", fb:"Search activities" },
     { key:"browseLink", section:"Under the finder", label:"Button to the library ({n} is the number of activities)", fb:"Art & craft activities ({n})" },
     { key:"techLink", section:"Under the finder", label:"Button to Computer Activities", fb:"Computer activities" },
-    { key:"techEyebrow", section:"Computer Activities", label:"Eyebrow", fb:"Computer Activities" },
+    { key:"craftHeading", section:"Art & Craft Activities", label:"Heading", fb:"Make it with your hands." },
     { key:"techHeading", section:"Computer Activities", label:"Heading", fb:"Make it on a screen." },
     { key:"techLede", section:"Computer Activities", label:"Text under the heading", type:"para",
-      fb:"Lessons that use a computer or tablet as a tool for making: build games and 3D models with AI, and see how the tools of the future work by using them." },
-    { key:"techWho", section:"Computer Activities", label:"Who does what (beside the heading)", type:"para",
-      fb:"These lessons are for subscribers. A grown-up sets up the tools and types; your child decides what to make, gives the instructions and checks what comes back." },
-    { key:"techJoin", section:"Computer Activities", label:"Join button (for visitors)", fb:"Join free to open them" },
-    { key:"techEmpty", section:"Computer Activities", label:"When there are no lessons yet", fb:"The first computer & tablet lessons are on their way." },
+      fb:"Write, film, record and build with a computer or tablet. The free activities use only what is already on any device; the AI lessons are for subscribers, with a grown-up at the keyboard and your child giving the directions." },
     { key:"studioEyebrow", section:"Chike’s Creative Studio", label:"Eyebrow", fb:"Chike’s Creative Studio" },
     { key:"studioHeading", section:"Chike’s Creative Studio", label:"Heading", fb:"Write, design and make it yours." },
     { key:"studioLede", section:"Chike’s Creative Studio", label:"Text under the heading", type:"para",
