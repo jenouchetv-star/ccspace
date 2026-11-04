@@ -257,7 +257,7 @@ body.no-layers .layers{ display:none; }
   </header>
   <div class="home__scroll"><div class="home__inner">
     <h1 id="home-title">New</h1>
-    <p class="home__lede">Pick a page to start. Your work saves on this device as you go.</p>
+    <p class="home__lede" id="home-lede">Pick a page to start. Your work saves on this device as you go.</p>
     <div class="starts">
       <button type="button" class="start" data-start="paint" data-format="landscape">
         <span class="start__art" style="background:#FFF1DB;color:#C46A1A"><i data-lucide="paintbrush"></i></span>
@@ -401,6 +401,104 @@ const store = (() => {
     async del(id){ return tx("readwrite", s => { if (s) s.delete(id); else mem.delete(id); }); }
   };
 })();
+
+/* ============================================================
+   Your account: pictures also kept with a mailing-list member's account (their Subscriber's Portal sign-in), so
+   they show in any browser where that grown-up signs in. The copy in this browser is still the one you work on
+   (fast, and fine offline); the account copy follows it. Free for everyone on the list.
+   The site that opens the app holds the sign-in and the connection to the server; opened on its own, the app just
+   keeps pictures in this browser.
+   ============================================================ */
+const cloud = {
+  email: "",
+  host(){ try { const w = window.parent; if (w && w !== window && typeof w.artCloudCall === "function" && typeof w.artCloudSignedIn === "function") return w; } catch(e){} return null; },
+  on(){ const w = this.host(); try { return !!(w && w.artCloudSignedIn()); } catch(e){ return false; } },
+  async call(action, extra){
+    const w = this.host();
+    if (!w) return { ok:false, error:"no_session" };
+    try { return (await w.artCloudCall(action, extra)) || { ok:false, error:"network" }; }
+    catch(e){ return { ok:false, error:"network" }; }
+  }
+};
+/* what goes to the account: not the trace picture (someone else's picture, kept here only) and not who owns it */
+const forCloud = p => { const k = Object.assign({}, p); delete k.trace; delete k.owner; return k; };
+/* a picture that belongs to another grown-up who signed in on this browser before is left alone */
+const mineToSync = p => !p.owner || !cloud.email || p.owner === cloud.email;
+let syncing = null, fullWarned = false;
+function cloudFull(r){ if (r && r.error === "full" && !fullWarned){ fullWarned = true; toast("Your account has 200 pictures, the most it keeps. Delete some to save new ones there."); } }
+/** Bring this browser and the account into step: newer copies win, and a picture deleted elsewhere goes here too.
+    Returns true when this browser's pictures changed. */
+function cloudSync(){
+  if (!cloud.on()) return Promise.resolve(false);
+  if (syncing) return syncing;
+  syncing = (async () => {
+    const r = await cloud.call("list");
+    if (!r || !r.ok || !Array.isArray(r.items)) return false;
+    cloud.email = String(r.email || "").toLowerCase();
+    const local = await store.all().catch(() => []);
+    const here = new Map(local.map(p => [p.id, p])), there = new Map(r.items.map(i => [i.id, i]));
+    let changedHere = false;
+    /* down: pictures that are newer in the account, and pictures deleted from it */
+    for (const it of r.items){
+      const mine = here.get(it.id);
+      if (cur && cur.id === it.id) continue;            // never swap the open picture under someone's brush
+      if (mine && !mineToSync(mine)) continue;
+      if (it.deleted){
+        if (mine && (mine.updated || 0) <= it.updated){ await store.del(it.id); here.delete(it.id); changedHere = true; }
+        continue;
+      }
+      if (mine && (mine.updated || 0) >= it.updated) continue;
+      const g = await cloud.call("get", { id:it.id });
+      if (!g || !g.ok || !g.project) continue;
+      try {
+        const p = cleanProject(g.project);
+        if (p.layers) p.layers.forEach(l => { if (l.type === "text") fitText(l); });
+        Object.assign(p, { id:it.id, updated:it.updated, created:g.project.created || p.created, owner:cloud.email });
+        if (mine && mine.trace) p.trace = mine.trace;
+        p.thumb = it.thumb || thumbOf(p);
+        await store.put(p); here.set(p.id, p); changedHere = true;
+      } catch(e){ /* a copy that can't be read stays out */ }
+    }
+    /* up: pictures this browser has that the account doesn't, or has an older copy of */
+    for (const p of here.values()){
+      if (!mineToSync(p)) continue;
+      const c = there.get(p.id);
+      if (!c || c.updated < (p.updated || 0)){
+        const pr = await cloud.call("put", { project:forCloud(p) });
+        cloudFull(pr);
+        if (!pr || !pr.ok) continue;
+      }
+      if (p.owner !== cloud.email){ p.owner = cloud.email; await store.put(p); }
+    }
+    return changedHere;
+  })().finally(() => { syncing = null; });
+  return syncing;
+}
+let pushTimer = 0, pushing = null;
+/** Copy the open picture to the account a moment after it was saved here (not on every stroke). */
+function queuePush(){ clearTimeout(pushTimer); if (cloud.on() && cur) pushTimer = setTimeout(pushNow, 2500); }
+async function pushNow(){
+  clearTimeout(pushTimer); pushTimer = 0;
+  if (!cur || !cloud.on() || (cur.owner && cloud.email && cur.owner !== cloud.email)) return;
+  if (pushing) await pushing;
+  const p = JSON.parse(JSON.stringify(cur));
+  setStatus("Saving to your account…");
+  pushing = cloud.call("put", { project:forCloud(p) }).then(r => {
+    cloudFull(r);
+    if (r && r.ok){ if (cloud.email && !cur.owner){ cur.owner = cloud.email; } setStatus("Saved to your account"); }
+    else setStatus("Saved in this browser. It goes to your account when you’re back online.");
+  }).finally(() => { pushing = null; });
+  return pushing;
+}
+/** Before leaving the picture: finish any save to the account that is waiting. */
+function flushPush(){ return pushTimer ? pushNow() : (pushing || Promise.resolve()); }
+const savedText = () => cloud.on() ? "Saved to your account" : "Saved on this device";
+/* leaving the tab: send what's waiting. Coming back to the gallery: bring in what changed in another browser. */
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden){ if (cur) flushPush(); return; }
+  if (!cur && document.body.classList.contains("editing") === false) cloudSync().then(c => { if (c && !cur) renderGallery(); });
+});
+window.addEventListener("pagehide", () => { if (cur) flushPush(); });
 
 /* ============================================================
    Projects and layers
@@ -702,6 +800,14 @@ function drawExamples(){
 async function showHome(){
   document.body.classList.remove("editing", "layers-open");
   cur = null;
+  $("#home-lede").textContent = cloud.on()
+    ? "Pick a page to start. Your work saves to your account as you go, so it’s there in any browser where you sign in."
+    : "Pick a page to start. Your work saves on this device as you go.";
+  await renderGallery();
+  /* then bring in what was made in other browsers */
+  cloudSync().then(changedHere => { if (changedHere && !cur) renderGallery(); });
+}
+async function renderGallery(){
   const list = (await store.all().catch(() => [])).sort((a, b) => (b.updated || 0) - (a.updated || 0));
   const g = $("#gallery");
   g.innerHTML = list.length ? list.map(p => '<article class="art">'
@@ -714,7 +820,7 @@ async function showHome(){
   icons();
   /* the examples use the app's font for their words, so wait for it */
   (document.fonts ? document.fonts.ready : Promise.resolve()).then(drawExamples, drawExamples);
-  if (!store.ok) toast("This browser can’t keep art between visits. Use Save a project file to keep it.");
+  if (!store.ok && !cloud.on()) toast("This browser can’t keep art between visits. Use Save a project file to keep it.");
 }
 function when(t){
   if (!t) return "";
@@ -774,8 +880,11 @@ async function saveNow(){
   if (!cur) return;
   clearTimeout(saveTimer);
   cur.updated = Date.now(); cur.thumb = thumbOf(cur);
-  try { await store.put(JSON.parse(JSON.stringify(cur))); setStatus(store.ok ? "Saved on this device" : "Not saved here: use Save a project file", !store.ok); }
-  catch(e){ setStatus("This device is full: use Save a project file", true); }
+  if (cloud.email && !cur.owner) cur.owner = cloud.email;
+  try { await store.put(JSON.parse(JSON.stringify(cur))); if (!cloud.on()) setStatus(store.ok ? "Saved on this device" : "Not saved here: use Save a project file", !store.ok); }
+  catch(e){ if (!cloud.on()) setStatus("This device is full: use Save a project file", true); }
+  /* and to the account, a moment later */
+  queuePush();
 }
 function useColor(c){
   color = c;
@@ -793,7 +902,7 @@ function openProject(p){
   document.body.classList.add("editing");
   document.body.classList.toggle("no-layers", p.kind === "pixel");
   $("#title-in").value = p.title;
-  setStatus("Saved on this device");
+  setStatus(savedText());
   toolsBar(); inspector(); layersPanel(); updateUndo();
   requestAnimationFrame(() => { resize(); fit(); });
 }
@@ -1505,7 +1614,13 @@ document.addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.start){ openProject(b.dataset.start === "pixel" ? newPixel(16) : newPaint(b.dataset.format)); if (b.dataset.start === "pixel") pickPixelSize(); return; }
   if (b.dataset.open){ store.all().then(list => { const p = list.find(x => x.id === b.dataset.open); if (p) openProject(p); }); return; }
-  if (b.dataset.del){ if (!confirm("Delete this from this device? This can’t be undone.")) return; store.del(b.dataset.del).then(showHome); return; }
+  if (b.dataset.del){
+    const id = b.dataset.del, both = cloud.on();
+    if (!confirm(both ? "Delete this picture? It goes from your account and every browser you sign in on. This can’t be undone."
+      : "Delete this from this device? This can’t be undone.")) return;
+    store.del(id).then(() => both ? cloud.call("delete", { id }) : null).then(renderGallery);
+    return;
+  }
   if (!cur && !b.dataset.act) return;
   if (b.dataset.tool){ setTool(b.dataset.tool); return; }
   if (b.dataset.pick){ selectLayer(b.dataset.pick); return; }
@@ -1522,8 +1637,8 @@ document.addEventListener("click", e => {
   if (b.dataset.obj) return objAction(b.dataset.obj);
   if (b.dataset.pxsize){ cur.n = +b.dataset.pxsize; cur.cells = new Array(cur.n * cur.n).fill(""); const s = $("#px-size"); if (s) s.remove(); fit(); inspector(); return; }
   const act = b.dataset.act; if (!act) return;
-  if (act === "home"){ saveNow().then(showHome); return; }
-  if (act === "close-app"){ (cur ? saveNow() : Promise.resolve()).finally(() => { try { window.parent.postMessage({ ccsStudio:"close" }, location.origin); } catch(err){} }); return; }
+  if (act === "home"){ saveNow().then(flushPush).then(showHome); return; }
+  if (act === "close-app"){ (cur ? saveNow().then(flushPush) : Promise.resolve()).finally(() => { try { window.parent.postMessage({ ccsStudio:"close" }, location.origin); } catch(err){} }); return; }
   if (act === "theme"){ const t = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"; applyTheme(t); try { localStorage.setItem("ccs-art-theme", t); } catch(err){} if (cur) draw(); return; }
   if (act === "open-file") return $("#file-in").click();
   if (!cur) return;
@@ -1701,7 +1816,7 @@ async function share(){
 }
 function saveFile(){
   /* the trace picture is someone else's picture, only a guide: it stays on this device, not in the file */
-  const keep = Object.assign({}, cur); delete keep.thumb; delete keep.trace;
+  const keep = Object.assign({}, cur); delete keep.thumb; delete keep.trace; delete keep.owner;
   saveBlob(new Blob([JSON.stringify(keep)], { type:"application/json" }), safeName() + ".art.json");
   toast("Saved a project file. Open it in Art Studio any time to keep working.");
 }

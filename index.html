@@ -405,6 +405,7 @@ p:last-child{ margin-bottom:0; }
 /* a studio not ready yet: full colour like the others, a quiet "Coming soon" line in place of the button */
 .studio-card__soon{ display:inline-flex; align-items:center; gap:8px; margin:0; min-height:44px; font-weight:800; font-size:.9rem; color:var(--ink-mute); }
 .studio-card__soon svg{ width:16px; height:16px; }
+.studio-card--link{ cursor:pointer; }
 .studio-card__shot{ display:block; width:100%; aspect-ratio:4/3; object-fit:cover; border:var(--line); border-radius:var(--r); background:#fff; }
 .studio-card__shot--big{ max-width:420px; margin:0 0 0 auto; box-shadow:var(--hard); }
 .studio-apphead{ grid-template-columns:minmax(0,1.5fr) minmax(0,.85fr); }
@@ -11478,10 +11479,14 @@ function studioAppCard(s){
     + '<h3 class="card__title studio-card__title"><img class="studio-card__icon" src="' + E(s.appIcon) + '" alt="">' + slot(C, s.id + "Title") + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + slot(C, s.id + "Text") + '</p>';
   /* not ready yet: the same card in full colour, with a "Coming soon" line where the button would be */
-  if (!s.live) return '<article class="card studio-card studio-card--soon">' + media + body
+  /* the whole card is the button: a studio not ready yet opens Join, so they hear when it launches */
+  if (!s.live) return '<article class="card studio-card studio-card--soon studio-card--link" data-act="studio-notify" data-id="' + E(s.id) + '"'
+    + ' tabindex="0" role="button" aria-label="' + E(name) + ', coming soon: join our mailing list to hear when it opens">' + media + body
     + '<div class="card__foot"><p class="studio-card__soon">' + ic("hourglass") + ' Coming soon</p></div></div></article>';
   const canOpen = !s.members || portalIsSubscriber() || portalIsAdmin();
-  return '<article class="card studio-card">' + media + body
+  const whole = canOpen ? ' data-act="open-studio-app" data-id="' + E(s.id) + '"'
+    : ' data-act="open-mailing-list" data-next="/create/studio/' + E(s.id) + '" data-game="' + E(name) + '"';
+  return '<article class="card studio-card studio-card--link"' + whole + ' tabindex="-1">' + media + body
     + '<div class="card__foot">'
     + (canOpen
       ? '<button type="button" class="btn btn--sm btn--cyan" data-act="open-studio-app" data-id="' + E(s.id) + '">' + ic("arrow-right") + ' Open ' + E(name) + '</button>'
@@ -11747,11 +11752,13 @@ function membersPoster(g, what){
         : '<div class="plate" role="presentation"></div>')
     + '<div class="gameposter__inner">'
     + (sub
-        ? '<a class="btn btn--lg btn--sun" href="' + E(to) + '">' + ic("play") + ' Play ' + nameHTML(g.title) + '</a>'
+        /* a subscriber plays right here: the game's code is fetched for them and opens in the game stage */
+        ? '<button type="button" class="btn btn--lg btn--sun" data-act="members-play" data-slug="' + E(g.portalSlug || "") + '" data-title="' + E(g.title) + '"'
+          + (g.id ? ' data-game-id="' + E(g.id) + '"' : "") + '>' + ic("play") + ' Play ' + nameHTML(g.title) + '</button>'
         : '<button type="button" class="btn btn--lg btn--sun" data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '">' + ic("lock") + ' Join free to play</button>'
           + '<button type="button" class="btn btn--sm btn--paper" data-act="open-mailing-list" data-member data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '">' + ic("log-in") + ' Already joined? Sign in</button>')
     + '</div>'
-    + '<span class="gameposter__note gameposter__note--wrap">' + (sub ? "Opens in the Subscriber’s Portal." : E(slotText("templates/game", "membersNote"))) + '</span>'
+    + (sub ? "" : '<span class="gameposter__note gameposter__note--wrap">' + E(slotText("templates/game", "membersNote")) + '</span>')
     + '</div>';
 }
 
@@ -13456,6 +13463,19 @@ async function portalCall(action, extra){
     if (res.error || !res.data) return { ok: false, error: "error" };
     return res.data;
   } catch(_e){ return { ok: false, error: "error" }; }
+}
+
+/** For Art Studio (opened inside the site): is a list member signed in here, and save or load their pictures in
+    their account (the art-cloud function). The app calls these on the site; the sign-in itself stays here. */
+function artCloudSignedIn(){ return !!portalSavedSession(); }
+async function artCloudCall(action, extra){
+  const session = portalSavedSession();
+  if (!session) return { ok: false, error: "no_session" };
+  try {
+    const res = await sb.functions.invoke("art-cloud", { body: Object.assign({}, extra || {}, { action: action, session: session }) });
+    if (res.error || !res.data) return { ok: false, error: "network" };
+    return res.data;
+  } catch(_e){ return { ok: false, error: "network" }; }
 }
 
 /** The one-time bits (?v= / ?k=) are used once and then removed from the
@@ -21882,7 +21902,7 @@ const PAGE_SLOTS = {
       fb:"Create with any device: write, film, record, and build. Activities are free, AI lessons require a subscription, and kids need adult supervision." },
     { key:"studioHeading", section:"Chike’s Creative Studio", label:"Heading", fb:"Write, design and make it yours." },
     { key:"studioLede", section:"Chike’s Creative Studio", label:"Text under the heading", type:"para",
-      fb:"Creative tools built for kids, right here on the site, each with short lessons that end in something finished. Nothing to install and no account for your child: their work stays on your device." },
+      fb:"Creative tools built for kids, right here on the site, each with short lessons that end in something finished. Nothing to install and no account for your child: their work saves with the grown-up’s mailing-list sign-in, so it’s there on any browser." },
     { key:"bookTitle", section:"Chike’s Creative Studio", label:"Book Studio title", fb:"Book Studio" },
     { key:"bookText", section:"Chike’s Creative Studio", label:"Book Studio text", type:"para", fb:"Write, draw and lay out a picture book with Chike and friends, then print it, save it, or share it." },
     { key:"cardTitle", section:"Chike’s Creative Studio", label:"Card Maker Studio title", fb:"Card Maker Studio" },
@@ -21890,8 +21910,8 @@ const PAGE_SLOTS = {
     { key:"artTitle", section:"Chike’s Creative Studio", label:"Art (Design) Studio title", fb:"Art Studio" },
     { key:"artText", section:"Chike’s Creative Studio", label:"Art (Design) Studio text", type:"para", fb:"Draw, paint, crop, and design on the screen, with shapes, colors and patterns to explore. Save your work and share it with a friend." },
     { key:"artLede", section:"Art Studio page", label:"Text under the heading", type:"para",
-      fb:"A blank page and everything you need to fill it: brushes, mirror drawing, shapes, words and a pixel grid. Everything you make is yours, and it saves on this device as you go." },
-    { key:"artNote", section:"Art Studio page", label:"Small note under the button", fb:"Free for subscribers for a limited time. Your art stays on this device unless you download it." },
+      fb:"A blank page and everything you need to fill it: brushes, mirror drawing, shapes, words and a pixel grid. Everything you make is yours, and it saves as you go, to your account, so it’s there in any browser where you sign in." },
+    { key:"artNote", section:"Art Studio page", label:"Small note under the button", fb:"Free for subscribers for a limited time. Your art is kept with your mailing-list sign-in, and you can download it any time." },
     { key:"artToolsHeading", section:"Art Studio page", label:"Heading over the tools", fb:"What you can make" }
   ],
   "templates/finder": [
@@ -25524,6 +25544,42 @@ const ACTIONS = {
     openGameStage({ id: "portal", title: el.getAttribute("data-title") || "Game", path: el.getAttribute("data-path"), icon: el.getAttribute("data-icon") || "dices",
       sharePath: e ? "/newsletter/" + encodeURIComponent(e.slug || e.id) : "/newsletter" });
   },
+  /* a subscribers-only game on the Play page: a subscriber (or an admin) plays it right there, without going to the
+     Subscriber's Portal page first. Its code still only ever comes from the portal, for a signed-in subscriber. */
+  "members-play": async (el) => {
+    if (el.getAttribute("aria-busy") === "true") return;
+    const slug = el.getAttribute("data-slug") || "", title = el.getAttribute("data-title") || "Game";
+    const gid = el.getAttribute("data-game-id");
+    const sharePath = gid ? "/play/" + encodeURIComponent(gid) : "/newsletter/" + encodeURIComponent(slug);
+    el.setAttribute("aria-busy", "true");
+    try {
+      let entry = null;
+      const session = PortalState.session || portalSavedSession();
+      if (session){
+        const r = await portalCall("entry", { session: session, slug: slug });
+        if (r.ok) entry = r.entry;
+        else if (r.error === "no_session"){
+          /* the sign-in has run out: sign in again, and the game opens after */
+          portalSaveSession("");
+          const b = document.createElement("button");
+          b.setAttribute("data-member", ""); b.setAttribute("data-next", "/newsletter/" + slug); b.setAttribute("data-game", title);
+          ACTIONS["open-mailing-list"](b);
+          return;
+        }
+      }
+      let html = entry && entry.gameHtml || "";
+      if (!entry && portalIsAdmin()){
+        const e = db.list("portalEntries").find(x => x.slug === slug || x.id === slug);
+        if (e && e.privateGameId) html = await loadPortalGameHtml(e.privateGameId) || "";
+        else if (e) entry = e;
+      }
+      if (html){ openGameStage({ id: "portal", title: title, icon: "dices", hasFile: true, srcdoc: html, sharePath: sharePath }); return; }
+      const path = entry && portalSafeUrl(entry.gamePath);
+      if (path){ openGameStage({ id: "portal", title: title, path: path, icon: "dices", sharePath: sharePath }); return; }
+      /* anything else (a game that lives on its portal page): go there */
+      navigate("#/newsletter/" + encodeURIComponent(slug));
+    } finally { el.removeAttribute("aria-busy"); }
+  },
   "portal-play-private": async (el) => {
     const e = portalCurrentEntry();
     if (!e || !e.privateGameId) return;
@@ -27292,6 +27348,13 @@ const ACTIONS = {
     /* the app has its own address, /create/studio/art, which opens it straight away */
     STUDIO_APP_OPENED = "";
     navigate("#/create/studio/" + s.id);
+  },
+  /* a studio that is not ready yet: join the list to hear when it opens (someone on the list already will hear) */
+  "studio-notify": (el) => {
+    const s = STUDIO_APPS.find(x => x.id === el.getAttribute("data-id"));
+    const name = s ? slotText("create", s.id + "Title") : "it";
+    if (portalIsSubscriber()){ toast("You’re on our mailing list, so you’ll hear when " + name + " opens."); return; }
+    ACTIONS["open-mailing-list"](null);
   },
   "studio-stage": (el) => {
     const s = STUDIO_APPS.find(x => x.id === el.getAttribute("data-id"));
