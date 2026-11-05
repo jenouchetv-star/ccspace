@@ -7298,9 +7298,7 @@ function mailingListModal(next, game, member, what){
   const lesson = !!play && (what === "lesson" || book || /^AI Lesson\b/i.test(play));
   const bleed = "calc(-1 * clamp(20px,3vw,32px))";
   /* the plain Join box (not for a game, a lesson or "Welcome back") is the wide one: what you get beside the form */
-  /* Art Studio found its sign-in had ended (30 days on, or the grown-up left the list): say why, and that nothing is lost */
-  const artLeft = what === "art-left" && !back2;
-  const wide = !play && !back2 && !artLeft;
+  const wide = !play && !back2;
   /* the picture and its close button stay pinned to the top while the rest of a tall box (on a phone) scrolls under it */
   const picture = '<div class="joinpic" style="margin:' + bleed + ' ' + bleed + ' ' + (wide ? "30px" : "22px") + ';top:' + bleed + '">'
     + (play
@@ -7315,10 +7313,6 @@ function mailingListModal(next, game, member, what){
     ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Welcome back!</h3>'
       + '<p class="tiny mute" style="margin:0 0 18px">Enter the email you subscribed with and we’ll send you a 6-digit code to '
       + (play ? (lesson ? 'open ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.') + '</p>'
-    : artLeft
-      ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Sign in to keep making art</h3>'
-        + '<p class="tiny mute" style="margin:0 0 18px">Art Studio is for our mailing list, and this browser’s sign-in has ended. '
-        + 'Your pictures are still saved in this browser. Join free, or sign in if you’re still on the list, and they’ll go back to your account.</p>'
     : play
       ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">' + (book ? 'This book is for subscribers' : lesson ? 'This AI lesson is for subscribers' : 'Join our mailing list') + '</h3>'
         + '<p class="tiny mute" style="margin:0 0 18px">' + (book ? 'Join our free mailing list to read it, along with every AI lesson.' : lesson ? 'Join our free mailing list to see it, and every AI lesson.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '
@@ -11491,7 +11485,8 @@ function studioAppCard(s){
   if (!s.live) return '<article class="card studio-card studio-card--soon studio-card--link" data-act="studio-notify" data-id="' + E(s.id) + '"'
     + ' tabindex="0" role="button" aria-label="' + E(name) + ', coming soon: join our mailing list to hear when it opens">' + media + body
     + '<div class="card__foot"><p class="studio-card__soon">' + ic("hourglass") + ' Coming soon</p></div></div></article>';
-  const canOpen = !s.members || portalIsSubscriber() || portalIsAdmin();
+  /* the app asks for the mailing-list sign-in itself (its own Sign in window), so everyone can open it */
+  const canOpen = true;
   const whole = canOpen ? ' data-act="open-studio-app" data-id="' + E(s.id) + '"'
     : ' data-act="open-mailing-list" data-next="/create/studio/' + E(s.id) + '" data-game="' + E(name) + '"';
   return '<article class="card studio-card studio-card--link"' + whole + ' tabindex="-1">' + media + body
@@ -11517,7 +11512,8 @@ function viewStudioApp(id){
   if (!s || !s.live) return notFound("page");
   const C = "create";
   const name = slotText(C, s.id + "Title");
-  const canOpen = !s.members || portalIsSubscriber() || portalIsAdmin();
+  /* Art Studio asks for the mailing-list sign-in itself, after its loading card, so the address opens it for everyone */
+  const canOpen = true;
   /* the address is the app: a subscriber lands straight in it (once per visit to this address, so closing it stays closed) */
   if (canOpen && STUDIO_APP_OPENED !== location.pathname){
     STUDIO_APP_OPENED = location.pathname;
@@ -11849,19 +11845,14 @@ async function openGameStage(idOrRecord){
 /* a studio app's own Close button asks the page to close it (same-origin frame, checked by source) */
 window.addEventListener("message", (ev) => {
   const d = ev.data;
-  if (!d || typeof d !== "object" || (d.ccsStudio !== "close" && d.ccsStudio !== "signed-out")) return;
+  if (!d || typeof d !== "object" || (d.ccsStudio !== "close" && d.ccsStudio !== "join")) return;
   const stage = $("#gamestage-frame");
   if (!stage || ev.source !== stage.contentWindow) return;
   closeGameStage();
-  /* the app found the sign-in is no longer good (it has saved the picture in this browser first): the page drops back
-     to "Join free to use it" and the Join box explains why, with the way to sign in again right in it */
-  if (d.ccsStudio === "signed-out" && !portalSavedSession()){
-    rerender();
-    const why = document.createElement("button");
-    why.setAttribute("data-what", "art-left");
-    ACTIONS["open-mailing-list"](why);
-    return;
-  }
+  /* signed in or out inside the app: the top bar (Join, or the Subscriber's Portal) is drawn again */
+  if (ART_SIGNIN_CHANGED){ ART_SIGNIN_CHANGED = false; rerender(); }
+  /* "New here? Join free" in the app's Sign in window: the site's own Join box */
+  if (d.ccsStudio === "join"){ ACTIONS["open-mailing-list"](null); return; }
   /* closing the app from its own address goes back to the studio dashboard */
   if (/^\/create\/studio\/[a-z]+/.test(location.pathname)){ STUDIO_APP_OPENED = ""; navigate("#/create/studio"); }
 });
@@ -13498,11 +13489,46 @@ async function artCloudCall(action, extra){
     return res.data;
   } catch(_e){ return { ok: false, error: "network" }; }
 }
+/* set when Art Studio signed someone in or out, so the page behind it is redrawn when the app closes */
+let ART_SIGNIN_CHANGED = false;
 function artCloudForget(){
   const P = PortalState;
   portalSaveSession("");
   P.session = ""; P.email = ""; P.entries = null; P.detail = {}; P.phase = "idle";
   P.gate = { state: "idle", email: "", consent: false, busy: false, step: "email" };
+  ART_SIGNIN_CHANGED = true;
+}
+/** Art Studio's own Sign in window: an admin never has to sign in to it (as with members games). */
+function artSkipSignIn(){ return portalIsAdmin(); }
+/** Step 1: email a 6-digit code to a list member (the same code the Welcome back box sends). Nobody new is added:
+    no consent is sent, so an address that is not on the list just says so. */
+async function artSignInStart(email){
+  email = String(email || "").trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, message: "That does not look like an email address." };
+  if (isFakeEmail(email)) return { ok: false, message: "Please use a real email address, not a placeholder or test one." };
+  const r = await portalCall("request", { email: email, code: true, next: "/newsletter" });
+  if (!r || !r.ok) return { ok: false, message: JOIN_ERRORS[r && r.error] || "We could not reach the sign-in just now. Check your connection and try again." };
+  if (r.status === "needs_consent") return { ok: false, notOnList: true, message: "That email isn’t on our mailing list yet. Press Join free to sign up. It’s free." };
+  return { ok: true };
+}
+/** Step 2: the code from the email. Right, and the whole site is signed in (the same sign-in as the Subscriber's Portal). */
+async function artSignInCode(email, code){
+  code = String(code || "").replace(/\D/g, "");
+  if (code.length !== 6) return { ok: false, message: "Type the 6 numbers from the email." };
+  const r = await portalCall("verify_code", { email: String(email || ""), code: code });
+  if (!r || !r.ok){
+    const why = {
+      wrong_code: "That code isn’t right. Check the email and try again.",
+      too_many_tries: "Too many tries. Press Resend code for a new one.",
+      code_expired: "That code has run out. Press Resend code for a new one.",
+      not_subscribed: "This email isn’t on our mailing list. Press Join free to sign up."
+    }[r && r.error];
+    return { ok: false, message: why || "We could not check the code just now. Check your connection and try again." };
+  }
+  portalSaveSession(r.session);
+  PortalState.phase = "idle";
+  ART_SIGNIN_CHANGED = true;
+  return { ok: true };
 }
 
 /** The one-time bits (?v= / ?k=) are used once and then removed from the
@@ -27371,7 +27397,6 @@ const ACTIONS = {
   "open-studio-app": (el) => {
     const s = STUDIO_APPS.find(x => x.id === el.getAttribute("data-id"));
     if (!s || !s.path) return;
-    if (s.members && !portalIsSubscriber() && !portalIsAdmin()) return;
     /* the app has its own address, /create/studio/art, which opens it straight away */
     STUDIO_APP_OPENED = "";
     navigate("#/create/studio/" + s.id);
@@ -27385,7 +27410,7 @@ const ACTIONS = {
   },
   "studio-stage": (el) => {
     const s = STUDIO_APPS.find(x => x.id === el.getAttribute("data-id"));
-    if (s && s.path && (!s.members || portalIsSubscriber() || portalIsAdmin())) openStudioStage(s);
+    if (s && s.path) openStudioStage(s);
   },
   "open-mailing-list": (el) => {
     AppState.navOpen = false;
@@ -27394,8 +27419,7 @@ const ACTIONS = {
     if (next && portalIsAdmin()){ navigate("#" + next); return; }
     const game = el && el.getAttribute("data-game");
     const member = !!(el && el.hasAttribute("data-member"));
-    const what = el && el.getAttribute("data-what");
-    openModal(mailingListModal(el && el.getAttribute("data-next"), game, member, what), null, game || member || what === "art-left" ? "modal--narrow" : "");
+    openModal(mailingListModal(el && el.getAttribute("data-next"), game, member, el && el.getAttribute("data-what")), null, game || member ? "modal--narrow" : "");
     rootAssetPaths($("#modal-root"));
   },
   "open-book": (el) => {
