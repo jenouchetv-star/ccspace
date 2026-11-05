@@ -1,4 +1,4 @@
-/* Chike's Creative Space - service worker.
+﻿/* Chike's Creative Space - service worker.
    Single-page app served with a path-based fallback to index.html (see
    .claude/serve.py locally, or an equivalent rewrite rule in production).
    Every navigation therefore resolves to the same shell document, which is
@@ -9,7 +9,7 @@
    the whole update mechanism: a new version number means a new cache name,
    which means install() re-fetches everything and activate() deletes the
    old caches, so nobody is left running stale HTML against a new build. */
-const CACHE_VERSION = "ccs-v110";
+const CACHE_VERSION = "ccs-v111";
 const SHELL_CACHE = CACHE_VERSION + "-shell";
 const RUNTIME_CACHE = CACHE_VERSION + "-runtime";
 

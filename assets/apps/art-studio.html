@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
 <script src="../vendor/lucide.js"></script>
+<script src="../lib/pixelblast.js"></script>
 <!--
   Art Space (Chike's Creative Space): a standalone drawing and design app laid out like the tools grown-ups use
   (Figma, Sketch, Photoshop, Procreate): a tool bar, a layers panel, the canvas with zoom and pan, and an
@@ -101,13 +102,19 @@ svg.lucide{ width:17px; height:17px; flex:none; stroke-width:1.75; }
 .appbar{ display:flex; align-items:center; gap:4px; height:46px; padding:0 8px 0 10px; background:var(--surface); border-bottom:var(--line); flex:none; }
 .appmark{ display:flex; align-items:center; gap:9px; font-weight:700; font-size:13.5px; margin-right:auto; min-width:0; }
 .appmark__icon{ display:block; width:26px; height:26px; flex:none; }
+.appmark__beta{ display:inline-block; padding:1px 7px; border-radius:999px; background:#1C1C1E; color:#fff; font-size:10.5px; font-weight:700; letter-spacing:.04em; vertical-align:2px; }
+:root[data-theme="dark"] .appmark__beta{ background:#ECECF0; color:#1C1C1E; }
 .appmark__ver{ font-weight:500; font-size:11px; color:var(--mute); font-variant-numeric:tabular-nums; }
 .sep{ width:1px; height:20px; background:var(--border); margin:0 4px; flex:none; }
 .zoom__val{ width:52px; height:30px; border:0; background:transparent; font-weight:600; font-size:12px; font-variant-numeric:tabular-nums; border-radius:6px; }
 .zoom__val:hover{ background:var(--hover); }
 
 /* ---------- home ---------- */
-#home{ height:100%; display:flex; flex-direction:column; }
+#home{ height:100%; display:flex; flex-direction:column; position:relative; }
+/* the moving pixel field behind the home page (PixelBlast); the page sits on top of it */
+.home__fx{ position:absolute; inset:46px 0 0 0; z-index:0; pointer-events:none; overflow:hidden; }
+.home__fx .pixel-blast-canvas{ position:absolute; inset:0; display:block; width:100%; height:100%; }
+#home > .appbar, #home > .home__scroll{ position:relative; z-index:1; }
 .home__scroll{ flex:1; overflow:auto; padding:30px 18px 48px; }
 .home__inner{ max-width:1080px; margin:0 auto; }
 .home h1{ font-size:22px; font-weight:700; letter-spacing:-.01em; margin:0 0 4px; }
@@ -346,8 +353,9 @@ body.no-layers .layers{ display:none; }
 
 <!-- =================== HOME =================== -->
 <main id="home" class="home" aria-labelledby="home-title">
+  <div id="home-fx" class="home__fx" aria-hidden="true"></div>
   <header class="appbar">
-    <span class="appmark"><img class="appmark__icon" src="../studio/art-studio-icon.svg" alt="">Art Space <span class="appmark__ver" title="Version 0.1.0">v0.1.0</span></span>
+    <span class="appmark"><img class="appmark__icon" src="../studio/art-studio-icon.svg" alt="">Art Space <span class="appmark__beta" title="Art Space is in beta: it works, and we are still adding to it">Beta</span> <span class="appmark__ver" title="Version 0.1.0">v0.1.0</span></span>
     <button type="button" class="btn btn--ghost iconbtn" data-act="theme" aria-label="Light or dark" title="Light or dark"><i data-lucide="sun-moon"></i></button>
     <button type="button" class="btn btn--ghost" data-act="close-app"><i data-lucide="x"></i> Close</button>
   </header>
@@ -431,7 +439,7 @@ body.no-layers .layers{ display:none; }
     <div class="splash__left">
       <div class="splash__brand">
         <img src="../studio/art-studio-icon.svg" alt="">
-        <div><h1 id="splash-name">Art Space</h1><small>v0.1.0</small></div>
+        <div><h1 id="splash-name">Art Space</h1><small><span class="appmark__beta">Beta</span> v0.1.0</small></div>
       </div>
       <div class="splash__legal">
         <span>© 2026 Chike’s Creative Space. All rights reserved.</span>
@@ -444,7 +452,7 @@ body.no-layers .layers{ display:none; }
         <p>Draw &amp; Paint · Mirror &amp; Pattern · Pixel Art · Shape Designer · Text · Layers · Trace a Picture · Download, Print and Share.</p>
         <p>Pictures save as you go, to this browser and to your mailing-list sign-in. Made for all creative kids.</p>
       </div>
-      <div class="splash__family"><img src="../studio/creative-studio-logo.svg" alt="">Chike’s Creative Studio</div>
+      <div class="splash__family"><img src="../studio/creative-studio-logo.svg" alt="">Creative Space Studio</div>
     </div>
     <div class="splash__art" role="img" aria-label="A colorful tiger among jungle leaves, traced in Art Space"></div>
   </div>
@@ -541,7 +549,24 @@ function ask(title, text, yesLabel){
   });
 }
 /* light or dark, remembered on this device only */
-function applyTheme(t){ document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light"); }
+function applyTheme(t){ document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light"); startHomeFx(); }
+/* The home page's pixel field, in colors that suit the theme. It stops itself while the editor covers the home page. */
+let homeFxStop = null;
+function startHomeFx(){
+  const box = document.getElementById("home-fx");
+  if (!box || !window.createPixelBlast) return;
+  if (homeFxStop){ try { homeFxStop(); } catch(e){} homeFxStop = null; }
+  box.innerHTML = "";
+  const dark = document.documentElement.getAttribute("data-theme") === "dark";
+  try {
+    homeFxStop = window.createPixelBlast(box, {
+      variant:"square", pixelSize:3, patternScale:2, patternDensity: dark ? .9 : .75,
+      color: dark ? "#4C7DFF" : "#3366F0", accentColor: dark ? "#C46AF0" : "#8B5CF6",
+      softness:.6, glow: dark ? .4 : .2, twinkle:.25, drift:.2, speed:.4,
+      hoverEffect:"reveal", enableRipples:true, edgeFade:.3, lightMode:!dark
+    });
+  } catch(e){ homeFxStop = null; }
+}
 /* dark by default, like most design apps; the sun/moon button switches, and the choice is remembered */
 try { applyTheme(localStorage.getItem("ccs-art-theme") || "dark"); } catch(e){ applyTheme("dark"); }
 
