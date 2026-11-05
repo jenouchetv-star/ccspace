@@ -136,7 +136,9 @@ describe("Admins never have to join", () => {
 describe("Admins see every page", () => {
   it("opens archived and draft pages for admins, and only for them", () => {
     expect(index).toContain("function adminSeesAll(){ return isAuthed() && isActiveAdmin(); }");
-    expect(index).toContain('if (!a || (a.status === "archived" && !adminSeesAll())) return notFound("activity");');
+    /* an activity is shown to visitors only once it is published: drafts are as hidden as archived ones */
+    expect(index).toContain('if (!a || (a.status !== "published" && !adminSeesAll())) return notFound("activity");');
+    expect(index).toContain('return a && (a.status === "published" || adminSeesAll()) ? a : null;');
     expect(index).toContain('if (!g || (g.status === "archived" && !adminSeesAll())) return notFound("game");');
     expect(index).toContain('if (!a || (a.status !== "published" && !adminSeesAll())) return notFound("article");');
     expect(index).not.toMatch(/\.status === "archived"\) return notFound\(/);
