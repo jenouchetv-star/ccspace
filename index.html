@@ -1237,7 +1237,9 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
 .finder-inline{ padding:clamp(20px,2.2vw,26px); }
 .finder-inline .finder-step{ margin-bottom:14px; }
 .finder-inline .finder-step__dot{ width:28px; height:28px; font-size:.82rem; }
-.finder-nav{ margin-top:16px; gap:12px; }
+.finder-nav{ margin-top:16px; gap:12px; flex-wrap:wrap; }
+.finder-nav__left{ display:flex; gap:8px; flex-wrap:wrap; }
+#finder-questions{ scroll-margin-top:96px; }
 .finder-nav .hint{ margin:0; }
 /* On a phone the eleven materials chips would need real scrolling to
    reach the last one - a tight two-column grid with a clamped example
@@ -1257,6 +1259,7 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
 .findresults{
   margin-top:clamp(30px,4vw,48px); padding-top:clamp(26px,3vw,36px);
   border-top:3px dashed rgba(30,40,46,.28);
+  scroll-margin-top:96px;   /* clears the sticky menu when the finder scrolls here */
 }
 .findresults__grid{ grid-template-columns:repeat(3,minmax(0,1fr)); }
 @media (max-width:900px){ .findresults__grid{ grid-template-columns:1fr; } }
@@ -10701,7 +10704,8 @@ function finderStepMarkup(){
   /* the first step's hint shares the row with Next, rather than taking a line of its own */
   const nav = '<div class="row-between finder-nav">'
     + (step > 1
-        ? '<button class="btn btn--sm btn--ghost" data-act="find-step-back">' + ic("arrow-left") + ' Back</button>'
+        ? '<span class="finder-nav__left"><button class="btn btn--sm btn--ghost" data-act="find-step-back">' + ic("arrow-left") + ' Back</button>'
+          + '<button class="btn btn--sm btn--ghost" data-act="find-clear">' + ic("rotate-ccw") + ' Start over</button></span>'
         : '<span class="hint">' + E(slotText("templates/finder", "step1Hint")) + '</span>')
     + (step < LAST
         ? '<button class="btn btn--sm btn--cyan" data-act="find-step-next"' + (stepAnswered ? "" : " disabled") + '>Next' + ic("arrow-right") + '</button>'
@@ -26547,13 +26551,27 @@ const ACTIONS = {
     AppState.finderRun = true;
     AppState.keepScroll = true;
     rerender();
+    /* take them down to the three matches */
+    requestAnimationFrame(() => {
+      const res = document.getElementById("finder-results");
+      if (!res) return;
+      const calm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      res.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
+    });
   },
   "find-clear": () => {
     AppState.finder = { materials:[], theme:"", time:"",
                         age:"", place:"", support:"", challenge:"", character:"", topic:"", access:"" };
     AppState.finderRun = false;
     AppState.finderStep = 1;
+    AppState.keepScroll = true;
     rerender();
+    refreshFinderModal();
+    /* back up to the first question if it has scrolled out of sight */
+    requestAnimationFrame(() => {
+      const q = document.getElementById("finder-questions");
+      if (q && q.getBoundingClientRect().top < 0) q.scrollIntoView({ block: "start" });
+    });
   },
   /* The Create page's own filter chips - a plain set, not a toggle, since
      "Everything"/"Any" already give the way back to unfiltered. */
