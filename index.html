@@ -2149,6 +2149,23 @@ body.is-admin .btn--lg:hover{ box-shadow:0 4px 14px rgba(20,34,44,.16); }
 }
 /* a short one-field box (the Gravity 4 Join / Welcome back / code boxes) */
 .modal--narrow{ width:min(520px,100%); }
+/* Art Space's Details: a wide panel whose header and footer stay put while the middle scrolls */
+.modal.appdetails{ width:min(780px,100%); }
+.appdetails .modal__head .eyebrow{ display:block; margin-bottom:8px; }
+.appdetails__head{ display:flex; align-items:center; gap:12px; }
+.appdetails__head img{ border-radius:10px; flex:none; }
+.appdetails__close{ flex:none; padding:7px; min-height:38px; min-width:38px; border-radius:10px; }
+.modal.appdetails .modal__foot{ justify-content:flex-end; }
+.modal.appdetails .modal__foot > .btn{ flex:0 0 auto; }
+.appdetails__features{ list-style:none; margin:0 0 18px; padding:0; display:grid; gap:10px 22px; }
+@media (min-width:700px){ .appdetails__features{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+.appdetails__features li{ display:flex; gap:10px; align-items:flex-start; font-size:.9rem; line-height:1.45; }
+.appdetails__features svg{ width:18px; height:18px; flex:none; margin-top:2px; color:var(--cyan-deep); }
+.appdetails__facts{ margin:0; border-top:2px dashed rgba(30,40,46,.22); padding-top:14px; display:grid; gap:8px; }
+.appdetails__row{ display:grid; grid-template-columns:130px 1fr; gap:12px; font-size:.86rem; line-height:1.45; }
+.appdetails__row dt{ font-weight:800; }
+.appdetails__row dd{ margin:0; color:var(--ink-mute); }
+@media (max-width:520px){ .appdetails__row{ grid-template-columns:1fr; gap:2px; } }
 .joinpic{ position:sticky; z-index:2; background:var(--paper-card); border-radius:var(--r-lg) var(--r-lg) 0 0; }
 .modal__head{ display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-bottom:18px; }
 .modal__foot{ display:flex; gap:11px; flex-wrap:wrap; justify-content:flex-end; margin-top:24px; padding-top:18px; border-top:2px dashed rgba(30,40,46,.24); }
@@ -27410,8 +27427,7 @@ const ACTIONS = {
   "media-sort-size": () => { AppState.admin.mediaSortBySize = !AppState.admin.mediaSortBySize; rerender(); },
   "load-more-terms": () => { AppState.admin.moderationTermsShown += 25; rerender(); },
 
-  /* Details: Art Space's own page, without opening the app over it */
-  "art-details": () => { STUDIO_APP_OPENED = "/create/studio/art"; navigate("#/create/studio/art"); },
+  "art-details": (el) => { openModal(artDetailsHTML(), null, "modal--sheet appdetails", el); },
   "art-install": async () => {
     const p = DEFERRED_INSTALL_PROMPT;
     if (p && p.__app === "/art-space.webmanifest"){
@@ -29599,6 +29615,37 @@ function syncAppManifest(){
 }
 /** Already running as the installed Art Space app (or the site app): no Install button then. */
 function artAppInstalled(){ return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }
+/** Art Space's details: what it does, what you need, how your pictures are kept, and its version. */
+function artDetailsHTML(){
+  const cfg = studioSettings();
+  const row = (k, v) => '<div class="appdetails__row"><dt>' + E(k) + '</dt><dd>' + v + '</dd></div>';
+  const features = [
+    ["paintbrush", "Five brushes", "Brush, pen, marker, pencil and airbrush, with size, opacity, a soft or hard edge, and smoothing for steadier curves."],
+    ["shapes", "Shapes and words", "Rectangles, circles, triangles, stars, hearts, lines and text you can move, resize, recolor and flip."],
+    ["layers", "Layers", "Stack, hide, lock, rename and fade layers, the way design tools do."],
+    ["flip-horizontal-2", "Mirror and patterns", "Symmetry repeats every stroke in 2, 4 or 8 parts."],
+    ["grid-3x3", "Pixel art", "A 16, 24 or 32-square grid for sprites and icons, exported with a see-through background."],
+    ["image", "Trace a picture", "Put a picture over or under your page to draw along. It stays on your device."],
+    ["share-2", "Export, print and share", "Save a PNG, print or save a PDF, share it, or keep a project file to open again."]
+  ];
+  return '<div class="modal__head"><div><span class="eyebrow">Creative Space Studio</span>'
+    + '<div class="appdetails__head"><img src="assets/studio/art-studio-icon.svg" alt="" width="40" height="40">'
+    + '<h3 style="margin:0">Art Space <span class="chip chip--ink">Beta</span></h3></div></div>'
+    + '<button class="btn btn--ghost btn--icon btn--sm appdetails__close" data-act="close-modal" aria-label="Close">' + ic("x") + '</button></div>'
+    + '<div class="modal__body">'
+    + '<p style="margin:0 0 14px">A drawing and design app for kids, right here on the site. Paint, build pictures from shapes and words, make patterns and pixel art, then print or share what you made.</p>'
+    + '<ul class="appdetails__features">' + features.map(f => '<li>' + ic(f[0]) + '<span><b>' + E(f[1]) + '.</b> ' + E(f[2]) + '</span></li>').join("") + '</ul>'
+    + '<dl class="appdetails__facts">'
+    + row("Who can use it", "Mailing-list subscribers, for now. Joining is free, with a grown-up’s email.")
+    + row("Saving", "Pictures save as you go: to your account when you’re signed in, so they’re there in any browser, or on this device if you’re not.")
+    + row("Works on", "Computers and tablets in Chrome, Edge or Safari, with a mouse, a pen or a finger. Install it to open it in its own window.")
+    + row("Help", "The question-mark button inside the app opens short help topics you can search.")
+    + row("Version", E("v" + cfg.version) + " · Beta, released " + E(fmtDate(cfg.since)))
+    + row("Privacy", 'We count how often Art Space is used, never what you draw. <a href="#/privacy" data-act="close-modal">Privacy Policy</a>')
+    + '</dl></div>'
+    + '<div class="modal__foot"><button type="button" class="btn btn--sm btn--ghost" data-act="close-modal">Close</button>'
+    + '<button type="button" class="btn btn--sm btn--cyan" data-act="open-studio-app" data-id="art">' + ic("arrow-right") + ' Open Art Space</button></div>';
+}
 function artInstallHelpHTML(){
   const ua = navigator.userAgent;
   const safariMac = /Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|Chromium|Edg|Firefox/.test(ua);
