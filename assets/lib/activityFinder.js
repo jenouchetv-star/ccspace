@@ -38,15 +38,15 @@ export const findMaterial = id => FIND_MATERIALS.find(m => m.id === id) || { id:
 export const FIND_THEMES = [
   { id:"fly",      label:"Fly & Move",       icon:"rocket",        bg:"#CFE7F7" },
   { id:"build",    label:"Build & Test",     icon:"hammer",        bg:"#FFE6A6" },
-  { id:"mix",      label:"Mix & Observe",    icon:"flask-conical", bg:"#BFEDE3" },
-  { id:"nature",   label:"Nature Detective", icon:"leaf",          bg:"#CDE9C2" },
+  { id:"mix",      label:"Experiment",       icon:"flask-conical", bg:"#BFEDE3" },
+  { id:"nature",   label:"Nature",           icon:"leaf",          bg:"#CDE9C2" },
   { id:"light",    label:"Light & Sound",    icon:"lightbulb",     bg:"#FBE3A8" },
-  { id:"space",    label:"Space Explorer",   icon:"telescope",     bg:"#E7DAF6" },
+  { id:"space",    label:"Space",            icon:"telescope",     bg:"#E7DAF6" },
   { id:"code",     label:"Code & Think",     icon:"binary",        bg:"#C6E1F2" },
   /* the library's own activities and the computer lessons, which the finder now suggests too */
   { id:"art",      label:"Draw & Tell",      icon:"pencil",        bg:"#EBD7F5" },
   { id:"music",    label:"Music & Move",     icon:"music",         bg:"#F8BDB6" },
-  { id:"tech",     label:"Make with Tech",   icon:"laptop",        bg:"#D9C2E3" },
+  { id:"tech",     label:"Technology",       icon:"laptop",        bg:"#D9C2E3" },
   { id:"surprise", label:"Surprise Me",      icon:"dices",         bg:"#F8C0B9" }
 ];
 export const findTheme = id => FIND_THEMES.find(t => t.id === id) || { id:id, label:id, icon:"dices" };

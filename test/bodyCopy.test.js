@@ -42,7 +42,8 @@ describe("formatting body copy", () => {
 
   it("shows each page's own paragraphs in the admin page form, and only on that page", () => {
     expect(html).toContain('{ key:"extra2", label:"Paragraph 2", type:"richtext", copy:true, wide:true, pages:["about/mission"]');
-    expect(html).toContain("(FIELDS[col] || []).filter(f => !f.pages || f.pages.indexOf(rec.key) >= 0).map(f => fieldControl(f, rec))");
+    expect(html).toContain("const fieldOnPage = (f, key) => (!f.pages || f.pages.indexOf(key) >= 0) && !(f.notOn && f.notOn.indexOf(key) >= 0);");
+    expect(html).toContain("(FIELDS[col] || []).filter(f => fieldOnPage(f, rec.key)).map(f => fieldControl(f, rec))");
     expect(html).toContain("if (!area && f.pages) return;");
   });
 

@@ -62,6 +62,14 @@ svg.lucide{ width:17px; height:17px; flex:none; stroke-width:1.75; }
 .btn:hover{ background:var(--surface-2); }
 .btn--primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
 .btn--primary:hover{ background:var(--accent-hover); }
+.btn--danger{ background:var(--danger); border-color:var(--danger); color:#fff; }
+.btn--danger:hover{ filter:brightness(.94); }
+.ask{ position:fixed; inset:0; z-index:200; display:grid; place-items:center; padding:16px; background:rgba(10,10,14,.45); }
+.ask[hidden]{ display:none; }
+.ask__box{ width:min(380px,100%); background:var(--surface); color:var(--text); border:var(--line); border-radius:var(--r); box-shadow:var(--pop); padding:20px; }
+.ask__box h2{ margin:0 0 6px; font-size:16px; }
+.ask__box p{ margin:0 0 18px; font-size:13.5px; line-height:1.5; color:var(--mute); }
+.ask__btns{ display:flex; justify-content:flex-end; gap:8px; }
 .btn--ghost{ border-color:transparent; background:transparent; }
 .btn--ghost:hover{ background:var(--hover); }
 .btn[disabled]{ opacity:.35; cursor:default; background:transparent; }
@@ -473,6 +481,16 @@ body.no-layers .layers{ display:none; }
 
 <div id="print-area"></div>
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="ask" class="ask" hidden>
+  <div class="ask__box" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-text">
+    <h2 id="ask-title"></h2>
+    <p id="ask-text"></p>
+    <div class="ask__btns">
+      <button type="button" class="btn" data-ask="no">Cancel</button>
+      <button type="button" class="btn btn--danger" data-ask="yes"></button>
+    </div>
+  </div>
+</div>
 
 <script>
 "use strict";
@@ -505,6 +523,22 @@ let toastTimer = 0;
 function toast(msg){
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 3400);
+}
+/* "Are you sure?" inside the app: the page this runs in blocks the browser's own confirm box */
+function ask(title, text, yesLabel){
+  const box = $("#ask"), back = document.activeElement;
+  $("#ask-title").textContent = title; $("#ask-text").textContent = text;
+  box.querySelector('[data-ask="yes"]').textContent = yesLabel || "OK";
+  box.hidden = false;
+  box.querySelector('[data-ask="no"]').focus();
+  return new Promise(done => {
+    const finish = yes => { box.hidden = true; box.removeEventListener("click", onClick); document.removeEventListener("keydown", onKey, true);
+      if (back && back.focus) try { back.focus(); } catch(e){}
+      done(yes); };
+    const onClick = e => { const b = e.target.closest("[data-ask]"); if (b) finish(b.dataset.ask === "yes"); else if (e.target === box) finish(false); };
+    const onKey = e => { if (e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); finish(false); } };
+    box.addEventListener("click", onClick); document.addEventListener("keydown", onKey, true);
+  });
 }
 /* light or dark, remembered on this device only */
 function applyTheme(t){ document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light"); }
@@ -1947,9 +1981,13 @@ document.addEventListener("click", e => {
   if (b.dataset.open){ store.all().then(list => { const p = list.find(x => x.id === b.dataset.open); if (p) openProject(p); }); return; }
   if (b.dataset.del){
     const id = b.dataset.del, both = cloud.on();
-    if (!confirm(both ? "Delete this picture? It goes from your account and every browser you sign in on. This can’t be undone."
-      : "Delete this from this device? This can’t be undone.")) return;
-    store.del(id).then(() => both ? cloud.call("delete", { id }) : null).then(renderGallery);
+    ask("Delete this picture?", both ? "It goes from your account and every browser you sign in on. This can’t be undone."
+      : "It goes from this device. This can’t be undone.", "Delete").then(yes => {
+      if (!yes) return;
+      store.del(id).then(() => both ? cloud.call("delete", { id }) : null)
+        .catch(() => toast("Deleted here, but your account couldn’t be reached. Try again later."))
+        .then(renderGallery);
+    });
     return;
   }
   if (!cur && !b.dataset.act) return;

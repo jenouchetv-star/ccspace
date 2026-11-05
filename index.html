@@ -1264,7 +1264,7 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
 @media (max-width:560px){ .themecards{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
 .themecard{
   display:flex; align-items:center; gap:8px; text-align:left;
-  padding:7px 10px; cursor:pointer; font-family:inherit; font-weight:800; font-size:.8rem;
+  padding:5px 9px; cursor:pointer; font-family:inherit; font-weight:800; font-size:.8rem; line-height:1.2;
   background:var(--paper-card); color:var(--ink);
   border:var(--line-thin); border-radius:10px;
   transition:transform .14s, box-shadow .14s, border-color .14s, background-color .14s;
@@ -1273,12 +1273,18 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
 .themecard:not([aria-pressed="true"]):hover{ background:#FFFFFF; }
 .themecard:active{ transform:translateY(0) scale(.97); }
 .themecard__mark{
-  width:28px; height:28px; flex:none; display:grid; place-items:center;
-  border-radius:8px;
+  width:24px; height:24px; flex:none; display:grid; place-items:center;
+  border-radius:7px;
 }
-.themecard__mark svg{ width:16px; height:16px; }
+.themecard__mark svg{ width:14px; height:14px; }
 .themecard[aria-pressed="true"]{ background:var(--ink); color:var(--paper); box-shadow:var(--hard-xs); }
 .themecard[aria-pressed="true"] .themecard__mark{ box-shadow:0 0 0 2px var(--paper); }
+@media (max-width:560px){
+  .themecards{ gap:6px; }
+  .themecard{ padding:4px 7px; font-size:.76rem; gap:6px; }
+  .themecard__mark{ width:22px; height:22px; border-radius:6px; }
+  .themecard__mark svg{ width:13px; height:13px; }
+}
 
 .findcard{
   --fc-pad:clamp(16px,2vw,22px);
@@ -1426,6 +1432,19 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
   content:""; flex:none; width:10px; height:6px; margin-top:-3px;
   border-left:2.5px solid currentColor; border-bottom:2.5px solid currentColor;
   transform:rotate(-45deg);
+}
+/* the finder's time choices: one row of three, the minutes on a small line under each name */
+.opts--time{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.opts--time .opt{ position:relative; width:100%; flex-direction:column; align-items:flex-start; gap:1px; padding:8px 12px; text-align:left; line-height:1.2; }
+.opts--time .opt__n{ margin:0; padding:0; min-width:0; background:none; font-size:.76rem; font-weight:700; text-align:left; opacity:.72; }
+.opts--time .opt[aria-pressed="true"] .opt__n{ background:none; opacity:.85; }
+.opts--time .opt[aria-pressed="true"]{ padding-right:28px; }
+.opts--time .opt[aria-pressed="true"]::before{ position:absolute; right:12px; top:50%; margin-top:-5px; }
+@media (max-width:560px){
+  .opts--time{ gap:6px; }
+  .opts--time .opt{ padding:7px 9px; font-size:.78rem; }
+  .opts--time .opt[aria-pressed="true"]{ padding-right:22px; }
+  .opts--time .opt[aria-pressed="true"]::before{ right:8px; }
 }
 .match{
   display:grid; grid-template-columns:104px 1fr; gap:18px; align-items:start;
@@ -10628,7 +10647,7 @@ function findExamples(m){
   return bits.slice(0, 3).join(", ") + (bits.length > 3 ? "…" : "");
 }
 
-/* The three-question wizard's own markup (dots, current step's fields,
+/* The two-step wizard's own markup (dots, current step's fields,
    Back/Next/Run nav) - shared by the inline panel (desktop, and mobile
    before the sheet took over) and the mobile sheet, so the two can never
    drift out of sync with each other. */
@@ -10653,42 +10672,43 @@ function finderStepMarkup(){
         + '<span>' + E(t.label) + '</span></button>').join("")
     + '</div></div>';
 
-  const step3 = '<div class="field"><label id="lbl-when">' + E(slotText("templates/finder", "step3Question")) + '</label>'
-    + '<div class="opts" role="group" aria-labelledby="lbl-when">'
+  const time = '<div class="field"><label id="lbl-when">' + E(slotText("templates/finder", "step3Question")) + ' <span class="hint">(optional)</span></label>'
+    + '<div class="opts opts--time" role="group" aria-labelledby="lbl-when">'
     + FIND_TIMES.map(t => '<button type="button" class="opt opt--sm opt--sun" data-act="find-set" data-key="time"'
         + ' data-value="' + E(t.id) + '" aria-pressed="' + (f.time === t.id ? "true" : "false") + '">'
-        + E(t.label) + ' <span class="opt__n">' + E(t.note) + '</span></button>').join("")
+        + '<span>' + E(t.label) + '</span> <span class="opt__n">' + E(t.note) + '</span></button>').join("")
     + '</div></div>';
 
-  /* One question on screen at a time, so the panel stays a fixed, modest
-     height instead of growing to fit all three questions stacked. */
-  const steps = [step1, step2, step3];
-  const stepNames = ["What you have", "What to explore", "How much time"];
-  const step = Math.min(3, Math.max(1, AppState.finderStep || 1));
+  /* Two steps: what you have, then what to explore and how long, together -
+     the time question is small and optional, so it rides along with the themes. */
+  const steps = [step1, step2 + time];
+  const stepNames = ["What you have", "What to explore"];
+  const LAST = steps.length;
+  const step = Math.min(LAST, Math.max(1, AppState.finderStep || 1));
 
   const dots = steps.map((_, i) => {
     const n = i + 1;
     return '<button type="button" class="finder-step__dot' + (n === step ? " is-current" : n < step ? " is-done" : "") + '"'
       + ' data-act="find-step-goto" data-step="' + n + '" aria-current="' + (n === step ? "step" : "false") + '"'
-      + ' aria-label="Step ' + n + ' of 3: ' + E(stepNames[i]) + '">'
+      + ' aria-label="Step ' + n + ' of ' + LAST + ': ' + E(stepNames[i]) + '">'
       + (n < step ? ic("check") : n) + '</button>';
   }).join('<span class="finder-step__line" aria-hidden="true"></span>');
 
   /* A step is answered once it has something to carry forward - greying
      the button out is a clearer stop than a click that just bounces back. */
-  const stepAnswered = step === 1 ? !!(f.materials || []).length : step === 2 ? !!f.theme : true;
+  const stepAnswered = step === 1 ? !!(f.materials || []).length : true;
 
   /* the first step's hint shares the row with Next, rather than taking a line of its own */
   const nav = '<div class="row-between finder-nav">'
     + (step > 1
         ? '<button class="btn btn--sm btn--ghost" data-act="find-step-back">' + ic("arrow-left") + ' Back</button>'
         : '<span class="hint">' + E(slotText("templates/finder", "step1Hint")) + '</span>')
-    + (step < 3
+    + (step < LAST
         ? '<button class="btn btn--sm btn--cyan" data-act="find-step-next"' + (stepAnswered ? "" : " disabled") + '>Next' + ic("arrow-right") + '</button>'
         : '<button class="btn btn--sm btn--cyan" data-act="find-run">' + ic("wand-sparkles") + ' ' + E(slotText("templates/finder", "findButton")) + '</button>')
     + '</div>';
 
-  return { dots, stepName: stepNames[step - 1], stepContent: steps[step - 1], nav, step };
+  return { dots, stepName: stepNames[step - 1], stepContent: steps[step - 1], nav, step, last: LAST };
 }
 
 function finderPanel(mode){
@@ -10726,7 +10746,7 @@ function finderPanel(mode){
     + m.nav
     + '</div>'
     + (AppState.finderRun ? "" : '<button type="button" class="btn btn--lg btn--cyan finder-trigger" data-act="finder-modal-open">'
-        + ic("wand-sparkles") + ' ' + (m.step > 1 || (AppState.finder.materials||[]).length ? "Continue – step " + m.step + " of 3" : "Find an activity")
+        + ic("wand-sparkles") + ' ' + (m.step > 1 || (AppState.finder.materials||[]).length ? "Continue – step " + m.step + " of " + m.last : "Find an activity")
         + '</button>')
     + '</div>'
     + (AppState.finderRun ? findResults(results) : "");
@@ -15298,7 +15318,7 @@ const EH_SKIP = /^(slug|key|id|path|url|email|status|youtubeId|youtubeUrl|icon|s
 /** The text boxes of an editor that the helper may write in (never addresses, links or picture descriptions). */
 function ehFields(col){
   const editingRec = EDITING && EDITING.col === col && EDITING.id ? db.find(col, EDITING.id) : null;
-  return (FIELDS[col] || []).filter(f => !f.pages || (editingRec && f.pages.indexOf(editingRec.key) >= 0))
+  return (FIELDS[col] || []).filter(f => (!f.pages && !f.notOn) || (editingRec && fieldOnPage(f, editingRec.key)))
     .filter(f => ["text", "textarea", "lines", "richtext", "tags"].indexOf(f.type) >= 0 && !EH_SKIP.test(f.key) && !/only used when/i.test(f.help || ""))
     .map(f => ({ path: f.key, label: f.label.toLowerCase(), ftype: f.type, type: f.type === "richtext" ? "richtext" : (f.type === "lines" || f.type === "tags") ? "lines" : "text",
       hint: f.help || (f.type === "textarea" || f.type === "richtext" ? "a few sentences" : "a short line") }));
@@ -16408,6 +16428,11 @@ function castInOrder(){
 
 const characterOptions = () => db.list("characters").map(c => ({ value:c.slug, label:c.name }));
 
+/* Records that only hold shared wording: the generic page fields (heading, intro, picture...) do nothing there. */
+const NO_PAGE_TOP = ["site"];
+/** Whether a pages field belongs on this page's form. */
+const fieldOnPage = (f, key) => (!f.pages || f.pages.indexOf(key) >= 0) && !(f.notOn && f.notOn.indexOf(key) >= 0);
+
 const FIELDS = {
   announcements: [
     { key:"title", label:"Admin name", type:"text", help:"Only shown in this list." },
@@ -16424,11 +16449,11 @@ const FIELDS = {
   pages: [
     { key:"title", label:"Admin name", type:"text", help:"Only shown in this list." },
     { key:"key", label:"Page address", type:"text", help:"Matches the page URL, e.g. about/vision." },
-    { key:"eyebrow", label:"Eyebrow", type:"text", help:"The small label above the heading. Leave blank to keep the built-in wording." },
-    { key:"heading", label:"Heading", type:"textarea", wide:true, help:"Plain text. Press Enter for a line break. Blank keeps the built-in heading." },
-    { key:"highlight", label:"Highlighted word", type:"text", help:"A word from the heading to mark. Leave blank for no mark." },
-    { key:"tone", label:"Mark color", type:"select", options:() => [{value:"sun",label:"Yellow"},{value:"cyan",label:"Blue"}] },
-    { key:"intro", label:"Intro", type:"richtext", wide:true, help:"The text under the heading. Use paragraph breaks, bold, or a link if you need them." },
+    { notOn:NO_PAGE_TOP, key:"eyebrow", label:"Eyebrow", type:"text", help:"The small label above the heading. Leave blank to keep the built-in wording." },
+    { notOn:NO_PAGE_TOP, key:"heading", label:"Heading", type:"textarea", wide:true, help:"Plain text. Press Enter for a line break. Blank keeps the built-in heading." },
+    { notOn:NO_PAGE_TOP, key:"highlight", label:"Highlighted word", type:"text", help:"A word from the heading to mark. Leave blank for no mark." },
+    { notOn:NO_PAGE_TOP, key:"tone", label:"Mark color", type:"select", options:() => [{value:"sun",label:"Yellow"},{value:"cyan",label:"Blue"}] },
+    { notOn:NO_PAGE_TOP, key:"intro", label:"Intro", type:"richtext", wide:true, help:"The text under the heading. Use paragraph breaks, bold, or a link if you need them." },
     /* A page's own paragraphs, shown only on the page they belong to (the same fields Quick Update edits).
        Press Enter for a new paragraph; bold, italic, underline, lists and links are all here. */
     { key:"extra1", label:"Paragraph 1", type:"richtext", copy:true, wide:true, pages:["about/mission"], help:"The first paragraph under the heading." },
@@ -16444,8 +16469,8 @@ const FIELDS = {
     { key:"lede", label:"Text above the form", type:"richtext", copy:true, wide:true, pages:["grown-ups/contact"] },
     { key:"newsletterNote", label:"Newsletter panel note", type:"richtext", copy:true, wide:true, pages:["site"] },
     { key:"donateStripText", label:"Support banner text", type:"richtext", copy:true, wide:true, pages:["site"] },
-    { key:"image", label:"Banner picture", type:"media", wide:true, help:"Sits beside the heading at the top of the page." },
-    { key:"body", label:"Page content", type:"richtext", wide:true, help:"Appears under the page's built-in sections." }
+    { notOn:NO_PAGE_TOP, key:"image", label:"Banner picture", type:"media", wide:true, help:"Sits beside the heading at the top of the page." },
+    { notOn:NO_PAGE_TOP, key:"body", label:"Page content", type:"richtext", wide:true, help:"Appears under the page's built-in sections." }
   ],
   activities: [
     { key:"image", label:"Cover image", type:"media", wide:true },
@@ -16789,7 +16814,10 @@ function fieldControl(f, rec){
 
 function readForm(form, col){
   const rec = {};
+  const keyEl = form.querySelector('[name="key"]');
+  const pageKey = keyEl ? keyEl.value.trim() : "";
   (FIELDS[col] || []).forEach(f => {
+    if (f.notOn && f.notOn.indexOf(pageKey) >= 0) return;
     if (f.type === "richtext"){
       const area = form.querySelector('[data-rt-for="' + f.key.replace(/"/g, "") + '"]');
       /* a page's own paragraph only appears on its own page's form - another page's form leaves it alone */
@@ -16961,7 +16989,7 @@ function openEditor(col, id, overlay){
     + '<div class="modal__body">'
     + '<div data-valbox>' + (problems.length ? validationBox(problems, { fix: true }) : "") + '</div>'
     + ehCardHTML(col, rec)
-    + '<div class="admin-form-grid">' + (FIELDS[col] || []).filter(f => !f.pages || f.pages.indexOf(rec.key) >= 0).map(f => fieldControl(f, rec)).join("") + '</div>'
+    + '<div class="admin-form-grid">' + (FIELDS[col] || []).filter(f => fieldOnPage(f, rec.key)).map(f => fieldControl(f, rec)).join("") + '</div>'
     + (col === "pages" ? slotFieldsHTML(rec) : "")
     + '<div class="admin-field col-2" style="margin-top:18px"><label for="f-status">Workflow status</label>'
     + '<select class="admin-select" id="f-status" name="__status">'
@@ -17691,7 +17719,7 @@ function siteTextIndex(){
   const plain = v => quPlainTextFromHTML(String(v || ""));
   db.list("pages").filter(r => r.status !== "archived").forEach(r => {
     const where = sitePageTitle(r.key, r);
-    (FIELDS.pages || []).filter(f => !f.pages || f.pages.indexOf(r.key) >= 0)
+    (FIELDS.pages || []).filter(f => fieldOnPage(f, r.key))
       .filter(f => ["eyebrow","heading","intro","body"].indexOf(f.key) >= 0 || f.pages)
       .forEach(f => { const t = plain(getPath(r, f.key)); if (t) out.push({ kind:"page", key:r.key, id:r.id, where:where, label:f.label, text:t }); });
     (PAGE_LIST_BLOCKS[r.key] || []).forEach(b => {
@@ -22219,7 +22247,7 @@ const PAGE_DEFS = [
   /* Shared wording, not pages of their own: the titles every activity, game, episode, book, character, article and
      printable-pack page uses, the finder's questions, the legal pages' closing panel, and small system pages
      (page not found, unsubscribe, the Subscriber's Portal heading). Their words are PAGE_SLOTS entries. */
-  { key:"site", title:"Site-wide: newsletter box and support banner", nav:"Shared" },
+  { key:"site", title:"Site-wide: announcement bar, newsletter box, support banner", nav:"Shared" },
   { key:"templates/finder", title:"Activity finder", nav:"Shared" },
   { key:"templates/activity", title:"Every activity page", nav:"Shared" },
   { key:"templates/game", title:"Every game page", nav:"Shared" },
@@ -22330,10 +22358,10 @@ const PAGE_SLOTS = {
     { key:"artToolsHeading", section:"Art Space page", label:"Heading over the tools", fb:"What you can make" }
   ],
   "templates/finder": [
-    { key:"step1Question", section:"Questions", label:"Question 1", fb:"What materials do you have." },
+    { key:"step1Question", section:"Questions", label:"Question 1", fb:"What materials do you have?" },
     { key:"step1Hint", section:"Questions", label:"Hint under question 1", fb:"Pick as many as you like, or Surprise me." },
-    { key:"step2Question", section:"Questions", label:"Question 2", fb:"2. What do you want to explore?" },
-    { key:"step3Question", section:"Questions", label:"Question 3", fb:"3. How much time do you have?" },
+    { key:"step2Question", section:"Questions", label:"Question 2 (step 2)", fb:"What do you want to explore?" },
+    { key:"step3Question", section:"Questions", label:"Question 3 (step 2, optional)", fb:"How much time do you have?" },
     { key:"findButton", section:"Questions", label:"Button on the last step", fb:"Find 3 Activities" },
     { key:"resultsEyebrow", section:"Results", label:"Eyebrow over the results", fb:"Your matches" },
     { key:"resultsHeading", section:"Results", label:"Results heading", fb:"The three that fit best" },
@@ -23915,7 +23943,7 @@ const TEST_SUITE = [
     return silent.length ? T.fail(silent.length + " results gave no reason")
       : T.pass("Three results, each carrying the reasons it matched");
   }},
-  { group:"Activity finder", name:"The three questions show one at a time, with no leftover narrow-results panel", blocking:true, run(){
+  { group:"Activity finder", name:"The three questions show across two steps, with no leftover narrow-results panel", blocking:true, run(){
     const before = JSON.parse(JSON.stringify(AppState.finder));
     const ran = AppState.finderRun;
     const stepBefore = AppState.finderStep;
@@ -23923,11 +23951,11 @@ const TEST_SUITE = [
                         age:"", place:"", support:"", challenge:"", character:"", topic:"", access:"" };
     AppState.finderRun = false;
 
-    /* one step at a time now, not all three stacked, so walk through them */
+    /* two steps: materials, then themes and time together - walk through both */
     const labels = [];
     let themeCards = 0;
     let filtersFoundAnywhere = false;
-    [1, 2, 3].forEach(step => {
+    [1, 2].forEach(step => {
       AppState.finderStep = step;
       const box = document.createElement("div");
       box.innerHTML = finderPanel("page");
@@ -23950,7 +23978,7 @@ const TEST_SUITE = [
     AppState.finderStep = stepBefore;
 
     const problems = [];
-    if (labels.length !== 3) problems.push("the three steps together ask " + labels.length + " questions, not three");
+    if (labels.length !== 3) problems.push("the two steps together ask " + labels.length + " questions, not three");
     if (filtersFoundAnywhere) problems.push("a narrow-results filter panel is still rendered somewhere");
     if (themeCards !== FIND_THEMES.length) problems.push("there are " + themeCards + " explore cards, not " + FIND_THEMES.length);
     if (cards !== 3) problems.push(cards + " result cards instead of three");
@@ -23958,7 +23986,7 @@ const TEST_SUITE = [
       if (facts.indexOf(f) < 0) problems.push("a result card is missing " + f);
     });
     return problems.length ? T.fail(problems.join("; "))
-      : T.pass("Three questions across three steps, then three result cards each carrying what you need, with no leftover filter panel");
+      : T.pass("Three questions across two steps, then three result cards each carrying what you need, with no leftover filter panel");
   }},
   { group:"Activity finder", name:"Results lead onto this site, not off it", blocking:true, run(){
     const before = JSON.parse(JSON.stringify(AppState.finder));
@@ -26683,11 +26711,7 @@ const ACTIONS = {
       toast("Pick at least one, or Surprise me.", "bad");
       return;
     }
-    if (step === 2 && !f.theme){
-      toast("Pick what you want to explore.", "bad");
-      return;
-    }
-    AppState.finderStep = Math.min(3, step + 1);
+    AppState.finderStep = Math.min(2, step + 1);
     AppState.keepScroll = true;
     rerender();
     refreshFinderModal();
@@ -26699,7 +26723,7 @@ const ACTIONS = {
     refreshFinderModal();
   },
   "find-step-goto": (el) => {
-    AppState.finderStep = Math.min(3, Math.max(1, Number(el.getAttribute("data-step")) || 1));
+    AppState.finderStep = Math.min(2, Math.max(1, Number(el.getAttribute("data-step")) || 1));
     AppState.keepScroll = true;
     rerender();
     refreshFinderModal();
