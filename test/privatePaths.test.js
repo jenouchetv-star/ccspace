@@ -14,7 +14,7 @@ const topFiles = tracked.filter((f) => !f.includes("/"));
 
 // what the site itself serves
 const PUBLIC_FOLDERS = ["assets", "games", "books"];
-const PUBLIC_FILES = ["index.html", "sw.js", "offline.html", "manifest.webmanifest", "favicon.ico", "robots.txt", "sitemap.xml", "llms.txt",
+const PUBLIC_FILES = ["index.html", "sw.js", "offline.html", "manifest.webmanifest", "art-space.webmanifest","favicon.ico", "robots.txt", "sitemap.xml", "llms.txt",
   "_headers", "_redirects"];   // Pages reads these two and never serves them
 // served but harmless (no secrets, nothing members-only); listed so a new root file has to be decided on
 const HARMLESS_FILES = ["README.md", "package.json", "package-lock.json", "vitest.config.js", ".env.example", ".gitignore", ".assetsignore", "qt=q_95.webp"];
