@@ -417,10 +417,25 @@ const cloud = {
   async call(action, extra){
     const w = this.host();
     if (!w) return { ok:false, error:"no_session" };
-    try { return (await w.artCloudCall(action, extra)) || { ok:false, error:"network" }; }
+    let r;
+    try { r = (await w.artCloudCall(action, extra)) || { ok:false, error:"network" }; }
     catch(e){ return { ok:false, error:"network" }; }
+    if (r.error === "no_session") cloudLost();
+    return r;
   }
 };
+/* The sign-in ended (after 30 days, or the grown-up left the mailing list), checked again each time the app opens
+   and on every save. Art Studio is for list members, so: keep the open picture in this browser, then hand back to the
+   site, which forgets the sign-in and shows the Join box. Pictures in this browser are never removed for this. */
+let lostSignIn = false;
+function cloudLost(){
+  if (lostSignIn) return;
+  lostSignIn = true;
+  clearTimeout(pushTimer); pushTimer = 0;
+  setStatus("You’re not signed in, so your art is saving in this browser only.");
+  const handBack = () => { try { window.parent.postMessage({ ccsStudio:"signed-out" }, location.origin); } catch(e){} };
+  (cur ? saveNow() : Promise.resolve()).catch(() => {}).finally(handBack);
+}
 /* what goes to the account: not the trace picture (someone else's picture, kept here only) and not who owns it */
 const forCloud = p => { const k = Object.assign({}, p); delete k.trace; delete k.owner; return k; };
 /* a picture that belongs to another grown-up who signed in on this browser before is left alone */
@@ -487,7 +502,10 @@ async function pushNow(){
   pushing = cloud.call("put", { project:forCloud(p) }).then(r => {
     cloudFull(r);
     if (r && r.ok){ if (cloud.email && !cur.owner){ cur.owner = cloud.email; } setStatus("Saved to your account"); }
-    else setStatus("Saved in this browser. It goes to your account when you’re back online.");
+    else if (!r || r.error === "network") setStatus("Saved in this browser. It goes to your account when you’re back online.");
+    else if (r.error === "full") setStatus("Saved in this browser. Your account is full.", true);
+    else if (r.error === "too_big") setStatus("Saved in this browser. It’s too big for your account.", true);
+    else if (r.error !== "no_session") setStatus("Saved in this browser. It goes to your account next time.");
   }).finally(() => { pushing = null; });
   return pushing;
 }

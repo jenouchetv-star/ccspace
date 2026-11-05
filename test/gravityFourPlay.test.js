@@ -57,11 +57,11 @@ describe("Gravity 4 on the Play page", () => {
     expect(modal).toContain("(back2 ? ' Send my code' : ' Join free')");
     expect(modal).toContain("(play ? '<input type=\"hidden\" name=\"code\" value=\"1\"><input type=\"hidden\" name=\"game\" value=\"' + E(play) + '\">' : \"\")");   // both ask for a code
     expect(modal).toContain('1789240884060-Gemini_Generated_Image_tri3mjtri3mjtri3.jpg" alt="Chike, Zech, and their 6 uniquely creative friends"');              // the whole crew, for a game
-    expect(index).toContain('game || member ? "modal--narrow" : ""');          // and a smaller box
+    expect(index).toContain('game || member || what === "art-left" ? "modal--narrow" : ""');          // and a smaller box
     expect(index).toContain(".modal--narrow{ width:min(520px,100%); }");
     expect(modal).toContain('(back2 ? "" : heardFromHTML("ml-heard") + adultCheckHTML("ml-adult"))');   // the tick box is for joining, not for "Welcome back"
     expect(modal).toContain('(back2 ? \'<input type="hidden" name="member" value="1">\' : "")');
-    expect(index).toContain('openModal(mailingListModal(el && el.getAttribute("data-next"), game, member, el && el.getAttribute("data-what")), null, game || member ? "modal--narrow" : "");');
+    expect(index).toContain('openModal(mailingListModal(el && el.getAttribute("data-next"), game, member, what), null, game || member || what === "art-left" ? "modal--narrow" : "");');
   });
   it("brings people back to the game after they confirm their email", () => {
     const modal = fn("mailingListModal");

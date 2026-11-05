@@ -7298,7 +7298,9 @@ function mailingListModal(next, game, member, what){
   const lesson = !!play && (what === "lesson" || book || /^AI Lesson\b/i.test(play));
   const bleed = "calc(-1 * clamp(20px,3vw,32px))";
   /* the plain Join box (not for a game, a lesson or "Welcome back") is the wide one: what you get beside the form */
-  const wide = !play && !back2;
+  /* Art Studio found its sign-in had ended (30 days on, or the grown-up left the list): say why, and that nothing is lost */
+  const artLeft = what === "art-left" && !back2;
+  const wide = !play && !back2 && !artLeft;
   /* the picture and its close button stay pinned to the top while the rest of a tall box (on a phone) scrolls under it */
   const picture = '<div class="joinpic" style="margin:' + bleed + ' ' + bleed + ' ' + (wide ? "30px" : "22px") + ';top:' + bleed + '">'
     + (play
@@ -7313,6 +7315,10 @@ function mailingListModal(next, game, member, what){
     ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Welcome back!</h3>'
       + '<p class="tiny mute" style="margin:0 0 18px">Enter the email you subscribed with and we’ll send you a 6-digit code to '
       + (play ? (lesson ? 'open ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.') + '</p>'
+    : artLeft
+      ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Sign in to keep making art</h3>'
+        + '<p class="tiny mute" style="margin:0 0 18px">Art Studio is for our mailing list, and this browser’s sign-in has ended. '
+        + 'Your pictures are still saved in this browser. Join free, or sign in if you’re still on the list, and they’ll go back to your account.</p>'
     : play
       ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">' + (book ? 'This book is for subscribers' : lesson ? 'This AI lesson is for subscribers' : 'Join our mailing list') + '</h3>'
         + '<p class="tiny mute" style="margin:0 0 18px">' + (book ? 'Join our free mailing list to read it, along with every AI lesson.' : lesson ? 'Join our free mailing list to see it, and every AI lesson.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '
@@ -11843,10 +11849,19 @@ async function openGameStage(idOrRecord){
 /* a studio app's own Close button asks the page to close it (same-origin frame, checked by source) */
 window.addEventListener("message", (ev) => {
   const d = ev.data;
-  if (!d || typeof d !== "object" || d.ccsStudio !== "close") return;
+  if (!d || typeof d !== "object" || (d.ccsStudio !== "close" && d.ccsStudio !== "signed-out")) return;
   const stage = $("#gamestage-frame");
   if (!stage || ev.source !== stage.contentWindow) return;
   closeGameStage();
+  /* the app found the sign-in is no longer good (it has saved the picture in this browser first): the page drops back
+     to "Join free to use it" and the Join box explains why, with the way to sign in again right in it */
+  if (d.ccsStudio === "signed-out" && !portalSavedSession()){
+    rerender();
+    const why = document.createElement("button");
+    why.setAttribute("data-what", "art-left");
+    ACTIONS["open-mailing-list"](why);
+    return;
+  }
   /* closing the app from its own address goes back to the studio dashboard */
   if (/^\/create\/studio\/[a-z]+/.test(location.pathname)){ STUDIO_APP_OPENED = ""; navigate("#/create/studio"); }
 });
@@ -13476,8 +13491,18 @@ async function artCloudCall(action, extra){
   try {
     const res = await sb.functions.invoke("art-cloud", { body: Object.assign({}, extra || {}, { action: action, session: session }) });
     if (res.error || !res.data) return { ok: false, error: "network" };
+    /* the server no longer accepts this sign-in (it ran out after 30 days, or the grown-up left the list): forget it
+       here at once, so the site stops treating this browser as a subscriber's. The app then asks them to sign in or
+       join again; its pictures in this browser are kept. */
+    if (res.data.error === "no_session" && portalSavedSession() === session) artCloudForget();
     return res.data;
   } catch(_e){ return { ok: false, error: "network" }; }
+}
+function artCloudForget(){
+  const P = PortalState;
+  portalSaveSession("");
+  P.session = ""; P.email = ""; P.entries = null; P.detail = {}; P.phase = "idle";
+  P.gate = { state: "idle", email: "", consent: false, busy: false, step: "email" };
 }
 
 /** The one-time bits (?v= / ?k=) are used once and then removed from the
@@ -27369,7 +27394,8 @@ const ACTIONS = {
     if (next && portalIsAdmin()){ navigate("#" + next); return; }
     const game = el && el.getAttribute("data-game");
     const member = !!(el && el.hasAttribute("data-member"));
-    openModal(mailingListModal(el && el.getAttribute("data-next"), game, member, el && el.getAttribute("data-what")), null, game || member ? "modal--narrow" : "");
+    const what = el && el.getAttribute("data-what");
+    openModal(mailingListModal(el && el.getAttribute("data-next"), game, member, what), null, game || member || what === "art-left" ? "modal--narrow" : "");
     rootAssetPaths($("#modal-root"));
   },
   "open-book": (el) => {
