@@ -166,6 +166,11 @@ body.no-layers .layers{ display:none; }
 .layer[aria-selected="true"]{ background:var(--accent-weak); }
 .layer__icon{ width:18px; display:grid; place-items:center; color:var(--mute); flex:none; }
 .layer__icon svg{ width:15px; height:15px; }
+.layer-op{ display:flex; align-items:center; gap:8px; padding:2px 8px 8px 34px; font-size:11.5px; color:var(--mute); list-style:none; }
+.layer-op .range{ flex:1; min-width:0; }
+.layer-op .field input{ width:46px; }
+.edgerow{ display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:600; color:var(--mute); }
+.edgerow .range{ flex:1; min-width:0; }
 .layer__name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px; border:0; background:transparent; text-align:left; padding:0; height:100%; }
 .layer[aria-selected="true"] .layer__name{ font-weight:600; color:var(--accent-text); }
 .layer__name.hidden-layer{ color:var(--faint); }
@@ -826,6 +831,7 @@ function cleanProject(raw){
         const out = { c: isColor(s && s.c) ? s.c : "#1E2226", s: num(s && s.s, 1, 300, 12), a: num(s && s.a, .05, 1, 1),
           b: BRUSH_KEYS.includes(s && s.b) ? s.b : "pen", e: !!(s && s.e), m: [1,2,4,8].includes(s && s.m) ? s.m : 1, p };
         if (Array.isArray(s && s.w) && s.w.length === p.length / 2) out.w = s.w.map(v => num(v, .02, 3, 1));
+        if (s && typeof s.h === "number" && (out.b === "brush" || out.b === "air")) out.h = num(s.h, 0, 1, 1);
         return out;
       }).filter(s => s.p.length >= 2);
       strokeCount += strokes.length;
@@ -879,7 +885,9 @@ function strokePath(ctx, st, w, h, k, dx, dy){
   const B = BRUSH[st.b] || BRUSH.pen, p = st.p, wv = st.w, n = p.length / 2, base = st.s * B.w;
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   ctx.strokeStyle = st.c; ctx.fillStyle = st.c;
-  ctx.shadowColor = st.c; ctx.shadowBlur = B.soft ? Math.max(.5, base * B.soft * k) : 0;
+  /* how soft the edge is: the brush's own, or the stroke's Soft-Hard setting (Brush and Airbrush) */
+  const soft = typeof st.h !== "number" ? B.soft : st.b === "air" ? .25 + (1 - st.h) * 1.2 : st.b === "brush" ? (1 - st.h) * .9 : B.soft;
+  ctx.shadowColor = st.c; ctx.shadowBlur = soft ? Math.max(.5, base * soft * k) : 0;
   for (const map of mirrorMaps(st.m, w, h)){
     const q = new Array(p.length);
     for (let i = 0; i < p.length; i += 2){ const r = map(p[i], p[i + 1]); q[i] = r[0] - dx; q[i + 1] = r[1] - dy; }
@@ -1142,7 +1150,7 @@ function when(t){
 let cur = null;
 let tool = "brush", shapeKind = "rect";
 let color = "#1E2226", recent = [];
-const brush = { b:"brush", s:22, a:1, m:1 };
+const brush = { b:"brush", s:22, a:1, m:1, sm:20, hard:{ brush:90, air:30 } };
 const eraser = { s:40, a:1 };
 let activeId = null;             // the active layer: a paint layer to draw on, or the picked shape or text
 let undoStack = [], redoStack = [];
@@ -1317,7 +1325,10 @@ function layersPanel(){
         : '<button type="button" class="layer__name' + (l.vis ? "" : " hidden-layer") + '" data-pick="' + esc(l.id) + '" title="Double-click to rename">' + esc(l.name) + '</button>')
       + '<button type="button" class="layer__btn' + (l.lock ? " on" : "") + '" data-lock="' + esc(l.id) + '" aria-label="' + (l.lock ? "Unlock " : "Lock ") + esc(l.name) + '" title="' + (l.lock ? "Unlock" : "Lock") + '"><i data-lucide="' + (l.lock ? "lock" : "lock-open") + '"></i></button>'
       + '<button type="button" class="layer__btn' + (l.vis ? "" : " on") + '" data-vis="' + esc(l.id) + '" aria-label="' + (l.vis ? "Hide " : "Show ") + esc(l.name) + '" title="' + (l.vis ? "Hide" : "Show") + '"><i data-lucide="' + (l.vis ? "eye" : "eye-off") + '"></i></button>'
-      + '</li>';
+      + '</li>'
+      + (sel ? '<li class="layer-op" role="presentation"><span>Opacity</span>'
+        + '<input type="range" class="range" min="0" max="100" value="' + Math.round(l.op * 100) + '" data-op aria-label="' + esc(l.name) + ' opacity">'
+        + '<label class="field"><input type="number" min="0" max="100" value="' + Math.round(l.op * 100) + '" data-op-num aria-label="' + esc(l.name) + ' opacity, percent"></label></li>' : "");
   }).join("");
   icons();
   const ri = $("#rename-in");
@@ -1417,23 +1428,25 @@ function inspector(){
       + sect(isLine ? "Stroke" : "Fill", swatchesHTML("objcolor", o.c))
       + (isLine ? sect("Width", rangeRow("data-ow", 2, 80, Math.round(o.ow || 8), "Line width"))
         : sect("Outline", switchRow(isText ? "Outline the letters" : "Outline", "data-outline", o.o)
-          + (o.o ? rangeRow("data-ow", 1, 60, Math.round(o.ow), "Outline width") + swatchesHTML("oc", o.oc) : "")))
-      + sect("Layer", '<label class="sub">Opacity</label>' + rangeRow("data-op", 0, 100, Math.round(o.op * 100), "Opacity"));
+          + (o.o ? rangeRow("data-ow", 1, 60, Math.round(o.ow), "Outline width") + swatchesHTML("oc", o.oc) : "")));
   } else if (tool === "brush"){
     const B = BRUSHES.find(b => b[0] === brush.b) || BRUSHES[0];
     h += sect("Brush", '<div class="seg" role="group" aria-label="Brush">' + BRUSHES.map(b => '<button type="button" data-brush="' + b[0] + '" aria-pressed="' + (brush.b === b[0]) + '" title="' + b[2] + '" aria-label="' + b[2] + '"><i data-lucide="' + b[1] + '"></i></button>').join("") + '</div>'
         + '<p class="hint"><b>' + B[2] + '.</b> ' + B[3] + '</p>')
       + sect("Size", rangeRow("data-bsize", 1, 200, brush.s, "Brush size"))
       + sect("Opacity", rangeRow("data-bop", 5, 100, Math.round(brush.a * 100), "Brush opacity"))
+      + (brush.b === "brush" || brush.b === "air"
+          ? sect("Edge", '<div class="edgerow"><span>Soft</span><input type="range" class="range" min="0" max="100" value="' + brush.hard[brush.b] + '" data-bhard aria-label="Edge, soft to hard"><span>Hard</span></div>')
+          : "")
+      + sect("Smoothing", rangeRow("data-bsmooth", 0, 100, brush.sm, "Smoothing")
+        + '<p class="hint">Higher makes curves steadier: the line follows a little behind your hand.</p>')
       + sect("Symmetry", symmetryHTML() + '<p class="hint">Draw once and it repeats around the middle of the page.</p>')
-      + sect("Color", swatchesHTML("color", color))
-      + paintLayerSect(l);
+      + sect("Color", swatchesHTML("color", color));
   } else if (tool === "eraser"){
     h += sect("Eraser", '<p class="hint">Erases on the selected paint layer only. Shapes and text are never erased.</p>')
       + sect("Size", rangeRow("data-esize", 2, 300, eraser.s, "Eraser size"))
       + sect("Strength", rangeRow("data-eop", 5, 100, Math.round(eraser.a * 100), "Eraser strength"))
-      + sect("Symmetry", symmetryHTML())
-      + paintLayerSect(l);
+      + sect("Symmetry", symmetryHTML());
   } else if (tool === "shapes"){
     h += sect("Shape", '<div class="shapes">' + SHAPES.map(s => '<button type="button" data-shape="' + s[0] + '" aria-pressed="' + (shapeKind === s[0]) + '" aria-label="' + s[2] + '" title="' + s[2] + '"><i data-lucide="' + s[1] + '"></i></button>').join("") + '</div>'
         + '<p class="hint">Drag on the canvas to draw it, or click to drop one. Hold Shift to keep it even.</p>')
@@ -1452,8 +1465,7 @@ function inspector(){
   } else if (tool === "hand"){
     h += sect("Hand", '<p class="hint">Drag to move around. Scroll or pinch to zoom. Hold Space with any tool to use the hand.</p>');
   } else {
-    h += paintLayerSect(l)
-      + sect("Page", '<p class="hint">' + cur.w + ' × ' + cur.h + (cur.format === "portrait" ? " · 8.5 × 11 in" : cur.format === "landscape" ? " · 11 × 8.5 in" : " · square") + '</p>'
+    h += sect("Page", '<p class="hint">' + cur.w + ' × ' + cur.h + (cur.format === "portrait" ? " · 8.5 × 11 in" : cur.format === "landscape" ? " · 11 × 8.5 in" : " · square") + '</p>'
         + '<label class="sub">Background</label>' + swatchesHTML("bg", cur.bg))
       + sect("Move", '<p class="hint">Click a shape or text to pick it. With a paint layer selected, drag to move everything on that layer.</p>');
   }
@@ -1681,8 +1693,9 @@ cv.addEventListener("pointerdown", e => {
     const px = round1(x - L.dx), py = round1(y - L.dy);
     const st = tool === "eraser" ? { c:"#000000", s:eraser.s, a:eraser.a, b:"pen", e:true, m:brush.m, p:[px, py] }
       : { c:color, s:brush.s, a:brush.a, b:brush.b, e:false, m:brush.m, p:[px, py] };
+    if (!st.e && (st.b === "brush" || st.b === "air")) st.h = round2(brush.hard[st.b] / 100);
     const cache = cacheOf(L);
-    drag = { kind:"stroke", st, layer:L.id, cache, t:performance.now(), sx:e.clientX, sy:e.clientY, cw:.35 };
+    drag = { kind:"stroke", st, layer:L.id, cache, t:performance.now(), sx:e.clientX, sy:e.clientY, cw:.35, smx:px, smy:py, rx:px, ry:py };
     if (st.b === "brush") st.w = [e.pointerType === "pen" && e.pressure > 0 ? round2(.15 + e.pressure * 1.15) : .35];
     drag.live = document.createElement("canvas"); drag.live.width = cache.c.width; drag.live.height = cache.c.height;
     drag.lx = drag.live.getContext("2d");
@@ -1738,7 +1751,13 @@ cv.addEventListener("pointermove", e => {
   if (drag.kind === "stroke"){
     hoverPt = [x, y];
     const L = layerById(drag.layer), p = drag.st.p, lx = p[p.length - 2], ly = p[p.length - 1];
-    const px = x - L.dx, py = y - L.dy;
+    let px = x - L.dx, py = y - L.dy;
+    drag.rx = px; drag.ry = py;
+    if (brush.sm > 0){
+      const f = Math.min(.92, brush.sm / 100 * .9);
+      drag.smx += (px - drag.smx) * (1 - f); drag.smy += (py - drag.smy) * (1 - f);
+      px = drag.smx; py = drag.smy;
+    }
     if (Math.hypot(px - lx, py - ly) * view.z < 1.5) return;
     p.push(round1(px), round1(py));
     if (drag.st.w) drag.st.w.push(brushWidth(e, drag));
@@ -1819,6 +1838,11 @@ function endDrag(e){
   if (d.kind === "stroke"){
     const L = layerById(d.layer), st = d.st;
     /* a brush stroke tapers off at the end, the way a real brush lifts away */
+    /* with smoothing on, the line catches up to where the pointer was let go */
+    if (brush.sm > 0 && st.p.length >= 2){
+      const lx = st.p[st.p.length - 2], ly = st.p[st.p.length - 1];
+      if (Math.hypot(d.rx - lx, d.ry - ly) > .5){ st.p.push(round1((lx + d.rx) / 2), round1((ly + d.ry) / 2), round1(d.rx), round1(d.ry)); if (st.w){ const w0 = st.w[st.w.length - 1]; st.w.push(w0, w0); } }
+    }
     if (st.w && st.w.length > 2){ const n = st.w.length, T = Math.min(8, n - 1); for (let j = 0; j < T; j++) st.w[n - 1 - j] = round2(st.w[n - 1 - j] * (j + 1) / (T + 1)); }
     if (L){ L.strokes.push(st); if (view.caches.get(L.id) === d.cache) drawStroke(d.cache.x, st, cur.w, cur.h, d.cache.k, 0, 0); else view.caches.delete(L.id); }
     changed({ keepPanel:true }); return;
@@ -1930,7 +1954,14 @@ document.addEventListener("click", e => {
   }
   if (!cur && !b.dataset.act) return;
   if (b.dataset.tool){ setTool(b.dataset.tool); return; }
-  if (b.dataset.pick){ selectLayer(b.dataset.pick); return; }
+  if (b.dataset.pick){
+    /* two quick clicks on a layer's name rename it (the first click redraws the list, so the browser's own
+       double-click never reaches the new button) */
+    const now = Date.now(), again = lastPick.id === b.dataset.pick && now - lastPick.at < 450;
+    lastPick = { id: b.dataset.pick, at: now };
+    if (again){ renaming = b.dataset.pick; layersPanel(); return; }
+    selectLayer(b.dataset.pick); return;
+  }
   if (b.dataset.vis){ const l = layerById(b.dataset.vis); if (l){ beginChange(); l.vis = !l.vis; changed(); } return; }
   if (b.dataset.lock){ const l = layerById(b.dataset.lock); if (l){ beginChange(); l.lock = !l.lock; changed(); } return; }
   if (b.dataset.color){ useColor(b.dataset.color); inspector(); return; }
@@ -1967,7 +1998,8 @@ document.addEventListener("click", e => {
   if (act === "clear"){ if (!cur.cells.some(Boolean)) return; beginChange(); cur.cells.fill(""); changed(); return; }
   if (act.startsWith("layer-")) return layerAction(act.slice(6));
 });
-document.addEventListener("dblclick", e => { const n = e.target.closest("[data-pick]"); if (n){ renaming = n.dataset.pick; layersPanel(); } });
+let lastPick = { id:"", at:0 };
+document.addEventListener("dblclick", e => { const n = e.target.closest("[data-pick]"); if (n && renaming !== n.dataset.pick){ renaming = n.dataset.pick; layersPanel(); } });
 let fieldBegan = null;
 const hexOf = v => { v = String(v).replace(/[^0-9a-f]/gi, ""); if (v.length === 3) v = v.split("").map(c => c + c).join(""); return v.length === 6 ? "#" + v.toUpperCase() : null; };
 document.addEventListener("input", e => {
@@ -1979,6 +2011,8 @@ document.addEventListener("input", e => {
   const once = () => { if (fieldBegan !== t){ beginChange(); fieldBegan = t; } };
   if (t.matches("[data-bsize],[data-bsize-num]")){ brush.s = val(); pair("data-bsize", brush.s); return; }
   if (t.matches("[data-bop],[data-bop-num]")){ brush.a = val() / 100; pair("data-bop", Math.round(brush.a * 100)); return; }
+  if (t.matches("[data-bhard]")){ if (brush.hard[brush.b] != null) brush.hard[brush.b] = Math.max(0, Math.min(100, Math.round(+t.value || 0))); return; }
+  if (t.matches("[data-bsmooth],[data-bsmooth-num]")){ brush.sm = val(); pair("data-bsmooth", brush.sm); return; }
   if (t.matches("[data-trop],[data-trop-num]") && cur.trace){ cur.trace.op = val() / 100; pair("data-trop", Math.round(cur.trace.op * 100)); draw(); queueSave(); return; }
   if (t.matches("[data-trsize],[data-trsize-num]") && cur.trace){ cur.trace.sc = val() / 100; pair("data-trsize", Math.round(cur.trace.sc * 100)); draw(); queueSave(); return; }
   if (t.matches("[data-esize],[data-esize-num]")){ eraser.s = val(); pair("data-esize", eraser.s); return; }

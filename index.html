@@ -83,7 +83,9 @@
 
 <!-- PWA: installable app metadata. Colors match --paper, the site's own
      background token, so the browser chrome never clashes with the page. -->
-<link rel="manifest" href="/manifest.webmanifest">
+<link rel="manifest" href="/manifest.webmanifest" id="app-manifest">
+<script>/* Chike's Creative Studio pages install as the Art Space app (art-space.webmanifest), the rest as the site */
+(function(){ try { if (/^\/create\/studio(\/|$)/.test(location.pathname)){ var l = document.getElementById("app-manifest"); l.href = "/art-space.webmanifest"; window.ART_MANIFEST_AT_LOAD = true; } } catch(e){} })();</script>
 <meta name="theme-color" content="#FAF4E6">
 <!-- /favicon.ico had no real file behind it - some browsers, feed
      readers, and bots still request this exact path regardless of the
@@ -406,6 +408,8 @@ p:last-child{ margin-bottom:0; }
 .studio-card__soon{ display:inline-flex; align-items:center; gap:8px; margin:0; min-height:44px; font-weight:800; font-size:.9rem; color:var(--ink-mute); }
 .studio-card__soon svg{ width:16px; height:16px; }
 .studio-card--link{ cursor:pointer; }
+.studio-install{ margin-left:6px; }
+.install-steps{ margin:0; padding-left:1.3em; display:grid; gap:8px; font-weight:600; }
 .studio-card__shot{ display:block; width:100%; aspect-ratio:4/3; object-fit:cover; border:var(--line); border-radius:var(--r); background:#fff; }
 .studio-card__shot--big{ max-width:420px; margin:0 0 0 auto; box-shadow:var(--hard); }
 .studio-apphead{ grid-template-columns:minmax(0,1.5fr) minmax(0,.85fr); }
@@ -429,6 +433,9 @@ p:last-child{ margin-bottom:0; }
 .studio-soon__item img{ width:52px; height:52px; flex:none; border-radius:12px; box-shadow:0 3px 10px rgba(20,14,40,.22); }
 .studio-soon__item h3{ margin:2px 0 4px; font-size:1.05rem; }
 .studio-soon__item p{ margin:0; font-size:.86rem; line-height:1.45; }
+.studio-soon__feats{ list-style:none; margin:8px 0 0; padding:0; display:grid; gap:3px; }
+.studio-soon__feats li{ display:flex; align-items:flex-start; gap:6px; font-size:.8rem; font-weight:700; color:var(--ink-mute); line-height:1.35; }
+.studio-soon__feats svg{ width:14px; height:14px; flex:none; margin-top:2px; color:var(--teal, #1a8f86); }
 @media (max-width:900px){ .card.studio-soon{ grid-column:span 1; padding:22px 20px 20px; } .studio-soon__list{ grid-template-columns:1fr; } }
 @media (max-width:900px){ .studio-apphead{ grid-template-columns:1fr; } .studio-card__logo--big{ margin:0; } }
 .art-tool h3{ margin:10px 0 .3em; }
@@ -8131,6 +8138,8 @@ const AppState = {
   createFilterDraft: null,
   storyFilter: { character:"", q:"" },
   storyFilterDraft: null,
+  gameFilter: { access:"", players:"", age:"", q:"" },
+  gameFilterDraft: null,
   watchPage: 1,
   /* Which contact forms just sent successfully, in this page view - each
      form renders an inline "Message sent" panel in place of itself while
@@ -11417,6 +11426,77 @@ function storyFilterFieldsHTML(state, prefix, opts){
     + '<div class="field"><span class="flabel">Character</span><div class="opts">' + charChips + '</div></div>'
     + activeRow;
 }
+/** The search box with the filter button beside it, as on Create: typing filters the list at once. */
+function listToolsHTML(o){
+  return '<div class="create-tools">'
+    + '<label class="arttools__search"><span class="sr-only">' + E(o.label) + '</span>' + ic("search")
+    + '<input class="inp" id="' + o.id + '" type="search" data-act="' + o.id + '" value="' + E(o.q || "") + '" placeholder="' + E(o.label) + '" autocomplete="off">'
+    + (o.q ? '<button type="button" class="arttools__clear" data-act="' + o.setAct + '" data-key="q" data-value="" aria-label="Clear the search">' + ic("x") + '</button>' : "")
+    + '</label>'
+    + '<button type="button" class="btn btn--paper filter-icon-btn" data-act="' + o.openAct + '" aria-label="Filter">' + ic("sliders-horizontal")
+    + (o.activeCount ? '<span class="pill-count">' + o.activeCount + '</span>' : "") + '</button></div>';
+}
+
+/* ---- Games: search and filter, from what each game already records ---- */
+const GAME_AGES = { "4-6":[4,6], "7-9":[7,9], "10-12":[10,12] };
+function gamePlaysAlone(g){ return /(^|[^0-9])1([^0-9]|$)/.test(String(g.players || "")); }
+function gamePlaysTogether(g){ return /\b[2-9]\b|or more|share a code|online/i.test(String(g.players || "")); }
+function gameMatches(g, f, skip){
+  if (skip !== "access" && f.access === "free" && g.kind === "members") return false;
+  if (skip !== "access" && f.access === "members" && g.kind !== "members") return false;
+  if (skip !== "players" && f.players === "alone" && !gamePlaysAlone(g)) return false;
+  if (skip !== "players" && f.players === "together" && !gamePlaysTogether(g)) return false;
+  if (skip !== "age" && f.age && GAME_AGES[f.age]){
+    const r = GAME_AGES[f.age], lo = Number(g.ageMin) || 0, hi = Number(g.ageMax) || 99;
+    if (lo > r[1] || hi < r[0]) return false;
+  }
+  if (skip !== "q" && f.q){
+    const q = f.q.toLowerCase();
+    if ((g.title + " " + (g.summary || "") + " " + (g.vocabWord || "")).toLowerCase().indexOf(q) < 0) return false;
+  }
+  return true;
+}
+function gameFilterActive(f){ return (f.q ? 1 : 0) + (f.access ? 1 : 0) + (f.players ? 1 : 0) + (f.age ? 1 : 0); }
+function gameFilterFieldsHTML(state, prefix, pool, offline){
+  const chip = (key, value, label) => {
+    const n = pool.filter(g => gameMatches(g, Object.assign({}, state, { [key]: value }), "")).length;
+    return '<button class="opt" data-act="' + prefix + '-set" data-key="' + key + '" data-value="' + E(value) + '" aria-pressed="' + ((state[key] || "") === value ? "true" : "false") + '">'
+      + E(label) + ' <span class="opt__n">' + n + '</span></button>';
+  };
+  return '<div class="field"><label for="' + prefix + '-search">Search games</label>'
+    + '<input class="inp" id="' + prefix + '-search" type="search" placeholder="Try: math, maze, bridge" value="' + E(state.q) + '" data-act="' + prefix + '-search"></div>'
+    + (offline ? "" : '<div class="field"><span class="flabel">Who can play</span><div class="opts">'
+      + chip("access", "", "Everyone") + chip("access", "free", "Free") + chip("access", "members", "Subscribers only") + '</div></div>')
+    + '<div class="field"><span class="flabel">Players</span><div class="opts">'
+    + chip("players", "", "Any") + chip("players", "alone", "Play alone") + chip("players", "together", "With others") + '</div></div>'
+    + '<div class="field"><span class="flabel">Ages</span><div class="opts">'
+    + chip("age", "", "Any age") + chip("age", "4-6", "4 to 6") + chip("age", "7-9", "7 to 9") + chip("age", "10-12", "10 to 12") + '</div></div>';
+}
+let GAME_POOL = "";
+function gamePool(){
+  const offline = GAME_POOL === "offline";
+  return db.list("games").filter(g => g.status === "published" && (offline ? !g.interactive : g.interactive));
+}
+function gameFilterModalHTML(){
+  const draft = AppState.gameFilterDraft;
+  return '<div class="modal__head"><div>'
+    + '<span class="eyebrow">Filter</span><h3 style="margin:0">Find a game</h3></div>'
+    + '<button class="btn btn--ghost btn--icon" data-act="close-modal" aria-label="Close">' + ic("x", "i-lg") + '</button></div>'
+    + '<div class="modal__body"><div class="stack" style="gap:20px">'
+    + gameFilterFieldsHTML(draft, "gfd", gamePool(), GAME_POOL === "offline")
+    + '</div></div>'
+    + '<div class="modal__foot">'
+    + '<button type="button" class="btn btn--ghost" data-act="gfd-clear">' + ic("rotate-ccw") + ' Clear all</button>'
+    + '<button type="button" class="btn btn--cyan" data-act="gf-modal-apply">' + ic("check") + ' Apply</button>'
+    + '</div>';
+}
+function reopenGameFilterModal(){
+  const box = $("#modal-root .modal");
+  if (!box) return;
+  box.innerHTML = gameFilterModalHTML();
+  drawIcons();
+}
+
 function storyFilterModalHTML(){
   const draft = AppState.storyFilterDraft;
   return '<div class="modal__head"><div>'
@@ -11564,6 +11644,11 @@ function viewCreateStudio(){
 
 /** The spaces still to come, together in one box: each with its icon, name and what it will make. Clicking one opens
     the Join box, so they hear when it opens (someone already on the list is told they will). */
+/** "a · b · c" as a short list of what a coming space will do */
+function studioFeatureList(text){
+  const items = String(text || "").split("·").map(x => x.trim()).filter(Boolean);
+  return items.length ? '<ul class="studio-soon__feats">' + items.map(x => '<li>' + ic("check") + E(x) + '</li>').join("") + '</ul>' : "";
+}
 function studioSoonBox(apps){
   const C = "create";
   return '<section class="card studio-soon" aria-labelledby="studio-soon-title">'
@@ -11575,7 +11660,8 @@ function studioSoonBox(apps){
         return '<li class="studio-soon__item" data-act="studio-notify" data-id="' + E(s.id) + '" tabindex="0" role="button"'
           + ' aria-label="' + E(name) + ', coming soon: join our mailing list to hear when it opens">'
           + '<img src="' + E(s.appIcon) + '" alt="" width="52" height="52" loading="lazy">'
-          + '<div><h3>' + slot(C, s.id + "Title") + '</h3><p>' + slot(C, s.id + "Text") + '</p></div></li>';
+          + '<div><h3>' + slot(C, s.id + "Title") + '</h3><p>' + slot(C, s.id + "Text") + '</p>'
+          + studioFeatureList(slotText(C, s.id + "Features")) + '</div></li>';
       }).join("")
     + '</ul></section>';
 }
@@ -11603,6 +11689,7 @@ function studioAppCard(s){
     + '<div class="card__foot">'
     + (canOpen
       ? '<button type="button" class="btn btn--sm btn--cyan" data-act="open-studio-app" data-id="' + E(s.id) + '">' + ic("arrow-right") + ' Open ' + E(name) + '</button>'
+        + (s.id === "art" && !artAppInstalled() ? '<button type="button" class="btn btn--sm btn--ghost studio-install" data-act="art-install">' + ic("download") + ' Install app</button>' : "")
       : '<button type="button" class="btn btn--sm btn--cyan" data-act="open-mailing-list" data-next="/create/studio/' + E(s.id) + '" data-game="' + E(name) + '">' + ic("lock") + ' Join free to use it</button>')
     + '</div></div></article>';
 }
@@ -11631,6 +11718,7 @@ function viewStudioApp(id){
   }
   const open = canOpen
     ? '<button type="button" class="btn btn--lg btn--cyan" data-act="studio-stage" data-id="' + E(s.id) + '">' + ic("palette") + ' Open ' + E(name) + '</button>'
+      + (s.id === "art" && !artAppInstalled() ? '<button type="button" class="btn btn--paper" data-act="art-install">' + ic("download") + ' Install app</button>' : "")
     : '<button type="button" class="btn btn--lg btn--sun" data-act="open-mailing-list" data-next="/create/studio/' + E(s.id) + '" data-game="' + E(name) + '">' + ic("lock") + ' Join free to use it</button>'
       + '<button type="button" class="btn btn--paper" data-act="open-mailing-list" data-member data-next="/create/studio/' + E(s.id) + '" data-game="' + E(name) + '">' + ic("log-in") + ' Already joined? Sign in</button>';
   return '<section class="section pagehead band-grad"><div class="shell">'
@@ -11759,9 +11847,13 @@ let ROLL_RESULT = null;
 let SPIN_RESULT = null;
 
 function viewPlay(sub){
-  const games   = db.list("games").filter(g => g.status === "published");
   const offline = sub === "offline";
-  const list    = games.filter(g => offline ? !g.interactive : g.interactive)
+  /* Online and Offline are two lists: moving between them starts the search and filters again */
+  const poolKey = offline ? "offline" : "online";
+  if (GAME_POOL !== poolKey){ GAME_POOL = poolKey; AppState.gameFilter = { access:"", players:"", age:"", q:"" }; }
+  const gf = AppState.gameFilter;
+  const pool    = gamePool();
+  const list    = pool.filter(g => gameMatches(g, gf, ""))
     /* a game with an "order" number goes first, lowest first; then New ones; then A to Z */
     .sort((a, b) => (typeof a.order === "number" ? a.order : 1e9) - (typeof b.order === "number" ? b.order : 1e9)
       || (b.badge ? 1 : 0) - (a.badge ? 1 : 0) || a.title.localeCompare(b.title));
@@ -11774,10 +11866,15 @@ function viewPlay(sub){
       "", { asideSmall: true, gradient: true })
     + '<section class="section"><div class="shell">'
     + cmsBody(key)
-    + '<div class="listhead"><h2>' + E(plural(list.length, "game")) + '</h2></div>'
+    + '<div class="listhead"><h2>' + E(plural(list.length, "game")) + '</h2>'
+    + listToolsHTML({ id:"gfq-search", label:"Search games", q: gf.q, setAct:"gf-set", openAct:"gf-modal-open", activeCount: gameFilterActive(gf) })
+    + '</div>'
     + (list.length
         ? '<div class="grid grid--games">' + list.map(g => gameCard(g)).join("") + '</div>'
-        : '<div class="empty">' + slot("templates/game", "emptyList") + '</div>')
+        : pool.length
+          ? '<div class="empty">' + ic("search-x","i-lg") + '<p style="margin-top:12px">No games match. Try another word or fewer filters.</p>'
+            + '<button class="btn btn--sm btn--paper" data-act="gf-clear" style="margin-top:14px">' + ic("rotate-ccw") + ' Start the filter again</button></div>'
+          : '<div class="empty">' + slot("templates/game", "emptyList") + '</div>')
     + '</div></section>';
 }
 
@@ -12272,12 +12369,8 @@ function viewStories(){
     + '<div class="create-layout__results">'
     + '<div class="listhead">'
     + '<h2>' + E(plural(list.length,"book")) + '</h2>'
-    + '<div class="row" style="gap:10px">'
-    + '<button type="button" class="btn btn--paper filter-icon-btn" data-act="sf-modal-open" aria-label="Filter">'
-    + ic("sliders-horizontal")
-    + (activeCount ? '<span class="pill-count">' + activeCount + '</span>' : "")
-    + '</button>'
-    + '</div></div>'
+    + listToolsHTML({ id:"sfq-search", label:"Search books", q: f.q, setAct:"sf-set", openAct:"sf-modal-open", activeCount: activeCount })
+    + '</div>'
     + (list.length ? '<div class="grid g-3 grid--compact">' + list.map(s => storyCard(s)).join("") + '</div>'
         : '<div class="empty">' + ic("search-x","i-lg")
           + '<p style="margin-top:12px">' + slot("stories", "emptyList") + '</p>'
@@ -22208,12 +22301,16 @@ const PAGE_SLOTS = {
     { key:"soonText", section:"Chike’s Creative Studio", label:"Coming soon box: text", fb:"More spaces are on the way. Join our mailing list to hear when each one opens." },
     { key:"bookTitle", section:"Chike’s Creative Studio", label:"Book Space title", fb:"Book Space" },
     { key:"bookText", section:"Chike’s Creative Studio", label:"Book Space text", type:"para", fb:"Write, draw and lay out a picture book or a coloring book with Chike and friends, then print it, save it, or share it." },
+    { key:"bookFeatures", section:"Chike’s Creative Studio", label:"Book Space: what it will do (separate with ·)", fb:"Picture books or coloring books · Covers, pages and text boxes · Print at home or share a link" },
     { key:"cardTitle", section:"Chike’s Creative Studio", label:"Card Maker Space title", fb:"Card Maker Space" },
     { key:"cardText", section:"Chike’s Creative Studio", label:"Card Maker Space text", type:"para", fb:"Design a digital birthday, thank-you or holiday card, front and inside. Share it digitally, or print it, fold it and give it to someone." },
+    { key:"cardFeatures", section:"Chike’s Creative Studio", label:"Card Maker Space: what it will do (separate with ·)", fb:"Front, inside and back · Stickers, photos and greetings · Print and fold, or send a link" },
     { key:"soundTitle", section:"Chike’s Creative Studio", label:"Sound Space title", fb:"Sound Space" },
     { key:"soundText", section:"Chike’s Creative Studio", label:"Sound Space text", type:"para", fb:"Make music, beats and sound effects, and record your own voice for your stories and cards." },
+    { key:"soundFeatures", section:"Chike’s Creative Studio", label:"Sound Space: what it will do (separate with ·)", fb:"Beats and instruments · Record your own voice · Sound effects for stories and cards" },
     { key:"motionTitle", section:"Chike’s Creative Studio", label:"Motion Space title", fb:"Motion Space" },
     { key:"motionText", section:"Chike’s Creative Studio", label:"Motion Space text", type:"para", fb:"Bring your drawings to life frame by frame and make short animations to watch and share." },
+    { key:"motionFeatures", section:"Chike’s Creative Studio", label:"Motion Space: what it will do (separate with ·)", fb:"Draw frame by frame · See the last frame as you draw · Use your Art Space drawings" },
     { key:"artLede", section:"Art Space page", label:"Text under the heading", type:"para",
       fb:"A blank page and everything you need to fill it: brushes, mirror drawing, shapes, words and a pixel grid. Everything you make is yours, and it saves as you go, to your account, so it’s there in any browser where you sign in." },
     { key:"artNote", section:"Art Space page", label:"Small note under the button", fb:"Free for subscribers for a limited time. Your art is kept with your mailing-list sign-in, and you can download it any time." },
@@ -25758,6 +25855,7 @@ function render(){
   portalSync();
 
   document.title = routeTitle() + " | " + BRAND.name;
+  syncAppManifest();
   updateCanonicalLink();
   updateRobotsMeta();
 }
@@ -26510,6 +26608,33 @@ const ACTIONS = {
     closeModal();
     rerender();
   },
+  "gf-set": (el) => {
+    AppState.gameFilter[el.getAttribute("data-key")] = el.getAttribute("data-value");
+    rerender();
+  },
+  "gf-clear": () => {
+    AppState.gameFilter = { access:"", players:"", age:"", q:"" };
+    rerender();
+  },
+  "gf-modal-open": () => {
+    AppState.gameFilterDraft = Object.assign({}, AppState.gameFilter);
+    openModal(gameFilterModalHTML(), null, "modal--sheet");
+    rootAssetPaths($("#modal-root"));
+  },
+  "gfd-set": (el) => {
+    AppState.gameFilterDraft[el.getAttribute("data-key")] = el.getAttribute("data-value");
+    reopenGameFilterModal();
+  },
+  "gfd-clear": () => {
+    AppState.gameFilterDraft = { access:"", players:"", age:"", q:"" };
+    reopenGameFilterModal();
+  },
+  "gf-modal-apply": () => {
+    AppState.gameFilter = Object.assign({}, AppState.gameFilterDraft);
+    AppState.gameFilterDraft = null;
+    closeModal();
+    rerender();
+  },
   "sf-set": (el) => {
     const key = el.getAttribute("data-key");
     AppState.storyFilter[key] = el.getAttribute("data-value");
@@ -27219,6 +27344,22 @@ const ACTIONS = {
   "media-sort-size": () => { AppState.admin.mediaSortBySize = !AppState.admin.mediaSortBySize; rerender(); },
   "load-more-terms": () => { AppState.admin.moderationTermsShown += 25; rerender(); },
 
+  "art-install": async () => {
+    const p = DEFERRED_INSTALL_PROMPT;
+    if (p && p.__app === "/art-space.webmanifest"){
+      DEFERRED_INSTALL_PROMPT = null;
+      try { p.prompt(); await p.userChoice; } catch(_e){}
+      rerender();
+      return;
+    }
+    /* Chrome and Edge only offer the Art Space app once this page has loaded with its manifest: load it fresh */
+    if (!window.ART_MANIFEST_AT_LOAD && "onbeforeinstallprompt" in window){
+      toast("Getting Art Space ready to install…");
+      location.assign(location.pathname.replace(/\/create\/studio\/art.*/, "/create/studio") + "?install=1");
+      return;
+    }
+    openModal(artInstallHelpHTML(), null, "modal--narrow");
+  },
   "pwa-install": async () => {
     if (!DEFERRED_INSTALL_PROMPT) return;
     const promptEvent = DEFERRED_INSTALL_PROMPT;
@@ -28758,9 +28899,15 @@ document.addEventListener("input", (ev) => {
   } else if (act === "cfd-search"){
     AppState.createFilterDraft.q = el.value;
     restoreFocusAfter(() => reopenFilterModal(), "#cfd-search");
-  } else if (act === "sf-search"){
+  } else if (act === "sf-search" || act === "sfq-search"){
     AppState.storyFilter.q = el.value;
-    restoreFocusAfter(() => rerender(), "#sf-search");
+    restoreFocusAfter(() => rerender(), "#" + act);
+  } else if (act === "gfq-search"){
+    AppState.gameFilter.q = el.value;
+    restoreFocusAfter(() => rerender(), "#gfq-search");
+  } else if (act === "gfd-search"){
+    AppState.gameFilterDraft.q = el.value;
+    restoreFocusAfter(() => reopenGameFilterModal(), "#gfd-search");
   } else if (act === "sfd-search"){
     AppState.storyFilterDraft.q = el.value;
     restoreFocusAfter(() => reopenStoryFilterModal(), "#sfd-search");
@@ -29363,6 +29510,8 @@ let PWA_INSTALLED = window.matchMedia("(display-mode: standalone)").matches || n
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   DEFERRED_INSTALL_PROMPT = e;
+  /* which app this offer is for: the site, or Art Space (on the Studio pages) */
+  try { e.__app = (document.getElementById("app-manifest") || {}).getAttribute ? document.getElementById("app-manifest").getAttribute("href") : ""; } catch(_e){}
   rerender();
 });
 window.addEventListener("appinstalled", () => {
@@ -29371,6 +29520,34 @@ window.addEventListener("appinstalled", () => {
   rerender();
 });
 function isIOSDevice(){ return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream; }
+
+/* ---- Art Space as an app of its own ---- */
+function onStudioRoute(){ return /^\/create\/studio(\/|$)/.test(location.pathname) || /^#\/create\/studio/.test(location.hash || ""); }
+function syncAppManifest(){
+  const l = document.getElementById("app-manifest");
+  if (!l) return;
+  const want = onStudioRoute() ? "/art-space.webmanifest" : "/manifest.webmanifest";
+  if (l.getAttribute("href") !== want) l.setAttribute("href", want);
+}
+/** Already running as the installed Art Space app (or the site app): no Install button then. */
+function artAppInstalled(){ return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }
+function artInstallHelpHTML(){
+  const ua = navigator.userAgent;
+  const safariMac = /Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|Chromium|Edg|Firefox/.test(ua);
+  const firefox = /Firefox/.test(ua);
+  const steps = isIOSDevice()
+    ? ["Tap the Share button at the bottom of Safari.", "Choose “Add to Home Screen”.", "Tap Add. Art Space appears on your home screen."]
+    : safariMac
+      ? ["In Safari’s menu bar, choose File.", "Choose “Add to Dock”.", "Click Add. Art Space opens from your Dock like any app."]
+      : firefox
+        ? ["Firefox can’t install apps.", "Open this page in Chrome, Edge or Safari, then press Install app again."]
+        : ["Look for the install icon at the right end of the address bar (a screen with a down arrow).", "Click it and choose Install.", "Art Space opens in its own window, and you’ll find it with your other apps."];
+  return '<div class="modal__head"><div><span class="eyebrow">Art Space</span><h3 style="margin:0">Install the app</h3></div>'
+    + '<button class="btn btn--ghost btn--icon" data-act="close-modal" aria-label="Close">' + ic("x", "i-lg") + '</button></div>'
+    + '<div class="modal__body"><ol class="install-steps">' + steps.map(t => '<li>' + E(t) + '</li>').join("") + '</ol>'
+    + '<p class="tiny mute" style="margin:14px 0 0">The app is Art Space in its own window: the same pictures, saved the same way, to your mailing-list sign-in.</p></div>'
+    + '<div class="modal__foot"><button type="button" class="btn btn--cyan" data-act="close-modal">' + ic("check") + ' Got it</button></div>';
+}
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
   window.addEventListener("load", () => {
