@@ -12,8 +12,8 @@ describe("the Newest game section", () => {
     const block = html.split('if (on("newgame")){')[1].split("\n  }\n")[0];
     expect(block).toContain('src="assets/studio/art-space-home.jpg"');
     expect(block).toContain('<span class="eyebrow">New in Creative Space Studio</span>');
-    expect(block).toContain('href="#/create/studio">\' + ic("arrow-right") + \' Open Art Space</a>');   /* the Studio page, with Open, Install and Details */
-    expect(block).toContain('data-act="art-details"');
+    expect(block).toContain('href="#/create/studio">\' + ic("wand-sparkles") + \' Creative Space Studio</a>');   /* the Studio page */
+    expect(block).toContain('data-act="open-mailing-list" data-next="/create/studio/art"');   /* Subscribe, for someone not on the list */
     expect(block).not.toContain("Featured game");
     expect(existsSync(new URL("../assets/studio/art-space-home.jpg", import.meta.url))).toBe(true);
     expect(html).toContain('{ key:"intro", label:"Home page intro", type:"textarea"');

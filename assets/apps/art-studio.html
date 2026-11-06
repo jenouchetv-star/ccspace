@@ -89,6 +89,27 @@ svg.lucide{ width:17px; height:17px; flex:none; stroke-width:1.75; }
 .appmenu kbd{ margin-left:auto; font:600 10.5px ui-monospace, Menlo, Consolas, monospace; color:var(--faint); }
 .appmenu small{ margin-left:auto; font-size:11px; color:var(--faint); }
 .appmenu hr{ border:0; border-top:var(--line); margin:5px 4px; }
+/* the right-click quick menu: the same look as the ☰ menu, with a row of tools across the top */
+.ctxmenu{ width:250px; max-height:calc(100vh - 16px); overflow:auto; z-index:70; }
+.ctxmenu button{ height:30px; }
+.ctxmenu .cx-tools{ display:flex; gap:4px; padding:4px 4px 2px; }
+.ctxmenu .cx-tools button{ flex:1; justify-content:center; height:28px; padding:0; gap:0; background:var(--surface-2); color:var(--mute); font-size:11.5px; }
+.ctxmenu .cx-tools button[aria-pressed="true"]{ background:var(--accent); color:#fff; }
+.ctxmenu .cx-sw{ width:16px; height:16px; border-radius:4px; border:1px solid rgba(128,128,128,.5); flex:none; }
+/* the shortcuts sheet */
+.keys{ position:fixed; inset:0; z-index:190; display:grid; place-items:center; padding:16px; background:rgba(10,10,14,.45); }
+.keys[hidden]{ display:none; }
+.keys__box{ width:min(860px,100%); max-height:calc(100vh - 32px); overflow:auto; background:var(--surface); color:var(--text); border:var(--line); border-radius:var(--r); box-shadow:var(--pop); padding:16px 22px 22px; }
+.keys__head{ display:flex; align-items:center; justify-content:space-between; }
+.keys__head h2{ margin:0; font-size:16px; display:flex; align-items:center; gap:8px; }
+.keys__head h2 svg{ width:18px; height:18px; color:var(--accent-text); }
+.keys__hint{ margin:2px 0 8px; font-size:13px; color:var(--mute); }
+.keys__cols{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0 28px; }
+.keys__cols h3{ margin:14px 0 4px; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mute); }
+.keys__row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:5px 0; border-bottom:var(--line); font-size:13px; }
+.keys__row span:last-child{ display:flex; gap:4px; flex:none; }
+.keys__row kbd{ font:600 11px/1 ui-monospace, Menlo, Consolas, monospace; padding:3px 6px; border:var(--line); border-bottom-width:2px; border-radius:4px; background:var(--surface-2); color:var(--text); white-space:nowrap; }
+@media (max-width:760px){ .keys__cols{ grid-template-columns:1fr; } }
 .appmenu__grp{ font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); padding:6px 10px 2px; }
 .appmark--editor{ gap:7px; font-size:13px; }
 .appmark--editor .appmark__icon{ width:22px; height:22px; }
@@ -534,7 +555,10 @@ body.no-layers .layers{ display:none; }
     <button type="button" role="menuitem" data-act="save-file"><i data-lucide="save"></i>Save project file<small>keeps layers</small></button>
     <button type="button" role="menuitem" data-act="share" id="menu-share" hidden><i data-lucide="share-2"></i>Share…</button>
     <button type="button" role="menuitem" data-act="print"><i data-lucide="printer"></i>Print<kbd class="mod-p"></kbd></button>
+    <hr>
+    <button type="button" role="menuitem" data-act="keys"><i data-lucide="keyboard"></i>Keyboard shortcuts<kbd>?</kbd></button>
   </div>
+  <div class="appmenu ctxmenu" id="ctxmenu" role="menu" aria-label="Quick menu" hidden></div>
   <div class="work">
     <div class="sidehead">
       <button type="button" class="btn btn--ghost iconbtn" data-act="menu" aria-haspopup="menu" aria-expanded="false" aria-controls="appmenu" aria-label="Menu" title="Menu"><i data-lucide="menu"></i></button>
@@ -634,6 +658,16 @@ body.no-layers .layers{ display:none; }
     <p id="help-none" class="help__none" hidden>No topics match that. Try another word, like brush, save or layers.</p>
   </div>
 </div>
+<div id="keys" class="keys" hidden>
+  <div class="keys__box" role="dialog" aria-modal="true" aria-labelledby="keys-title">
+    <div class="keys__head">
+      <h2 id="keys-title"><i data-lucide="keyboard"></i> Keyboard shortcuts</h2>
+      <button type="button" class="btn btn--ghost iconbtn" data-act="keys-close" aria-label="Close" title="Close"><i data-lucide="x"></i></button>
+    </div>
+    <p class="keys__hint">Right-click the page, a shape or a layer for a quick menu (press and hold on a tablet).</p>
+    <div id="keys-list" class="keys__cols"></div>
+  </div>
+</div>
 <div id="ask" class="ask" hidden>
   <div class="ask__box" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-text">
     <h2 id="ask-title"></h2>
@@ -693,6 +727,8 @@ function toast(msg){
 const K = k => "<kbd>" + k + "</kbd>";
 const MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl";
 const HELP = [
+  ["Getting started", "Keyboard shortcuts and the quick menu", "keyboard shortcuts keys hotkeys right click quick menu context press hold",
+    "<p><b>Right-click</b> the page, a shape, words or a layer for a quick menu of what you can do there. On a tablet, press and hold. Each item shows its shortcut.</p><p>Press " + K("?") + " to see every shortcut.</p><p><button type=\"button\" class=\"btn\" data-act=\"keys\"><i data-lucide=\"keyboard\"></i> Show all shortcuts</button></p>"],
   ["Getting started", "Start a new picture", "new start page format wide tall square poster pattern",
     "<p>Pick a page on the home screen:</p><ul><li><b>Blank page</b>: choose wide, tall or square, then a size (or your own, 300 to 3,000 pixels each way).</li><li><b>Mirror &amp; Pattern</b>: a square page with symmetry turned on.</li><li><b>Pixel Art</b>: a grid of squares, 16, 24 or 32 across.</li></ul>"],
   ["Getting started", "Change the page size or shape", "page size shape resize wide tall square custom letter screen story canvas dimensions orientation",
@@ -2194,6 +2230,7 @@ cv.addEventListener("pointerdown", e => {
   if (e.button === 1 || tool === "hand" || spaceDown){ drag = { kind:"pan", sx:e.clientX, sy:e.clientY, ox:view.ox, oy:view.oy }; cv.style.cursor = "grabbing"; return; }
   if (e.button > 0) return;
   const [x, y] = toPage(e);
+  if (e.altKey && !e.ctrlKey && !e.metaKey){ pickAt(x, y); return; }   /* Alt+click: use the color under the pointer */
   if (cur.kind === "pixel") return pixelDown(x, y);
 
   /* the picked object's handles win over the tool */
@@ -2544,6 +2581,7 @@ document.addEventListener("click", e => {
   if (act === "theme"){ const t = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"; applyTheme(t); try { localStorage.setItem("ccs-art-theme", t); } catch(err){} if (cur) draw(); return; }
   if (act === "open-file") return $("#file-in").click();
   if (act === "help") return openHelp();
+  if (act === "keys"){ if (!$("#help").hidden) closeHelp(); return openKeys(); }
   if (!cur) return;
   if (act === "toggle-layers"){ document.body.classList.toggle("layers-open"); return; }
   if (act === "undo") return undo();
@@ -2626,6 +2664,237 @@ document.addEventListener("change", e => {
     changed(); return;
   }
 });
+/* ============================================================
+   Quick actions: shared by the right-click menu and the keyboard
+   ============================================================ */
+let clip = null;          // a copied shape or words, to paste
+let ctxAt = null;         // where on the page the quick menu was opened
+function pickAt(x, y){
+  if (cur.kind === "pixel"){ const i = cellAt(x, y); if (i >= 0 && cur.cells[i]){ useColor(cur.cells[i]); inspector(); toast("Picked " + cur.cells[i]); } return; }
+  pickColor(x, y);
+}
+function sizeStep(f){
+  if (cur.kind === "pixel") return;
+  if (tool === "eraser") eraser.s = clamp(Math.round(eraser.s * f), 2, 300); else if (tool === "blend") blend.s = clamp(Math.round(blend.s * f), 4, 200); else brush.s = clamp(Math.round(brush.s * f), 1, 200);
+  inspector(); draw();
+}
+function setOpacity(v){
+  if (cur.kind === "pixel") return;
+  const o = activeObj();
+  if (o){ if (o.lock) return toast("This layer is locked."); beginChange(); o.op = v; changed(); }
+  else { if (tool === "eraser") eraser.a = v; else if (tool === "blend") blend.a = v; else brush.a = v; inspector(); }
+  toast("Opacity " + Math.round(v * 100) + "%");
+}
+function colorStep(d){
+  const i = PALETTE.findIndex(c => c.toUpperCase() === String(color).toUpperCase());
+  useColor(PALETTE[((i < 0 ? 0 : i + d) + PALETTE.length) % PALETTE.length]); inspector();
+}
+function mirrorStep(){
+  if (cur.kind === "pixel"){ pxMirror = !pxMirror; inspector(); draw(); toast(pxMirror ? "Mirror on" : "Mirror off"); return; }
+  const order = [1, 2, 4, 8]; brush.m = order[(order.indexOf(brush.m) + 1) % order.length];
+  inspector(); draw(); toast(brush.m === 1 ? "Symmetry off" : "Symmetry " + brush.m);
+}
+function actualSize(){
+  if (cur.kind === "pixel") return fit();
+  const [pw, ph] = pageSize(); view.z = 1; view.ox = (view.W - pw) / 2; view.oy = (view.H - ph) / 2; zoomChanged();
+}
+const hasTextSelection = () => { const s = window.getSelection && window.getSelection(); return !!(s && String(s).length); };
+function copyObj(){
+  const o = activeObj(); if (!o) return;
+  clip = JSON.parse(JSON.stringify(o)); toast("Copied " + o.name);
+}
+function pasteObj(at){
+  if (!clip || cur.kind !== "paint") return toast("Copy a shape or words first.");
+  if (cur.layers.length >= MAX_LAYERS) return toast("That’s a lot of layers! Delete some first.");
+  beginChange();
+  const c = JSON.parse(JSON.stringify(clip)); c.id = uid(); c.lock = false; c.vis = true;
+  if (at){ c.x = at[0]; c.y = at[1]; } else { c.x += 30; c.y += 30; clip.x += 30; clip.y += 30; }
+  const i = cur.layers.findIndex(l => l.id === activeId);
+  cur.layers.splice(i < 0 ? cur.layers.length : i + 1, 0, c); activeId = c.id;
+  if (tool === "brush" || tool === "eraser" || tool === "blend" || tool === "fill"){ tool = "move"; toolsBar(); }
+  changed();
+}
+function toggleLayer(k){
+  const l = active(); if (!l) return;
+  beginChange(); l[k] = !l[k]; changed();
+  toast(k === "lock" ? (l.lock ? "Locked " : "Unlocked ") + l.name : (l.vis ? "Showing " : "Hid ") + l.name);
+}
+function editWords(id){
+  selectLayer(id);
+  setTimeout(() => { const ta = $("#txt"); if (ta){ ta.focus(); ta.select(); } }, 0);
+}
+function centerObj(){
+  const o = activeObj(); if (!o) return;
+  if (o.lock) return toast("This layer is locked.");
+  beginChange(); o.x = cur.w / 2; o.y = cur.h / 2; changed();
+}
+
+/* ---- the right-click quick menu (press and hold on a tablet) ---- */
+const ck = k => k.replace(/Ctrl/g, MOD);
+const cxItem = (act, icon, label, key, opts) => '<button type="button" role="menuitem" data-cx="' + act + '"' + (opts && opts.disabled ? " disabled" : "") + '>'
+  + (opts && opts.swatch ? '<span class="cx-sw" style="background:' + esc(opts.swatch) + '"></span>' : '<i data-lucide="' + icon + '"></i>') + esc(label) + (key ? '<kbd>' + esc(ck(key)) + '</kbd>' : "") + '</button>';
+const cxTools = list => '<div class="cx-tools" role="group" aria-label="Tools">' + list.map(t => '<button type="button" role="menuitemradio" data-cx="tool:' + t[0] + '" aria-pressed="' + (tool === t[0]) + '" title="' + t[1] + '  ' + t[2] + '">' + t[1] + '</button>').join("") + '</div>';
+function ctxPageHTML(){
+  const swatch = (() => { try { const c = renderPaint(cur, 1).getContext("2d").getImageData(clamp(Math.floor(ctxAt[0]), 0, Math.max(0, Math.ceil(cur.w) - 1)), clamp(Math.floor(ctxAt[1]), 0, Math.max(0, Math.ceil(cur.h) - 1)), 1, 1).data; return "#" + [c[0], c[1], c[2]].map(v => v.toString(16).padStart(2, "0")).join(""); } catch(e){ return color; } })();
+  return cxTools([["brush","Brush","B"],["eraser","Eraser","E"],["blend","Blend","N"],["fill","Fill","G"]]) + '<hr>'
+    + cxItem("usecolor", "", "Use this color", "Alt+click", { swatch })
+    + cxItem("bigger", "plus", "Brush bigger", "]") + cxItem("smaller", "minus", "Brush smaller", "[")
+    + cxItem("mirror", "flip-horizontal-2", "Symmetry: " + (brush.m === 1 ? "Off" : brush.m) + " (next: " + ({ 1:"2", 2:"4", 4:"8", 8:"Off" })[brush.m] + ")", "M") + '<hr>'
+    + cxItem("undo", "undo-2", "Undo", "Ctrl+Z", { disabled:!undoStack.length }) + cxItem("redo", "redo-2", "Redo", "Ctrl+Y", { disabled:!redoStack.length })
+    + cxItem("paste-here", "clipboard-paste", "Paste", "Ctrl+V", { disabled:!clip }) + '<hr>'
+    + cxItem("newlayer", "layers", "New layer", "Ctrl+Shift+N") + cxItem("fit", "maximize", "Fit to screen", "Ctrl+0") + cxItem("export", "image-down", "Export picture (PNG)", "Ctrl+E");
+}
+function ctxObjHTML(o){
+  const text = o.type === "text";
+  return (text ? cxItem("edit", "pencil", "Edit words", "Enter") + cxItem("bold", "bold", o.bold ? "Not bold" : "Bold", "Ctrl+B") + '<hr>' : "")
+    + cxItem("copy", "copy", "Copy", "Ctrl+C") + cxItem("paste-here", "clipboard-paste", "Paste", "Ctrl+V", { disabled:!clip }) + cxItem("dup", "copy-plus", "Duplicate", "Ctrl+D") + '<hr>'
+    + cxItem("up", "arrow-up", "Bring forward", "Ctrl+]") + cxItem("down", "arrow-down", "Send backward", "Ctrl+[")
+    + cxItem("center", "align-center", "Center on the page") + cxItem("flip-h", "flip-horizontal-2", "Flip across") + cxItem("flip-v", "flip-vertical-2", "Flip up and down")
+    + cxItem("lock", o.lock ? "lock-open" : "lock", o.lock ? "Unlock" : "Lock", "Ctrl+L") + '<hr>'
+    + cxItem("del", "trash-2", "Delete", "Del");
+}
+function ctxLayerHTML(l){
+  return cxItem("rename", "pencil", "Rename") + cxItem("dup", "copy-plus", "Duplicate", "Ctrl+D")
+    + cxItem("hide", l.vis ? "eye-off" : "eye", l.vis ? "Hide" : "Show", "Ctrl+,") + cxItem("lock", l.lock ? "lock-open" : "lock", l.lock ? "Unlock" : "Lock", "Ctrl+L") + '<hr>'
+    + cxItem("up", "arrow-up", "Move up", "Ctrl+]") + cxItem("down", "arrow-down", "Move down", "Ctrl+[") + '<hr>'
+    + cxItem("del", "trash-2", "Delete layer", "Del");
+}
+function ctxPixelHTML(){
+  return cxTools([["pencil","Pencil","B"],["eraser","Eraser","E"],["fill","Fill","G"],["pick","Pick","I"]]) + '<hr>'
+    + cxItem("usecolor", "pipette", "Use this color", "Alt+click") + cxItem("mirror", "flip-horizontal-2", pxMirror ? "Mirror: on" : "Mirror: off", "M") + '<hr>'
+    + cxItem("undo", "undo-2", "Undo", "Ctrl+Z", { disabled:!undoStack.length }) + cxItem("redo", "redo-2", "Redo", "Ctrl+Y", { disabled:!redoStack.length }) + '<hr>'
+    + cxItem("fit", "maximize", "Fit to screen", "Ctrl+0") + cxItem("export", "image-down", "Export picture (PNG)", "Ctrl+E");
+}
+let ctxBack = null, ctxOpenedAt = 0;
+function openCtx(cx, cy, html){
+  const m = $("#ctxmenu"); if (!m) return;
+  closeMenu(false);
+  m.innerHTML = html; icons();
+  m.hidden = false; ctxOpenedAt = Date.now();
+  if (!ctxBack) ctxBack = document.activeElement;
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(cx, innerWidth - r.width - 8)) + "px";
+  m.style.top = Math.max(8, Math.min(cy, innerHeight - r.height - 8)) + "px";
+  const first = m.querySelector("button:not(:disabled)"); if (first) first.focus({ preventScroll:true });
+}
+function closeCtx(refocus){
+  const m = $("#ctxmenu"); if (!m || m.hidden) return;
+  m.hidden = true;
+  if (refocus && ctxBack && ctxBack.focus) try { ctxBack.focus(); } catch(e){}
+  ctxBack = null;
+}
+/** The quick menu for a point on the page: the shape or words under it, or the page itself. */
+function ctxAtPoint(clientX, clientY, x, y){
+  if (!cur) return;
+  ctxAt = [x, y];
+  if (cur.kind === "pixel") return openCtx(clientX, clientY, ctxPixelHTML());
+  const hit = hitObject(x, y);
+  if (hit){ selectLayer(hit.id); return openCtx(clientX, clientY, ctxObjHTML(hit)); }
+  openCtx(clientX, clientY, ctxPageHTML());
+}
+cv.addEventListener("contextmenu", e => {
+  e.preventDefault();
+  if (!cur || Date.now() - ctxOpenedAt < 600) return;   // a long press already opened it
+  const [x, y] = toPage(e);
+  ctxAtPoint(e.clientX, e.clientY, x, y);
+});
+document.addEventListener("contextmenu", e => {
+  const row = e.target.closest && e.target.closest("#layer-list .layer");
+  if (!row || !cur) return;
+  e.preventDefault();
+  const b = row.querySelector("[data-pick],[data-lock]"), id = b && (b.dataset.pick || b.dataset.lock);
+  if (!id) return;
+  selectLayer(id);
+  const l = layerById(id); if (l) openCtx(e.clientX, e.clientY, ctxLayerHTML(l));
+});
+/* press and hold on a tablet: the same menu, and whatever the finger had started is dropped */
+let hold = null;
+cv.addEventListener("pointerdown", e => {
+  if (e.pointerType === "mouse" || !cur) return;
+  clearTimeout(hold && hold.t);
+  hold = { id:e.pointerId, x:e.clientX, y:e.clientY, t:setTimeout(() => {
+    if (!hold || pointers.size !== 1) return;
+    if (drag && drag.kind === "stroke"){ undoStack.pop(); updateUndo(); }
+    if (drag && drag.began){ restore(undoStack.pop()); updateUndo(); view.caches.clear(); }
+    drag = null; draw();
+    const r = cv.getBoundingClientRect();
+    ctxAtPoint(hold.x, hold.y, (hold.x - r.left - view.ox) / view.z, (hold.y - r.top - view.oy) / view.z);
+    hold = null;
+  }, 550) };
+});
+cv.addEventListener("pointermove", e => { if (hold && e.pointerId === hold.id && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 8){ clearTimeout(hold.t); hold = null; } });
+["pointerup", "pointercancel"].forEach(t => cv.addEventListener(t, () => { if (hold){ clearTimeout(hold.t); hold = null; } }));
+document.addEventListener("pointerdown", e => { const m = $("#ctxmenu"); if (m && !m.hidden && !m.contains(e.target)) closeCtx(false); }, true);
+window.addEventListener("resize", () => closeCtx(false));
+document.addEventListener("keydown", e => {
+  const m = $("#ctxmenu"); if (!m || m.hidden) return;
+  if (e.key === "Escape"){ e.preventDefault(); e.stopImmediatePropagation(); closeCtx(true); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+    e.preventDefault(); e.stopImmediatePropagation();
+    const items = [...m.querySelectorAll("button:not(:disabled)")], i = items.indexOf(document.activeElement);
+    const next = items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]; if (next) next.focus();
+    return;
+  }
+  if (e.key !== "Enter" && e.key !== " " && e.key !== "Tab"){ closeCtx(false); }   /* any other key: close it and let the shortcut work */
+}, true);
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("#ctxmenu [data-cx]"); if (!b || b.disabled || !cur) return;
+  e.stopPropagation();
+  const a = b.dataset.cx; closeCtx(false);
+  if (a.startsWith("tool:")) return setTool(a.slice(5));
+  if (a === "usecolor") return ctxAt && pickAt(ctxAt[0], ctxAt[1]);
+  if (a === "bigger") return sizeStep(1.15);
+  if (a === "smaller") return sizeStep(1 / 1.15);
+  if (a === "mirror") return mirrorStep();
+  if (a === "undo") return undo();
+  if (a === "redo") return redo();
+  if (a === "paste-here") return pasteObj(ctxAt);
+  if (a === "newlayer") return layerAction("add");
+  if (a === "fit") return fit();
+  if (a === "export") return download();
+  if (a === "edit"){ const o = activeObj(); if (o) editWords(o.id); return; }
+  if (a === "bold" || a === "flip-h" || a === "flip-v") return objAction(a);
+  if (a === "copy") return copyObj();
+  if (a === "center") return centerObj();
+  if (a === "dup" || a === "up" || a === "down" || a === "del") return layerAction(a);
+  if (a === "lock") return toggleLayer("lock");
+  if (a === "hide") return toggleLayer("vis");
+  if (a === "rename"){ renaming = activeId; layersPanel(); return; }
+}, true);
+
+/* ---- the shortcuts sheet (? , Help, and the ☰ menu) ---- */
+const KEYS = [
+  ["Tools", [["Move","V"],["Brush (Pencil in pixel art)","B"],["Eraser","E"],["Blend","N"],["Fill","G"],["Shapes","U"],["Text","T"],["Color picker","I"],["Hand (or hold Space)","H"],["Crop","C"],["Trace a picture","R"]]],
+  ["Drawing", [["Brush bigger / smaller","] / ["],["Opacity 10% to 100%","1 … 0"],["Symmetry Off, 2, 4, 8","M"],["Use the color under the pointer","Alt+click"],["Next / previous color",". / ,"]]],
+  ["View", [["Zoom in / out","Ctrl+= / Ctrl+-"],["Fit to screen","Ctrl+0"],["Actual size","Ctrl+1"],["Move around","Space+drag"]]],
+  ["Picture and layers", [["Undo / Redo","Ctrl+Z / Ctrl+Y"],["New layer","Ctrl+Shift+N"],["Duplicate","Ctrl+D"],["Move up / down","Ctrl+] / Ctrl+["],["Copy / Paste shape or words","Ctrl+C / Ctrl+V"],["Lock / unlock","Ctrl+L"],["Hide / show layer","Ctrl+,"],["Nudge a shape (Shift: 10)","Arrows"],["Delete","Del"]]],
+  ["Words", [["Edit the picked words","Enter"],["Bold","Ctrl+B"]]],
+  ["File", [["Export picture (PNG)","Ctrl+E"],["Save project file","Ctrl+S"],["Print","Ctrl+P"],["This list","?"]]]
+];
+let keysBack = null;
+function openKeys(){
+  closeMenu(false); closeCtx(false);
+  const kb = k => ck(k).split(" / ").map(x => "<kbd>" + esc(x) + "</kbd>").join(" ");
+  const col = groups => "<div>" + groups.map(g => "<h3>" + esc(g[0]) + "</h3>" + g[1].map(r => '<div class="keys__row"><span>' + esc(r[0]) + "</span><span>" + kb(r[1]) + "</span></div>").join("")).join("") + "</div>";
+  $("#keys-list").innerHTML = col([KEYS[0]]) + col([KEYS[1], KEYS[2]]) + col([KEYS[3], KEYS[4], KEYS[5]]);
+  keysBack = document.activeElement;
+  $("#keys").hidden = false; icons();
+  $("#keys").querySelector('[data-act="keys-close"]').focus();
+}
+function closeKeys(){
+  $("#keys").hidden = true;
+  if (keysBack && keysBack.focus) try { keysBack.focus(); } catch(e){}
+}
+document.addEventListener("click", e => {
+  if (e.target.id === "keys") return closeKeys();
+  if (e.target.closest && e.target.closest('[data-act="keys-close"]')) closeKeys();
+});
+document.addEventListener("keydown", e => {
+  if ($("#keys").hidden) return;
+  if (e.key === "Escape" || e.key === "?"){ e.preventDefault(); closeKeys(); }
+  e.stopImmediatePropagation();   /* shortcuts wait while the list is open */
+}, true);
+
 function objAction(a){
   const o = activeObj(); if (!o) return;
   if (o.lock) return toast("This layer is locked.");
@@ -2647,6 +2916,8 @@ document.addEventListener("keydown", e => {
   if (mod && key === "s"){ e.preventDefault(); saveFile(); return; }
   if (mod && key === "p"){ e.preventDefault(); printArt(); return; }
   if (typing) return;
+  if (mod && key === "e"){ e.preventDefault(); download(); return; }
+  if (mod && key === "1"){ e.preventDefault(); actualSize(); return; }
   if (mod && (key === "=" || key === "+")){ e.preventDefault(); zoomAt(1.25); return; }
   if (mod && key === "-"){ e.preventDefault(); zoomAt(1 / 1.25); return; }
   if (mod && key === "0"){ e.preventDefault(); fit(); return; }
@@ -2655,6 +2926,11 @@ document.addEventListener("keydown", e => {
     if (mod && key === "d"){ e.preventDefault(); layerAction("dup"); return; }
     if (mod && key === "]"){ e.preventDefault(); layerAction("up"); return; }
     if (mod && key === "["){ e.preventDefault(); layerAction("down"); return; }
+    if (mod && key === "c" && activeObj() && !hasTextSelection()){ e.preventDefault(); copyObj(); return; }
+    if (mod && key === "v" && clip){ e.preventDefault(); pasteObj(); return; }
+    if (mod && key === "l"){ e.preventDefault(); toggleLayer("lock"); return; }
+    if (mod && key === ","){ e.preventDefault(); toggleLayer("vis"); return; }
+    if (mod && key === "b"){ const o = activeObj(); if (o && o.type === "text"){ e.preventDefault(); objAction("bold"); } return; }
   }
   if (e.key === " " && !spaceDown){ spaceDown = true; cursorFor(); e.preventDefault(); return; }
   if (mod) return;
@@ -2669,11 +2945,12 @@ document.addEventListener("keydown", e => {
     changed(); return;
   }
   if (e.key === "Escape"){ if (o){ activeId = nearestPaintLayer(); inspector(); layersPanel(); draw(); } return; }
-  if (e.key === "[" || e.key === "]"){
-    const f = e.key === "]" ? 1.15 : 1 / 1.15;
-    if (tool === "eraser") eraser.s = clamp(Math.round(eraser.s * f), 2, 300); else if (tool === "blend") blend.s = clamp(Math.round(blend.s * f), 4, 200); else brush.s = clamp(Math.round(brush.s * f), 1, 200);
-    inspector(); draw(); return;
-  }
+  if (e.key === "[" || e.key === "]"){ sizeStep(e.key === "]" ? 1.15 : 1 / 1.15); return; }
+  if (e.key === "?"){ e.preventDefault(); openKeys(); return; }
+  if (e.key === "Enter" && o && o.type === "text"){ e.preventDefault(); editWords(o.id); return; }
+  if (/^[0-9]$/.test(e.key)){ setOpacity(e.key === "0" ? 1 : +e.key / 10); return; }
+  if (e.key === "." || e.key === ","){ colorStep(e.key === "." ? 1 : -1); return; }
+  if (key === "m"){ mirrorStep(); return; }
   const map = cur.kind === "pixel" ? { b:"pencil", e:"eraser", g:"fill", i:"pick", h:"hand" }
     : { v:"move", b:"brush", e:"eraser", n:"blend", g:"fill", u:"shapes", t:"text", i:"pick", h:"hand", c:"crop", r:"trace" };
   if (map[key]) setTool(map[key]);
