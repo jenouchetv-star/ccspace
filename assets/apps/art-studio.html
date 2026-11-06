@@ -321,6 +321,11 @@ body.no-layers .layers{ display:none; }
 .layer-op{ display:flex; align-items:center; gap:8px; padding:2px 8px 8px 34px; font-size:11.5px; color:var(--mute); list-style:none; }
 .layer-op .range{ flex:1; min-width:0; }
 .layer-op .field input{ width:46px; }
+.layer-op--clip{ padding-top:0; }
+.layer-op--clip .switchrow{ flex:1; font-size:11.5px; color:var(--mute); }
+.layer--clip{ padding-left:4px; }
+.layer__clip{ width:14px; display:grid; place-items:center; color:var(--accent); flex:none; }
+.layer__clip svg{ width:13px; height:13px; }
 .edgerow{ display:flex; align-items:center; gap:8px; font-size:11.5px; font-weight:600; color:var(--mute); }
 .edgerow .range{ flex:1; min-width:0; }
 .layer__name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px; border:0; background:transparent; text-align:left; padding:0; height:100%; }
@@ -572,6 +577,7 @@ body.no-layers .layers{ display:none; }
     <nav class="tools" id="tools" aria-label="Tools"></nav>
     <aside class="layers" id="layers" aria-label="Layers">
       <div class="layers__head"><h3>Layers</h3>
+        <button type="button" class="btn btn--ghost iconbtn" data-act="drawing-pick" aria-label="Bring in a drawing" title="Bring in a drawing: a photo of your drawing, ready to color"><i data-lucide="image-up"></i></button>
         <button type="button" class="btn btn--ghost iconbtn" data-act="layer-add" aria-label="New paint layer" title="New paint layer  Ctrl+Shift+N"><i data-lucide="plus"></i></button>
       </div>
       <ul class="layers__list" id="layer-list" role="listbox" aria-label="Layers, top first"></ul>
@@ -593,6 +599,7 @@ body.no-layers .layers{ display:none; }
     <aside class="inspector" id="inspector" aria-label="Properties"></aside>
   </div>
   <input type="file" id="trace-in" accept="image/png,image/jpeg,image/webp,image/gif" class="sr-only" tabindex="-1" aria-hidden="true">
+  <input type="file" id="drawing-in" accept="image/png,image/jpeg,image/webp" class="sr-only" tabindex="-1" aria-hidden="true">
 </section>
 
 <!-- =================== LAUNCH: loading card, then Sign in when needed =================== -->
@@ -713,7 +720,7 @@ const BRUSHES = [["brush","paintbrush","Brush","Tapers in and out. Move fast or 
   ["air","spray-can","Airbrush","A soft spray for shading and glows."]];
 const BRUSH_KEYS = BRUSHES.map(b => b[0]);
 const FONTS = { sans:"'Plus Jakarta Sans', system-ui, sans-serif", serif:"Georgia, 'Times New Roman', serif", mono:"ui-monospace, Menlo, Consolas, monospace" };
-const MAX_TEXT = 300, MAX_LAYERS = 120, MAX_STROKES = 6000, HISTORY = 80;
+const MAX_TEXT = 300, MAX_LAYERS = 120, MAX_STROKES = 100000, HISTORY = 80;   /* Fill inside the lines and detailed paintings lay many small strokes */
 const isColor = c => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1191,7 +1198,15 @@ function cleanProject(raw){
         return out;
       }).filter(s => s.p.length >= 2);
       strokeCount += strokes.length;
-      return Object.assign(base(l), { type:"paint", dx:num(l.dx, -w * 2, w * 2, 0), dy:num(l.dy, -h * 2, h * 2, 0), strokes });
+      return Object.assign(base(l), { type:"paint", clip:!!l.clip, dx:num(l.dx, -w * 2, w * 2, 0), dy:num(l.dy, -h * 2, h * 2, 0), strokes });
+    }
+    if (l.type === "drawing"){
+      /* a photo of a drawing: only a plain picture, kept as data, is allowed in */
+      const src = typeof l.src === "string" && l.src.length < 12e6 && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(l.src) ? l.src : null;
+      if (!src) return null;
+      return Object.assign(base(l), { type:"drawing", t:"drawing", src, iw:num(l.iw, 1, 8000, 1000), ih:num(l.ih, 1, 8000, 1000),
+        x:num(l.x, -w, w * 2, w / 2), y:num(l.y, -h, h * 2, h / 2), w:num(l.w, 4, w * 4, w), h:num(l.h, 4, h * 4, h),
+        r:num(l.r, -3600, 3600, 0), fx:!!l.fx, fy:!!l.fy, paper:l.paper !== false, str:num(l.str, 0, 1, .5), ink: isColor(l.ink) ? l.ink : "" });
     }
     if (l.type === "shape" || l.type === "text"){
       return Object.assign(base(l), { type:l.type,
@@ -1358,11 +1373,55 @@ function fitText(o){
   o.w = Math.max(40, ...lines.map(l => measureCtx.measureText(l || " ").width)) + o.f * .3;
   o.h = lines.length * o.f * 1.18 + o.f * .2;
 }
+/* ============================================================
+   Drawings: a photo of a drawing brought in as a real layer, part of the picture you export and print.
+   With "Make the paper see-through", the white paper turns clear and only the lines stay, so you can paint under them.
+   ============================================================ */
+const DRAW_IMGS = new Map(), DRAW_CANV = new Map();
+function drawingImage(o){
+  let im = DRAW_IMGS.get(o.src);
+  if (!im){ im = new Image(); im.onload = () => { if (cur) draw(); }; im.src = o.src; DRAW_IMGS.set(o.src, im); }
+  return im.complete && im.naturalWidth ? im : null;
+}
+function drawingCanvas(o){
+  const im = drawingImage(o); if (!im) return null;
+  const key = o.src.length + "|" + o.src.slice(-24) + "|" + o.paper + "|" + o.str + "|" + (o.ink || "");
+  const got = DRAW_CANV.get(o.id); if (got && got.key === key) return got.c;
+  const c = document.createElement("canvas"); c.width = im.naturalWidth; c.height = im.naturalHeight;
+  const x = c.getContext("2d"); x.drawImage(im, 0, 0);
+  if (o.paper){
+    const d = x.getImageData(0, 0, c.width, c.height), a = d.data, n = a.length / 4;
+    /* the paper is the brightness most of the page sits at; anything darker is a line */
+    const hist = new Uint32Array(256);
+    for (let i = 0; i < a.length; i += 4) hist[(a[i] * 299 + a[i + 1] * 587 + a[i + 2] * 114) / 1000 | 0]++;
+    let acc = 0, paper = 255; for (let v = 255; v >= 0; v--){ acc += hist[v]; if (acc >= n * .5){ paper = v; break; } }
+    paper = Math.max(paper, 110) - 6;
+    /* the darkest marks on the page (pencil is often gray, not black) count as full-strength lines */
+    let dark = 0; acc = 0; for (let v = 0; v < 256; v++){ acc += hist[v]; if (acc >= n * .01){ dark = v; break; } }
+    const span = Math.max(30, paper - dark);
+    const g = 1.8 - o.str * 1.4;   /* stronger lines: lighter marks keep more of their weight */
+    const ink = o.ink ? [1, 3, 5].map(k => parseInt(o.ink.slice(k, k + 2), 16)) : null;
+    for (let i = 0; i < a.length; i += 4){
+      const L = (a[i] * 299 + a[i + 1] * 587 + a[i + 2] * 114) / 1000;
+      const t = Math.pow(clamp((paper - L) / span, 0, 1), g);
+      if (ink){ a[i] = ink[0]; a[i + 1] = ink[1]; a[i + 2] = ink[2]; }
+      else { a[i] *= .45; a[i + 1] *= .45; a[i + 2] *= .48; }
+      a[i + 3] = Math.round(t * 255);
+    }
+    x.putImageData(d, 0, 0);
+  }
+  DRAW_CANV.set(o.id, { key, c }); return c;
+}
+/** A clipped paint layer shows only where the layer under it has paint (a clipping mask). This finds that layer. */
+function clipBase(p, i){ for (let j = i - 1; j >= 0; j--){ const b = p.layers[j]; if (!(b.type === "paint" && b.clip)) return b; } return null; }
 function drawObject(ctx, o){
   ctx.save();
   ctx.globalAlpha = o.op === undefined ? 1 : o.op;
   ctx.translate(o.x, o.y); ctx.rotate(o.r * Math.PI / 180);
-  if (o.type === "text"){
+  if (o.type === "drawing"){
+    ctx.scale(o.fx ? -1 : 1, o.fy ? -1 : 1);
+    const c = drawingCanvas(o); if (c) ctx.drawImage(c, -o.w / 2, -o.h / 2, o.w, o.h);
+  } else if (o.type === "text"){
     ctx.font = fontOf(o); ctx.textAlign = o.align || "center"; ctx.textBaseline = "middle";
     const lines = textLines(o), lh = o.f * 1.18, top = -(lines.length - 1) * lh / 2;
     const ax = o.align === "left" ? -o.w / 2 + o.f * .15 : o.align === "right" ? o.w / 2 - o.f * .15 : 0;
@@ -1393,13 +1452,24 @@ function renderPaint(p, k, opts){
   opts = opts || {};
   const out = newLayerCanvas(p, k), ctx = out.x;
   if (!opts.transparent){ ctx.fillStyle = p.bg; ctx.fillRect(0, 0, p.w, p.h); }
-  for (const l of p.layers){
-    if (!l.vis) continue;
-    if (l.type === "paint"){
-      const L = paintLayerCanvas(p, l, k);
-      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = l.op; ctx.drawImage(L.c, Math.round(l.dx * k), Math.round(l.dy * k)); ctx.restore();
-    } else drawObject(ctx, l);
-  }
+  p.layers.forEach((l, i) => {
+    if (!l.vis) return;
+    if (l.type !== "paint") return drawObject(ctx, l);
+    const L = paintLayerCanvas(p, l, k);
+    const b = l.clip ? clipBase(p, i) : null;
+    if (b && !b.vis) return;
+    let src = L.c, ox = Math.round(l.dx * k), oy = Math.round(l.dy * k);
+    if (b){
+      /* a clipped layer: keep only the paint that sits on the layer below */
+      const T = newLayerCanvas(p, k), t = T.x;
+      t.setTransform(1, 0, 0, 1, 0, 0); t.drawImage(L.c, ox, oy);
+      t.globalCompositeOperation = "destination-in";
+      if (b.type === "paint") t.drawImage(paintLayerCanvas(p, b, k).c, Math.round(b.dx * k), Math.round(b.dy * k));
+      else { t.setTransform(k, 0, 0, k, 0, 0); drawObject(t, b); }
+      src = T.c; ox = 0; oy = 0;
+    }
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = l.op; ctx.drawImage(src, ox, oy); ctx.restore();
+  });
   if (opts.crop && p.crop){
     const c = p.crop, cc = document.createElement("canvas");
     cc.width = Math.round(c.w * k); cc.height = Math.round(c.h * k);
@@ -1809,10 +1879,123 @@ function loadTrace(input){
   img.onerror = () => { URL.revokeObjectURL(url); toast("That picture couldn’t be opened."); };
   img.src = url;
 }
+/* ---- Bring in a drawing: a photo of your drawing as a real layer, on top, ready to color under ---- */
+let drawingSwap = false;
+function loadDrawing(input){
+  const f = input.files && input.files[0]; input.value = "";
+  const swap = drawingSwap; drawingSwap = false;
+  if (!f || !cur || cur.kind !== "paint") return;
+  if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return toast("Pick a photo: a PNG, JPG or WebP.");
+  if (f.size > 25 * 1024 * 1024) return toast("That photo is too big. Try one under 25 MB.");
+  const url = URL.createObjectURL(f), img = new Image();
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const k = Math.min(1, 2400 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+    const x = c.getContext("2d"); x.fillStyle = "#FFFFFF"; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+    const src = c.toDataURL("image/jpeg", .9);
+    const fitK = Math.min(cur.w / c.width, cur.h / c.height);
+    beginChange();
+    const old = activeObj();
+    if (swap && old && old.type === "drawing"){
+      Object.assign(old, { src, iw:c.width, ih:c.height, h: old.w * c.height / c.width });
+    } else {
+      if (cur.layers.length >= MAX_LAYERS){ undoStack.pop(); return toast("That’s a lot of layers! Delete some first."); }
+      const o = { id:uid(), type:"drawing", t:"drawing", name:"Lines", vis:true, lock:false, op:1, src, iw:c.width, ih:c.height,
+        x:cur.w / 2, y:cur.h / 2, w:c.width * fitK, h:c.height * fitK, r:0, fx:false, fy:false, paper:true, str:.5, ink:"" };
+      cur.layers.push(o); activeId = o.id;
+    }
+    tool = "move"; toolsBar(); changed();
+    toast("Your drawing is in. Lock it, then pick the paint layer under it and color.");
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast("That photo couldn’t be opened."); };
+  img.src = url;
+}
+/* ---- Fill inside the lines: on a paint layer, color pours into the shape you click and stops at what you can see.
+   The fill is laid down as rows of ordinary pen strokes, so it saves, undoes and exports like any other paint. ---- */
+let fillGap = 2;
+function boxPass(m, W, H, r, all){
+  /* every pixel within r (a square) is open (all) / any pixel within r is open (!all): rows, then columns */
+  const t = new Uint8Array(W * H), o = new Uint8Array(W * H), need = all ? 2 * r + 1 : 1;
+  for (let y = 0; y < H; y++){
+    let s = 0; const row = y * W;
+    for (let x = -r; x < W; x++){
+      const a = x + r, b = x - r - 1;
+      if (a < W && m[row + a]) s++;
+      if (b >= 0 && m[row + b]) s--;
+      if (x >= 0){ const span = Math.min(W - 1, x + r) - Math.max(0, x - r) + 1; t[row + x] = all ? (s === span ? 1 : 0) : (s > 0 ? 1 : 0); }
+    }
+  }
+  for (let x = 0; x < W; x++){
+    let s = 0;
+    for (let y = -r; y < H; y++){
+      const a = y + r, b = y - r - 1;
+      if (a < H && t[a * W + x]) s++;
+      if (b >= 0 && t[b * W + x]) s--;
+      if (y >= 0){ const span = Math.min(H - 1, y + r) - Math.max(0, y - r) + 1; o[y * W + x] = all ? (s === span ? 1 : 0) : (s > 0 ? 1 : 0); }
+    }
+  }
+  return o;
+}
+function fillInside(x, y){
+  const l = active();
+  if (l.lock){ toast("That layer is locked."); return; }
+  const k = Math.min(1, 1600 / Math.max(cur.w, cur.h));
+  const img = renderPaint(cur, k), W = img.width, H = img.height;
+  const sx = Math.floor(x * k), sy = Math.floor(y * k);
+  if (sx < 0 || sy < 0 || sx >= W || sy >= H) return;
+  const d = img.getContext("2d").getImageData(0, 0, W, H).data, i0 = (sy * W + sx) * 4;
+  const r0 = d[i0], g0 = d[i0 + 1], b0 = d[i0 + 2], TOL = 52 * 52;
+  /* the lines of a brought-in drawing are walls, even pale pencil ones */
+  const wc = document.createElement("canvas"); wc.width = W; wc.height = H;
+  const wx = wc.getContext("2d"); wx.setTransform(k, 0, 0, k, 0, 0);
+  cur.layers.forEach(q => { if (q.type === "drawing" && q.vis && q.paper) drawObject(wx, Object.assign({}, q, { op:1 })); });
+  const wd = wx.getImageData(0, 0, W, H).data;
+  const ok = new Uint8Array(W * H);
+  for (let p = 0, q = 0; p < W * H; p++, q += 4){
+    const dr = d[q] - r0, dg = d[q + 1] - g0, db = d[q + 2] - b0;
+    ok[p] = wd[q + 3] < 70 && dr * dr + dg * dg + db * db <= TOL ? 1 : 0;
+  }
+  if (!ok[sy * W + sx]) ok[sy * W + sx] = 1;
+  /* close small gaps: shrink the open space before pouring, so color can't squeeze through, then grow it back */
+  const gap = Math.round(fillGap * Math.max(1, k * 1.5));
+  let open = gap ? boxPass(ok, W, H, gap, true) : ok;
+  if (!open[sy * W + sx]) open = ok;
+  const mask = new Uint8Array(W * H), stack = new Int32Array(W * H); let sp = 0, count = 0;
+  stack[sp++] = sy * W + sx; mask[sy * W + sx] = 1;
+  while (sp){
+    const p = stack[--sp], px = p % W; count++;
+    if (px > 0 && open[p - 1] && !mask[p - 1]){ mask[p - 1] = 1; stack[sp++] = p - 1; }
+    if (px < W - 1 && open[p + 1] && !mask[p + 1]){ mask[p + 1] = 1; stack[sp++] = p + 1; }
+    if (p >= W && open[p - W] && !mask[p - W]){ mask[p - W] = 1; stack[sp++] = p - W; }
+    if (p < W * (H - 1) && open[p + W] && !mask[p + W]){ mask[p + W] = 1; stack[sp++] = p + W; }
+  }
+  /* grow back by the gap, plus a little, so the color tucks under the lines with no white edge */
+  const full = boxPass(mask, W, H, gap + 2, false);
+  const step = 2, pen = step / k * 1.7, trim = pen * .35, strokes = [];
+  for (let yy = 0; yy < H; yy += step){
+    const row = Math.min(H - 1, yy + (step >> 1)) * W;
+    let xx = 0;
+    while (xx < W){
+      if (!full[row + xx]){ xx++; continue; }
+      const x0 = xx; while (xx + 1 < W && full[row + xx + 1]) xx++;
+      const a = (x0 + .5) / k, b = (xx + .5) / k, py = (yy + step / 2) / k;
+      const a2 = b - a > trim * 2 ? a + trim : a, b2 = b - a > trim * 2 ? b - trim : b;
+      strokes.push({ c:color, s:round2(pen), a:1, b:"pen", e:false, m:1, p:[round2(a2 - l.dx), round2(py - l.dy), round2(Math.max(b2, a2 + .3) - l.dx), round2(py - l.dy)] });
+      xx++;
+    }
+  }
+  if (!strokes.length) return;
+  const total = cur.layers.reduce((n, q) => n + (q.strokes ? q.strokes.length : 0), 0);
+  if (total + strokes.length > MAX_STROKES) return toast("This picture is very full. Try a bigger brush for this part.");
+  beginChange(); l.strokes.push(...strokes); view.caches.delete(l.id); useColor(color); changed();
+}
 function traceSect(){
   const t = cur.trace;
+  const colorIt = sect("Color your drawing", '<p class="hint">Want your drawing in the picture, so you can color it like a coloring book? Bring it in instead.</p>'
+    + '<button type="button" class="btn" data-act="drawing-pick"><i data-lucide="image-up"></i> Bring in a drawing</button>');
   if (!t) return sect("Trace", '<p class="hint">Pick a picture to draw over. It shows faded on your page, so you can follow its lines with the Brush. It’s only a guide: it’s never in the picture you export, print or share.</p>'
-    + '<button type="button" class="btn" data-act="trace-pick"><i data-lucide="image-plus"></i> Choose a picture</button>');
+    + '<button type="button" class="btn" data-act="trace-pick"><i data-lucide="image-plus"></i> Choose a picture</button>') + colorIt;
   return sect("Trace", '<p class="hint">Drag on the page to move the picture. Then pick the Brush and draw over it. It’s never in the picture you export, print or share.</p>'
       + switchRow("Show the picture", "data-trvis", t.vis))
     + sect("Opacity", rangeRow("data-trop", 5, 100, Math.round(t.op * 100), "Trace opacity"))
@@ -1835,12 +2018,15 @@ function nearestPaintLayer(){
 /* ============================================================
    Layers panel
    ============================================================ */
-const LAYER_ICON = { rect:"square", circle:"circle", triangle:"triangle", star:"star", heart:"heart", line:"minus", text:"type" };
+const LAYER_ICON = { rect:"square", circle:"circle", triangle:"triangle", star:"star", heart:"heart", line:"minus", text:"type", drawing:"image" };
 function layersPanel(){
   if (!cur || cur.kind !== "paint") return;
   $("#layer-list").innerHTML = [...cur.layers].reverse().map(l => {
     const icon = l.type === "paint" ? "paintbrush" : LAYER_ICON[l.t] || "square", sel = l.id === activeId;
-    return '<li class="layer" role="option" aria-selected="' + sel + '">'
+    const clipped = l.type === "paint" && l.clip && cur.layers.indexOf(l) > 0;
+    const canClip = l.type === "paint" && cur.layers.indexOf(l) > 0;
+    return '<li class="layer' + (clipped ? " layer--clip" : "") + '" role="option" aria-selected="' + sel + '"' + (clipped ? ' title="Clipped to the layer below"' : "") + '>'
+      + (clipped ? '<span class="layer__clip" aria-label="Clipped to the layer below"><i data-lucide="corner-left-down"></i></span>' : "")
       + '<span class="layer__icon" aria-hidden="true"><i data-lucide="' + icon + '"></i></span>'
       + (renaming === l.id
         ? '<input class="layer__rename" id="rename-in" value="' + esc(l.name) + '" maxlength="40" aria-label="Layer name">'
@@ -1850,7 +2036,8 @@ function layersPanel(){
       + '</li>'
       + (sel ? '<li class="layer-op" role="presentation"><span>Opacity</span>'
         + '<input type="range" class="range" min="0" max="100" value="' + Math.round(l.op * 100) + '" data-op aria-label="' + esc(l.name) + ' opacity">'
-        + '<label class="field"><input type="number" min="0" max="100" value="' + Math.round(l.op * 100) + '" data-op-num aria-label="' + esc(l.name) + ' opacity, percent"></label></li>' : "");
+        + '<label class="field"><input type="number" min="0" max="100" value="' + Math.round(l.op * 100) + '" data-op-num aria-label="' + esc(l.name) + ' opacity, percent"></label></li>'
+        + (canClip ? '<li class="layer-op layer-op--clip" role="presentation">' + switchRow("Clip to the layer below", "data-clip", !!l.clip) + '</li>' : "") : "");
   }).join("");
   icons();
   const ri = $("#rename-in");
@@ -1937,7 +2124,23 @@ function inspector(){
     P.innerHTML = h; icons(); return;
   }
   const o = activeObj(), l = active();
-  if (o && tool !== "brush" && tool !== "eraser" && tool !== "blend" && tool !== "fill"){
+  if (o && o.type === "drawing" && tool !== "brush" && tool !== "eraser" && tool !== "blend" && tool !== "fill"){
+    h += sect("Drawing", '<div class="btnrow">'
+        + '<button type="button" data-obj="center-h" title="Center horizontally on the page" aria-label="Center horizontally"><i data-lucide="align-center-vertical"></i></button>'
+        + '<button type="button" data-obj="center-v" title="Center vertically on the page" aria-label="Center vertically"><i data-lucide="align-center-horizontal"></i></button>'
+        + '<button type="button" data-obj="flip-h" title="Flip horizontal" aria-label="Flip horizontal"><i data-lucide="flip-horizontal-2"></i></button>'
+        + '<button type="button" data-obj="flip-v" title="Flip vertical" aria-label="Flip vertical"><i data-lucide="flip-vertical-2"></i></button></div>'
+        + '<p class="hint">Your drawing is part of the picture. Lock it, then pick a paint layer under it and color. Your lines stay on top, so you don’t have to be neat.</p>')
+      + sect("Paper", switchRow("Make the paper see-through", "data-dpaper", o.paper)
+        + '<p class="hint">' + (o.paper ? "Only your lines stay. The paper turns clear, so the colors under it show." : "Shows the photo just as it is, paper and all.") + '</p>')
+      + (o.paper ? sect("Lines", '<label class="sub">How strong the lines are</label>' + rangeRow("data-dstr", 0, 100, Math.round(o.str * 100), "How strong the lines are"))
+        + sect("Line color", '<div class="seg" role="group" aria-label="Line color"><button type="button" data-dink="" aria-pressed="' + !o.ink + '">Pencil</button><button type="button" data-dink="' + (o.ink || "#1E2226") + '" aria-pressed="' + !!o.ink + '">A color</button></div>'
+          + (o.ink ? swatchesHTML("dink", o.ink) : "")) : "")
+      + sect("Position", '<div class="fields">' + numField("X", "x", Math.round(o.x)) + numField("Y", "y", Math.round(o.y)) + numField("W", "w", Math.round(o.w), "Width") + numField("H", "h", Math.round(o.h), "Height")
+        + numField("°", "r", Math.round(((o.r % 360) + 360) % 360), "Rotation") + '</div>'
+        + '<div class="btnrow2"><button type="button" class="btn" data-act="drawing-fit"><i data-lucide="maximize"></i> Fit to page</button>'
+        + '<button type="button" class="btn" data-act="drawing-swap"><i data-lucide="replace"></i> Swap photo</button></div>');
+  } else if (o && tool !== "brush" && tool !== "eraser" && tool !== "blend" && tool !== "fill"){
     const isText = o.type === "text", isLine = o.t === "line";
     h += sect(isText ? "Text" : (SHAPES.find(s => s[0] === o.t) || [0, 0, "Shape"])[2], '<div class="btnrow">'
         + '<button type="button" data-obj="center-h" title="Center horizontally on the page" aria-label="Center horizontally"><i data-lucide="align-center-vertical"></i></button>'
@@ -1992,7 +2195,12 @@ function inspector(){
   } else if (tool === "text"){
     h += sect("Text", '<p class="hint">Click the canvas where your words should go, then type.</p>') + sect("Color", swatchesHTML("color", color));
   } else if (tool === "fill"){
-    h += sect("Fill", '<p class="hint">Click a shape or text to fill it. Click an empty part of the page to fill the background.</p>') + sect("Color", swatchesHTML("color", color));
+    h += (l && l.type === "paint"
+        ? sect("Fill inside the lines", '<p class="hint">Click inside a shape in your picture. Color pours in on <b>' + esc(l.name) + '</b> and stops at the lines, like a coloring book.</p>')
+          + sect("Close small gaps", rangeRow("data-fgap", 0, 8, fillGap, "Close small gaps")
+            + '<p class="hint">If color leaks out through a gap in your lines, turn this up and try again.</p>')
+        : sect("Fill", '<p class="hint">Click a shape or text to fill it. To color inside your lines, pick a paint layer first.</p>'))
+      + sect("Color", swatchesHTML("color", color));
   } else if (tool === "pick"){
     h += sect("Color picker", '<p class="hint">Click anywhere on your picture to pick up that color.</p>') + sect("Color", swatchesHTML("color", color));
   } else if (tool === "crop"){
@@ -2096,6 +2304,11 @@ function zoomChanged(){
   if (Math.abs(want - view.k) / view.k > .15) view.kTimer = setTimeout(() => { if (drag && drag.kind === "stroke") return; view.k = want; view.caches.clear(); draw(); }, 140);
   draw();
 }
+let clipCanvas = null;
+function clipWork(c){
+  if (!clipCanvas || clipCanvas.width !== c.width || clipCanvas.height !== c.height){ clipCanvas = document.createElement("canvas"); clipCanvas.width = c.width; clipCanvas.height = c.height; }
+  const x = clipCanvas.getContext("2d"); x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.globalCompositeOperation = "source-over"; x.clearRect(0, 0, c.width, c.height); return x;
+}
 function cacheOf(l){
   let c = view.caches.get(l.id);
   if (!c || c.k !== view.k){ c = paintLayerCanvas(cur, l, view.k); view.caches.set(l.id, c); }
@@ -2128,12 +2341,27 @@ function draw(){
   cx.fillStyle = cur.bg; cx.fillRect(0, 0, cur.w, cur.h); cx.restore();
   cx.save(); cx.beginPath(); cx.rect(0, 0, cur.w, cur.h); cx.clip();
   if (cur.trace && !cur.trace.top) drawTrace(cx);
-  for (const l of cur.layers){
-    if (!l.vis) continue;
-    if (l.type !== "paint"){ drawObject(cx, l); continue; }
+  cur.layers.forEach((l, i) => {
+    if (!l.vis) return;
+    if (l.type !== "paint"){ drawObject(cx, l); return; }
     const c = cacheOf(l);
+    const b = l.clip ? clipBase(cur, i) : null;
+    if (b && !b.vis) return;
     cx.save(); cx.globalAlpha = l.op;
-    if (drag && drag.kind === "stroke" && drag.layer === l.id){
+    if (b){
+      /* a clipped layer (and the stroke being drawn on it) shows only on the paint of the layer below */
+      const t = clipWork(c.c), k = view.k, live = drag && drag.kind === "stroke" && drag.layer === l.id;
+      if (live && BLEND_KEYS.includes(drag.st.b)) t.drawImage(drag.live, 0, 0);
+      else {
+        t.drawImage(c.c, 0, 0);
+        if (live){ t.globalAlpha = drag.st.e ? drag.st.a : strokeAlpha(drag.st); t.globalCompositeOperation = drag.st.e ? "destination-out" : "source-over"; t.drawImage(drag.live, 0, 0); }
+      }
+      t.globalAlpha = 1; t.globalCompositeOperation = "destination-in";
+      if (b.type === "paint") t.drawImage(cacheOf(b).c, (b.dx - l.dx) * k, (b.dy - l.dy) * k);
+      else { t.setTransform(k, 0, 0, k, -l.dx * k, -l.dy * k); drawObject(t, b); t.setTransform(1, 0, 0, 1, 0, 0); }
+      t.globalCompositeOperation = "source-over";
+      cx.drawImage(clipCanvas, l.dx, l.dy, cur.w, cur.h);
+    } else if (drag && drag.kind === "stroke" && drag.layer === l.id){
       /* the stroke being drawn shows exactly as it will look once it's done */
       if (BLEND_KEYS.includes(drag.st.b)) cx.drawImage(drag.live, l.dx, l.dy, cur.w, cur.h);
       else if (drag.st.e){
@@ -2147,7 +2375,7 @@ function draw(){
       }
     } else cx.drawImage(c.c, l.dx, l.dy, cur.w, cur.h);
     cx.restore();
-  }
+  });
   if (drag && drag.kind === "draw-shape" && drag.ob) drawObject(cx, drag.ob);
   if (cur.trace && cur.trace.top) drawTrace(cx);
   cx.restore();
@@ -2285,6 +2513,10 @@ cv.addEventListener("pointerdown", e => {
   }
   if (tool === "pick"){ pickColor(x, y); return; }
   if (tool === "fill"){
+    let al = active();
+    /* with your drawing picked, color goes on the paint layer under it */
+    if (al && al.type === "drawing"){ activeId = nearestPaintLayer(); al = active(); inspector(); layersPanel(); }
+    if (al && al.type === "paint"){ fillInside(x, y); return; }
     const hit = hitObject(x, y);
     if (hit && hit.lock) return toast("That layer is locked.");
     beginChange();
@@ -2563,6 +2795,7 @@ document.addEventListener("click", e => {
   if (b.dataset.color){ useColor(b.dataset.color); inspector(); return; }
   if (b.dataset.objcolor){ const o = activeObj(); if (o){ beginChange(); o.c = b.dataset.objcolor; useColor(o.c); changed(); } return; }
   if (b.dataset.oc){ const o = activeObj(); if (o){ beginChange(); o.oc = b.dataset.oc; changed(); } return; }
+  if (b.hasAttribute("data-dink")){ const o = activeObj(); if (o && o.type === "drawing"){ beginChange(); o.ink = b.dataset.dink || ""; changed(); } return; }
   if (b.dataset.bg){ beginChange(); cur.bg = b.dataset.bg; changed(); return; }
   if (b.dataset.brush){ brush.b = b.dataset.brush; inspector(); return; }
   if (b.dataset.mirror){ brush.m = +b.dataset.mirror; inspector(); draw(); return; }
@@ -2608,6 +2841,13 @@ document.addEventListener("click", e => {
   if (act === "zoom-fit") return fit();
   if (act === "focus-color"){ const p = document.querySelector("[data-color-picker],[data-objcolor-picker]"); if (p) p.click(); return; }
   if (act === "trace-pick") return $("#trace-in").click();
+  if (act === "drawing-pick"){ if (cur.kind !== "paint") return toast("Bring in a drawing works on a Blank page or a Mirror & Pattern page."); drawingSwap = false; return $("#drawing-in").click(); }
+  if (act === "drawing-swap"){ drawingSwap = true; return $("#drawing-in").click(); }
+  if (act === "drawing-fit"){
+    const o = activeObj(); if (!o || o.type !== "drawing") return;
+    const k = Math.min(cur.w / o.iw, cur.h / o.ih);
+    beginChange(); Object.assign(o, { x:cur.w / 2, y:cur.h / 2, w:o.iw * k, h:o.ih * k, r:0 }); changed(); return;
+  }
   if (act === "trace-fit"){ if (cur.trace){ fitTrace(cur.trace); inspector(); draw(); queueSave(); } return; }
   if (act === "trace-remove"){ cur.trace = null; traceImg = null; traceSrc = ""; inspector(); draw(); queueSave(); toast("Removed the trace picture. Your drawing stays."); return; }
   if (act === "uncrop"){ beginChange(); cur.crop = null; changed(); return; }
@@ -2643,6 +2883,9 @@ document.addEventListener("input", e => {
   if (t.matches("[data-eop],[data-eop-num]")){ eraser.a = val() / 100; pair("data-eop", Math.round(eraser.a * 100)); return; }
   if (t.matches("[data-op],[data-op-num]")){ const l = active(); if (!l) return; once(); l.op = val() / 100; pair("data-op", Math.round(l.op * 100)); draw(); queueSave(); updateUndo(); return; }
   if (t.matches("[data-ow],[data-ow-num]")){ const o = activeObj(); if (!o) return; once(); o.ow = val(); pair("data-ow", o.ow); draw(); queueSave(); updateUndo(); return; }
+  if (t.matches("[data-dstr],[data-dstr-num]")){ const o = activeObj(); if (!o || o.type !== "drawing") return; once(); o.str = val() / 100; pair("data-dstr", Math.round(o.str * 100)); draw(); queueSave(); updateUndo(); return; }
+  if (t.matches("[data-fgap],[data-fgap-num]")){ fillGap = val(); pair("data-fgap", fillGap); return; }
+  if (t.matches("[data-dink-picker]")){ const o = activeObj(); if (!o || o.type !== "drawing") return; once(); o.ink = t.value.toUpperCase(); t.parentNode.style.background = o.ink; draw(); queueSave(); updateUndo(); return; }
   if (t.matches("[data-color-picker]")){ color = t.value.toUpperCase(); const s = $("#tool-swatch"); if (s) s.style.background = color; t.parentNode.style.background = color; return; }
   if (t.matches("[data-objcolor-picker]")){ const o = activeObj(); if (!o) return; once(); o.c = t.value.toUpperCase(); t.parentNode.style.background = o.c; draw(); queueSave(); updateUndo(); return; }
   if (t.matches("[data-oc-picker]")){ const o = activeObj(); if (!o) return; once(); o.oc = t.value.toUpperCase(); t.parentNode.style.background = o.oc; draw(); queueSave(); updateUndo(); return; }
@@ -2652,7 +2895,13 @@ document.addEventListener("change", e => {
   const t = e.target; const wasField = fieldBegan === t; fieldBegan = null;
   if (t.matches("#file-in")) return openFile(t);
   if (t.matches("#trace-in")) return loadTrace(t);
+  if (t.matches("#drawing-in")) return loadDrawing(t);
   if (!cur) return;
+  if (t.matches("[data-dpaper]")){ const o = activeObj(); if (o && o.type === "drawing"){ beginChange(); o.paper = t.checked; changed(); } return; }
+  if (t.matches("[data-clip]")){ const l = active(); if (l && l.type === "paint"){ beginChange(); l.clip = t.checked; changed(); } return; }
+  if (t.matches("[data-dink-hex]")){ const c = hexOf(t.value), o = activeObj(); if (c && o && o.type === "drawing"){ beginChange(); o.ink = c; changed(); } else inspector(); return; }
+  if (t.matches("[data-dink-picker]")){ if (wasField) changed(); return; }
+  if (t.matches("[data-dstr],[data-dstr-num]")){ if (wasField) changed({ keepPanel:true }); return; }
   if (t.matches("[data-trvis]") && cur.trace){ cur.trace.vis = t.checked; draw(); queueSave(); return; }
   if (t.matches("[data-color-hex]")){ const c = hexOf(t.value); if (c) useColor(c); inspector(); return; }
   if (t.matches("[data-objcolor-hex]")){ const c = hexOf(t.value), o = activeObj(); if (c && o){ beginChange(); o.c = c; useColor(c); changed(); } else inspector(); return; }
