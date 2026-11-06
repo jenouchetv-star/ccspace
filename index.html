@@ -404,6 +404,27 @@ p:last-child{ margin-bottom:0; }
 .studio-card__bigicon{ width:34% !important; height:auto !important; aspect-ratio:1; object-fit:contain !important; filter:drop-shadow(0 6px 12px rgba(30,34,38,.22)); }
 .studio-card__title{ display:flex; align-items:center; gap:12px; }
 .studio-card__icon{ width:48px; height:48px; flex:none; border-radius:12px; box-shadow:0 3px 10px rgba(20,14,40,.28); }
+/* Art Space's light and dark looks: the switch slides, the picture fades between the two */
+.studio-card__media .studio-card__light{ position:absolute; inset:0; opacity:0; transition:opacity .5s ease; }
+.studio-card--light .studio-card__light{ opacity:1; }
+.themeflip{ margin-left:auto; flex:none; position:relative; width:66px; height:36px; padding:0; border-radius:999px; border:2px solid var(--ink);
+  background:#1E2433; cursor:pointer; transition:background .45s ease; }
+.themeflip__knob{ position:absolute; top:3px; left:3px; width:26px; height:26px; border-radius:50%; background:#2C3550; display:grid; place-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.35); transition:transform .5s cubic-bezier(.5,1.6,.5,1), background .45s ease; }
+.themeflip__knob svg{ position:absolute; width:16px; height:16px; transition:opacity .35s ease, transform .5s ease; }
+.themeflip__moon{ color:#C9D6FF; }
+.themeflip__sun{ color:#F2A100; opacity:0; transform:rotate(-120deg) scale(.4); }
+.themeflip__star{ position:absolute; width:3px; height:3px; border-radius:50%; background:#C9D6FF; transition:opacity .35s ease, transform .45s ease; }
+.themeflip__star--a{ right:12px; top:9px; } .themeflip__star--b{ right:20px; top:20px; width:2px; height:2px; }
+.studio-card--light .themeflip{ background:#BFE3FF; }
+.studio-card--light .themeflip__knob{ transform:translateX(30px); background:#FFF6D6; }
+.studio-card--light .themeflip__moon{ opacity:0; transform:rotate(120deg) scale(.4); }
+.studio-card--light .themeflip__sun{ opacity:1; transform:none; }
+.studio-card--light .themeflip__star{ opacity:0; transform:translateY(6px); }
+.themeflip:focus-visible{ outline:3px solid var(--sky-deep, #1D6FD6); outline-offset:3px; }
+@media (prefers-reduced-motion: reduce){
+  .studio-card__media .studio-card__light, .themeflip, .themeflip__knob, .themeflip__knob svg, .themeflip__star{ transition:none; }
+}
 /* a studio not ready yet: full colour like the others, a quiet "Coming soon" line in place of the button */
 .studio-card__soon{ display:inline-flex; align-items:center; gap:8px; margin:0; min-height:44px; font-weight:800; font-size:.9rem; color:var(--ink-mute); }
 .studio-card__soon svg{ width:16px; height:16px; }
@@ -8671,7 +8692,8 @@ const CREATE_NAV = [
    Each app is its own program: Art Space is a first-party file that opens in the full-window stage. */
 const STUDIO_APPS = [
   { id:"art",  icon:"palette",   bg:"#EDE3F8", live:true, path:"assets/apps/art-studio.html", members:true, appIcon:"assets/studio/art-studio-icon.svg",
-    preview:"assets/studio/art-space-portrait-ui.jpg", previewAlt:"The Art Space editor with a painted portrait of a girl in a crown of flowers, its brushes on the left and its layers on the right" },
+    preview:"assets/studio/art-space-hero-ui.jpg", previewLight:"assets/studio/art-space-hero-ui-light.jpg",
+    previewAlt:"The Art Space editor with a colored comic drawing of a boy superhero in a red and blue suit running beside his dog, its brushes on the left and its layers on the right" },
   { id:"book", icon:"book-open", bg:"#E6ECFF", live:false, appIcon:"assets/studio/book-studio-icon.svg" },
   { id:"card", icon:"mail-open", bg:"#DDF5F3", live:false, appIcon:"assets/studio/card-maker-icon.svg" },
   { id:"sound", icon:"audio-lines", live:false, appIcon:"assets/studio/sound-space-icon.svg" },
@@ -11782,15 +11804,20 @@ function studioAppCard(s){
   const badge = s.live && s.members ? '<span class="card__badge chip chip--members">' + ic("lock") + ' Subscribers only</span>' : "";
   const media = '<div class="card__media studio-card__media" style="background:' + s.bg + '">'
     + (s.preview ? '<img class="skel" src="' + E(s.preview) + '" alt="' + E(s.previewAlt || "") + '" loading="lazy">'
+        + (s.previewLight ? '<img class="studio-card__light" src="' + E(s.previewLight) + '" alt="" loading="lazy">' : "")
       : '<img class="studio-card__bigicon" src="' + E(s.appIcon) + '" alt="" loading="lazy">')
     + badge + '</div>';
+  /* a switch between the app's dark and light looks, when there's a picture of each */
+  const flip = s.previewLight ? '<button type="button" class="themeflip" data-act="studio-theme" role="switch" aria-checked="false" aria-label="Show ' + E(name) + ' in light mode" title="Dark or light">'
+    + '<span class="themeflip__star themeflip__star--a"></span><span class="themeflip__star themeflip__star--b"></span>'
+    + '<span class="themeflip__knob">' + ic("moon", "themeflip__moon") + ic("sun", "themeflip__sun") + '</span></button>' : "";
   const second = portalIsSubscriber()
     ? (s.id === "art" && !artAppInstalled() ? '<button type="button" class="btn btn--sm btn--paper" data-act="art-install" aria-label="Install ' + E(name) + ' as an app">' + ic("download") + ' Install</button>' : "")
     : '<button type="button" class="btn btn--sm btn--paper" data-act="open-mailing-list" data-next="/create/studio/' + E(s.id) + '" data-game="' + E(name) + '">' + ic("mail") + ' Subscribe for free access</button>';
   return '<article class="card studio-card studio-card--link" data-act="open-studio-app" data-id="' + E(s.id) + '" tabindex="-1">' + media
     + '<div class="card__body">'
     + '<h3 class="card__title studio-card__title"><img class="studio-card__icon" src="' + E(s.appIcon) + '" alt="">' + slot(C, s.id + "Title")
-    + (s.id === "art" ? ' <span class="chip chip--ink" title="Art Space is in beta: it works, and we are still adding to it">Beta</span>' : "") + '</h3>'
+    + (s.id === "art" ? ' <span class="chip chip--ink" title="Art Space is in beta: it works, and we are still adding to it">Beta</span>' : "") + flip + '</h3>'
     + '<p class="studio-card__lead">' + slot(C, s.id + "Lead") + '</p>'
     + '<p class="studio-card__text">' + slot(C, s.id + "Text") + '</p>'
     + '<div class="card__foot">'
@@ -27951,6 +27978,13 @@ const ACTIONS = {
   "studio-meet": () => {
     const t = document.getElementById("studio-art");
     if (t) t.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start" });
+  },
+  /* the Art Space card: show the app in its light or dark look (just the picture; it doesn't open the app) */
+  "studio-theme": (el) => {
+    const card = el.closest(".studio-card"); if (!card) return;
+    const light = card.classList.toggle("studio-card--light");
+    el.setAttribute("aria-checked", String(light));
+    el.setAttribute("aria-label", "Show " + (el.getAttribute("aria-label") || "").replace(/^Show (.*) in (light|dark) mode$/, "$1") + " in " + (light ? "dark" : "light") + " mode");
   },
   "open-studio-app": (el) => {
     const s = STUDIO_APPS.find(x => x.id === el.getAttribute("data-id"));
