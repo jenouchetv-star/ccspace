@@ -1754,6 +1754,10 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
 .newest__grid > div:not(.newest__player) .row{ justify-content:center; }
 .newest__grid--flip{ grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr); }
 .newest__grid--flip .newest__player{ margin-left:0; margin-right:auto; }
+/* the Art Space introduction on the home page: the app's icon beside its name */
+.artintro__title{ display:flex; align-items:center; justify-content:center; gap:12px; flex-wrap:wrap; }
+.artintro__title img{ width:40px; height:40px; flex:none; }
+.artintro__title .chip{ font-size:.8rem; }
 /* The Gravity 4 invitation under the hero: the members-only game, and what else the mailing list opens up. */
 .g4band{ border-bottom:var(--line); background:linear-gradient(180deg,#EAF6FB 0%,#D3ECF7 100%); }
 .g4promo{ display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr); gap:clamp(24px,3.6vw,52px); align-items:center; }
@@ -7528,9 +7532,9 @@ function seedHomepage(){
   const mods = [
     M("hero","hero","Treehouse hero","Parallax background with the studio illustration.",[]),
     M("promise","strip","Promise strip","Scrolling band of brand promises.",[]),
+    M("newgame","newgame","Art Space","An introduction to Art Space, the drawing and design app, with Open and Details buttons. (This spot used to show the newest online game.)",["game-doodle-dash"]),
     M("gravityfour","gravityfour","New games band","The eight games with their arcade makeover: a moving preview, Play the new games, and Join for exclusive games.",[]),
     M("episodes","videos","Newest episode","The most recent published episode, on its own.",[]),
-    M("newgame","newgame","Newest game","The newest online game, with a Play button. Pinned to Doodle Dash for now; if that game is ever unpublished, the most recently added online game shows instead.",["game-doodle-dash"]),
     M("finder","finder","What should we create today?","The rule-based activity finder.",[]),
     M("featured","activities","Popular projects to start with","Featured activities pulled from the activity manager.",
       ["act-cardboard-city","act-backyard-sound-song","act-paper-airplane","act-orrery","act-story-cubes","act-clay-volcano"], false),
@@ -11174,6 +11178,26 @@ function viewHome(){
     html += '<div class="strip" role="presentation">' + quEditable("home-promises", homeId, '<div class="strip__track">' + band + echo + '</div>') + '</div>';
   }
 
+  /* The first section under the promise strip, above the new games band: an introduction to Art Space, the drawing and design app in
+     Creative Space Studio. (It used to feature the newest online game; the home module keeps its "newgame" kind.)
+     The picture is a real screenshot of the app with a painting made in it. */
+  if (on("newgame")){
+    html += '<section class="section section--tight newest artintro" style="border-bottom:var(--line)"><div class="shell">'
+      + '<div class="newest__grid newest__grid--flip">'
+      + '<div class="newest__player"><div class="embed"><a class="embed__facade" href="#/create/studio/art" aria-label="Open Art Space">'
+      + '<img class="skel" src="assets/studio/art-space-home.jpg" alt="The Art Space editor: brushes and colors on the left, layers on the right, and a bright tiger face on a ring of jungle leaves on the page" width="1600" height="900" loading="lazy">'
+      + '<span class="embed__note">' + ic("palette") + ' Draws right here in your browser</span></a></div></div>'
+      + '<div><span class="eyebrow">New in Creative Space Studio</span>'
+      + '<h2 class="newest__title artintro__title"><img src="assets/studio/art-studio-icon.svg" alt="" width="40" height="40">Art Space <span class="chip chip--ink">Beta</span></h2>'
+      + '<p class="lede">A drawing and design app for kids, right here on the site. Paint and blend, build posters from shapes and words, make mirror patterns and pixel art, then print or share what you made.</p>'
+      + '<p class="tiny mute" style="margin:10px 0 0">Free for mailing-list subscribers, for now.</p>'
+      + '<div class="row" style="margin-top:18px">'
+      + '<a class="btn btn--cyan" href="#/create/studio/art">' + ic("arrow-right") + ' Open Art Space</a>'
+      + '<button type="button" class="btn btn--paper" data-act="art-details">' + ic("info") + ' Details</button>'
+      + '</div></div>'
+      + '</div></div></section>';
+  }
+
   if (on("gravityfour")) html += newGamesPromoHTML();
 
   if (on("videos")){
@@ -11189,32 +11213,6 @@ function viewHome(){
         + '<a class="btn btn--paper" href="#/watch">' + ic("arrow-right") + ' All episodes</a>'
         + '</div></div>'
         + '<div class="newest__player">' + embed(latest) + '</div>'
-        + '</div></div></section>';
-    }
-  }
-
-  /* The newest game: the pinned game if the module names one that is published,
-     otherwise the most recently added online game. Same shape as the newest episode. */
-  if (on("newgame")){
-    const gm = mods.find(m => m.kind === "newgame");
-    const ng = (gm.items || []).map(id => db.find("games", id)).find(r => r && r.status === "published")
-      || db.list("games").filter(r => r.status === "published" && r.kind === "embed")
-           .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
-    if (ng){
-      const pic = (gm.image && gm.image.src) || (ng.cover && ng.cover.src) || "assets/games/doodle-dash.jpg";
-      html += '<section class="section section--tight newest" style="border-bottom:var(--line)"><div class="shell">'
-        + '<div class="newest__grid newest__grid--flip">'
-        + '<div class="newest__player"><div class="embed"><a class="embed__facade" href="#/play/' + E(ng.id) + '" aria-label="Play ' + E(ng.title) + '">'
-        + '<img class="skel" src="' + E(pic) + '" alt="' + E((ng.cover && ng.cover.alt) || ng.title) + '" width="1200" height="892" loading="lazy">'
-        + '<span class="embed__note">' + ic("gamepad-2") + ' Plays right here in your browser</span></a></div></div>'
-        + '<div><span class="eyebrow">Featured game</span>'
-        + '<h2 class="newest__title">' + E(ng.title) + '</h2>'
-        /* the home page has room for more than the Play card's one line: the game's intro, when it has one */
-        + '<p class="lede">' + quEditable(ng.intro ? "newest-game-intro" : "newest-game-desc", ng.id, E(ng.intro || ng.summary)) + '</p>'
-        + '<div class="row" style="margin-top:20px">'
-        + '<a class="btn btn--cyan" href="#/play/' + E(ng.id) + '">' + ic("gamepad-2") + ' Play ' + E(ng.title) + '</a>'
-        + '<a class="btn btn--paper" href="#/play">' + ic("arrow-right") + ' All games</a>'
-        + '</div></div>'
         + '</div></div></section>';
     }
   }

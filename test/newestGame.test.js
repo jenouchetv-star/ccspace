@@ -1,15 +1,21 @@
 // The home page's Newest game section has room for more than a Play page card's one line: it shows the game's
 // optional intro (Doodle Dash's adds its second sentence), and falls back to the short summary.
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const sql = readFileSync(new URL("../supabase/doodle-dash-intro.sql", import.meta.url), "utf8");
 const INTRO = "Draw your own level, then run and jump through it. Share a six-character code to play in the same world as a friend.";
 
 describe("the Newest game section", () => {
-  it("shows the game's intro, or its summary when it has none", () => {
-    expect(html).toContain(`quEditable(ng.intro ? "newest-game-intro" : "newest-game-desc", ng.id, E(ng.intro || ng.summary))`);
+  it("now introduces Art Space instead of a game, with Open and Details", () => {
+    const block = html.split('if (on("newgame")){')[1].split("\n  }\n")[0];
+    expect(block).toContain('src="assets/studio/art-space-home.jpg"');
+    expect(block).toContain('<span class="eyebrow">New in Creative Space Studio</span>');
+    expect(block).toContain('href="#/create/studio/art">\' + ic("arrow-right") + \' Open Art Space</a>');
+    expect(block).toContain('data-act="art-details"');
+    expect(block).not.toContain("Featured game");
+    expect(existsSync(new URL("../assets/studio/art-space-home.jpg", import.meta.url))).toBe(true);
     expect(html).toContain('{ key:"intro", label:"Home page intro", type:"textarea"');
   });
 
