@@ -295,8 +295,24 @@ describe("how the site wires the portal in", () => {
     expect(html).toContain('const PORTAL_SESSION_KEY = "ccs_portal_session";');
     expect(body("portalScrub")).toContain('history.replaceState({}, "", location.pathname)');
     const boot = body("portalBoot");
-    expect(boot.indexOf('portalCall("verify"')).toBeLessThan(boot.indexOf('portalCall("exchange"'));
-    expect(boot.indexOf('portalCall("exchange"')).toBeLessThan(boot.indexOf('portalCall("session"'));
+    expect(boot.indexOf('portalCall("verify"')).toBeLessThan(boot.indexOf('portalCall("session"'));
+    // a newsletter's key is scrubbed from the address too, and never turned into a session
+    expect(boot).toContain("portalScrub();");
+    expect(boot).not.toContain('portalCall("exchange"');
+    expect(html).not.toContain('portalCall("exchange"');
+  });
+
+  it("opens only the page a newsletter link points to, to read, and asks for the code anywhere else", () => {
+    const open = body("portalOpenByKey");
+    expect(open).toContain('portalCall("entry_by_key", { key: key, slug: slug })');
+    expect(open).not.toMatch(/portalSaveSession|portalUnlock/);       // reading from a link never signs in
+    expect(body("portalKeyedHere")).toContain('r.name === "newsletter-detail"');
+    expect(body("portalSync")).toContain("!portalKeyedHere()");
+    const entry = body("viewNewsletterEntry");
+    expect(entry).toContain("portalEntryHTML(fromEmail, [], portalKeyedBar())");   // no other entries listed beside it
+    expect(body("viewNewsletter")).toContain('PortalState.phase === "keyed"){ portalLeaveKeyed(); return portalDecoy(); }');
+    expect(body("portalKeyedBar").split("\n}")[0]).not.toMatch(/PortalState|email/i);   // shows nobody's address
+    expect(body("portalRememberKey")).toContain("sessionStorage");                     // this tab only, not saved for good
   });
 
   it("lets signed-in admins straight in, with a bar to manage entries", () => {

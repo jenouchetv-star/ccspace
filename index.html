@@ -450,8 +450,6 @@ p:last-child{ margin-bottom:0; }
 .studio-card .card__foot .btn{ padding-left:12px; padding-right:12px; }
 .install-steps{ margin:0; padding-left:1.3em; display:grid; gap:8px; font-weight:600; }
 .studio-card__shot{ display:block; width:100%; aspect-ratio:4/3; object-fit:cover; border:var(--line); border-radius:var(--r); background:#fff; }
-.studio-card__shot--big{ max-width:420px; margin:0 0 0 auto; box-shadow:var(--hard); }
-.studio-apphead{ grid-template-columns:minmax(0,1.5fr) minmax(0,.85fr); }
 /* the Studio page: its logo on the right of the header (above the title on a phone) */
 /* The Creative Space Studio page. 1: the studio, its words beside a big screenshot of Art Space. */
 .studiohero{ padding-top:clamp(28px,4vw,48px); padding-bottom:clamp(32px,4.4vw,56px); }
@@ -503,11 +501,7 @@ p:last-child{ margin-bottom:0; }
   .studioinside__list, .studio-soon__list{ grid-template-columns:1fr; }
   .studioart__kid img{ aspect-ratio:3/2; height:auto; }
 }
-@media (max-width:900px){ .studio-apphead{ grid-template-columns:1fr; } .studio-card__logo--big{ margin:0; } }
-.art-tool h3{ margin:10px 0 .3em; }
-.art-tool__icon{ display:grid; place-items:center; width:48px; height:48px; border:var(--line); border-radius:14px; background:#EDE3F8; }
-.art-tool__icon svg{ width:24px; height:24px; }
-.art-tool--soon{ opacity:.6; }
+@media (max-width:900px){ .studio-card__logo--big{ margin:0; } }
 /* Grown-Ups guide: Choose / Prepare / Support, Try this, home and class, stories, the end */
 /* the same breathing room between every part of the guide */
 .guide__steps, .guide__try, .guide__pair, .guide__story, .guide__end{ --guide-gap:clamp(56px,7vw,96px); }
@@ -8717,15 +8711,6 @@ const STUDIO_APPS = [
   { id:"sound", icon:"audio-lines", live:false, appIcon:"assets/studio/sound-space-icon.svg" },
   { id:"motion", icon:"clapperboard", live:false, appIcon:"assets/studio/motion-space-icon.svg" }
 ];
-/* what Art Space can do, for its own page */
-const ART_STUDIO_TOOLS = [
-  { icon:"brush",            name:"Draw & Paint",     text:"Brushes, an eraser and every color on a blank page. Undo anything." },
-  { icon:"flip-horizontal-2",name:"Mirror & Pattern", text:"Draw once and it repeats in 2, 4 or 8 mirrored slices, like a kaleidoscope." },
-  { icon:"grid-3x3",         name:"Pixel Art",        text:"Color squares on a grid to make game sprites and icons." },
-  { icon:"shapes",           name:"Shape Designer",   text:"Build a picture from circles, squares, stars and hearts you can resize, turn and recolor." },
-  { icon:"megaphone",        name:"Design a Poster",  text:"A tall page for big words and pictures: a sign, an invitation or a poster for your room." },
-  { icon:"crop",             name:"Crop, Save & Share", text:"Trim your picture to the part you like, then download it, print it or send it to a friend." }
-];
 
 /* "Create: Digital Activities" - the crumb back to a Create tab */
 function createCrumbLabel(sub){
@@ -8911,7 +8896,7 @@ function parseRoute(address){
     /* /create/studio/art: one studio app inside Chike's Creative Studio */
     app: seg[1] === "studio" && STUDIO_APPS.some(s => s.id === seg[2]) ? seg[2] : "" }, query:query };
   if (seg[0] === "find" && seg[1]) return { name:"find-detail", params:{ id: seg[1] }, query:query };
-  if (seg[0] === "unsubscribe" && seg[1]) return { name:"unsubscribe", params:{ id: seg[1] }, query:query };
+  if (seg[0] === "unsubscribe" && seg[1]) return { name:"unsubscribe", params:{ id: seg[1], sig: seg[2] || "" }, query:query };
   if (seg[0] === "help")  return { name:"grown-ups", params:{ sub:"help" }, query:query };
   if (seg[0] === "contact") return { name:"grown-ups", params:{ sub:"contact" }, query:query };
   const detailable = { activity:"activity", watch:"video", stories:"story", characters:"character", collection:"collection", article:"article", newsletter:"newsletter" };
@@ -11881,43 +11866,18 @@ function openStudioStage(s){
   openGameStage({ id:"studio-" + s.id, title: slotText("create", s.id + "Title"), icon: s.icon, path: s.path,
     sharePath: "/create/studio/" + s.id, sandboxExtra: "allow-downloads allow-modals", bare: true });
 }
-/** /create/studio/art: one studio app's own page, with what it does and the button that opens it.
-    Subscribers only for now: anyone else is asked to join (free) or sign in, the way members games are. */
+/** /create/studio/art: the app's own address. It opens the app full-window (once per visit to the address, so
+    closing it stays closed), over the Studio page; the app's Close button goes back to /create/studio. There is no
+    separate page for it. */
 function viewStudioApp(id){
   if (!studioSettings().live && !adminSeesAll()) return notFound("page");
   const s = STUDIO_APPS.find(x => x.id === id);
   if (!s || !s.live) return notFound("page");
-  const C = "create";
-  const name = slotText(C, s.id + "Title");
-  /* Art Space asks for the mailing-list sign-in itself, after its loading card, so the address opens it for everyone */
-  const canOpen = true;
-  /* the address is the app: a subscriber lands straight in it (once per visit to this address, so closing it stays closed) */
-  if (canOpen && STUDIO_APP_OPENED !== location.pathname){
+  if (STUDIO_APP_OPENED !== location.pathname){
     STUDIO_APP_OPENED = location.pathname;
     setTimeout(() => { if (!$(".gamestage")) openStudioStage(s); }, 0);
   }
-  const open = canOpen
-    ? '<button type="button" class="btn btn--lg btn--cyan" data-act="studio-stage" data-id="' + E(s.id) + '">' + ic("palette") + ' Open ' + E(name) + '</button>'
-      + (s.id === "art" && !artAppInstalled() ? '<button type="button" class="btn btn--paper" data-act="art-install">' + ic("download") + ' Install app</button>' : "")
-    : '<button type="button" class="btn btn--lg btn--sun" data-act="open-mailing-list" data-next="/create/studio/' + E(s.id) + '" data-game="' + E(name) + '">' + ic("lock") + ' Join free to use it</button>'
-      + '<button type="button" class="btn btn--paper" data-act="open-mailing-list" data-member data-next="/create/studio/' + E(s.id) + '" data-game="' + E(name) + '">' + ic("log-in") + ' Already joined? Sign in</button>';
-  return '<section class="section pagehead band-grad"><div class="shell">'
-    + '<div class="pagehead__grid studio-apphead">'
-    + '<div><h1>' + E(name) + '</h1>'
-    + '<div class="lede"><p>' + slot(C, "artLede") + '</p></div>'
-    + '<div class="row" style="margin-top:22px;gap:10px">' + open + '</div>'
-    + '<p class="tiny mute" style="margin:14px 0 0">' + slot(C, "artNote") + '</p></div>'
-    + '<div class="pagehead__aside">' + (s.preview ? '<img class="studio-card__shot studio-card__shot--big" src="' + E(s.preview) + '" alt="' + E(s.previewAlt || "") + '" onerror="this.remove()">' : "") + '</div>'
-    + '</div></div></section>'
-    + '<section class="section"><div class="shell">'
-    + '<div class="listhead"><h2>' + slot(C, "artToolsHeading") + '</h2></div>'
-    + '<div class="grid g-3">'
-    + ART_STUDIO_TOOLS.map(t => '<article class="panel panel--flat art-tool' + (t.soon ? " art-tool--soon" : "") + '">'
-        + '<span class="art-tool__icon">' + ic(t.icon) + '</span>'
-        + '<h3>' + E(t.name) + '</h3><p class="tiny" style="margin:0">' + E(t.text) + '</p>'
-        + (t.soon ? '<span class="chip" style="margin-top:12px">' + ic("hourglass") + ' Coming soon</span>' : "")
-        + '</article>').join("")
-    + '</div></div></section>';
+  return viewCreateStudio();
 }
 
 /* ============================================================
@@ -13811,17 +13771,24 @@ function viewArticle(id){
     email (see supabase/functions/send-newsletter). Requires an explicit
     click rather than acting the moment the page loads, so an email
     client or security scanner prefetching the link can't silently
-    unsubscribe someone who never actually saw this page. The anon key
-    has no delete access on subscribers any more (see the RLS cutover in
-    migration.sql) - this calls the one narrow, purpose-built exception,
-    unsubscribe_newsletter(), instead. */
-function viewUnsubscribe(id){
+    unsubscribe someone who never actually saw this page.
+    The link is signed for the one subscriber it was sent to
+    (/unsubscribe/<id>/<signature>), and the portal function checks the
+    signature, so knowing someone's id is not enough to take them off the
+    list. A link from an email sent before the signature existed has none:
+    the page then asks for the email address the subscriber is on the list
+    with, and only that address works. */
+function viewUnsubscribe(id, sig){
   return '<section class="section"><div class="shell" style="max-width:520px;text-align:center;padding:80px 20px">'
     + '<span class="eyebrow">' + slot("system", "unsubEyebrow") + '</span>'
-    + '<h1 style="margin:.3em 0" id="unsub-heading">' + slot("system", "unsubHeading") + '</h1>'
+    + '<h1 style="margin:.3em 0;font-size:clamp(1.8rem,4vw,2.6rem);text-wrap:balance" id="unsub-heading">' + slot("system", "unsubHeading") + '</h1>'
     + '<p class="lede" id="unsub-copy">' + slot("system", "unsubText", { name: BRAND.name }) + '</p>'
-    + '<button class="btn btn--cyan" id="unsub-btn" type="button" data-act="confirm-unsubscribe" data-id="' + E(id) + '" style="margin-top:20px">' + ic("mail") + ' ' + E(slotText("system", "unsubButton")) + '</button>'
-    + '</div></section>';
+    + '<form id="unsub-form" data-act="confirm-unsubscribe" data-id="' + E(id) + '" data-sig="' + E(sig || "") + '" style="margin-top:20px;display:grid;gap:12px;justify-items:center">'
+    + (sig ? "" : '<label class="unsub__label" for="unsub-email" style="font-weight:700">' + E(slotText("system", "unsubEmailLabel")) + '</label>'
+        + '<input class="input" id="unsub-email" name="email" type="email" autocomplete="email" required style="max-width:340px;width:100%">')
+    + '<button class="btn btn--cyan" id="unsub-btn" type="submit">' + ic("mail") + ' ' + E(slotText("system", "unsubButton")) + '</button>'
+    + '<p class="tiny" id="unsub-error" role="alert" style="margin:0;color:var(--bad, #B3261E)"></p>'
+    + '</form></div></section>';
 }
 
 function shopPrintablesUnavailable(){
@@ -13979,16 +13946,18 @@ async function portalBoot(){
     P.phase = "locked";
     return portalSetGate({ state: portalErrorState(r.error), step: "email" });
   }
-  if (q.key){
-    P.gate.state = "verifying";
-    portalSync();
-    const r = await portalCall("exchange", { key: q.key });
-    portalScrub();
-    if (r.ok) return portalUnlock(r, "Welcome back!");
-    P.phase = "locked";
-    return portalSetGate({ state: portalErrorState(r.error), step: "email" });
-  }
+  /* A newsletter's link (?k=...) opens the page it points to, to read. It never signs anyone in: a newsletter can be
+     forwarded, and whoever it reaches should see what was in that email and nothing of the subscriber's own. Someone
+     already signed in on this device just carries on with the whole portal. */
   const saved = portalSavedSession();
+  const here = AppState.route && AppState.route.name === "newsletter-detail" ? String(AppState.route.params.id || "") : "";
+  if (q.key){
+    portalScrub();
+    if (!saved && here){ portalRememberKey(q.key, here); return portalOpenByKey(q.key, here); }
+  } else if (!saved && here){
+    const kept = portalKeptKey(here);          /* the same page opened again in this tab (a reload) */
+    if (kept) return portalOpenByKey(kept, here);
+  }
   if (saved){
     P.gate.state = "loading";
     portalSync();
@@ -14004,6 +13973,44 @@ async function portalBoot(){
   }
   P.phase = "locked";
   portalSetGate({ state: "idle", step: "email" });
+}
+
+/* the key a newsletter link brought, kept for this tab only, so reloading the page still shows it */
+const PORTAL_KEY_KEY = "ccs_portal_key";
+function portalRememberKey(key, slug){ try { sessionStorage.setItem(PORTAL_KEY_KEY, JSON.stringify({ key: key, slug: slug })); } catch(_e){ /* private window */ } }
+function portalKeptKey(slug){
+  try { const v = JSON.parse(sessionStorage.getItem(PORTAL_KEY_KEY) || "null"); return v && v.slug === slug ? String(v.key || "") : ""; }
+  catch(_e){ return ""; }
+}
+/** Showing the one page a newsletter link opened (no one is signed in). */
+function portalKeyedHere(){
+  const r = AppState.route, P = PortalState;
+  return P.phase === "keyed" && !!P.keyedSlug && !!r && r.name === "newsletter-detail" && String(r.params.id) === P.keyedSlug;
+}
+async function portalOpenByKey(key, slug){
+  const P = PortalState;
+  P.gate.state = "verifying";
+  portalSync();
+  const r = await portalCall("entry_by_key", { key: key, slug: slug });
+  if (r.ok){
+    P.phase = "keyed"; P.keyedSlug = slug; P.detail[slug] = r.entry;
+    rerender();
+    return;
+  }
+  P.phase = "locked";
+  /* a page that email does not link to: the ordinary sign-in */
+  return portalSetGate({ state: r.error === "not_in_email" ? "idle" : portalErrorState(r.error), step: "email" });
+}
+/** Anywhere else in the portal, someone who came in from a newsletter link signs in with a code first. */
+function portalLeaveKeyed(){
+  const P = PortalState;
+  P.phase = "locked"; P.keyedSlug = "";
+  P.gate = Object.assign(P.gate, { state: "idle", step: "email" });
+  setTimeout(portalSync, 0);
+}
+function portalKeyedBar(){
+  return '<div class="pbar no-print"><span>' + ic("mail-open") + ' From your newsletter</span>'
+    + '<span class="pbar__acts"><button type="button" class="btn btn--sm btn--paper" data-act="portal-signin-from-key">' + ic("log-in") + ' Sign in for the whole Subscriber’s Portal</button></span></div>';
 }
 
 async function portalUnlock(r, welcome){
@@ -14129,7 +14136,7 @@ function portalGateHTML(){
 /** Draws, updates or removes the gate to match the state. */
 function portalSync(){
   const app = document.getElementById("app");
-  const needed = portalOnRoute() && !portalIsAdmin() && PortalState.phase !== "ready";
+  const needed = portalOnRoute() && !portalIsAdmin() && PortalState.phase !== "ready" && !portalKeyedHere();
   let root = document.getElementById("portal-gate");
   if (!needed){
     if (root) root.remove();
@@ -14285,6 +14292,8 @@ function portalEntriesForAdmin(){
 function viewNewsletter(){
   const admin = portalIsAdmin();
   portalKick();
+  /* came in from a newsletter link: that one page is open to read, the archive takes the sign-in code */
+  if (!admin && PortalState.phase === "keyed"){ portalLeaveKeyed(); return portalDecoy(); }
   if (!admin && !(PortalState.phase === "ready" && PortalState.entries)) return portalDecoy();
   const list = admin ? portalEntriesForAdmin() : PortalState.entries;
   const cat = AppState.portalCat || "";
@@ -14592,6 +14601,11 @@ function viewNewsletterEntry(slug){
     return portalEntryHTML(e, others, portalAdminBar(
       '<span class="chip ' + (live ? "chip--leaf" : "chip--sun") + '">' + E(statusMeta(e.status).label) + '</span>'
       + '<button type="button" class="btn btn--sm btn--paper" data-act="edit-record" data-col="portalEntries" data-id="' + E(e.id) + '">' + ic("pencil") + ' Edit</button>'));
+  }
+  if (PortalState.phase === "keyed"){
+    if (!portalKeyedHere()){ portalLeaveKeyed(); return portalDecoy(); }
+    const fromEmail = PortalState.detail[slug];
+    return fromEmail ? portalEntryHTML(fromEmail, [], portalKeyedBar()) : portalDecoy();
   }
   if (!(PortalState.phase === "ready" && PortalState.entries)) return portalDecoy();
   if (!Object.prototype.hasOwnProperty.call(PortalState.detail, slug)){
@@ -22509,7 +22523,7 @@ const PAGE_SLOTS = {
     { key:"artTitle", section:"Creative Space Studio", label:"Art Space title", fb:"Art Space" },
     { key:"artLead", section:"Creative Space Studio", label:"Art Space card: first line", fb:"This is your space to make something original!" },
     { key:"artText", section:"Creative Space Studio", label:"Art Space text", type:"para", fb:"Draw, paint and design with brushes, shapes, words and patterns. Every tool is right where you expect it, so you can jump straight in and start making. Work in dark or light mode, whichever you like." },
-    { key:"insideHeading", section:"Creative Space Studio", label:"What’s inside: heading", fb:"What’s inside" },
+    { key:"insideHeading", section:"Creative Space Studio", label:"What’s inside: heading", fb:"Inside Art Space" },
     { key:"insideText", section:"Creative Space Studio", label:"What’s inside: text", type:"para", fb:"A drawing and design app for kids. Paint and blend, build posters from shapes and words, make mirror patterns and pixel art, then print or share what you made." },
     { key:"insideBrushesTitle", section:"Creative Space Studio", label:"What’s inside: tool 1", fb:"Five brushes" },
     { key:"insideBrushesText", section:"Creative Space Studio", label:"What’s inside: tool 1 text", fb:"Brush, pen, marker, pencil and airbrush, with smoothing for steadier curves." },
@@ -22539,10 +22553,6 @@ const PAGE_SLOTS = {
     { key:"motionTitle", section:"Creative Space Studio", label:"Motion Space title", fb:"Motion Space" },
     { key:"motionText", section:"Creative Space Studio", label:"Motion Space text (the first sentence shows in bold)", type:"para", fb:"Make your drawings move. Create short animations, one frame at a time." },
     { key:"motionFeatures", section:"Creative Space Studio", label:"Motion Space: what it will do (separate with ·)", fb:"Draw frame by frame · See the last frame as you draw · Use your Art Space drawings" },
-    { key:"artLede", section:"Art Space page", label:"Text under the heading", type:"para",
-      fb:"A blank page and everything you need to fill it: brushes, mirror drawing, shapes, words and a pixel grid. Everything you make is yours, and it saves as you go, to your account, so it’s there in any browser where you sign in." },
-    { key:"artNote", section:"Art Space page", label:"Small note under the button", fb:"Free for subscribers for a limited time. Your art is kept with your mailing-list sign-in, and you can download it any time." },
-    { key:"artToolsHeading", section:"Art Space page", label:"Heading over the tools", fb:"What you can make" }
   ],
   "templates/finder": [
     { key:"step1Question", section:"Questions", label:"Question 1", fb:"What materials do you have?" },
@@ -22754,6 +22764,7 @@ const PAGE_SLOTS = {
     { key:"unsubHeading", section:"Unsubscribe page", label:"Heading", fb:"Unsubscribe from the mailing list?" },
     { key:"unsubText", section:"Unsubscribe page", label:"Text", fb:"You will stop receiving emails from {name}. You can always join again later." },
     { key:"unsubButton", section:"Unsubscribe page", label:"Button", fb:"Unsubscribe" },
+    { key:"unsubEmailLabel", section:"Unsubscribe page", label:"Older links: the email box", fb:"Enter the email address you get our newsletter at" },
     { key:"packsOffHeading", section:"Printable packs switched off", label:"Heading", fb:"Printable packs aren’t available right now." },
     { key:"packsOffText", section:"Printable packs switched off", label:"Text", fb:"Check back soon, or see what else is in the shop." },
     { key:"portalEyebrow", section:"Subscriber’s Portal", label:"Eyebrow", fb:"Subscribers only" },
@@ -25995,7 +26006,7 @@ function renderRoute(route){
     case "terms":             return viewTerms();
     case "shop":              return (p.sub === "printables" && !SHOP_PRINTABLES_ENABLED) ? shopPrintablesUnavailable() : viewShop(p.sub === "printables" ? "printables" : "amazon");
     case "product-detail":    return SHOP_PRINTABLES_ENABLED ? viewProduct(p.id) : shopPrintablesUnavailable();
-    case "unsubscribe":       return viewUnsubscribe(p.id);
+    case "unsubscribe":       return viewUnsubscribe(p.id, p.sig);
     case "newsletter":        return viewNewsletter();
     case "newsletter-detail": return viewNewsletterEntry(p.id);
     case "admin":             return viewAdmin(p.section === "dashboard" || !p.section ? "dashboard" : p.section, p.id, p.sub);
@@ -26111,7 +26122,7 @@ function routeTitle(){
   const map = { home:"Make it real", create:"Create", play:"Games", watch:"Videos", stories:"Books",
     characters:"Chike & Friends", "grown-ups":"For Grown-Ups", shop:"Shop",
     test:"Test panel", donate:"Support",
-    privacy:"Privacy Policy", terms:"Terms and Conditions", newsletter:"Subscriber’s Portal" };
+    privacy:"Privacy Policy", terms:"Terms and Conditions", newsletter:"Subscriber’s Portal", unsubscribe:"Unsubscribe" };
   if (r.name === "newsletter-detail"){
     const pe = portalCurrentEntry();
     return pe ? pe.title : "Subscriber’s Portal";
@@ -27033,21 +27044,40 @@ const ACTIONS = {
   },
   "cart-checkout": () => toast("Prototype build: there is no real checkout yet, so nothing can be bought or charged.", "bad"),
 
-  "confirm-unsubscribe": async (el) => {
-    el.disabled = true;
-    try {
-      const { error } = await sb.rpc("unsubscribe_newsletter", { target_id: el.getAttribute("data-id") });
-      if (error) throw error;
+  /* reading a page from a newsletter link: sign in (with the emailed code) for the whole portal */
+  "portal-signin-from-key": () => { portalLeaveKeyed(); },
+  "confirm-unsubscribe": async (el, ev) => {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    const form = el.closest("form") || el;
+    const btn = form.querySelector("#unsub-btn"), err = form.querySelector("#unsub-error"), box = form.querySelector("#unsub-email");
+    if (box && !box.value.trim()){ box.focus(); return; }
+    if (btn) btn.disabled = true;
+    if (err) err.textContent = "";
+    const r = await portalCall("unsubscribe_link", { id: form.getAttribute("data-id"), sig: form.getAttribute("data-sig") || undefined, email: box ? box.value : undefined });
+    if (r && r.ok){
       const heading = document.getElementById("unsub-heading");
       const copy = document.getElementById("unsub-copy");
       if (heading) heading.textContent = "You're unsubscribed.";
       if (copy) copy.textContent = "You won't receive any more emails from us. Sorry to see you go.";
-      el.remove();
-    } catch(err){
-      el.disabled = false;
-      toast("Could not unsubscribe: " + err.message, "bad");
+      form.remove();
+      return;
     }
+    if (btn) btn.disabled = false;
+    const why = r && r.error;
+    /* a signed link that does not check out (cut short when it was copied): ask for the email address instead */
+    if (why === "invalid" && !box){
+      form.setAttribute("data-sig", "");
+      btn.insertAdjacentHTML("beforebegin", '<label class="unsub__label" for="unsub-email" style="font-weight:700">' + E(slotText("system", "unsubEmailLabel")) + '</label>'
+        + '<input class="input" id="unsub-email" name="email" type="email" autocomplete="email" required style="max-width:340px;width:100%">');
+      form.querySelector("#unsub-email").focus();
+    }
+    if (err) err.textContent = why === "wrong_email" ? "That isn't the email address this link was sent to. Check it and try again."
+      : why === "needs_email" ? "Enter the email address you get our newsletter at."
+      : why === "rate_limited" ? "Too many tries for now. Please try again in an hour."
+      : why === "invalid" ? "This unsubscribe link isn't complete. Enter the email address you get our newsletter at instead."
+      : "We couldn't unsubscribe you just now. Please try again.";
   },
+
   "donate-freq": (el) => {
     AppState.donateFreq = el.getAttribute("data-freq") === "monthly" ? "monthly" : "once";
     AppState.donateAmount = null;
@@ -28216,6 +28246,7 @@ function fallbackCopy(text, done){
    32. FORM SUBMISSION
    ============================================================ */
 async function handleSubmit(form, act){
+  if (act === "confirm-unsubscribe") return ACTIONS["confirm-unsubscribe"](form);
   if (act === "admin-signin"){
     const email = form.elements["email"].value.trim();
     const password = form.elements["password"].value;
