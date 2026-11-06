@@ -388,7 +388,12 @@ p:last-child{ margin-bottom:0; }
 @media (max-width:900px){ .tips-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:560px){ .tips-grid{ grid-template-columns:1fr; } }
 /* Create's tabs: the links under the finder, the library's search row, the studio cards */
-.create-next{ justify-content:center; }
+/* the three cards under the finder: one row of three, stacking on a phone */
+.create-next__title{ margin:0 0 20px; font-size:clamp(1.5rem,2.6vw,2rem); text-wrap:balance; }
+.create-next{ grid-template-columns:repeat(3,minmax(0,1fr)); }
+.create-next__card{ cursor:pointer; }
+@media (max-width:900px){ .create-next{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:560px){ .create-next{ grid-template-columns:1fr; } }
 .create-tools{ display:flex; align-items:center; gap:12px; flex:1 1 360px; justify-content:flex-end; }
 .create-tools .arttools__search{ flex:0 1 380px; }
 /* our own clear button only, not the browser's as well */
@@ -11626,6 +11631,30 @@ function reopenStoryFilterModal(){
   drawIcons();
 }
 
+/** Under the finder: a card for each of Create's other three tabs, with its picture, what's in it and how many. */
+function createNextCards(){
+  const tech = createActivities().filter(isComputerActivity).length;
+  const cards = [
+    { hash:"#/create/browse", key:"nextCraft", badge:plural(craftActivities().length, "activity", "activities"),
+      img:"https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/uploads/media/1789526258298-Gemini_Generated_Image_yf7jydyf7jydyf7j.jpg",
+      alt:"Four children building and decorating a house out of cardboard on a playroom floor", go:"See the activities" },
+    { hash:"#/create/tech", key:"nextTech", badge:plural(tech, "activity", "activities"),
+      img:"assets/activities/pixel-sprite/main-thumb.jpg",
+      alt:"A boy smiles at a pixel-art robot he drew on his laptop", go:"See the activities" },
+    { hash:"#/create/studio", key:"nextStudio", badge:"Art Space and more",
+      img:"assets/activities/mirror-pattern/main-thumb.jpg",
+      alt:"A girl in headphones paints a colorful pattern on a tablet", go:"Open the Studio" }
+  ];
+  return cards.map(c => '<article class="card create-next__card" data-act="go" data-hash="' + c.hash + '" tabindex="0" role="link">'
+    + '<div class="card__media"><img class="skel" src="' + E(c.img) + '" alt="' + E(c.alt) + '" loading="lazy">'
+    + '<span class="card__badge chip chip--ink">' + E(c.badge) + '</span></div>'
+    + '<div class="card__body">'
+    + '<h3 class="card__title">' + slot("create", c.key + "Title") + '</h3>'
+    + '<p class="tiny mute" style="margin:0">' + slot("create", c.key + "Text") + '</p>'
+    + '<div class="card__foot"><button type="button" class="btn btn--sm btn--cyan" data-act="go" data-hash="' + c.hash + '">' + E(c.go) + ' ' + ic("arrow-right") + '</button></div>'
+    + '</div></article>').join("");
+}
+
 /** Create, by tab: "" is the finder, "browse" Art & Craft Activities (the library), "tech" Computer Activities,
     "studio" Chike's Creative Studio. */
 function viewCreate(sub){
@@ -11633,10 +11662,10 @@ function viewCreate(sub){
   if (sub !== "browse" && sub !== "tech"){
     /* the finder on its own, with a way on to the art & craft library and the computer activities */
     return '<section class="section finder" id="finder"><div class="shell">' + finderPanel("page") + '</div></section>'
-      + '<section class="section section--tight"><div class="shell"><div class="row create-next">'
-      + '<a class="btn btn--paper" href="#/create/browse">' + ic("palette") + ' ' + E(slotText("create", "browseLink", { n: craftActivities().length })) + '</a>'
-      + '<a class="btn btn--paper" href="#/create/tech">' + ic("laptop") + ' ' + E(slotText("create", "techLink")) + '</a>'
-      + '</div></div></section>';
+      + '<section class="section section--tight"><div class="shell">'
+      + '<h2 class="create-next__title">' + slot("create", "nextTitle") + '</h2>'
+      + '<div class="grid create-next">' + createNextCards() + '</div>'
+      + '</div></section>';
   }
   /* Art & Craft Activities and Computer Activities are the same page over two lists; moving between them starts
      the search and filters again, so one tab's choices never empty the other */
@@ -22448,8 +22477,13 @@ const PAGE_SLOTS = {
       fb:{ src:"assets/hero/what-should-we-create.jpg", alt:"Chike resting his chin on his hand with a large question mark floating beside his head" } },
     { key:"emptyList", section:"Activity list", label:"When no activity matches the filters", fb:"Nothing matches all of those at once." },
     { key:"searchPlaceholder", section:"Activity list", label:"Words inside the search box", fb:"Search activities" },
-    { key:"browseLink", section:"Under the finder", label:"Button to the library ({n} is the number of activities)", fb:"Art & craft activities ({n})" },
-    { key:"techLink", section:"Under the finder", label:"Button to Digital Activities", fb:"Digital activities" },
+    { key:"nextTitle", section:"Under the finder", label:"Heading over the three cards", fb:"Or explore on your own" },
+    { key:"nextCraftTitle", section:"Under the finder", label:"Art & Craft card: name", fb:"Art & Craft Activities" },
+    { key:"nextCraftText", section:"Under the finder", label:"Art & Craft card: text", type:"para", fb:"Make it with your hands. Build, draw, fold, paint, dance and play with things you already have at home." },
+    { key:"nextTechTitle", section:"Under the finder", label:"Digital card: name", fb:"Digital Activities" },
+    { key:"nextTechText", section:"Under the finder", label:"Digital card: text", type:"para", fb:"Make it on a screen. Write, film, record and draw, and build your own games in the AI lessons." },
+    { key:"nextStudioTitle", section:"Under the finder", label:"Studio card: name", fb:"Creative Space Studio" },
+    { key:"nextStudioText", section:"Under the finder", label:"Studio card: text", type:"para", fb:"Real making apps for kids. Start with Art Space to draw, paint and design, right in the browser." },
     { key:"craftHeading", section:"Art & Craft Activities", label:"Heading", fb:"Make it with your hands." },
     { key:"techHeading", section:"Digital Activities", label:"Heading", fb:"Make it on a screen." },
     { key:"techLede", section:"Digital Activities", label:"Text under the heading", type:"para",
