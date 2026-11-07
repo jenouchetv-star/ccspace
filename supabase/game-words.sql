@@ -18,6 +18,7 @@ with w(id, patch) as (values
   ('game-sound-hunt', $j${"vocabWord":"vibration","vocabSay":"vy-BRAY-shun · noun","vocabMeaning":"A very fast shake back and forth. Vibrations make sounds.","vocabExample":"Tap a spoon on a cup and touch the cup lightly. Can you feel the vibration?"}$j$::jsonb),
   ('game-bridge-challenge', $j${"vocabWord":"load","vocabSay":"LOHD · noun","vocabMeaning":"The weight that a bridge or building has to hold up.","vocabExample":"In The Bridge Challenge, every coin adds to the load. How many can your paper bridge hold?"}$j$::jsonb),
   ('game-story-relay', $j${"vocabWord":"narrator","vocabSay":"NAIR-ay-ter · noun","vocabMeaning":"The person who tells a story.","vocabExample":"In Story Relay, everyone takes a turn as the narrator by adding one sentence."}$j$::jsonb),
-  ('game-freeze-swap', $j${"vocabWord":"transform","vocabSay":"trans-FORM · verb","vocabMeaning":"To change into something different.","vocabExample":"When the music stops in Freeze and Swap, transform into a new animal, machine or character."}$j$::jsonb)
+  ('game-freeze-swap', $j${"vocabWord":"transform","vocabSay":"trans-FORM · verb","vocabMeaning":"To change into something different.","vocabExample":"When the music stops in Freeze and Swap, transform into a new animal, machine or character."}$j$::jsonb),
+  ('game-word-quest', $j${"vocabWord":"vocabulary","vocabSay":"voh-KAB-yuh-lair-ee · noun","vocabMeaning":"All the words you know and understand.","vocabExample":"In Word Quest, tap a word to hear it. Every word you find and say grows your vocabulary!"}$j$::jsonb)
 )
 update games g set data = g.data || w.patch, updated_at = now() from w where g.id = w.id;
