@@ -3821,7 +3821,11 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 }
 .subnav__in::-webkit-scrollbar{ display:none; }
 .subnav__link{ flex:none; font-size:calc(.9rem + 1px); }
-.subnav__link[aria-current="page"], .subnav__link[aria-current="location"]{ --hl:var(--sun); background-size:100% 1.3em; }
+/* the current sub-page sits in a small container, so the selection is clear at a glance */
+.subnav__link[aria-current="page"], .subnav__link[aria-current="location"]{
+  background:var(--sun); border:2.5px solid var(--ink); border-radius:12px;
+  padding:5px 14px; box-shadow:2px 2px 0 var(--ink);
+}
 /* On a phone, a row of desktop tabs either clips labels or turns into a
    silent horizontal-scroll the visitor has to discover. Below that width
    the tab row is replaced entirely by the sticky contextual bar below
@@ -12007,6 +12011,17 @@ const ROLL_TWISTS = ["It has to stand up on its own","It has to make a sound","I
 let ROLL_RESULT = null;
 let SPIN_RESULT = null;
 
+/* The Play page order: every New game sits at the top, the newest first; the rest go by their "order" number
+   (lowest first), then A to Z. */
+function playOrder(a, b){
+  const isNew = (g) => String(g.badge || "").trim().toLowerCase() === "new" ? 1 : 0;
+  const rank = (g) => (typeof g.order === "number" ? g.order : 1e9);
+  return (isNew(b) - isNew(a))
+    || (isNew(a) && isNew(b) ? String(b.createdAt || "").localeCompare(String(a.createdAt || "")) : 0)
+    || rank(a) - rank(b)
+    || String(a.title || "").localeCompare(String(b.title || ""));
+}
+
 function viewPlay(sub){
   const offline = sub === "offline";
   /* Online and Offline are two lists: moving between them starts the search and filters again */
@@ -12014,10 +12029,7 @@ function viewPlay(sub){
   if (GAME_POOL !== poolKey){ GAME_POOL = poolKey; AppState.gameFilter = { access:"", players:"", age:"", q:"" }; }
   const gf = AppState.gameFilter;
   const pool    = gamePool();
-  const list    = pool.filter(g => gameMatches(g, gf, ""))
-    /* a game with an "order" number goes first, lowest first; then New ones; then A to Z */
-    .sort((a, b) => (typeof a.order === "number" ? a.order : 1e9) - (typeof b.order === "number" ? b.order : 1e9)
-      || (b.badge ? 1 : 0) - (a.badge ? 1 : 0) || a.title.localeCompare(b.title));
+  const list    = pool.filter(g => gameMatches(g, gf, "")).sort(playOrder);
   const note    = offline
     ? "Build a paper bridge, freeze into something new, draw what you hear or pass a story around. Check how to play, then put the device away. Each game uses paper or everyday things and introduces a Word to know. Most are best with a friend or family member."
     : "Build a road, draw your own level, crack a hidden word or bend a planet’s orbit. These quick games play right in your browser, take 5 to 15 minutes, and each one introduces a Word to know. Some let you play with a friend by sharing a code.";

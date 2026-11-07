@@ -1,33 +1,37 @@
-// The Play page lists online games by an "order" number (lowest first), then New ones, then A to Z.
-// A game can also carry a short note, shown on its card and its page (Solar System Sandbox is
-// best on a desktop or tablet).
+// The Play page lists every New game first (the newest at the very top), then the rest by an
+// "order" number (lowest first), then A to Z. A game can also carry a short note, shown on its card
+// and its page (Solar System Sandbox is best on a desktop or tablet).
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const src = html.split("function playOrder(")[1].split("\nfunction ")[0];
+const playOrder = new Function("return function playOrder(" + src)();
 
 describe("Play page game order and notes", () => {
-  it("sorts by order number first, then New, then title", () => {
+  it("is the sort the Play page uses", () => {
     const fn = html.split("function viewPlay(sub){")[1].split("function gamePlate")[0];
-    expect(fn).toContain('typeof a.order === "number" ? a.order : 1e9');
-    expect(fn).toContain("(b.badge ? 1 : 0) - (a.badge ? 1 : 0)");
-    expect(fn).toContain("a.title.localeCompare(b.title)");
+    expect(fn).toContain(".sort(playOrder)");
   });
 
-  it("the sort rule puts ordered games first and leaves the rest A to Z", () => {
-    const key = (g) => (typeof g.order === "number" ? g.order : 1e9);
+  it("puts every New game at the top, newest first, then the rest by order number, then A to Z", () => {
     const games = [
       { title: "Air Hockey Arcade" },
       { title: "UFO", order: 9 },
-      { title: "Doodle Dash", order: 1, badge: "New" },
+      { title: "Hands-Free Builder", order: 0 },
+      { title: "Doodle Dash", order: 1, badge: "New", createdAt: "2026-10-17T18:00:00.000Z" },
+      { title: "Word Quest", order: 0, badge: "New", createdAt: "2026-11-07T23:10:00.000Z" },
+      { title: "Pathbuilder", order: 0, badge: "New", createdAt: "2026-10-28T06:00:00.000Z" },
       { title: "Bounce & Bank", order: 2 },
       { title: "Zebra Zoom" },
     ];
-    const sorted = games
-      .slice()
-      .sort((a, b) => key(a) - key(b) || (b.badge ? 1 : 0) - (a.badge ? 1 : 0) || a.title.localeCompare(b.title))
-      .map((g) => g.title);
-    expect(sorted).toEqual(["Doodle Dash", "Bounce & Bank", "UFO", "Air Hockey Arcade", "Zebra Zoom"]);
+    const sorted = games.slice().sort(playOrder).map((g) => g.title);
+    expect(sorted).toEqual(["Word Quest", "Pathbuilder", "Doodle Dash", "Hands-Free Builder", "Bounce & Bank", "UFO", "Air Hockey Arcade", "Zebra Zoom"]);
+  });
+
+  it("treats any other badge as an ordinary game", () => {
+    const sorted = [{ title: "B", badge: "Popular", order: 3 }, { title: "A", order: 1 }].sort(playOrder).map((g) => g.title);
+    expect(sorted).toEqual(["A", "B"]);
   });
 
   it("shows a game's note on its card and on its page, and Solar System Sandbox carries one", () => {
