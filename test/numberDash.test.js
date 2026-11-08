@@ -198,6 +198,20 @@ describe("the most coins, kept for each grade", () => {
     expect(html).toContain('ccsSave: "set", game: SAVE_NAME');
     expect(html).toContain('const SAVE_NAME = "math-runner"');
   });
+  it("shows the grade's best, small, just below the coins during a run", () => {
+    const ask = html.split('<div class="ask is-on" id="ask">')[1].split("</div></div>")[0] + "</div></div>";
+    expect(html).toMatch(/<span id="ask-q" aria-live="polite">0<\/span><\/div><div class="ask__best" id="ask-best">/);
+    expect(html).toContain(".ask__best {");
+    expect(html.split("function noteBest(){")[1].split("\n}\n")[0]).toContain("paintBest()");
+    expect(html.split("function startRun(")[1].split("\n}\n")[0]).toContain("paintBest()");
+    expect(ask).toBeTruthy();
+  });
+  it("shows a grade's best below its button when the pointer (or the keyboard) is on it", () => {
+    const btns = html.split("function gradeButtons(mark){")[1].split("\n}\n")[0];
+    expect(btns).toContain('<span class="lvl__best"');
+    expect(html).toContain(".lvl:hover .lvl__best, .lvl:focus-visible .lvl__best, .lvl.is-focus .lvl__best { opacity:1;");
+    expect(html).toContain("function bestLabel(levelId){");
+  });
   it("notes a new best as soon as the coins pass it, so leaving mid-run keeps it", () => {
     const update = html.split("function onGate(")[1].split("\n}\n")[0];
     expect(update).toContain("noteBest()");
