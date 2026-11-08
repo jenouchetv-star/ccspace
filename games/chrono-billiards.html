@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Chrono Billiards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="game-skin.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&display=swap">
+<script src="game-sound.js"></script>
+<style>
+/* ============================================================
+   Chrono Billiards: a 3D arcade pool game for K to 5th grade.
+   The look: a game-room carpet under a chunky toy pool table, seen
+   in 3D. The angle and the speed of every shot are painted right on
+   the felt, so kids read them where the ball will roll.
+   Ink outlines and hard shadows come from the site's game skin;
+   Bungee is the arcade sign lettering for titles and numbers.
+   ============================================================ */
+:root{
+  --ink:#1E2226;
+  --paper:#FFFBF3;
+  --berry:#7A1E4B;
+  --berry-2:#A3306A;
+  --deep:#3A0F2A;
+  --sun:#FFD23F;
+  --orange:#FF8A3D;
+  --blue:#2F86E8;
+  --blue-deep:#1F66C1;
+  --lime:#8BD346;
+  --red:#E8463C;
+  --cyan:#4FD6F0;
+  --pink:#FF6FA3;
+  --muted:#5E5670;
+  --arcade:'Bungee','Plus Jakarta Sans',system-ui,sans-serif;
+}
+[hidden]{display:none !important}
+html,body{height:100%;margin:0}
+body{
+  background:var(--deep);
+  color:var(--ink);
+  overflow:hidden;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;-webkit-user-select:none;
+}
+
+/* ---------- the game room: a berry glow and an arcade carpet of little colored dots ---------- */
+.room{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse at 50% 38%,rgba(255,210,63,.20) 0%,rgba(255,210,63,0) 42%),
+    radial-gradient(circle at 18% 28%,rgba(255,210,63,.22) 0 3px,transparent 4px) 0 0/92px 92px,
+    radial-gradient(circle at 64% 70%,rgba(79,214,240,.20) 0 3px,transparent 4px) 0 0/118px 118px,
+    radial-gradient(circle at 40% 52%,rgba(139,211,70,.18) 0 2.5px,transparent 3.5px) 0 0/74px 74px,
+    radial-gradient(circle at 80% 20%,rgba(255,111,163,.18) 0 2.5px,transparent 3.5px) 0 0/66px 66px,
+    radial-gradient(ellipse at 50% 30%,var(--berry-2) 0%,var(--berry) 45%,var(--deep) 100%)}
+
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:40}
+#app{position:relative;z-index:1;height:100vh;height:100dvh;display:grid}
+.screen{grid-area:1/1;min-height:0;min-width:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---------- shared pieces ---------- */
+.badge{display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:#fff;border-radius:999px;padding:5px 12px;font-weight:800;font-size:.85rem;line-height:1;white-space:nowrap}
+.cb .cta{
+  background:var(--blue) !important;color:#fff;font-family:var(--arcade) !important;font-weight:400 !important;
+  font-size:clamp(1.3rem,3.2vh,1.8rem);letter-spacing:.04em;padding:14px 30px;min-height:58px;
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;text-shadow:0 2px 0 var(--blue-deep);
+}
+.cb .cta svg{width:.9em;height:.9em}
+.cb .ghost{background:var(--paper);color:var(--ink);display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.cb .ghost svg{width:18px;height:18px}
+.icon{width:20px;height:20px;flex:none}
+
+/* ============================================================
+   TITLE SCREEN
+   ============================================================ */
+#title{display:grid;place-items:center;padding:clamp(12px,3vh,28px) 16px;overflow:auto}
+.cabinet{width:min(1060px,100%);display:grid;grid-template-columns:1fr minmax(330px,440px);gap:clamp(16px,4vw,44px);align-items:center}
+.marquee{text-align:center;display:flex;flex-direction:column;align-items:center;min-width:0}
+.logo{margin:0;font-family:var(--arcade) !important;font-weight:400 !important;line-height:.92 !important;letter-spacing:.01em !important;font-size:clamp(2.6rem,min(8vw,12vh),5.8rem)}
+.logo span{display:block;
+  text-shadow:-4px -4px 0 var(--ink),4px -4px 0 var(--ink),-4px 4px 0 var(--ink),4px 4px 0 var(--ink),0 -4px 0 var(--ink),0 4px 0 var(--ink),-4px 0 0 var(--ink),4px 0 0 var(--ink),0 11px 0 var(--ink);}
+.logo .w1{color:var(--sun);transform:rotate(-3deg)}
+.logo .w2{color:var(--cyan);transform:rotate(2deg);margin-top:.06em}
+.tagline{margin:14px 0 0;font-size:clamp(.9rem,2vh,1.1rem);padding:9px 18px}
+.preview-row{position:relative;width:100%;max-width:600px;margin-top:clamp(8px,2vh,18px)}
+.preview{display:block;width:100%;aspect-ratio:16/10;height:auto}
+.title-chike{position:absolute;right:-4%;bottom:-6%;width:clamp(84px,min(15vw,20vh),150px);height:auto;filter:drop-shadow(0 8px 0 rgba(30,8,24,.45));animation:bob 2.6s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-8px) rotate(-2deg)}}
+
+.controls{background:var(--paper);border:4px solid var(--ink);border-radius:28px;box-shadow:8px 8px 0 var(--ink);padding:clamp(16px,3vh,26px) clamp(16px,3vw,26px);display:flex;flex-direction:column;gap:clamp(12px,2.2vh,18px)}
+.step-label{margin:0 0 8px;font-size:.8rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.grades{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.cb .grade{padding:0 !important;aspect-ratio:1;width:100%;background:#fff;font-family:var(--arcade) !important;font-weight:400 !important;font-size:clamp(.9rem,2.4vh,1.15rem);color:var(--ink)}
+.cb .grade[aria-checked="true"]{background:var(--sun)}
+.cb .grade .sup{font-size:.6em;vertical-align:.45em;margin-left:1px}
+.grade-name{margin:8px 0 0;font-weight:700;color:var(--muted);font-size:.92rem}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* #title wins over the shared skin's pill shape and its 48px minimum height (its button rule is very specific) */
+#title .modes .mode{border-radius:16px !important}
+#title .grades .grade{min-height:0 !important}
+.cb .mode{background:#fff;padding:12px !important;text-align:left;display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:0;color:var(--ink)}
+.cb .mode[aria-checked="true"]{background:#CFF3FB}
+.mode-top{display:flex;align-items:center;gap:7px;font-size:1.02rem;font-weight:800}
+.mode-top svg{width:22px;height:22px;flex:none}
+.mode-sub{font-weight:600;font-size:.8rem;color:var(--muted);line-height:1.3}
+.cb #play{width:100%}
+.title-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.best-line{margin:0;font-weight:700;color:var(--muted);font-size:.9rem}
+.best-line b{font-family:var(--arcade);font-weight:400;color:var(--ink);font-size:1.05rem;margin-left:4px}
+.ccs-sound-btn{background:var(--paper)}
+
+/* ============================================================
+   GAME SCREEN
+   ============================================================ */
+#game{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:clamp(6px,1.2vh,12px);padding:clamp(8px,1.6vh,14px) clamp(10px,2vw,22px) clamp(10px,2vh,16px)}
+.hud{display:flex;align-items:center;gap:clamp(6px,1vw,12px);min-width:0}
+.pill{background:var(--paper);border:3px solid var(--ink);border-radius:999px;box-shadow:3px 3px 0 var(--ink);display:flex;align-items:center;gap:8px;padding:5px 14px;min-height:46px}
+.cb .icon-btn{padding:0 !important;width:48px;min-height:48px;height:48px;background:var(--paper);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.cb .icon-btn svg{width:22px;height:22px}
+.hud-label{font-size:.68rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.score-pill{min-width:150px}
+.score-pill b{font-family:var(--arcade);font-weight:400;font-size:clamp(1.15rem,2.8vh,1.55rem);margin-left:auto;font-variant-numeric:tabular-nums}
+.score-pill.bump b{animation:bump .35s ease}
+@keyframes bump{40%{transform:scale(1.22);color:var(--blue)}}
+.clock{flex:1;min-width:110px}
+.clock-track{flex:1;height:16px;border:3px solid var(--ink);border-radius:999px;background:#F1E4EC;overflow:hidden;min-width:40px}
+.clock-fill{display:block;height:100%;width:100%;background:var(--lime);border-right:3px solid var(--ink);transition:background .3s}
+.clock.mid .clock-fill{background:var(--sun)}
+.clock.low .clock-fill{background:var(--red)}
+.clock.low{animation:shake .5s ease infinite}
+.clock b{font-family:var(--arcade);font-weight:400;font-size:1.1rem;min-width:3.2ch;text-align:right;font-variant-numeric:tabular-nums}
+.shots{flex:1;min-width:110px}
+.shots b{font-family:var(--arcade);font-weight:400;font-size:1.1rem;margin-left:auto}
+.shot-pips{display:flex;gap:4px;flex-wrap:wrap}
+.shot-pips i{width:12px;height:12px;border-radius:50%;background:var(--blue);border:2px solid var(--ink)}
+.shot-pips i.used{background:transparent;border-color:rgba(30,34,38,.35)}
+.left-balls{gap:4px;padding:5px 12px}
+.left-balls i{width:16px;height:16px;border-radius:50%;border:2.5px solid var(--ink);background:var(--c);box-shadow:inset -2px -3px 0 rgba(0,0,0,.18)}
+.combo{font-family:var(--arcade);font-weight:400;font-size:1rem;padding:9px 14px;min-width:60px;justify-content:center;color:var(--sun)}
+.combo.hot{animation:bump .4s ease}
+.table-badge{font-size:.9rem;padding:8px 14px}
+.table-badge b{font-family:var(--arcade);font-weight:400;color:var(--sun)}
+
+.table-wrap{position:relative;min-height:0;min-width:0}
+#board{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair;outline:none}
+#board:focus-visible{outline:3px solid var(--sun) !important;outline-offset:-3px !important;box-shadow:none !important}
+.banner{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;z-index:6;text-align:center}
+.banner b{font-family:var(--arcade);font-weight:400;font-size:clamp(2.4rem,8.5vmin,4.8rem);line-height:1;color:var(--sun);text-shadow:-4px -4px 0 var(--ink),4px -4px 0 var(--ink),-4px 4px 0 var(--ink),4px 4px 0 var(--ink),0 9px 0 var(--ink);animation:zoom .7s cubic-bezier(.2,1.5,.4,1) both}
+.banner small{display:block;margin-top:.5em;font-size:.36em;color:#fff;letter-spacing:.08em}
+@keyframes zoom{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes shake{20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+
+.foot{display:flex;align-items:center;justify-content:center;gap:clamp(10px,2vw,20px);min-width:0}
+.coach{display:flex;align-items:center;gap:8px;min-width:0;max-width:340px}
+.coach img{width:clamp(48px,7vh,64px);height:auto;flex:none;filter:drop-shadow(0 4px 0 rgba(30,8,24,.4))}
+.bubble{position:relative;margin:0;background:#fff;border:3px solid var(--ink);border-radius:16px;padding:7px 12px;font-weight:800;font-size:.88rem;line-height:1.25;box-shadow:3px 3px 0 var(--ink)}
+.bubble::before{content:"";position:absolute;left:-11px;top:50%;margin-top:-8px;border:8px solid transparent;border-right-color:var(--ink)}
+.bubble.say{animation:pop .4s ease}
+@keyframes pop{0%{transform:scale(1)}45%{transform:scale(1.06) rotate(-1.5deg)}100%{transform:scale(1)}}
+
+/* ---------- how to shoot: a tiny looping demo and three steps that light up as you play ---------- */
+.howto{display:flex;align-items:center;justify-content:center;gap:clamp(10px,2vw,20px);background:var(--paper);border:3px solid var(--ink);border-radius:999px;box-shadow:4px 4px 0 var(--ink);padding:6px 18px 6px 8px;min-width:0;max-width:100%}
+.demo{position:relative;width:96px;height:32px;flex:none;background:#1E9E8B;border:3px solid var(--ink);border-radius:10px;overflow:hidden}
+.demo .ball{position:absolute;left:46px;top:8px;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid var(--ink);animation:dball 3s ease-in-out infinite}
+.demo .stick{position:absolute;left:8px;top:12px;width:34px;height:5px;border-radius:3px;background:linear-gradient(90deg,#5A2E14 0 40%,#F2D39A 40% 92%,#4FA8E8 92%);border:1.5px solid var(--ink);animation:dstick 3s ease-in-out infinite}
+@keyframes dstick{0%,10%{transform:translateX(0)}45%,55%{transform:translateX(-14px)}62%{transform:translateX(4px)}75%,100%{transform:translateX(0);opacity:0}}
+@keyframes dball{0%,60%{transform:translateX(0)}90%,100%{transform:translateX(36px)}}
+.steps{list-style:none;margin:0;padding:0;display:flex;align-items:center;gap:clamp(8px,1.6vw,18px)}
+.steps li{display:inline-flex;align-items:center;gap:7px;font-weight:800;font-size:clamp(.82rem,1.8vh,.98rem);color:var(--muted);white-space:nowrap;transition:color .15s}
+.steps b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#E3D6E0;color:var(--ink);font-family:var(--arcade);font-weight:400;font-size:.8rem;transition:background .15s,transform .15s}
+.steps li.now{color:var(--ink)}
+.steps li.now b{background:var(--ink);color:var(--sun);transform:scale(1.15)}
+.steps .short{display:none}
+
+.float{position:fixed;z-index:45;pointer-events:none;font-family:var(--arcade);font-size:clamp(1.1rem,3vh,1.7rem);color:#fff;text-shadow:-2px -2px 0 var(--ink),2px -2px 0 var(--ink),-2px 2px 0 var(--ink),2px 2px 0 var(--ink),0 4px 0 var(--ink);transform:translate(-50%,-50%);animation:rise 1.2s cubic-bezier(.2,.8,.3,1) forwards;white-space:nowrap;text-align:center}
+.float small{display:block;font-size:.58em;color:var(--sun)}
+@keyframes rise{0%{opacity:0;transform:translate(-50%,-30%) scale(.6)}15%{opacity:1;transform:translate(-50%,-70%) scale(1.1)}100%{opacity:0;transform:translate(-50%,-190%) scale(1)}}
+
+/* ============================================================
+   OVERLAYS
+   ============================================================ */
+.overlay{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:16px;background:rgba(40,8,28,.62);backdrop-filter:blur(3px)}
+.dialog{position:relative;width:min(440px,100%);max-height:100%;overflow:auto;background:var(--paper);border:4px solid var(--ink);border-radius:28px;box-shadow:10px 10px 0 var(--ink);padding:clamp(18px,3.4vh,28px) 22px;text-align:center;animation:zoom .45s cubic-bezier(.2,1.4,.4,1) both}
+.dialog h2{margin:0;font-family:var(--arcade) !important;font-weight:400 !important;font-size:clamp(1.8rem,5vh,2.5rem);letter-spacing:.01em !important}
+.dialog .sub{margin:6px 0 0;font-weight:700;color:var(--muted)}
+.dialog-chike{width:clamp(84px,15vh,128px);height:auto;margin:-6px auto 0;display:block}
+.stars{display:flex;justify-content:center;gap:8px;margin:10px 0 4px}
+.stars svg{width:clamp(44px,8vh,62px);height:auto;color:#E3D6E0}
+.stars svg.on{color:var(--sun);animation:starpop .5s cubic-bezier(.2,1.7,.4,1) both}
+.stars svg:nth-child(2){transform:translateY(-10px)}
+.stars svg.on:nth-child(2){animation-delay:.18s}
+.stars svg.on:nth-child(3){animation-delay:.36s}
+@keyframes starpop{from{transform:scale(0) rotate(-40deg)}}
+.tally{list-style:none;margin:12px 0 14px;padding:12px 16px;background:#fff;border:3px solid var(--ink);border-radius:18px;text-align:left;display:grid;gap:6px}
+.tally li{display:flex;justify-content:space-between;gap:12px;font-weight:700}
+.tally b{font-family:var(--arcade);font-weight:400;font-variant-numeric:tabular-nums}
+.tally .total{border-top:3px dashed rgba(30,34,38,.2);padding-top:8px;font-size:1.1rem}
+.new-best{margin:8px auto 0;background:var(--ink);color:var(--sun);font-size:.95rem}
+.dialog-btns{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.dialog-btns .row{display:flex;gap:10px}
+.dialog-btns .row > *{flex:1}
+
+/* ============================================================
+   SMALL AND TALL WINDOWS
+   ============================================================ */
+@media (max-width:880px){
+  .cabinet{grid-template-columns:1fr;max-width:500px;gap:12px}
+  .tagline{display:none}
+  .preview-row{max-width:420px}
+}
+@media (max-width:880px) and (max-height:860px){
+  .preview-row{display:none}
+}
+@media (max-width:1180px){
+  .coach{display:none}
+}
+@media (max-width:760px){
+  .hud .hud-label,.table-badge .tw{display:none}
+  .score-pill{min-width:0}
+}
+@media (max-width:560px){
+  .steps .long{display:none}
+  .steps .short{display:inline}
+  .howto{padding:5px 14px 5px 6px;gap:10px}
+  .steps{gap:10px}
+  .steps b{width:21px;height:21px}
+  .hud{flex-wrap:wrap;row-gap:8px}
+  .pill{padding:5px 10px}
+  .clock,.shots{order:10;flex:1 1 100%;min-height:40px}
+  .table-badge{display:none}
+}
+@media (max-width:420px){
+  .controls{padding:16px 14px;border-radius:24px}
+  .grades{gap:6px}
+  .demo{width:70px}
+  .demo .ball{left:36px}
+  .score-pill{flex:1}
+}
+@media (prefers-reduced-motion:reduce){
+  .title-chike,.clock.low,.demo .ball,.demo .stick{animation:none}
+  .float{animation-duration:.01s}
+  *{transition:none !important}
+}
+</style>
+</head>
+<body class="ccs-game cb">
+<div class="room" aria-hidden="true"></div>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<main id="app">
+  <!-- ===================== TITLE ===================== -->
+  <section id="title" class="screen" aria-labelledby="logo">
+    <div class="cabinet">
+      <div class="marquee">
+        <h1 class="logo" id="logo"><span class="w1">Chrono</span><span class="w2">Billiards</span></h1>
+        <p class="badge tagline">See the angle. Pick the speed. Sink it!</p>
+        <div class="preview-row" aria-hidden="true">
+          <canvas class="preview" id="preview"></canvas>
+          <img class="title-chike" src="../assets/characters/chike-pose-point.png" alt="" width="378" height="391">
+        </div>
+      </div>
+
+      <div class="controls">
+        <div>
+          <p class="step-label" id="grade-label">Your grade</p>
+          <div class="grades" role="radiogroup" aria-labelledby="grade-label" id="grades"></div>
+          <p class="grade-name" id="grade-name"></p>
+        </div>
+        <div>
+          <p class="step-label" id="mode-label">How to play</p>
+          <div class="modes" role="radiogroup" aria-labelledby="mode-label">
+            <button type="button" class="mode" role="radio" data-mode="arcade" aria-checked="true">
+              <span class="mode-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Arcade</span>
+              <span class="mode-sub">Beat the clock. Every ball in adds time.</span>
+            </button>
+            <button type="button" class="mode" role="radio" data-mode="trick" aria-checked="false">
+              <span class="mode-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>Trick Shots</span>
+              <span class="mode-sub">A few shots per table. Plan with angles!</span>
+            </button>
+          </div>
+        </div>
+        <button type="button" class="cta" id="play">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>Play
+        </button>
+        <div class="title-foot">
+          <p class="best-line">Best score <b id="best-title">0</b></p>
+          <span id="sound-slot-title"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== GAME ===================== -->
+  <section id="game" class="screen" hidden aria-label="Chrono Billiards table">
+    <header class="hud">
+      <button type="button" class="icon-btn" id="pause-btn" aria-label="Pause">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4.5" width="4" height="15" rx="1.5"/><rect x="14" y="4.5" width="4" height="15" rx="1.5"/></svg>
+      </button>
+      <div class="pill score-pill" id="score-pill"><span class="hud-label">Score</span><b id="score">0</b></div>
+      <div class="pill clock" id="clock" role="timer" aria-label="Time left">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9.5 2.5h5"/></svg>
+        <span class="clock-track"><span class="clock-fill" id="clock-fill"></span></span>
+        <b id="clock-num">1:30</b>
+      </div>
+      <div class="pill shots" id="shots" hidden><span class="hud-label">Shots</span><span class="shot-pips" id="shot-pips"></span><b id="shots-num">0</b></div>
+      <div class="pill left-balls" id="left-balls" role="img" aria-label="Balls left"></div>
+      <span class="badge combo" id="combo" aria-label="Combo">x1</span>
+      <span class="badge table-badge"><span class="tw">Table</span> <b id="rack">1</b></span>
+    </header>
+
+    <div class="table-wrap" id="table-wrap">
+      <canvas id="board" tabindex="0" role="img" aria-label="A pool table. Press and pull back behind the white ball to aim. The arrow keys turn the aim and change the speed, and Space shoots."></canvas>
+      <div class="banner" id="banner" aria-hidden="true"></div>
+      <p class="sr" id="aim-say" aria-live="polite"></p>
+    </div>
+
+    <div class="foot">
+      <div class="coach">
+        <img id="coach-img" src="../assets/characters/chike-pose-point.png" alt="Chike" width="378" height="391">
+        <p class="bubble" id="bubble" aria-live="polite">Press and pull back behind the white ball!</p>
+      </div>
+      <footer class="howto" aria-label="How to shoot">
+        <div class="demo" aria-hidden="true"><i class="stick"></i><i class="ball"></i></div>
+        <ol class="steps" id="steps">
+          <li data-step="1" class="now"><b>1</b><span class="long">Press and pull back</span><span class="short">Pull</span></li>
+          <li data-step="2"><b>2</b><span class="long">Check the angle and speed</span><span class="short">Aim</span></li>
+          <li data-step="3"><b>3</b><span class="long">Let go to shoot!</span><span class="short">Let go</span></li>
+        </ol>
+      </footer>
+    </div>
+  </section>
+
+  <!-- ===================== PAUSE ===================== -->
+  <div class="overlay" id="pause" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+      <h2 id="pause-title">Paused</h2>
+      <p class="sub" id="pause-sub">The clock is stopped.</p>
+      <div class="dialog-btns" style="margin-top:18px">
+        <button type="button" class="cta" id="resume-btn">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>Keep playing
+        </button>
+        <div class="row">
+          <button type="button" class="ghost" id="restart-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>Start over
+          </button>
+          <button type="button" class="ghost menu-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>Change grade
+          </button>
+        </div>
+        <span id="sound-slot-pause"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== TABLE CLEAR (Trick Shots) ===================== -->
+  <div class="overlay" id="clear" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="clear-title">
+      <img class="dialog-chike" src="../assets/characters/chike-pose-thumbs-up.png" alt="" width="378" height="391">
+      <h2 id="clear-title">Table clear!</h2>
+      <div class="stars" id="stars" role="img" aria-label="Stars"></div>
+      <ul class="tally" id="tally"></ul>
+      <div class="dialog-btns">
+        <button type="button" class="cta" id="next-btn">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>Next table
+        </button>
+        <button type="button" class="ghost menu-btn">Change grade</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== GAME OVER ===================== -->
+  <div class="overlay" id="over" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="over-title">
+      <img class="dialog-chike" src="../assets/characters/chike-pose-point-up.png" alt="" width="378" height="391">
+      <h2 id="over-title">Time's up!</h2>
+      <p class="sub" id="over-sub">Great game.</p>
+      <ul class="tally" id="over-tally"></ul>
+      <p class="badge new-best" id="new-best" hidden>New best score!</p>
+      <div class="dialog-btns" style="margin-top:12px">
+        <button type="button" class="cta" id="again-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>Play again
+        </button>
+        <button type="button" class="ghost menu-btn">Change grade</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+/* BEGIN pure */
+/* ---------- the table, in meters. x runs along the long side, z across it; the white ball starts on the left ---------- */
+const TABLE = { L:2.24, W:1.12, R:0.042, RAIL:0.15, CUSH:0.05, RAIL_H:0.05, NOSE_H:0.036, BODY:0.24 };
+/* rolling: a steady slowdown plus a little air drag; cushions keep 78% of the speed, balls 96% of a hit */
+const PHYS = { DT:1/480, ROLL:0.55, DRAG:0.12, CUSHION_E:0.78, BALL_E:0.96, STOP:0.004 };
+
+/* ---------- grades: balls on the first table, pocket size, how many cushion bounces the guide shows,
+   and the helper (K to 2nd see where a hit ball goes and whether it drops in) ---------- */
+const GRADE_ORDER = ["K","1","2","3","4","5"];
+const GRADES = {
+  K:   { id:"K", label:"K",   name:"Kindergarten", balls:3, pocket:0.118, bounces:2, helper:true  },
+  "1": { id:"1", label:"1st", name:"1st grade",    balls:4, pocket:0.108, bounces:2, helper:true  },
+  "2": { id:"2", label:"2nd", name:"2nd grade",    balls:5, pocket:0.100, bounces:2, helper:true  },
+  "3": { id:"3", label:"3rd", name:"3rd grade",    balls:6, pocket:0.092, bounces:1, helper:false },
+  "4": { id:"4", label:"4th", name:"4th grade",    balls:7, pocket:0.086, bounces:1, helper:false },
+  "5": { id:"5", label:"5th", name:"5th grade",    balls:8, pocket:0.080, bounces:1, helper:false }
+};
+const MODES = {
+  arcade: { id:"arcade", name:"Arcade", time:90, perBall:3, clearTime:15 },
+  trick:  { id:"trick",  name:"Trick Shots" }
+};
+const MAX_LEVEL = 10, SPEED_STEP = 0.5, MAX_COMBO = 5, MAX_EXTRA = 3;
+const CUE_SPOT = { x:TABLE.L * 0.25, z:TABLE.W / 2 };
+const BALL_COLORS = ["#FFFFFF","#FFD23F","#2F86E8","#E8463C","#8E5CE6","#FF8A3D","#3DBA5B","#FF6FA3","#19B5C6"];
+
+function makeRng(seed){
+  let a = seed >>> 0;
+  return function(){
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------- angles: whole degrees, counterclockwise from straight right (along the long side) ---------- */
+function norm360(d){ return ((d % 360) + 360) % 360; }
+function degOf(x, z){ return norm360(Math.atan2(z, x) * 180 / Math.PI); }
+function dirOf(deg){ const a = deg * Math.PI / 180; return { x:Math.cos(a), z:Math.sin(a) }; }
+/* how the angle is shown, like a protractor: 0 to 90 from the line along the table (ref 0 = pointing right,
+   180 = pointing left), on whichever side the shot goes. 0 is straight along the table, 90 straight across. */
+function railAngle(deg){
+  const d = norm360(Math.round(deg)), a = d % 180;
+  return { deg:Math.min(a, 180 - a), ref:(d <= 90 || d >= 270) ? 0 : 180 };
+}
+
+/* ---------- speed: how far the stick is pulled back becomes speed 1 to 10, half a meter per second each ---------- */
+function levelFromDistance(d){
+  if (!(d > 0.07)) return 0;
+  return Math.min(MAX_LEVEL, Math.max(1, Math.ceil((d - 0.07) / 0.05)));
+}
+function speedOf(level){ return Math.max(0, Math.min(MAX_LEVEL, level)) * SPEED_STEP; }
+/* how far a ball rolling at v goes before it stops, and how fast it is still going after s meters */
+function stopDistance(v){ return v <= 0 ? 0 : Math.log(1 + PHYS.DRAG * v * v / PHYS.ROLL) / (2 * PHYS.DRAG); }
+function speedAfter(v, s){
+  const k = (PHYS.ROLL + PHYS.DRAG * v * v) * Math.exp(-2 * PHYS.DRAG * s) - PHYS.ROLL;
+  return k <= 0 ? 0 : Math.sqrt(k / PHYS.DRAG);
+}
+
+/* ---------- pockets: 4 corners and 2 in the middle of the long sides. Order: near left, near middle,
+   near right, far left, far middle, far right ---------- */
+function pocketsFor(grade){
+  const pr = GRADES[grade].pocket, L = TABLE.L, W = TABLE.W, o = pr * 0.28, m = pr * 0.5;
+  return [
+    { x:-o,    z:-o,    r:pr }, { x:L / 2, z:-m,    r:pr * 0.92 }, { x:L + o, z:-o,    r:pr },
+    { x:-o,    z:W + o, r:pr }, { x:L / 2, z:W + m, r:pr * 0.92 }, { x:L + o, z:W + o, r:pr }
+  ];
+}
+/* the cushion is open where a pocket cuts into it. "along" is the spot along that cushion */
+function wallOpen(world, wall, along){
+  const pr = world.pr, cg = pr * 1.1, mg = pr * 0.82;
+  if (wall === "near" || wall === "far") return along < cg || along > TABLE.L - cg || Math.abs(along - TABLE.L / 2) < mg;
+  return along < cg || along > TABLE.W - cg;
+}
+
+/* ---------- a new table: balls placed apart, away from the pockets, on the right-hand side ---------- */
+function rackBalls(grade, count, seed){
+  const rand = makeRng(seed), out = [], R = TABLE.R, L = TABLE.L, W = TABLE.W, pockets = pocketsFor(grade);
+  let guard = 0;
+  while (out.length < count && guard++ < 20000){
+    const p = { x:L * 0.5 + rand() * (L * 0.5 - 0.2), z:0.16 + rand() * (W - 0.32) };
+    if (out.some(q => Math.hypot(q.x - p.x, q.z - p.z) < 2 * R + 0.06)) continue;
+    if (pockets.some(k => Math.hypot(k.x - p.x, k.z - p.z) < k.r + 0.12)) continue;
+    out.push(p);
+  }
+  return out;
+}
+function makeWorld(grade, count, seed){
+  const balls = [{ id:0, num:0, color:BALL_COLORS[0], x:CUE_SPOT.x, z:CUE_SPOT.z, vx:0, vz:0, alive:true, roll:0, rollDir:0 }];
+  rackBalls(grade, count, seed).forEach((p, i) => balls.push({ id:i + 1, num:i + 1, color:BALL_COLORS[1 + i % 8], x:p.x, z:p.z, vx:0, vz:0, alive:true, roll:0, rollDir:0 }));
+  return { grade, pr:GRADES[grade].pocket, pockets:pocketsFor(grade), balls };
+}
+function shoot(world, deg, level){
+  const d = dirOf(deg), v = speedOf(level), c = world.balls[0];
+  c.vx = d.x * v; c.vz = d.z * v;
+}
+/* the white ball goes back on its spot, slid along until it is clear of every other ball */
+function respotCue(world){
+  const c = world.balls[0], R = TABLE.R;
+  const clear = (x, z) => world.balls.every(b => b === c || !b.alive || Math.hypot(b.x - x, b.z - z) >= 2 * R + 0.005);
+  let x = CUE_SPOT.x, z = CUE_SPOT.z;
+  for (let k = 0; k < 60 && !clear(x, z); k++){ z = CUE_SPOT.z + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.03; if (k > 30) x = CUE_SPOT.x - 0.12; }
+  Object.assign(c, { x, z, vx:0, vz:0, alive:true });
+}
+
+/* ---------- one small step of the table ---------- */
+function stepWorld(world, dt){
+  const ev = [], R = TABLE.R, L = TABLE.L, W = TABLE.W, e = PHYS.CUSHION_E, B = world.balls;
+  for (const b of B){
+    if (!b.alive) continue;
+    const s = Math.hypot(b.vx, b.vz);
+    if (!s) continue;
+    b.x += b.vx * dt; b.z += b.vz * dt;
+    b.roll += s * dt / R; b.rollDir = Math.atan2(b.vz, b.vx);
+    /* cushions: same angle out as in, a little slower */
+    const bounce = (wall) => { b.vx *= e; b.vz *= e; ev.push({ type:"cushion", ball:b.id, wall, speed:s }); };
+    if (b.z < R && !wallOpen(world, "near", b.x)){ b.z = 2 * R - b.z; b.vz = -b.vz; bounce("near"); }
+    else if (b.z > W - R && !wallOpen(world, "far", b.x)){ b.z = 2 * (W - R) - b.z; b.vz = -b.vz; bounce("far"); }
+    if (b.x < R && !wallOpen(world, "left", b.z)){ b.x = 2 * R - b.x; b.vx = -b.vx; bounce("left"); }
+    else if (b.x > L - R && !wallOpen(world, "right", b.z)){ b.x = 2 * (L - R) - b.x; b.vx = -b.vx; bounce("right"); }
+  }
+  /* balls hitting balls: wind back to the exact moment they touch, so the hit ball leaves along the line between centers */
+  const D = 2 * R;
+  for (let i = 0; i < B.length; i++){
+    const a = B[i];
+    if (!a.alive) continue;
+    for (let j = i + 1; j < B.length; j++){
+      const b = B[j];
+      if (!b.alive) continue;
+      let dx = b.x - a.x, dz = b.z - a.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= D * D) continue;
+      const rvx = b.vx - a.vx, rvz = b.vz - a.vz, closing = dx * rvx + dz * rvz;
+      if (closing < 0){
+        const A = rvx * rvx + rvz * rvz;
+        let t = (closing + Math.sqrt(Math.max(0, closing * closing - A * (d2 - D * D)))) / A;
+        t = Math.max(0, Math.min(dt * 2, t));
+        a.x -= a.vx * t; a.z -= a.vz * t; b.x -= b.vx * t; b.z -= b.vz * t;
+        dx = b.x - a.x; dz = b.z - a.z;
+        const dl = Math.hypot(dx, dz) || 1, nx = dx / dl, nz = dz / dl;
+        const vn = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
+        if (vn > 0){
+          const imp = (1 + PHYS.BALL_E) / 2 * vn;
+          a.vx -= imp * nx; a.vz -= imp * nz; b.vx += imp * nx; b.vz += imp * nz;
+          ev.push({ type:"ball", a:a.id, b:b.id, speed:vn });
+        }
+        a.x += a.vx * t; a.z += a.vz * t; b.x += b.vx * t; b.z += b.vz * t;
+      } else {
+        const dl = Math.sqrt(d2) || 1e-6, push = (D - dl) / 2, nx = dx / dl, nz = dz / dl;
+        a.x -= nx * push; a.z -= nz * push; b.x += nx * push; b.z += nz * push;
+      }
+    }
+  }
+  /* the felt slows every ball */
+  for (const b of B){
+    if (!b.alive) continue;
+    const s = Math.hypot(b.vx, b.vz);
+    if (!s) continue;
+    const s2 = s - (PHYS.ROLL + PHYS.DRAG * s * s) * dt;
+    if (s2 <= PHYS.STOP){ b.vx = 0; b.vz = 0; } else { b.vx *= s2 / s; b.vz *= s2 / s; }
+  }
+  /* pockets */
+  for (const b of B){
+    if (!b.alive) continue;
+    let hit = -1;
+    world.pockets.forEach((p, k) => { if (hit < 0 && Math.hypot(b.x - p.x, b.z - p.z) < p.r) hit = k; });
+    if (hit < 0 && (b.x < -R || b.x > L + R || b.z < -R || b.z > W + R)) hit = nearestPocket(world, b.x, b.z);
+    if (hit >= 0){ b.alive = false; b.vx = 0; b.vz = 0; ev.push({ type:"pocket", ball:b.id, pocket:hit }); }
+  }
+  return ev;
+}
+function nearestPocket(world, x, z){
+  let best = 0, bd = Infinity;
+  world.pockets.forEach((p, k) => { const d = Math.hypot(p.x - x, p.z - z); if (d < bd){ bd = d; best = k; } });
+  return best;
+}
+function isMoving(world){ return world.balls.some(b => b.alive && (b.vx || b.vz)); }
+
+/* ---------- the aim guide: where the white ball goes, how it bounces, what it hits and where that ball goes.
+   It uses the same rules as the table, so what it draws is what happens. ---------- */
+function rayCircle(p, d, c, rad){
+  const fx = p.x - c.x, fz = p.z - c.z, b = fx * d.x + fz * d.z, cc = fx * fx + fz * fz - rad * rad;
+  if (cc <= 0) return 0;
+  if (b > 0) return null;
+  const disc = b * b - cc;
+  return disc < 0 ? null : -b - Math.sqrt(disc);
+}
+/* the first thing a ball rolling from p along d meets within "reach": a ball, a pocket, a cushion, or nothing */
+function firstHit(world, p, d, reach, skip){
+  const R = TABLE.R, L = TABLE.L, W = TABLE.W;
+  let best = { t:reach, kind:"stop" };
+  for (const b of world.balls){
+    if (!b.alive || skip.indexOf(b.id) >= 0) continue;
+    const t = rayCircle(p, d, b, 2 * R);
+    if (t !== null && t < best.t) best = { t, kind:"ball", ball:b };
+  }
+  world.pockets.forEach((k, i) => { const t = rayCircle(p, d, k, k.r); if (t !== null && t < best.t) best = { t, kind:"pocket", pocket:i }; });
+  const walls = [];
+  if (d.z < 0) walls.push({ t:(R - p.z) / d.z, out:(-R - p.z) / d.z, wall:"near" });
+  if (d.z > 0) walls.push({ t:(W - R - p.z) / d.z, out:(W + R - p.z) / d.z, wall:"far" });
+  if (d.x < 0) walls.push({ t:(R - p.x) / d.x, out:(-R - p.x) / d.x, wall:"left" });
+  if (d.x > 0) walls.push({ t:(L - R - p.x) / d.x, out:(L + R - p.x) / d.x, wall:"right" });
+  for (const w of walls){
+    if (w.t < 0 || w.t >= best.t) continue;
+    const hx = p.x + d.x * w.t, hz = p.z + d.z * w.t;
+    const along = (w.wall === "near" || w.wall === "far") ? hx : hz;
+    if (wallOpen(world, w.wall, along)){
+      if (w.out < best.t) best = { t:w.out, kind:"pocket", pocket:nearestPocket(world, p.x + d.x * w.out, p.z + d.z * w.out) };
+      continue;
+    }
+    best = { t:w.t, kind:"wall", wall:w.wall };
+  }
+  return best;
+}
+function bankDeg(d, wall){
+  const a = (wall === "near" || wall === "far") ? Math.atan2(Math.abs(d.z), Math.abs(d.x)) : Math.atan2(Math.abs(d.x), Math.abs(d.z));
+  return Math.round(a * 180 / Math.PI);
+}
+function straightPath(world, p, d, v, skip){
+  const h = firstHit(world, p, d, stopDistance(v), skip);
+  return { x1:p.x, z1:p.z, x2:p.x + d.x * h.t, z2:p.z + d.z * h.t, end:h.kind, pocket:h.kind === "pocket" ? h.pocket : -1, wall:h.wall || null };
+}
+function predictShot(world, deg, level, maxBounces){
+  const cue = world.balls[0];
+  let p = { x:cue.x, z:cue.z }, d = dirOf(deg), v = speedOf(level);
+  const out = { deg, level, speed:v, segments:[], bounces:[], hit:null, stop:null, pocket:-1, endsAtBounce:false };
+  for (let leg = 0; leg <= maxBounces; leg++){
+    const h = firstHit(world, p, d, stopDistance(v), [0]);
+    const q = { x:p.x + d.x * h.t, z:p.z + d.z * h.t };
+    out.segments.push({ x1:p.x, z1:p.z, x2:q.x, z2:q.z });
+    const vAt = speedAfter(v, h.t);
+    if (h.kind === "stop"){ out.stop = q; break; }
+    if (h.kind === "pocket"){ out.pocket = h.pocket; break; }
+    if (h.kind === "ball"){
+      const b = h.ball;
+      let nx = b.x - q.x, nz = b.z - q.z;
+      const nl = Math.hypot(nx, nz) || 1; nx /= nl; nz /= nl;
+      const vn = vAt * (d.x * nx + d.z * nz), imp = (1 + PHYS.BALL_E) / 2 * vn;
+      const cvx = vAt * d.x - imp * nx, cvz = vAt * d.z - imp * nz, cs = Math.hypot(cvx, cvz);
+      out.hit = {
+        ball:b.id, ghost:q, deg:Math.round(degOf(nx, nz)) % 360, dir:{ x:nx, z:nz }, speed:imp,
+        path:straightPath(world, { x:b.x, z:b.z }, { x:nx, z:nz }, imp, [0, b.id]),
+        cueAfter:cs > 0.02 ? straightPath(world, q, { x:cvx / cs, z:cvz / cs }, cs, [0, b.id]) : null
+      };
+      break;
+    }
+    const nd = (h.wall === "near" || h.wall === "far") ? { x:d.x, z:-d.z } : { x:-d.x, z:d.z };
+    /* past the last bounce this grade is shown, the guide stops at the cushion with a short hint of the way out */
+    if (out.bounces.length >= maxBounces){ out.endsAtBounce = true; out.edge = { x:q.x, z:q.z, outDir:nd }; break; }
+    out.bounces.push({ x:q.x, z:q.z, wall:h.wall, deg:bankDeg(d, h.wall), inDir:d, outDir:nd });
+    p = q; d = nd; v = vAt * PHYS.CUSHION_E;
+  }
+  return out;
+}
+
+/* ---------- scoring ---------- */
+function pocketPoints(banks, combo){ return 100 * (1 + Math.min(3, banks)) * combo; }
+function nextCombo(combo, pocketed, scratch){ return pocketed > 0 && !scratch ? Math.min(MAX_COMBO, combo + 1) : 1; }
+function rackSize(grade, rack){ return GRADES[grade].balls + Math.min(MAX_EXTRA, Math.max(0, rack - 1)); }
+function trickShots(grade, balls){ return balls + (GRADES[grade].helper ? 4 : 3); }
+function trickStars(used, balls){ return used <= balls ? 3 : used <= balls + 2 ? 2 : 1; }
+/* END pure */
+
+/* ============================================================
+   DRAWING THE TABLE IN 3D
+   The table lies on a tilted plane seen through a camera; every point is
+   projected, and labels are drawn flat on the felt with a matching transform.
+   ============================================================ */
+function mix(a, b, t){
+  const p = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const A = p(a), B = p(b);
+  return "#" + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, "0")).join("");
+}
+function makeView(canvas){
+  const L = TABLE.L, W = TABLE.W, R = TABLE.R;
+  const v = { canvas, ctx:canvas.getContext("2d"), dpr:1, w:0, h:0, portrait:false, phi:56 * Math.PI / 180, cam:3.1, f:1, ox:0, oy:0 };
+  const SIN = () => Math.sin(v.phi), COS = () => Math.cos(v.phi);
+  v.toPlane = (x, z) => v.portrait ? { px:W / 2 - z, pz:x - L / 2 } : { px:x - L / 2, pz:z - W / 2 };
+  v.raw = (px, pz, h) => {
+    const Y = pz * SIN() + h * COS(), Z = v.cam + pz * COS() - h * SIN();
+    return { x:v.ox + v.f * px / Z, y:v.oy - v.f * Y / Z, s:v.f / Z, depth:pz };
+  };
+  v.P = (x, z, h) => { const q = v.toPlane(x, z); return v.raw(q.px, q.pz, h || 0); };
+  v.toTable = (sx, sy) => {
+    const a = (sx - v.ox) / v.f, b = -(sy - v.oy) / v.f, den = SIN() - b * COS();
+    if (den <= 0.02) return null;
+    const pz = b * v.cam / den, px = a * (v.cam + pz * COS());
+    return v.portrait ? { x:pz + L / 2, z:W / 2 - px } : { x:px + L / 2, z:pz + W / 2 };
+  };
+  v.resize = () => {
+    const r = canvas.getBoundingClientRect();
+    v.w = Math.max(20, r.width); v.h = Math.max(20, r.height);
+    v.dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(v.w * v.dpr); canvas.height = Math.round(v.h * v.dpr);
+    v.portrait = v.h > v.w * 1.1;
+    v.cam = v.portrait ? 3.7 : 3.1;
+    v.f = 1; v.ox = 0; v.oy = 0;
+    const E = TABLE.RAIL, xs = [], ys = [];
+    for (const [x, z] of [[-E, -E], [L + E, -E], [-E, W + E], [L + E, W + E]]){
+      for (const h of [TABLE.RAIL_H, -TABLE.BODY]){ const p = v.P(x, z, h); xs.push(p.x); ys.push(p.y); }
+    }
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    v.f = Math.min(v.w * 0.97 / (maxX - minX), v.h * 0.95 / (maxY - minY));
+    v.ox = v.w / 2 - v.f * (maxX + minX) / 2;
+    v.oy = v.h / 2 - v.f * (maxY + minY) / 2;
+  };
+  v.screen = () => v.ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+  /* a flat drawing frame on the felt at (x,z): 1 unit = 1 mm, x along table direction (ux,uz), y toward the viewer.
+     Returns screen pixels per mm there, so labels can keep a readable size. */
+  v.frame = (x, z, ux, uz, h) => {
+    const e = 0.01, hh = h || 0, p0 = v.P(x, z, hh), p1 = v.P(x + ux * e, z + uz * e, hh), p2 = v.P(x - uz * e, z + ux * e, hh), k = v.dpr / (e * 1000);
+    v.ctx.setTransform((p1.x - p0.x) * k, (p1.y - p0.y) * k, -(p2.x - p0.x) * k, -(p2.y - p0.y) * k, p0.x * v.dpr, p0.y * v.dpr);
+    return Math.hypot(p1.x - p0.x, p1.y - p0.y) / (e * 1000);
+  };
+  /* the table direction that reads left to right on screen, for upright labels */
+  v.upright = () => v.portrait ? { x:0, z:-1 } : { x:1, z:0 };
+  return v;
+}
+
+/* points on a flat arc in a table-aligned frame: table angles (counterclockwise) to frame coordinates */
+function arcPts(r, a0, a1, n){
+  const out = [];
+  for (let i = 0; i <= n; i++){ const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; out.push([Math.cos(a) * r, -Math.sin(a) * r]); }
+  return out;
+}
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+function drawTable(v, world, o){
+  const ctx = v.ctx, L = TABLE.L, W = TABLE.W, E = TABLE.RAIL, C = TABLE.CUSH, RH = TABLE.RAIL_H, NH = TABLE.NOSE_H, BODY = TABLE.BODY;
+  const poly = (pts) => { ctx.beginPath(); pts.forEach((q, i) => { const p = v.P(q[0], q[1], q[2]); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }); ctx.closePath(); };
+  v.screen();
+  ctx.clearRect(0, 0, v.w, v.h);
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  const O = [[-E, -E], [L + E, -E], [L + E, W + E], [-E, W + E]];
+  const F = [[0, 0], [L, 0], [L, W], [0, W]];
+  const I = [[-C, -C], [L + C, -C], [L + C, W + C], [-C, W + C]];
+
+  /* floor shadow */
+  {
+    const l = v.P(-E, W / 2, -BODY), r = v.P(L + E, W / 2, -BODY), nr = v.P(L / 2, -E, -BODY), fr = v.P(L / 2, W + E, -BODY);
+    const cx = (l.x + r.x) / 2, cy = (nr.y + fr.y) / 2, rx = Math.abs(r.x - l.x) * 0.58 + 20, ry = Math.abs(nr.y - fr.y) * 0.62 + 16;
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(1, ry / rx);
+    const sg = ctx.createRadialGradient(0, 0, rx * 0.5, 0, 0, rx);
+    sg.addColorStop(0, "rgba(20,0,12,.5)"); sg.addColorStop(1, "rgba(20,0,12,0)");
+    ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI * 2); ctx.fillStyle = sg; ctx.fill();
+    ctx.restore();
+  }
+
+  /* the side facing the camera, with a row of arcade bulbs */
+  let near = 0, nd = Infinity;
+  for (let i = 0; i < 4; i++){ const a = O[i], b = O[(i + 1) % 4], d = v.P((a[0] + b[0]) / 2, (a[1] + b[1]) / 2).depth; if (d < nd){ nd = d; near = i; } }
+  const na = O[near], nb = O[(near + 1) % 4];
+  poly([[na[0], na[1], RH], [nb[0], nb[1], RH], [nb[0], nb[1], -BODY], [na[0], na[1], -BODY]]);
+  const top = v.P(na[0], na[1], RH), bot = v.P(na[0], na[1], -BODY);
+  let g = ctx.createLinearGradient(0, top.y, 0, bot.y);
+  g.addColorStop(0, "#A2531D"); g.addColorStop(1, "#5E2C0C");
+  ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = "#1E2226"; ctx.lineWidth = 3; ctx.stroke();
+  const bulbs = 16, t = o.time || 0;
+  for (let i = 0; i < bulbs; i++){
+    const f = (i + 0.5) / bulbs, x = na[0] + (nb[0] - na[0]) * f, z = na[1] + (nb[1] - na[1]) * f;
+    const p = v.P(x, z, (RH - BODY) / 2), r = Math.max(2.5, 0.016 * p.s);
+    const lit = o.still ? i % 2 === 0 : ((i + Math.floor(t * 6)) % 3) === 0;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = lit ? ["#FFD23F", "#FF6FA3", "#4FD6F0"][i % 3] : "#4A2410";
+    if (lit){ ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10; }
+    ctx.fill(); ctx.shadowBlur = 0; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+
+  /* wooden rail top */
+  poly(O.map(q => [q[0], q[1], RH]));
+  const a = v.P(0, 0, RH), b = v.P(L, W, RH);
+  g = ctx.createLinearGradient(0, Math.min(a.y, b.y) - 40, 0, Math.max(a.y, b.y) + 40);
+  g.addColorStop(0, "#E59345"); g.addColorStop(1, "#B8621F");
+  ctx.fillStyle = g; ctx.fill(); ctx.lineWidth = 3.5; ctx.strokeStyle = "#1E2226"; ctx.stroke();
+
+  /* the felt, with a soft pool of light from the lamp above */
+  poly(F.map(q => [q[0], q[1], 0]));
+  ctx.fillStyle = "#1A9886"; ctx.fill();
+  ctx.save(); ctx.clip();
+  const c = v.P(L / 2, W / 2), far = v.P(L, W);
+  const rad = Math.hypot(far.x - c.x, far.y - c.y) * 1.25;
+  g = ctx.createRadialGradient(c.x, c.y - rad * 0.1, rad * 0.05, c.x, c.y, rad);
+  g.addColorStop(0, "rgba(140,255,225,.42)"); g.addColorStop(.55, "rgba(60,200,170,.12)"); g.addColorStop(1, "rgba(0,40,40,.35)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, v.w, v.h);
+  /* the head line and the two spots */
+  ctx.setLineDash([6, 8]); ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 2;
+  const h1 = v.P(CUE_SPOT.x, 0), h2 = v.P(CUE_SPOT.x, W);
+  ctx.beginPath(); ctx.moveTo(h1.x, h1.y); ctx.lineTo(h2.x, h2.y); ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+  for (const sx of [CUE_SPOT.x, L * 0.75]){
+    v.frame(sx, W / 2, 1, 0); ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.fill();
+  }
+  v.screen();
+
+  /* the far cushion's face, then the four cushion tops */
+  let farI = (near + 2) % 4;
+  const fa = F[farI], fb = F[(farI + 1) % 4];
+  poly([[fa[0], fa[1], 0], [fb[0], fb[1], 0], [fb[0], fb[1], NH], [fa[0], fa[1], NH]]);
+  ctx.fillStyle = "#0B5E53"; ctx.fill();
+  for (let i = 0; i < 4; i++){
+    const p1 = F[i], p2 = F[(i + 1) % 4], q2 = I[(i + 1) % 4], q1 = I[i];
+    poly([[p1[0], p1[1], NH], [p2[0], p2[1], NH], [q2[0], q2[1], RH], [q1[0], q1[1], RH]]);
+    ctx.fillStyle = i === near ? "#178C7B" : "#14806F"; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = "rgba(30,34,38,.55)"; ctx.stroke();
+  }
+  poly(F.map(q => [q[0], q[1], NH])); ctx.lineWidth = 2.5; ctx.strokeStyle = "#1E2226"; ctx.stroke();
+
+  /* sights on the rails */
+  const mid = -(E + C) / 2;
+  const sight = (x, z) => { v.frame(x, z, 1, 0, RH); ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(9, 0); ctx.lineTo(0, 12); ctx.lineTo(-9, 0); ctx.closePath(); ctx.fillStyle = "#FFFBF3"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#1E2226"; ctx.stroke(); };
+  for (let k = 1; k < 8; k++){ if (k === 4) continue; sight(L * k / 8, mid); sight(L * k / 8, W - mid); }
+  for (let k = 1; k < 4; k++){ sight(mid, W * k / 4); sight(L - mid, W * k / 4); }
+
+  /* pockets */
+  world.pockets.forEach((p, i) => {
+    v.frame(p.x, p.z, 1, 0, RH * 0.6);
+    const r = p.r * 1000;
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
+    const pg = ctx.createRadialGradient(0, r * 0.25, r * 0.1, 0, 0, r);
+    pg.addColorStop(0, "#000"); pg.addColorStop(1, "#2B1A22");
+    ctx.fillStyle = pg; ctx.fill();
+    const glow = o.glow && o.glow.indexOf(i) >= 0, warn = o.warn === i;
+    ctx.lineWidth = 16; ctx.strokeStyle = warn ? "#E8463C" : glow ? "#8BD346" : "#FFD23F"; ctx.stroke();
+    ctx.lineWidth = 5; ctx.strokeStyle = "#1E2226"; ctx.beginPath(); ctx.arc(0, 0, r + 8, 0, Math.PI * 2); ctx.stroke();
+    if (glow || warn){
+      const pulse = 0.5 + 0.5 * Math.sin(t * 8);
+      ctx.beginPath(); ctx.arc(0, 0, r + 26 + pulse * 10, 0, Math.PI * 2);
+      ctx.lineWidth = 8; ctx.strokeStyle = warn ? "rgba(232,70,60,.8)" : "rgba(139,211,70,.85)"; ctx.stroke();
+    }
+  });
+  v.screen();
+}
+
+function drawBall(v, b, scale, sink){
+  const ctx = v.ctx, R = TABLE.R * (scale || 1);
+  const c = v.P(b.x, b.z, R - (sink || 0)), rad = R * c.s;
+  if (rad < 0.5) return;
+  const g = ctx.createRadialGradient(c.x - rad * .35, c.y - rad * .42, rad * .08, c.x, c.y, rad);
+  g.addColorStop(0, mix(b.color, "#FFFFFF", .6)); g.addColorStop(.55, b.color); g.addColorStop(1, mix(b.color, "#1E2226", b.num ? .45 : .3));
+  ctx.beginPath(); ctx.arc(c.x, c.y, rad, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+  /* a number disc that rolls around the ball as it moves */
+  const q = v.P(b.x + Math.cos(b.rollDir) * 0.01, b.z + Math.sin(b.rollDir) * 0.01, R);
+  let dx = q.x - c.x, dy = q.y - c.y; const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+  const vis = Math.cos(b.roll), off = Math.sin(b.roll) * 0.55 * rad;
+  if (vis > -0.15){
+    const cx = c.x + dx * off, cy = c.y + dy * off - rad * 0.05, dr = rad * (b.num ? 0.46 : 0.16);
+    ctx.save(); ctx.beginPath(); ctx.arc(c.x, c.y, rad, 0, Math.PI * 2); ctx.clip();
+    ctx.beginPath(); ctx.ellipse(cx, cy, dr * Math.max(0.3, Math.abs(vis)), dr, Math.atan2(dy, dx), 0, Math.PI * 2);
+    ctx.fillStyle = b.num ? "#FFFBF3" : "#E8463C"; ctx.fill();
+    if (b.num && vis > 0.35 && rad > 6){
+      ctx.fillStyle = "#1E2226"; ctx.font = "800 " + Math.round(rad * 0.62) + "px 'Plus Jakarta Sans',system-ui,sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(b.num, cx, cy + rad * 0.03);
+    }
+    ctx.restore();
+  }
+  ctx.beginPath(); ctx.ellipse(c.x - rad * .38, c.y - rad * .46, rad * .22, rad * .13, -0.5, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fill();
+  ctx.beginPath(); ctx.arc(c.x, c.y, rad, 0, Math.PI * 2);
+  ctx.lineWidth = Math.max(1.4, rad * 0.1); ctx.strokeStyle = "#1E2226"; ctx.stroke();
+}
+function drawShadow(v, b, scale){
+  v.frame(b.x + 0.012, b.z - 0.018, 1, 0);
+  v.ctx.beginPath(); v.ctx.arc(0, 0, TABLE.R * 1000 * (scale || 1) * 1.05, 0, Math.PI * 2);
+  v.ctx.fillStyle = "rgba(0,30,25,.35)"; v.ctx.fill();
+}
+
+/* ---------- the cue stick: chalked tip, maple shaft, a pink wrap and a dark butt, tilted up in 3D ---------- */
+function drawStick(v, cue, deg, pull){
+  const ctx = v.ctx, R = TABLE.R, d = dirOf(deg);
+  const at = (s) => { const k = R + pull + s; return v.P(cue.x - d.x * k, cue.z - d.z * k, R * 1.05 + s * 0.13); };
+  const width = (s, p) => Math.max(1.5, (0.0068 + s * 0.0075) * p.s);
+  const seg = (s0, s1, fill) => {
+    const A = at(s0), B = at(s1), dx = B.x - A.x, dy = B.y - A.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l, wa = width(s0, A), wb = width(s1, B);
+    ctx.beginPath(); ctx.moveTo(A.x + nx * wa, A.y + ny * wa); ctx.lineTo(B.x + nx * wb, B.y + ny * wb); ctx.lineTo(B.x - nx * wb, B.y - ny * wb); ctx.lineTo(A.x - nx * wa, A.y - ny * wa); ctx.closePath();
+    if (fill){ ctx.fillStyle = fill; ctx.fill(); }
+  };
+  v.screen();
+  ctx.lineJoin = "round";
+  seg(0, 1.35); ctx.lineWidth = 5; ctx.strokeStyle = "#1E2226"; ctx.stroke();
+  [[0, 0.02, "#4FA8E8"], [0.02, 0.045, "#FFFBF3"], [0.045, 0.8, "#F2D39A"], [0.8, 1.02, "#FF6FA3"], [1.02, 1.06, "#FFD23F"], [1.06, 1.35, "#6A3416"]].forEach(s => seg(s[0], s[1], s[2]));
+  /* a shine along the shaft */
+  const A = at(0.06), B = at(0.78);
+  ctx.beginPath(); ctx.moveTo(A.x, A.y - width(0.06, A) * 0.4); ctx.lineTo(B.x, B.y - width(0.78, B) * 0.4);
+  ctx.lineWidth = Math.max(1, width(0.4, at(0.4)) * 0.5); ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.stroke();
+}
+
+/* ============================================================
+   THE AIM GUIDE, DRAWN ON THE FELT
+   ============================================================ */
+const GUIDE = { ring:150 };
+/* guides are drawn at the height of a ball's center, so paths line up with what the balls actually touch */
+const GH = TABLE.R;
+function label(v, x, z, text, opts){
+  const ctx = v.ctx, up = v.upright();
+  const k = v.frame(x, z, up.x, up.z, GH);
+  const size = Math.max(opts.size || 40, (opts.minPx || 14) / k);
+  ctx.font = "400 " + size + "px Bungee, 'Plus Jakarta Sans', system-ui, sans-serif";
+  const w = ctx.measureText(text).width + size * 0.9, h = size * 1.45;
+  roundRect(ctx, -w / 2, -h / 2, w, h, h / 2);
+  ctx.fillStyle = opts.bg || "#FFD23F"; ctx.fill();
+  ctx.lineWidth = Math.max(4, size * 0.12); ctx.strokeStyle = "#1E2226"; ctx.stroke();
+  ctx.fillStyle = opts.color || "#1E2226"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(text, 0, size * 0.06);
+  v.screen();
+}
+function screenLine(v, a, b, color, width, dash, offset){
+  const ctx = v.ctx, A = v.P(a.x, a.z, GH), B = v.P(b.x, b.z, GH);
+  ctx.setLineDash(dash || []); ctx.lineDashOffset = offset || 0;
+  ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y);
+  ctx.lineWidth = width + 3; ctx.strokeStyle = "rgba(30,34,38,.55)"; ctx.stroke();
+  ctx.lineWidth = width; ctx.strokeStyle = color; ctx.stroke();
+  ctx.setLineDash([]);
+}
+/* the protractor around the white ball: a ring with ticks, a 0 degree line, and the aim angle filled in */
+function drawProtractor(v, cue, deg){
+  const ctx = v.ctx, r = GUIDE.ring;
+  v.frame(cue.x, cue.z, 1, 0, GH);
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.lineWidth = 6; ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.stroke();
+  for (let a = 0; a < 360; a += 15){
+    const long = a % 90 === 0, rr = a % 45 === 0 ? 22 : 12, c = Math.cos(a * Math.PI / 180), s = -Math.sin(a * Math.PI / 180);
+    ctx.beginPath(); ctx.moveTo(c * (r - rr), s * (r - rr)); ctx.lineTo(c * r, s * r);
+    ctx.lineWidth = long ? 6 : 4; ctx.strokeStyle = long ? "rgba(255,255,255,.9)" : "rgba(255,255,255,.55)"; ctx.stroke();
+  }
+  const ra = railAngle(deg), delta = signedFrom(ra.ref, deg);
+  refLine(ctx, ra.ref, TABLE.R * 1000 + 8, r + 40);
+  if (ra.deg > 0){
+    const pts = arcPts(r - 4, ra.ref, ra.ref + delta, Math.max(6, Math.ceil(ra.deg / 6)));
+    ctx.beginPath(); ctx.moveTo(0, 0); pts.forEach(p => ctx.lineTo(p[0], p[1])); ctx.closePath();
+    ctx.fillStyle = "rgba(255,210,63,.3)"; ctx.fill();
+    ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+    ctx.lineWidth = 10; ctx.strokeStyle = "#FFD23F"; ctx.stroke();
+  }
+  v.screen();
+  /* the number sits in the middle of the angle; a small angle's number moves to the other side of the 0 line, off the path */
+  const at = Math.abs(delta) >= 34 ? ra.ref + delta / 2 : ra.ref - (delta >= 0 ? 1 : -1) * 24;
+  const m = dirOf(at), lr = (r + 85) / 1000;
+  label(v, cue.x + m.x * lr, cue.z + m.z * lr, ra.deg + "°", { size:58, minPx:22 });
+}
+/* the turn from the reference line to an aim, -90 to 90 (counterclockwise is positive) */
+function signedFrom(ref, deg){ return ((norm360(Math.round(deg)) - ref + 540) % 360) - 180; }
+/* the dashed line along the table that angles are measured from */
+function refLine(ctx, ref, from, to){
+  const s = ref ? -1 : 1;
+  ctx.setLineDash([16, 12]); ctx.beginPath(); ctx.moveTo(s * from, 0); ctx.lineTo(s * to, 0);
+  ctx.lineWidth = 5; ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.stroke(); ctx.setLineDash([]);
+}
+/* at a cushion: the angle coming in and the angle going out, measured from the cushion, always the same */
+function drawBounce(v, bn){
+  const ctx = v.ctx, along = (bn.wall === "near" || bn.wall === "far") ? { x:1, z:0 } : { x:0, z:1 };
+  v.frame(bn.x, bn.z, along.x, along.z, GH);
+  ctx.beginPath(); ctx.moveTo(-150, 0); ctx.lineTo(150, 0); ctx.lineWidth = 6; ctx.strokeStyle = "rgba(255,255,255,.75)"; ctx.stroke();
+  const rel = (d) => Math.atan2(along.x * d.z - along.z * d.x, along.x * d.x + along.z * d.z) * 180 / Math.PI;
+  const rays = [rel({ x:-bn.inDir.x, z:-bn.inDir.z }), rel(bn.outDir)];
+  const spots = [];
+  rays.forEach((a, i) => {
+    const base = Math.cos(a * Math.PI / 180) >= 0 ? 0 : (a >= 0 ? 180 : -180);
+    const pts = arcPts(88, base, a, 12);
+    ctx.beginPath(); ctx.moveTo(0, 0); pts.forEach(p => ctx.lineTo(p[0], p[1])); ctx.closePath();
+    ctx.fillStyle = i ? "rgba(255,210,63,.3)" : "rgba(79,214,240,.3)"; ctx.fill();
+    ctx.beginPath(); pts.forEach((p, j) => j ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+    ctx.lineWidth = 8; ctx.strokeStyle = i ? "#FFD23F" : "#4FD6F0"; ctx.stroke();
+    spots.push((base + a) / 2);
+  });
+  v.screen();
+  spots.forEach((a, i) => {
+    const t = (a) * Math.PI / 180, r = 0.17;
+    const x = bn.x + (along.x * Math.cos(t) - along.z * Math.sin(t)) * r, z = bn.z + (along.z * Math.cos(t) + along.x * Math.sin(t)) * r;
+    label(v, x, z, bn.deg + "°", { size:46, minPx:17, bg:i ? "#FFD23F" : "#4FD6F0" });
+  });
+}
+/* the speed readout on the felt beside the white ball: a number, ten bars, and meters per second */
+function drawSpeed(v, cue, deg, level){
+  const ctx = v.ctx, d = dirOf(deg), L = TABLE.L, W = TABLE.W;
+  let side = { x:-d.z, z:d.x };
+  if ((cue.x + side.x * 0.3 - L / 2) ** 2 + (cue.z + side.z * 0.3 - W / 2) ** 2 > (cue.x - side.x * 0.3 - L / 2) ** 2 + (cue.z - side.z * 0.3 - W / 2) ** 2) side = { x:-side.x, z:-side.z };
+  let x = cue.x + side.x * 0.3 - d.x * 0.08, z = cue.z + side.z * 0.3 - d.z * 0.08;
+  x = Math.max(0.16, Math.min(L - 0.16, x)); z = Math.max(0.1, Math.min(W - 0.1, z));
+  const up = v.upright(), k = v.frame(x, z, up.x, up.z, GH);
+  const u = Math.max(1.2, 14 / (26 * k));
+  const w = 250 * u, h = 132 * u;
+  roundRect(ctx, -w / 2, -h / 2, w, h, 26 * u);
+  ctx.fillStyle = "#FFFBF3"; ctx.fill(); ctx.lineWidth = 7 * u; ctx.strokeStyle = "#1E2226"; ctx.stroke();
+  ctx.fillStyle = "#1E2226"; ctx.textBaseline = "middle";
+  ctx.textAlign = "left"; ctx.font = "800 " + 26 * u + "px 'Plus Jakarta Sans', system-ui, sans-serif";
+  ctx.fillText("SPEED", -w / 2 + 20 * u, -h / 2 + 30 * u);
+  ctx.textAlign = "right"; ctx.font = "400 " + 46 * u + "px Bungee, system-ui, sans-serif";
+  ctx.fillText(String(level), w / 2 - 18 * u, -h / 2 + 34 * u);
+  const bw = (w - 40 * u) / 10;
+  for (let i = 0; i < 10; i++){
+    const on = i < level, col = i < 4 ? "#8BD346" : i < 7 ? "#FFD23F" : i < 9 ? "#FF8A3D" : "#E8463C";
+    roundRect(ctx, -w / 2 + 20 * u + i * bw + 2 * u, -h / 2 + 60 * u, bw - 4 * u, 22 * u, 5 * u);
+    ctx.fillStyle = on ? col : "#E9DFE6"; ctx.fill(); ctx.lineWidth = 3 * u; ctx.strokeStyle = "#1E2226"; ctx.stroke();
+  }
+  ctx.fillStyle = "#1E2226"; ctx.textAlign = "center"; ctx.font = "800 " + 28 * u + "px 'Plus Jakarta Sans', system-ui, sans-serif";
+  ctx.fillText(speedOf(level).toFixed(1) + " m/s", 0, h / 2 - 22 * u);
+  v.screen();
+}
+function drawArrowHead(v, p, d, color){
+  const ctx = v.ctx; v.frame(p.x, p.z, d.x, d.z, GH);
+  ctx.beginPath(); ctx.moveTo(26, 0); ctx.lineTo(-22, -26); ctx.lineTo(-22, 26); ctx.closePath();
+  ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = "#1E2226"; ctx.stroke(); v.screen();
+}
+function drawGuide(v, world, aim, pred, helper, time){
+  const ctx = v.ctx, cue = world.balls[0], march = -(time || 0) * 40;
+  if (!pred){
+    const d = dirOf(aim.deg);
+    screenLine(v, cue, { x:cue.x + d.x * 0.3, z:cue.z + d.z * 0.3 }, "rgba(255,255,255,.75)", 3, [8, 8], march);
+    drawProtractor(v, cue, aim.deg);
+    return;
+  }
+  pred.segments.forEach(s => screenLine(v, { x:s.x1, z:s.z1 }, { x:s.x2, z:s.z2 }, "#FFFFFF", 3.5, [12, 9], march));
+  drawProtractor(v, cue, aim.deg);
+  if (pred.endsAtBounce){
+    const e = pred.edge;
+    screenLine(v, e, { x:e.x + e.outDir.x * 0.22, z:e.z + e.outDir.z * 0.22 }, "rgba(255,255,255,.45)", 3, [6, 9], march);
+  }
+  pred.bounces.forEach(bn => drawBounce(v, bn));
+  if (pred.stop){
+    v.frame(pred.stop.x, pred.stop.z, 1, 0, GH);
+    ctx.setLineDash([14, 10]); ctx.beginPath(); ctx.arc(0, 0, TABLE.R * 1000, 0, Math.PI * 2);
+    ctx.lineWidth = 6; ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.stroke(); ctx.setLineDash([]); v.screen();
+  }
+  if (pred.pocket >= 0){
+    const p = world.pockets[pred.pocket];
+    label(v, p.x, p.z, "Uh-oh!", { size:50, minPx:19, bg:"#E8463C", color:"#FFFFFF" });
+  }
+  const hit = pred.hit;
+  if (hit){
+    const b = world.balls[hit.ball];
+    v.frame(hit.ghost.x, hit.ghost.z, 1, 0, GH);
+    ctx.setLineDash([12, 9]); ctx.beginPath(); ctx.arc(0, 0, TABLE.R * 1000, 0, Math.PI * 2);
+    ctx.lineWidth = 6; ctx.strokeStyle = "#FFFFFF"; ctx.stroke(); ctx.setLineDash([]); v.screen();
+    if (hit.cueAfter) screenLine(v, { x:hit.cueAfter.x1, z:hit.cueAfter.z1 }, { x:hit.cueAfter.x2, z:hit.cueAfter.z2 }, "rgba(255,255,255,.38)", 2.5, [4, 8], march);
+    /* where the hit ball goes: a colored arrow as long as it will roll (or to the cushion) */
+    const pth = hit.path, len = Math.hypot(pth.x2 - pth.x1, pth.z2 - pth.z1), show = Math.max(0.14, len);
+    const end = { x:b.x + hit.dir.x * show, z:b.z + hit.dir.z * show };
+    screenLine(v, b, end, b.color, 6, null);
+    drawArrowHead(v, end, hit.dir, b.color);
+    /* its angle, measured the same way as the aim */
+    const r = 110, ra = railAngle(hit.deg), delta = signedFrom(ra.ref, hit.deg);
+    v.frame(b.x, b.z, 1, 0, GH);
+    refLine(ctx, ra.ref, TABLE.R * 1000 + 6, r + 30);
+    if (ra.deg > 0){
+      const pts = arcPts(r, ra.ref, ra.ref + delta, Math.max(6, Math.ceil(ra.deg / 6)));
+      ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+      ctx.lineWidth = 9; ctx.strokeStyle = b.color; ctx.stroke();
+    }
+    v.screen();
+    const m = dirOf(ra.ref + delta / 2), lr = (r + 70) / 1000;
+    label(v, b.x + m.x * lr, b.z + m.z * lr, ra.deg + "°", { size:48, minPx:18, bg:b.color, color:b.num === 2 || b.num === 4 ? "#FFFFFF" : "#1E2226" });
+    if (helper && pth.end === "pocket"){
+      const p = world.pockets[pth.pocket];
+      label(v, p.x, p.z, "In!", { size:52, minPx:20, bg:"#8BD346" });
+    }
+  }
+}
+
+/* everything, back to front */
+function renderScene(v, world, o){
+  drawTable(v, world, o);
+  if (o.aim && o.aim.on) drawGuide(v, world, o.aim, o.pred, o.helper, o.time);
+  const list = world.balls.filter(b => b.alive).map(b => ({ b, d:v.toPlane(b.x, b.z).pz, scale:1, sink:0 }));
+  (o.sinking || []).forEach(s => list.push({ b:s.ball, d:v.toPlane(s.ball.x, s.ball.z).pz, scale:1 - s.t * 0.55, sink:s.t * 0.05 }));
+  list.forEach(it => drawShadow(v, it.b, it.scale));
+  v.screen();
+  list.sort((a, b) => b.d - a.d).forEach(it => drawBall(v, it.b, it.scale, it.sink));
+  if (o.aim && o.aim.on && o.aim.level > 0 && world.balls[0].alive) drawSpeed(v, world.balls[0], o.aim.deg, o.aim.level);
+  if (o.stick) drawStick(v, world.balls[0], o.stick.deg, o.stick.pull);
+}
+
+/* ============================================================
+   THE GAME
+   ============================================================ */
+(function(){
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const S = (name, o) => window.CCSSound && CCSSound.play(name, o);
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const CHIKE = (pose) => "../assets/characters/chike-pose-" + pose + ".png";
+  const BIG_STAR = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="m32 4 8.3 17.2 18.9 2.6-13.8 13.2 3.4 18.7L32 46.8l-16.8 8.9 3.4-18.7L4.8 23.8l18.9-2.6z" fill="currentColor" stroke="#1E2226" stroke-width="4" stroke-linejoin="round"/></svg>';
+  const CHEERS = ["Nice shot!","In it goes!","Super!","Awesome!","Great angle!","Wow!","Yes!","Way to go!"];
+  const COLORS = BALL_COLORS.slice(1);
+  const pullFor = (level) => 0.03 + level * 0.022;
+
+  /* ---------- remembered between visits (this browser only) ---------- */
+  const store = {
+    get(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e){ return d; } },
+    set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e){} }
+  };
+  const bestKey = () => st.grade + "-" + st.mode;
+  const getBest = () => (store.get("chronobilliards-best", {}) || {})[bestKey()] || 0;
+
+  const st = {
+    grade: store.get("chronobilliards-grade", "K"),
+    mode: store.get("chronobilliards-mode", "arcade"),
+    screen:"title", phase:"idle", paused:false,
+    world:null, rack:1, rackBalls:0, score:0, combo:1, timeLeft:0, shotsLeft:0, shotsUsed:0,
+    totalIn:0, bestBank:0, tablesCleared:0,
+    aim:{ on:false, deg:0, level:0 }, pred:null, dragging:false, pointerId:null,
+    shot:null, strike:null, sinking:[], acc:0, lastTick:-1, seed:1
+  };
+  if (!GRADES[st.grade]) st.grade = "K";
+  if (!MODES[st.mode]) st.mode = "arcade";
+
+  const view = makeView($("board"));
+
+  /* ============================================================
+     TITLE
+     ============================================================ */
+  function buildGrades(){
+    const box = $("grades");
+    box.innerHTML = "";
+    GRADE_ORDER.forEach(id => {
+      const g = GRADES[id], b = document.createElement("button");
+      b.type = "button"; b.className = "grade"; b.setAttribute("role", "radio"); b.dataset.grade = id;
+      b.setAttribute("aria-label", g.name);
+      b.innerHTML = id === "K" ? "K" : id + '<span class="sup">' + g.label.slice(1) + "</span>";
+      b.addEventListener("click", () => { st.grade = id; store.set("chronobilliards-grade", id); S("click"); paintTitle(); });
+      box.appendChild(b);
+    });
+    radioKeys(box, ".grade");
+  }
+  function radioKeys(box, sel){
+    box.addEventListener("keydown", (e) => {
+      const items = [...box.querySelectorAll(sel)], i = items.indexOf(document.activeElement);
+      if (i < 0) return;
+      const step = { ArrowRight:1, ArrowDown:1, ArrowLeft:-1, ArrowUp:-1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      const next = items[(i + step + items.length) % items.length];
+      next.focus(); next.click();
+    });
+  }
+  function paintTitle(){
+    document.querySelectorAll(".grade").forEach(b => { const on = b.dataset.grade === st.grade; b.setAttribute("aria-checked", on); b.tabIndex = on ? 0 : -1; });
+    document.querySelectorAll(".mode").forEach(b => { const on = b.dataset.mode === st.mode; b.setAttribute("aria-checked", on); b.tabIndex = on ? 0 : -1; });
+    const g = GRADES[st.grade];
+    $("grade-name").textContent = g.name + ": " + g.balls + " balls to sink" + (g.helper ? ", big pockets, and the table shows where a hit ball will go" : g.id === "3" ? ", the angles and speed to read" : ", smaller pockets, read every angle");
+    $("best-title").textContent = getBest().toLocaleString();
+  }
+  document.querySelectorAll(".mode").forEach(b => b.addEventListener("click", () => { st.mode = b.dataset.mode; store.set("chronobilliards-mode", st.mode); S("click"); paintTitle(); }));
+  radioKeys(document.querySelector(".modes"), ".mode");
+
+  /* the little table on the title screen sweeps its aim, so the angles move like an arcade machine waiting for a player */
+  const pv = makeView($("preview")), demo = makeWorld("K", 3, 4);
+  const demoBall = demo.balls[1], demoBase = degOf(demoBall.x - demo.balls[0].x, demoBall.z - demo.balls[0].z);
+  function drawPreview(t){
+    if (!pv.w) pv.resize();
+    const deg = norm360(Math.round(demoBase + (reduced ? 0 : Math.sin(t * 0.7) * 5)));
+    const aim = { on:true, deg, level:6 };
+    const pred = predictShot(demo, deg, 6, 2);
+    const glow = pred.hit && pred.hit.path.end === "pocket" ? [pred.hit.path.pocket] : [];
+    renderScene(pv, demo, { aim, pred, helper:true, time:reduced ? 0 : t, still:reduced, glow, stick:{ deg, pull:pullFor(6) } });
+  }
+
+  function showScreen(name){
+    st.screen = name;
+    $("title").hidden = name !== "title";
+    $("game").hidden = name !== "game";
+    if (name === "game") requestAnimationFrame(() => { view.resize(); });
+    else requestAnimationFrame(() => { pv.resize(); });
+  }
+
+  /* ============================================================
+     PLAY
+     ============================================================ */
+  function newRack(){
+    st.rackBalls = rackSize(st.grade, st.rack);
+    st.seed = (Date.now() ^ (Math.random() * 1e9)) >>> 0;
+    st.world = makeWorld(st.grade, st.rackBalls, st.seed);
+    st.sinking = []; st.aim.on = false; st.pred = null;
+    if (st.mode === "trick"){ st.shotsLeft = trickShots(st.grade, st.rackBalls); st.shotsUsed = 0; }
+  }
+  function start(){
+    st.score = 0; st.combo = 1; st.rack = 1; st.totalIn = 0; st.bestBank = 0; st.tablesCleared = 0;
+    st.timeLeft = MODES.arcade.time; st.paused = false; st.lastTick = -1;
+    newRack();
+    ["pause", "over", "clear"].forEach(id => $(id).hidden = true);
+    $("clock").hidden = st.mode !== "arcade";
+    $("shots").hidden = st.mode !== "trick";
+    showScreen("game");
+    paintHud();
+    st.phase = "aim";
+    S("start");
+    banner("Rack 'em!", st.mode === "arcade" ? "Sink balls before the clock runs out" : "Sink them all in " + st.shotsLeft + " shots", 1300);
+    say(GRADES[st.grade].helper
+      ? "Press anywhere and pull back behind the white ball. A green pocket means it will go in!"
+      : "Press anywhere and pull back behind the white ball. Read the angle and the speed, then let go!", "point");
+    setStep([1]);
+  }
+  const canAim = () => st.screen === "game" && st.phase === "aim" && !st.paused && st.world.balls[0].alive &&
+    (st.mode === "arcade" ? st.timeLeft > 0 : st.shotsLeft > 0);
+
+  function setAim(deg, level){
+    st.aim.on = true; st.aim.deg = norm360(Math.round(deg)); st.aim.level = Math.max(0, Math.min(MAX_LEVEL, level));
+    st.pred = st.aim.level > 0 ? predictShot(st.world, st.aim.deg, st.aim.level, GRADES[st.grade].bounces) : null;
+    setStep(st.aim.level > 0 ? [2, 3] : [1]);
+    sayAim();
+  }
+  let sayT = 0;
+  function sayAim(){
+    clearTimeout(sayT);
+    sayT = setTimeout(() => {
+      let text = "";
+      if (st.aim.on){
+        text = "Aim " + railAngle(st.aim.deg).deg + " degrees, speed " + st.aim.level + ", " + speedOf(st.aim.level).toFixed(1) + " meters per second";
+        const p = st.pred;
+        if (p && p.hit) text += ". It hits ball " + p.hit.ball + ", which rolls off at " + railAngle(p.hit.deg).deg + " degrees" + (GRADES[st.grade].helper && p.hit.path.end === "pocket" ? " and drops in" : "");
+        else if (p && p.pocket >= 0) text += ". The white ball would fall in a pocket";
+        else if (p && p.bounces.length) text += ". It bounces off " + p.bounces.length + (p.bounces.length === 1 ? " cushion" : " cushions");
+      }
+      $("aim-say").textContent = text;
+    }, 350);
+  }
+  function aimFrom(e){
+    const r = $("board").getBoundingClientRect(), p = view.toTable(e.clientX - r.left, e.clientY - r.top);
+    if (!p) return;
+    const c = st.world.balls[0], dx = c.x - p.x, dz = c.z - p.z, dist = Math.hypot(dx, dz);
+    if (dist < 0.005) return;
+    setAim(degOf(dx, dz), levelFromDistance(dist));
+  }
+  $("board").addEventListener("pointerdown", (e) => {
+    if (!canAim() || (e.button !== undefined && e.button > 0)) return;
+    e.preventDefault();
+    st.dragging = true; st.pointerId = e.pointerId;
+    try { $("board").setPointerCapture(e.pointerId); } catch (err){}
+    aimFrom(e);
+  });
+  $("board").addEventListener("pointermove", (e) => { if (st.dragging && e.pointerId === st.pointerId) aimFrom(e); });
+  const release = (e) => {
+    if (!st.dragging || (e && e.pointerId !== undefined && e.pointerId !== st.pointerId)) return;
+    st.dragging = false;
+    if (st.aim.on && st.aim.level > 0 && canAim()) fire();
+    else { st.aim.on = false; st.pred = null; setStep([1]); if (canAim()) say("Pull the stick farther back from the white ball to shoot.", "point"); }
+  };
+  $("board").addEventListener("pointerup", release);
+  $("board").addEventListener("pointercancel", () => { st.dragging = false; st.aim.on = false; st.pred = null; });
+  window.addEventListener("pointerup", (e) => release(e));
+
+  function fire(){
+    const deg = st.aim.deg, level = st.aim.level;
+    st.phase = "strike";
+    st.strike = { t:0, deg, level };
+    st.aim.on = false;
+    st.shot = { banks:0, contact:false, pocketed:0, scratch:false };
+    if (st.mode === "trick"){ st.shotsLeft--; st.shotsUsed++; }
+    setStep([3]);
+    paintHud();
+  }
+  function launch(){
+    shoot(st.world, st.strike.deg, st.strike.level);
+    S("pop", { pitch:0.7 + st.strike.level * 0.05, volume:0.6 + st.strike.level * 0.06 });
+    st.strike = null; st.phase = "roll"; st.acc = 0;
+  }
+
+  function onEvent(ev){
+    const w = st.world;
+    if (ev.type === "ball"){
+      if (ev.a === 0 || ev.b === 0) st.shot.contact = true;
+      S("click", { pitch:1.6 + Math.min(1, ev.speed / 3), volume:Math.min(1.4, 0.3 + ev.speed / 2) });
+    } else if (ev.type === "cushion"){
+      if (ev.ball === 0 && !st.shot.contact) st.shot.banks++;
+      S("thud", { volume:Math.min(0.9, 0.15 + ev.speed / 5) });
+    } else if (ev.type === "pocket"){
+      const b = w.balls[ev.ball], p = w.pockets[ev.pocket];
+      st.sinking.push({ ball:{ ...b, alive:true, x:p.x, z:p.z }, t:0 });
+      const sp = view.P(p.x, p.z, TABLE.RAIL_H), r = $("board").getBoundingClientRect(), at = { x:r.left + sp.x, y:r.top + sp.y };
+      if (ev.ball === 0){
+        st.shot.scratch = true;
+        S("bad");
+        floatAt(at, "Oops!", "");
+      } else {
+        st.shot.pocketed++; st.totalIn++;
+        const banks = st.shot.contact ? Math.min(3, st.shot.banks) : 0;
+        st.bestBank = Math.max(st.bestBank, banks);
+        const pts = pocketPoints(banks, st.combo);
+        st.score += pts;
+        let small = banks ? "Bank x" + (1 + banks) + "!" : "";
+        if (st.mode === "arcade"){ st.timeLeft += MODES.arcade.perBall; small = (small ? small + " " : "") + "+" + MODES.arcade.perBall + "s"; }
+        floatAt(at, "+" + pts, small);
+        burst(at, 22, true);
+        S("coin"); setTimeout(() => S("good"), 90);
+        say(CHEERS[Math.floor(Math.random() * CHEERS.length)] + (banks ? " A bank shot is worth more!" : ""), "thumbs-up");
+        paintHud(true);
+      }
+    }
+  }
+
+  function endShot(){
+    const shot = st.shot;
+    st.combo = nextCombo(st.combo, shot.pocketed, shot.scratch);
+    if (shot.scratch){
+      respotCue(st.world);
+      say("Oops! The white ball fell in. It goes back on its spot.", "point");
+    } else if (!shot.pocketed){
+      say(shot.contact ? "Close! Check the colored arrow: it shows where the ball you hit will go." : "Missed. Turn the aim a little and try again!", "point");
+    }
+    paintHud();
+    const left = st.world.balls.filter(b => b.id && b.alive).length;
+    if (!left){ tableClear(); return; }
+    if (st.mode === "arcade" && st.timeLeft <= 0){ gameOver("time"); return; }
+    if (st.mode === "trick" && st.shotsLeft <= 0){ gameOver("shots"); return; }
+    st.phase = "aim";
+    setStep([1]);
+  }
+
+  function tableClear(){
+    st.tablesCleared++;
+    if (st.mode === "arcade"){
+      const bonus = 300 + 100 * st.rack;
+      st.score += bonus; st.timeLeft += MODES.arcade.clearTime;
+      st.phase = "clear";
+      banner("Table clear!", "+" + bonus + " and +" + MODES.arcade.clearTime + " seconds", 1500);
+      S("level"); confetti();
+      say("Table clear! Here comes a new table with one more ball.", "thumbs-up");
+      paintHud();
+      setTimeout(() => {
+        if (st.screen !== "game" || st.phase !== "clear") return;
+        st.rack++; newRack(); paintHud(); st.phase = "aim"; setStep([1]);
+      }, 1700);
+    } else {
+      st.phase = "clear";
+      const stars = trickStars(st.shotsUsed, st.rackBalls), bonus = 200 * stars;
+      st.score += bonus;
+      $("stars").innerHTML = [0, 1, 2].map(k => BIG_STAR.replace("<svg", '<svg class="' + (k < stars ? "on" : "") + '"')).join("");
+      $("stars").setAttribute("aria-label", stars + (stars === 1 ? " star" : " stars"));
+      $("tally").innerHTML =
+        "<li><span>Balls sunk</span><b>" + st.rackBalls + "</b></li>" +
+        "<li><span>Shots used</span><b>" + st.shotsUsed + "</b></li>" +
+        "<li><span>Star bonus</span><b>+" + bonus + "</b></li>" +
+        '<li class="total"><span>Score</span><b>' + st.score.toLocaleString() + "</b></li>";
+      paintHud();
+      $("clear").hidden = false;
+      S("win"); confetti();
+      setTimeout(() => $("next-btn").focus(), 50);
+    }
+  }
+  function nextTable(){
+    $("clear").hidden = true;
+    st.rack++; newRack(); paintHud(); st.phase = "aim"; setStep([1]);
+    say("A new table with one more ball. Use your angles!", "point");
+  }
+
+  function gameOver(reason){
+    st.phase = "over"; st.aim.on = false;
+    const best = store.get("chronobilliards-best", {}) || {};
+    const isBest = st.score > (best[bestKey()] || 0);
+    if (isBest){ best[bestKey()] = st.score; store.set("chronobilliards-best", best); }
+    $("over-title").textContent = reason === "time" ? "Time's up!" : "Out of shots!";
+    $("over-sub").textContent = st.totalIn ? "You sank " + st.totalIn + (st.totalIn === 1 ? " ball!" : " balls!") : "Pull back, read the angle, and try again!";
+    $("over-tally").innerHTML =
+      "<li><span>Balls sunk</span><b>" + st.totalIn + "</b></li>" +
+      "<li><span>Tables cleared</span><b>" + st.tablesCleared + "</b></li>" +
+      "<li><span>Best bank shot</span><b>" + (st.bestBank ? st.bestBank + (st.bestBank === 1 ? " cushion" : " cushions") : "none yet") + "</b></li>" +
+      '<li class="total"><span>Score</span><b>' + st.score.toLocaleString() + "</b></li>";
+    $("new-best").hidden = !isBest || !st.score;
+    $("over").hidden = false;
+    S(st.totalIn ? "win" : "lose");
+    if (st.totalIn) confetti();
+    setTimeout(() => $("again-btn").focus(), 50);
+  }
+
+  /* ============================================================
+     HUD, CHIKE, BANNERS
+     ============================================================ */
+  function paintHud(bump){
+    $("score").textContent = st.score.toLocaleString();
+    if (bump){ const p = $("score-pill"); p.classList.remove("bump"); void p.offsetWidth; p.classList.add("bump"); }
+    $("combo").textContent = "x" + st.combo;
+    $("combo").setAttribute("aria-label", "Combo x" + st.combo);
+    $("rack").textContent = st.rack;
+    const left = st.world ? st.world.balls.filter(b => b.id && b.alive) : [];
+    $("left-balls").innerHTML = left.map(b => '<i style="--c:' + b.color + '"></i>').join("");
+    $("left-balls").setAttribute("aria-label", left.length + (left.length === 1 ? " ball left" : " balls left"));
+    if (st.mode === "trick"){
+      const total = trickShots(st.grade, st.rackBalls);
+      $("shot-pips").innerHTML = Array.from({ length:total }, (_, k) => '<i class="' + (k >= st.shotsLeft ? "used" : "") + '"></i>').join("");
+      $("shots-num").textContent = st.shotsLeft;
+    }
+    paintClock();
+  }
+  function paintClock(){
+    if (st.mode !== "arcade") return;
+    const t = Math.max(0, st.timeLeft), whole = Math.ceil(t);
+    $("clock-num").textContent = Math.floor(whole / 60) + ":" + String(whole % 60).padStart(2, "0");
+    $("clock-fill").style.width = Math.min(100, t / MODES.arcade.time * 100) + "%";
+    $("clock").classList.toggle("mid", t <= 30 && t > 10);
+    $("clock").classList.toggle("low", t <= 10);
+  }
+  function setStep(list){ document.querySelectorAll("#steps li").forEach(li => li.classList.toggle("now", list.indexOf(+li.dataset.step) >= 0)); }
+  function say(text, pose){
+    const b = $("bubble");
+    b.textContent = text;
+    b.classList.remove("say"); void b.offsetWidth; b.classList.add("say");
+    if (pose) $("coach-img").src = CHIKE(pose);
+  }
+  function banner(big, small, ms){
+    const box = $("banner");
+    box.innerHTML = "<b>" + big + (small ? "<small>" + small + "</small>" : "") + "</b>";
+    clearTimeout(box._t);
+    box._t = setTimeout(() => { box.innerHTML = ""; }, ms || 1000);
+  }
+  function floatAt(p, text, small){
+    const f = document.createElement("div");
+    f.className = "float";
+    f.innerHTML = text + (small ? "<small>" + small + "</small>" : "");
+    f.style.left = p.x + "px"; f.style.top = p.y + "px";
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 1300);
+  }
+
+  /* ============================================================
+     PAUSE, MENU, KEYS
+     ============================================================ */
+  function pause(){
+    if (st.screen !== "game" || st.paused || st.phase === "over" || !$("clear").hidden) return;
+    st.paused = true; st.dragging = false;
+    $("pause-sub").textContent = st.mode === "arcade" ? "The clock is stopped." : "Take a break.";
+    $("pause").hidden = false;
+    S("click");
+    setTimeout(() => $("resume-btn").focus(), 30);
+  }
+  function resume(){
+    if (!st.paused) return;
+    st.paused = false; $("pause").hidden = true; S("click");
+  }
+  function toMenu(){
+    st.paused = false; st.phase = "idle"; st.aim.on = false;
+    ["pause", "over", "clear"].forEach(id => $(id).hidden = true);
+    showScreen("title"); paintTitle(); S("click");
+  }
+  $("play").addEventListener("click", start);
+  $("pause-btn").addEventListener("click", pause);
+  $("resume-btn").addEventListener("click", resume);
+  $("restart-btn").addEventListener("click", start);
+  $("again-btn").addEventListener("click", start);
+  $("next-btn").addEventListener("click", nextTable);
+  document.querySelectorAll(".menu-btn").forEach(b => b.addEventListener("click", toMenu));
+  document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
+
+  document.addEventListener("keydown", (e) => {
+    if (st.screen !== "game") return;
+    if (!$("pause").hidden){ if (e.key === "Escape" || e.key === "p" || e.key === "P"){ e.preventDefault(); resume(); } return; }
+    if (!$("over").hidden || !$("clear").hidden) return;
+    if (e.key === "Escape" || e.key === "p" || e.key === "P"){ e.preventDefault(); pause(); return; }
+    if (!canAim()) return;
+    const turn = { ArrowLeft:1, ArrowRight:-1 }[e.key], power = { ArrowUp:1, ArrowDown:-1 }[e.key];
+    if (turn || power){
+      e.preventDefault();
+      const deg = st.aim.on ? st.aim.deg : 0, level = st.aim.on ? st.aim.level : 5;
+      setAim(deg + (turn || 0) * (e.shiftKey ? 5 : 1), level + (power || 0));
+      return;
+    }
+    if ((e.key === " " || e.key === "Enter") && st.aim.on && st.aim.level > 0){ e.preventDefault(); fire(); }
+  });
+
+  /* ============================================================
+     THE LOOP: physics in small steps, the clock, the drawing
+     ============================================================ */
+  let last = performance.now();
+  function frame(now){
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const t = now / 1000;
+    if (st.screen === "title"){ drawPreview(t); }
+    if (st.screen === "game" && st.world){
+      const running = !st.paused && st.phase !== "over" && $("clear").hidden;
+      if (running){
+        if (st.phase === "strike"){
+          st.strike.t += dt;
+          if (st.strike.t >= 0.11) launch();
+        }
+        if (st.phase === "roll"){
+          st.acc += dt;
+          while (st.acc >= PHYS.DT){ stepWorld(st.world, PHYS.DT).forEach(onEvent); st.acc -= PHYS.DT; }
+          if (!isMoving(st.world)) endShot();
+        }
+        if (st.mode === "arcade" && (st.phase === "aim" || st.phase === "roll" || st.phase === "strike")){
+          st.timeLeft -= dt;
+          const whole = Math.ceil(st.timeLeft);
+          if (whole !== st.lastTick){ st.lastTick = whole; if (whole <= 5 && whole > 0) S("tick", { pitch:1.4, volume:1.2 }); }
+          if (st.timeLeft <= 0){
+            st.timeLeft = 0;
+            if (st.phase === "aim"){ st.dragging = false; gameOver("time"); }
+          }
+          paintClock();
+        }
+        st.sinking = st.sinking.filter(s => (s.t += dt / 0.35) < 1);
+      }
+      const helper = GRADES[st.grade].helper;
+      const glow = helper && st.aim.on && st.pred && st.pred.hit && st.pred.hit.path.end === "pocket" ? [st.pred.hit.path.pocket] : [];
+      const warn = st.aim.on && st.pred && st.pred.pocket >= 0 ? st.pred.pocket : -1;
+      let stick = null;
+      if (st.aim.on && st.aim.level > 0 && st.phase === "aim") stick = { deg:st.aim.deg, pull:pullFor(st.aim.level) };
+      if (st.phase === "strike" && st.strike) stick = { deg:st.strike.deg, pull:pullFor(st.strike.level) * Math.max(0, 1 - st.strike.t / 0.11) };
+      renderScene(view, st.world, { aim:st.phase === "aim" ? st.aim : null, pred:st.pred, helper, time:reduced ? 0 : t, still:reduced, glow, warn, sinking:st.sinking, stick });
+    }
+    stepFx(dt);
+    requestAnimationFrame(frame);
+  }
+
+  /* ============================================================
+     SIZING
+     ============================================================ */
+  new ResizeObserver(() => { if (st.screen === "game"){ view.resize(); if (st.aim.on) setAim(st.aim.deg, st.aim.level); } }).observe($("table-wrap"));
+  new ResizeObserver(() => pv.resize()).observe($("preview"));
+  window.addEventListener("resize", sizeFx);
+
+  /* ============================================================
+     SPARKLES AND CONFETTI
+     ============================================================ */
+  const fx = $("fx"), ctx = fx.getContext("2d");
+  let parts = [], dpr = 1;
+  function sizeFx(){ dpr = Math.min(2, window.devicePixelRatio || 1); fx.width = innerWidth * dpr; fx.height = innerHeight * dpr; }
+  sizeFx();
+  function burst(at, count, stars){
+    if (reduced) return;
+    for (let i = 0; i < count; i++){
+      const a = Math.random() * Math.PI * 2, sp = 140 + Math.random() * 300;
+      parts.push({ x:at.x, y:at.y, vx:Math.cos(a) * sp, vy:Math.sin(a) * sp - 120, g:520, life:.7 + Math.random() * .5, t:0,
+        size:5 + Math.random() * 7, color:COLORS[Math.floor(Math.random() * COLORS.length)], spin:(Math.random() - .5) * 10, rot:0, star:stars || Math.random() < .3 });
+    }
+  }
+  function confetti(){
+    if (reduced) return;
+    for (let i = 0; i < 140; i++){
+      parts.push({ x:Math.random() * innerWidth, y:-20 - Math.random() * innerHeight * .4, vx:(Math.random() - .5) * 120, vy:80 + Math.random() * 160, g:160,
+        life:3 + Math.random() * 1.2, t:0, size:7 + Math.random() * 8, color:COLORS[i % COLORS.length], spin:(Math.random() - .5) * 8, rot:Math.random() * 6, star:false, flat:true });
+    }
+  }
+  function starPath(s){
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++){ const r = i % 2 ? s * .45 : s, a = -Math.PI / 2 + i * Math.PI / 5; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+    ctx.closePath();
+  }
+  function stepFx(dt){
+    if (!parts.length) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    parts = parts.filter(p => (p.t += dt) < p.life);
+    for (const p of parts){
+      p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.spin * dt;
+      if (!p.flat) p.vx *= .985;
+      const fade = Math.min(1, (p.life - p.t) / .3);
+      ctx.save(); ctx.globalAlpha = fade; ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = p.color; ctx.strokeStyle = "#1E2226"; ctx.lineWidth = 2;
+      if (p.star){ starPath(p.size); ctx.fill(); ctx.stroke(); }
+      else if (p.flat){ ctx.scale(1, Math.abs(Math.sin(p.rot * 1.7)) + .15); ctx.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * .66); ctx.strokeRect(-p.size / 2, -p.size / 3, p.size, p.size * .66); }
+      else { ctx.beginPath(); ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+      ctx.restore();
+    }
+    if (!parts.length) ctx.clearRect(0, 0, innerWidth, innerHeight);
+  }
+
+  /* ============================================================
+     START
+     ============================================================ */
+  buildGrades(); paintTitle();
+  if (window.CCSSound){
+    $("sound-slot-title").appendChild(CCSSound.button());
+    $("sound-slot-pause").appendChild(CCSSound.button());
+  }
+  pv.resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

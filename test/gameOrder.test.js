@@ -25,9 +25,10 @@ describe("Play page game order and notes", () => {
       { title: "Bounce & Bank", order: 2 },
       { title: "Zebra Zoom" },
       { title: "Echo Matrix", order: 0, badge: "New", createdAt: "2026-11-08T02:15:00.000Z" },
+      { title: "Chrono Billiards", order: 0, badge: "New", createdAt: "2026-11-08T03:18:00.000Z" },
     ];
     const sorted = games.slice().sort(playOrder).map((g) => g.title);
-    expect(sorted).toEqual(["Echo Matrix", "Word Quest", "Pathbuilder", "Doodle Dash", "Hands-Free Builder", "Bounce & Bank", "UFO", "Air Hockey Arcade", "Zebra Zoom"]);
+    expect(sorted).toEqual(["Chrono Billiards", "Echo Matrix", "Word Quest", "Pathbuilder", "Doodle Dash", "Hands-Free Builder", "Bounce & Bank", "UFO", "Air Hockey Arcade", "Zebra Zoom"]);
   });
 
   it("treats any other badge as an ordinary game", () => {
