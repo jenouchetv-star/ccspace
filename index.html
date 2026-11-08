@@ -202,6 +202,22 @@
   --gut: clamp(18px, 4vw, 44px);
   --nav-h: 74px;
 
+  /* --- motion ---
+     One set of timings and curves for every animation on the site, so they all feel related. Change a value here
+     and everything that uses it follows: hover and press feedback, the sliding nav marker, the page change, the
+     card reveals and the count-up numbers (the JS reads --mo-dur-count and --mo-stagger from here too). The rules
+     that use them are in the MOTION block near the end of this stylesheet. */
+  --mo-dur-press:  .14s;   /* hover and pressed feedback */
+  --mo-dur-state:  .26s;   /* the nav marker sliding, small state changes */
+  --mo-dur-reveal: .32s;   /* cards and loaded content coming in */
+  --mo-dur-page:   .26s;   /* a new page fading in */
+  --mo-dur-count:  650ms;  /* the longest a number takes to count (it scales with the size of the jump, 400ms up) */
+  --mo-stagger:    50ms;   /* the gap between cards in a row; the eighth card on starts together */
+  --mo-rise:       10px;   /* how far a card rises as it comes in */
+  --mo-ease-out:   cubic-bezier(.22,1,.36,1);    /* entrances: quick start, soft landing */
+  --mo-ease-state: cubic-bezier(.4,0,.2,1);      /* state changes: even and calm */
+  --mo-ease-press: cubic-bezier(.2,.9,.3,1.2);   /* the buttons' small springy lift (a touch of overshoot, no bounce) */
+
   /* --- textures --- */
   --halftone: radial-gradient(circle at center, rgba(30,52,62,.17) 1.1px, transparent 1.3px);
   --halftone-lite: radial-gradient(circle at center, rgba(30,52,62,.09) 1px, transparent 1.2px);
@@ -591,11 +607,12 @@ p:last-child{ margin-bottom:0; }
   padding:var(--btn-pad-md); min-height:var(--btn-h-md); font-weight:800; font-size:var(--btn-fs-md);
   letter-spacing:.005em; cursor:pointer; text-decoration:none;
   box-shadow:var(--hard-sm);
-  transition:transform .13s cubic-bezier(.2,.9,.3,1.4), box-shadow .13s, background .16s;
+  transition:transform var(--mo-dur-press) var(--mo-ease-press), box-shadow var(--mo-dur-press) var(--mo-ease-state), background var(--mo-dur-press) var(--mo-ease-state);
   -webkit-tap-highlight-color:transparent;
 }
-.btn:hover{ transform:translate(-2px,-2px); box-shadow:6px 6px 0 var(--ink); }
-.btn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink); }
+/* the lift only on a screen with a real pointer: on a phone, a tapped button would otherwise stay lifted */
+@media (hover:hover){ .btn:hover{ transform:translate(-2px,-2px); box-shadow:6px 6px 0 var(--ink); } }
+.btn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink); transition-duration:.07s; }
 .btn[disabled]{ opacity:.45; cursor:not-allowed; transform:none; box-shadow:var(--hard-sm); }
 .btn--sun{ --bg:var(--sun); --fg:var(--ink); }
 .btn--plum{ --bg:var(--plum); --fg:#FDF7EE; }
@@ -611,7 +628,7 @@ p:last-child{ margin-bottom:0; }
 .btn--paper:hover{ background:#FFFFFF; }
 .btn--xs{ padding:var(--btn-pad-xs); min-height:var(--btn-h-xs); font-size:var(--btn-fs-xs); gap:var(--btn-gap-xs); box-shadow:none; }
 .btn--sm{ padding:var(--btn-pad-sm); min-height:var(--btn-h-sm); font-size:var(--btn-fs-sm); gap:var(--btn-gap-sm); box-shadow:var(--hard-xs); }
-.btn--sm:hover{ box-shadow:var(--hard-sm); }
+@media (hover:hover){ .btn--sm:hover{ box-shadow:var(--hard-sm); } }
 .btn--lg{ padding:var(--btn-pad-lg); min-height:var(--btn-h-lg); font-size:var(--btn-fs-lg); gap:var(--btn-gap-lg); box-shadow:var(--hard); }
 .btn--xl{ padding:var(--btn-pad-xl); min-height:var(--btn-h-xl); font-size:var(--btn-fs-xl); gap:var(--btn-gap-xl); box-shadow:var(--hard); }
 .btn--block{ width:100%; }
@@ -676,11 +693,13 @@ p:last-child{ margin-bottom:0; }
   box-shadow:var(--hard-sm);
   overflow:hidden; position:relative;
   text-align:left; text-decoration:none; color:inherit;
-  transition:transform .16s cubic-bezier(.2,.9,.3,1.4), box-shadow .16s, background-color .16s;
+  transition:transform var(--mo-dur-press) var(--mo-ease-press), box-shadow var(--mo-dur-press) var(--mo-ease-state), background-color var(--mo-dur-press) var(--mo-ease-state);
   cursor:pointer; padding:0; font:inherit; width:100%;
 }
-.card:hover, .card:focus-visible{ transform:translate(-3px,-4px); box-shadow:var(--hard-lift); background:#FFFFFF; }
-.card:active{ transform:translate(0,0) scale(.98); box-shadow:var(--hard-xs); }
+/* keyboard focus always lifts the card; a pointer only lifts it where hovering is real (not a phone's tap) */
+.card:focus-visible{ transform:translate(-3px,-4px); box-shadow:var(--hard-lift); background:#FFFFFF; }
+@media (hover:hover){ .card:hover{ transform:translate(-3px,-4px); box-shadow:var(--hard-lift); background:#FFFFFF; } }
+.card:active{ transform:translate(0,0) scale(.98); box-shadow:var(--hard-xs); transition-duration:.07s; }
 .card__media{
   position:relative; aspect-ratio:16/10; overflow:hidden;
   border-bottom:var(--line); background:var(--paper-3);
@@ -869,7 +888,7 @@ img.skel.is-loaded, video.skel.is-loaded{ animation:none; background-image:none;
   padding:8px .14em; text-decoration:none; color:var(--ink);
   font-weight:800; font-size:calc(.96rem + 1px); border:0; white-space:nowrap; cursor:pointer;
   background:linear-gradient(180deg,transparent 40%,var(--hl) 40%,var(--hl) 96%,transparent 96%) 0 50% / 0% 1.3em no-repeat;
-  transition:background-size .28s ease;
+  transition:background-size var(--mo-dur-state) var(--mo-ease-state);
 }
 .nav__link:hover, .subnav__link:hover{ background-size:100% 1.3em; }
 .nav__link[aria-current="page"]{ --hl:#8FE3F0; background-size:100% 1.3em; }
@@ -898,7 +917,8 @@ img.skel.is-loaded, video.skel.is-loaded{ animation:none; background-image:none;
 /* a bridge over the gap, so the pointer can travel from the word down into the tray */
 .nav__menu::before{ content:""; position:absolute; left:0; right:0; top:-14px; height:14px; }
 .nav__item:hover .nav__menu, .nav__item:focus-within .nav__menu{ opacity:1; visibility:visible; transform:translate(-50%, 0); }
-.nav__menu-link{ display:block; padding:9px 12px; border-radius:10px; text-decoration:none; color:var(--ink); font-weight:700; font-size:.95rem; white-space:nowrap; }
+.nav__menu-link{ display:block; padding:9px 12px; border-radius:10px; text-decoration:none; color:var(--ink); font-weight:700; font-size:.95rem; white-space:nowrap;
+  transition:background-color var(--mo-dur-press) var(--mo-ease-state); }
 .nav__menu-link:hover, .nav__menu-link:focus-visible{ background:var(--paper-2); }
 @media (prefers-reduced-motion: reduce){ .nav__menu{ transition:none; } }
 /* in the phone and tablet drawer, the section words are plain rows: no trays */
@@ -3359,6 +3379,7 @@ h1.admin-page-title{ font-size:1.7rem; }
 /* ============================================================ FOOTER */
 .foot{ background:var(--slate); color:var(--paper); border-top:var(--line); padding:clamp(46px,6vw,74px) 0 30px; }
 .foot a, .foot ul li button{ color:var(--paper); text-decoration:none; opacity:.82; }
+.foot a:not(.btn), .foot ul li button:not(.btn){ transition:opacity var(--mo-dur-press) var(--mo-ease-state); }
 .foot a:hover, .foot ul li button:hover{ opacity:1; text-decoration:underline; text-underline-offset:4px; }
 .foot a.btn{ color:var(--fg); opacity:1; }
 .foot a.btn:hover{ text-decoration:none; }
@@ -3448,7 +3469,7 @@ h1.admin-page-title{ font-size:1.7rem; }
   padding:6px 2px; border:0; background:transparent; color:var(--ink-mute);
   font-size:.66rem; font-weight:800; letter-spacing:.01em;
   text-decoration:none; cursor:pointer; border-radius:12px;
-  transition:transform .15s, color .15s;
+  transition:transform var(--mo-dur-press) var(--mo-ease-state), color var(--mo-dur-state) var(--mo-ease-state);
 }
 .bottom-nav__item span:last-child{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
 .bottom-nav__icon{ display:flex; }
@@ -3999,6 +4020,67 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
   background:var(--ink); color:var(--paper); border-radius:var(--r-pill);
   font-size:.7rem; font-weight:800;
 }
+/* ============================================================ MOTION
+   The small movements that make the site feel responsive. Timings and curves are the --mo-* tokens in :root;
+   Motion (in the script, next to render()) decides when each one runs. Everything here is opacity and transform
+   only, nothing here hides content without JS adding it first, and reduced motion switches all of it off. */
+
+/* a new page fades in (no exit animation: the old page is replaced at once, so nothing waits). Opacity only, so
+   nothing measured on the new page (the parallax, the nav marker) is thrown off. On the admin pages only the
+   content area fades; the side rail and top bar stay still. */
+@keyframes mo-page-in{ from{ opacity:.3; } to{ opacity:1; } }
+.mo-page-in{ animation:mo-page-in var(--mo-dur-page) var(--mo-ease-out); }
+#main:focus, .admin-content:focus{ outline:none; box-shadow:none; }
+
+/* a row of cards comes in one after another, rising a few pixels, the first time it scrolls into view. `translate`
+   (not `transform`) so a card's own hover lift still works the moment it lands. */
+@keyframes mo-rise{ from{ opacity:0; translate:0 var(--mo-rise); } to{ opacity:1; translate:0 0; } }
+.mo-stagger > *{ opacity:0; }
+.mo-stagger.mo-stagger--in > *{
+  animation:mo-rise var(--mo-dur-reveal) var(--mo-ease-out) both;
+  animation-delay:calc(var(--mo-i, 0) * var(--mo-stagger));
+}
+/* content that was loading (a skeleton) settles in once it arrives */
+.mo-arrive{ animation:mo-rise var(--mo-dur-reveal) var(--mo-ease-out) both; }
+
+/* a number counting up: the box holds the widest the number gets, so nothing beside it moves while it counts */
+.mo-count{ display:inline-block; font-variant-numeric:tabular-nums; }
+
+/* the marker under the current page in a nav: one shape per nav that slides to the new page, instead of each link
+   having its own. It sits behind the words; hover keeps its own look on the links themselves. */
+.mo-ind{
+  position:absolute; left:0; top:0; z-index:0; pointer-events:none; box-sizing:border-box;
+  transition:transform var(--mo-dur-state) var(--mo-ease-state), width var(--mo-dur-state) var(--mo-ease-state), height var(--mo-dur-state) var(--mo-ease-state);
+}
+/* the header: the blue highlighter stroke the current page has always had */
+.nav__drawer-list.mo-ind-on{ position:relative; }
+.mo-ind-on > .nav__link, .mo-ind-on > .nav__item > .nav__link{ position:relative; z-index:1; }
+.mo-ind-on .nav__link[aria-current="page"]{ background-size:0 1.3em; }
+.mo-ind--main{
+  font-size:calc(.96rem + 1px);
+  background:linear-gradient(180deg,transparent 40%,#8FE3F0 40%,#8FE3F0 96%,transparent 96%) 0 50% / 100% 1.3em no-repeat;
+}
+/* a section's tab row: the yellow tab */
+.subnav__in.mo-ind-on{ position:relative; }
+.mo-ind-on > .subnav__link{ position:relative; z-index:1; }
+.mo-ind-on > .subnav__link[aria-current]{ background:transparent; border-color:transparent; box-shadow:none; }
+.mo-ind--sub{ background:var(--sun); border:2.5px solid var(--ink); border-radius:12px; box-shadow:2px 2px 0 var(--ink); }
+/* the phone's bottom bar: the soft blue pill */
+.mo-ind-on > .bottom-nav__item{ position:relative; z-index:1; }
+.mo-ind-on > .bottom-nav__item.is-active{ background:transparent; }
+.mo-ind--bottom{ background:rgba(18,115,176,.13); border-radius:12px; }
+
+/* ---- reduced motion: no movement, no count-ups, no shimmer; the current page and every state still show ---- */
+@media (prefers-reduced-motion: reduce){
+  .mo-page-in, .mo-arrive, .mo-stagger.mo-stagger--in > *{ animation:none; }
+  .mo-stagger > *{ opacity:1; }
+  .mo-ind{ transition:none; }
+  .btn, .card, .nav__link, .subnav__link, .nav__menu-link, .bottom-nav__item{ transition-duration:.01ms; }
+}
+@media print{
+  .mo-stagger > *{ opacity:1 !important; animation:none !important; }
+}
+
 /* ============================================================ FOCUS
    Two-tone focus indicator. The dark ring carries contrast on light
    grounds, the sun ring carries it on dark grounds, so whichever
@@ -13657,7 +13739,7 @@ function articleFigureHTML(f){
   let inner = "";
   if (f.type === "stats"){
     inner = '<div class="astats">' + (f.items || []).map(s =>
-      '<div class="astat"><span class="astat__num">' + E(s.value) + '</span><span class="astat__label">' + E(s.label) + '</span></div>').join("") + '</div>';
+      '<div class="astat"><span class="astat__num" data-count="astat:' + E(s.label) + '">' + E(s.value) + '</span><span class="astat__label">' + E(s.label) + '</span></div>').join("") + '</div>';
   } else if (f.type === "columns"){
     /* vertical bars: the value above each column, its label under it (the same `bars` list) */
     const max = f.max || Math.max.apply(null, (f.bars || []).map(b => Number(b.value) || 0).concat([1]));
@@ -18338,13 +18420,16 @@ function storageOverviewCardHTML(){
         ? '<span class="admin-chip' + (level === "good" ? " admin-chip--good" : level === "warn" ? " admin-chip--warn" : " admin-chip--bad") + '">' + E(level === "good" ? "Within quota" : level === "warn" ? "Approaching quota" : "Over quota") + '</span>'
         : '<button class="admin-btn admin-btn--sm admin-btn--ghost" data-act="refresh-storage-usage">' + ic("refresh-cw") + ' Refresh</button>')
     + '</div>'
-    + (su.status === "loading" || su.status === "idle" ? '<p class="admin-meta" style="margin-top:12px">Checking Supabase Storage...</p>'
+    + (su.status === "loading" || su.status === "idle"
+        ? Motion.waiting("storage") + '<div style="margin-top:16px" role="status" aria-live="polite"><span class="sr-only">Checking Supabase Storage</span>'
+          + '<div aria-hidden="true"><div class="row-between" style="align-items:flex-end"><div>' + skelBar(27, "130px", "--r:6px") + skelBar(12, "110px", "margin-top:7px") + '</div>' + skelBar(22, "64px", "--r:6px") + '</div>'
+          + skelBar(10, "100%", "margin-top:12px;--r:5px") + skelBar(12, "100%", "margin-top:16px") + skelBar(12, "70%", "margin-top:7px") + '</div></div>'
       : su.status === "error" ? '<p class="admin-meta" style="margin-top:12px">Could not check storage usage: ' + E(su.error || "unknown error") + '</p>'
-      : '<div style="margin-top:16px">'
+      : '<div style="margin-top:16px" class="' + Motion.arrived("storage").trim() + '">'
         + '<div class="row-between" style="align-items:flex-end">'
-        + '<div><div style="font-size:1.7rem;font-weight:800;font-family:var(--admin-font-mono);color:var(--admin-ink);line-height:1">' + E(formatBytes(su.totalBytes)) + '</div>'
+        + '<div><div style="font-size:1.7rem;font-weight:800;font-family:var(--admin-font-mono);color:var(--admin-ink);line-height:1" data-count="storage-used">' + E(formatBytes(su.totalBytes)) + '</div>'
         + '<p class="admin-meta" style="margin:5px 0 0">of 1 GB allocated</p></div>'
-        + '<div style="font-size:1.4rem;font-weight:800;font-family:var(--admin-font-mono);color:' + (level === "good" ? "var(--admin-good)" : level === "warn" ? "var(--admin-warn)" : "var(--admin-bad)") + '">' + pct.toFixed(1) + '<span style="font-size:.85rem">%</span></div>'
+        + '<div style="font-size:1.4rem;font-weight:800;font-family:var(--admin-font-mono);color:' + (level === "good" ? "var(--admin-good)" : level === "warn" ? "var(--admin-warn)" : "var(--admin-bad)") + '"><span data-count="storage-pct">' + pct.toFixed(1) + '</span><span style="font-size:.85rem">%</span></div>'
         + '</div>'
         + '<div class="admin-progress-track" style="height:10px;margin-top:12px"><div class="admin-progress-fill" style="width:' + Math.max(pct, 1.2).toFixed(1) + '%;background:' + (level === "good" ? "var(--admin-good)" : level === "warn" ? "var(--admin-warn)" : "var(--admin-bad)") + '"></div></div>'
         + '<p class="admin-meta" style="margin-top:14px;line-height:1.5">Storage use is tracked against the free-tier quota. Supabase doesn’t expose exact monthly egress through any API - check the real number on your '
@@ -18398,7 +18483,14 @@ function adminSharesCard(){
   const head = '<div class="row-between" style="flex-wrap:wrap;gap:10px"><div>'
     + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("share-2") + 'Shared content</h3>'
     + '<p class="admin-meta" style="margin:2px 0 0">What visitors pass on the most. Counted each time someone uses a Share option: only the page and how, never who.</p></div>';
-  if (s.status === "idle" || s.status === "loading") return '<div class="admin-card" style="margin-bottom:20px">' + head + '</div><p class="admin-meta">Loading shares...</p></div>';
+  if (s.status === "idle" || s.status === "loading"){
+    Motion.waiting("shares");
+    return '<div class="admin-card" style="margin-bottom:20px">' + head + '</div>'
+      + '<div role="status" aria-live="polite"><span class="sr-only">Loading shares</span>'
+      + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px;margin:16px 0" aria-hidden="true">'
+      + Array(3).fill('<div>' + skelBar(10, "60%") + skelBar(24, "45%", "margin-top:6px;--r:6px") + skelBar(11, "75%", "margin-top:6px") + '</div>').join("")
+      + '</div></div></div>';
+  }
   if (s.status === "error"){
     const missing = /share_events|relation|schema cache/i.test(s.error);
     return '<div class="admin-card" style="margin-bottom:20px">' + head + '</div>'
@@ -18409,13 +18501,13 @@ function adminSharesCard(){
     + '<p class="admin-meta" style="margin-top:10px">No shares recorded in the last ' + plural(s.days, "day") + '. Counting started once the share counter went live, so earlier shares are not included.</p></div>';
   const max = sum.byContent[0].count;
   const top = sum.byContent.slice(0, 10);
-  const stat = (label, value, note) => '<div><div class="admin-meta" style="text-transform:uppercase;letter-spacing:.07em;font-size:.66rem;font-weight:800;margin:0">' + E(label) + '</div>'
-    + '<div style="font-size:1.5rem;font-weight:800;font-family:var(--admin-font-mono);line-height:1.2;margin-top:4px">' + E(value) + '</div>'
+  const stat = (label, value, note, count) => '<div><div class="admin-meta" style="text-transform:uppercase;letter-spacing:.07em;font-size:.66rem;font-weight:800;margin:0">' + E(label) + '</div>'
+    + '<div style="font-size:1.5rem;font-weight:800;font-family:var(--admin-font-mono);line-height:1.2;margin-top:4px"' + (count ? ' data-count="' + count + '"' : "") + '>' + E(value) + '</div>'
     + '<div class="admin-meta" style="margin:2px 0 0">' + E(note) + '</div></div>';
-  return '<div class="admin-card" style="margin-bottom:20px">' + head
+  return '<div class="admin-card' + Motion.arrived("shares") + '" style="margin-bottom:20px">' + head
     + '<span class="admin-chip admin-chip--info">' + ic("share-2") + ' ' + plural(sum.total, "share") + '</span></div>'
     + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px;margin:16px 0">'
-    + stat("Total shares", sum.total.toLocaleString(), "in the last " + plural(s.days, "day"))
+    + stat("Total shares", sum.total.toLocaleString(), "in the last " + plural(s.days, "day"), "shares-total")
     + stat("Most shared", top[0].title, plural(top[0].count, "share") + " (" + sharePct(top[0].count, sum.total) + ")")
     + stat("Favourite way", sum.byMethod[0].label, plural(sum.byMethod[0].count, "share") + " (" + sharePct(sum.byMethod[0].count, sum.total) + ")")
     + '</div>'
@@ -18652,7 +18744,7 @@ function countryMapHTML(byCountry){
     wm.status = "loading";
     loadWorldMapSvg().then(svg => { AppState.admin.worldMap = { status:"loaded", svg:svg }; rerender(); });
   }
-  if (wm.status !== "loaded") return '<div style="min-height:220px;display:flex;align-items:center;justify-content:center"><p class="admin-meta">Loading map...</p></div>';
+  if (wm.status !== "loaded") return '<div style="min-height:220px;display:flex;align-items:stretch" role="status" aria-live="polite"><span class="sr-only">Loading map</span>' + skelBar(220, "100%", "--r:12px") + '</div>';
   if (!wm.svg) return '<p class="admin-meta">Map unavailable.</p>';
   const max = Math.max(1, ...byCountry.map(c => c.views));
   const sum = byCountry.reduce((s,c) => s + c.views, 0);
@@ -18756,7 +18848,7 @@ function renderAnalyticsLoaded(data){
     + '<span class="admin-meta" style="text-transform:uppercase;letter-spacing:.07em;font-size:.66rem;font-weight:800;margin:0">' + E(label) + '</span>'
     + '<span class="admin-badge admin-badge--md admin-badge--brand">' + ic(icon) + '</span></div>'
     + '<div class="row" style="gap:8px;align-items:baseline;margin-top:10px">'
-    + '<div style="font-size:1.7rem;font-weight:800;font-family:var(--admin-font-mono);color:var(--admin-ink);line-height:1">' + value + '</div>'
+    + '<div style="font-size:1.7rem;font-weight:800;font-family:var(--admin-font-mono);color:var(--admin-ink);line-height:1" data-count="an-' + E(label) + '">' + value + '</div>'
     + (typeof deltaPct === "number" ? '<span style="display:inline-flex;align-items:center;gap:2px;font-size:.72rem;font-weight:700;color:' + (deltaPct >= 0 ? "var(--admin-good)" : "var(--admin-bad)") + '">' + ic(deltaPct >= 0 ? "trending-up" : "trending-down") + " " + Math.abs(deltaPct).toFixed(1) + '%</span>' : "")
     + '</div>'
     + '<p class="admin-meta" style="margin:5px 0 0">' + E(note) + '</p>'
@@ -18915,14 +19007,36 @@ function adminAnalytics(){
     /* The share counts sit under the range summary inside renderAnalyticsLoaded(); while the traffic is still
        loading, or could not load, they are drawn here instead so they never disappear with it. */
     + (a.status === "loading" || a.status === "idle"
-        ? '<div class="admin-card" style="margin-bottom:20px"><p class="admin-meta">Loading traffic data...</p></div>' + adminSharesCard()
+        ? analyticsSkeleton() + adminSharesCard()
       : a.status === "error"
         ? adminSharesCard() + '<div class="admin-card"><div class="row" style="gap:10px;align-items:center">'
           + '<span class="admin-badge admin-badge--lg admin-badge--bad">' + ic("triangle-alert") + '</span>'
           + '<h3 class="admin-section-title" style="font-size:1rem">Could not load analytics</h3></div>'
           + '<p class="admin-meta" style="margin-top:10px">' + E(a.error) + '</p>'
           + '<p class="admin-meta" style="margin-top:6px">If this is the first time this page has loaded, get-site-analytics may not be deployed yet, or its three Cloudflare secrets may not be set - see supabase/deploy-get-site-analytics.ps1.</p></div>'
-        : renderAnalyticsLoaded(a.data));
+        : '<div class="' + Motion.arrived("analytics").trim() + '">' + renderAnalyticsLoaded(a.data) + '</div>');
+}
+/** A skeleton line or block for a loading admin card (the shimmer is .skel-block's; still under reduced motion). */
+function skelBar(h, w, extra){
+  return '<div class="skel-block" style="height:' + h + 'px;width:' + (w || "100%") + ';' + (extra || "") + '"></div>';
+}
+/** While the traffic numbers load: the same range summary and three number tiles, then the "Most popular" card, as
+    plain shapes, so the real ones land where these sit instead of pushing the page down. */
+function analyticsSkeleton(){
+  Motion.waiting("analytics");
+  const tile = '<div class="admin-card">'
+    + '<div class="row-between" style="align-items:flex-start;gap:8px">' + skelBar(10, "48%", "margin-top:6px") + skelBar(30, "30px", "--r:8px;flex:none") + '</div>'
+    + skelBar(30, "62%", "margin-top:10px;--r:6px") + skelBar(16, "80%", "margin-top:10px") + skelBar(28, "100%", "margin-top:10px;--r:6px")
+    + '</div>';
+  return '<div role="status" aria-live="polite"><span class="sr-only">Loading traffic data</span>'
+    + '<div class="grid" style="grid-template-columns:1.6fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;align-items:stretch" aria-hidden="true">'
+    + '<div class="admin-card"><div class="row" style="gap:14px;align-items:flex-start">' + skelBar(40, "40px", "--r:10px;flex:none")
+    + '<div style="flex:1">' + skelBar(14, "50%") + skelBar(11, "100%", "margin-top:10px") + skelBar(11, "92%", "margin-top:7px") + skelBar(11, "70%", "margin-top:7px") + '</div></div></div>'
+    + tile + tile + tile + '</div>'
+    + '<div class="admin-card" style="margin-bottom:20px" aria-hidden="true">' + skelBar(16, "180px") + skelBar(11, "60%", "margin:10px 0 18px")
+    + '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px">'
+    + Array(5).fill('<div style="border:1px solid var(--admin-border);border-radius:12px;padding:14px">' + skelBar(10, "70%") + skelBar(16, "85%", "margin-top:14px") + skelBar(11, "40%", "margin-top:8px") + '</div>').join("")
+    + '</div></div></div>';
 }
 
 /* The dashboard's own workflow-stage colors - the site's brand cast
@@ -19033,13 +19147,13 @@ function adminDashboard(){
     + '<div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">'
     + '<div style="border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);border-radius:12px;padding:14px">'
     + '<div style="font-size:.7rem;color:#BFD4EE">Launch readiness</div>'
-    + '<div style="font-size:1.7rem;font-weight:800;margin-top:4px">' + lrcPct + '<span style="font-size:1rem">%</span></div>'
+    + '<div style="font-size:1.7rem;font-weight:800;margin-top:4px"><span data-count="dash-ready">' + lrcPct + '</span><span style="font-size:1rem">%</span></div>'
     + '<div class="admin-progress-track" style="background:rgba(255,255,255,.2);margin-top:8px"><div class="admin-progress-fill" style="width:' + Math.max(lrcPct,2) + '%;background:#BFDBFE"></div></div>'
     + '<div style="font-size:.68rem;color:#BFD4EE;margin-top:8px">' + lrcDone + ' of ' + lrc.length + ' checklist items</div>'
     + '</div>'
     + '<div style="border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);border-radius:12px;padding:14px">'
     + '<div style="font-size:.7rem;color:#BFD4EE">Needs attention</div>'
-    + '<div style="font-size:1.7rem;font-weight:800;margin-top:4px;font-family:var(--admin-font-mono)">' + String(needsAttention).padStart(2,"0") + '</div>'
+    + '<div style="font-size:1.7rem;font-weight:800;margin-top:4px;font-family:var(--admin-font-mono)" data-count="dash-attention">' + String(needsAttention).padStart(2,"0") + '</div>'
     + '<div style="font-size:.68rem;color:#BFD4EE;margin-top:8px">' + (needsAttention ? plural(problems.length,"content problem") + ' &middot; ' + plural(openIssues.length + openTickets.length, "operational item") : "Nothing open right now") + '</div>'
     + (needsAttention ? '<a href="#needs-attention" style="text-decoration:none;display:inline-block;margin-top:8px;font-size:.72rem;font-weight:700;color:#fff">Needs review &rarr;</a>' : "")
     + '</div>'
@@ -19074,7 +19188,7 @@ function adminDashboard(){
           + stages.map(p => { const pct = p.denom ? (p.n / p.denom) * 100 : 0;
               return '<div class="admin-card admin-card--flat" style="flex:1 1 100px;min-width:100px;padding:13px;background:' + (p.s.id === "published" ? "var(--admin-good-soft)" : "var(--admin-surface)") + '">'
                 + '<span style="font-size:.72rem;font-weight:700">' + E(p.s.label) + '</span>'
-                + '<div style="font-size:1.4rem;font-weight:800;font-family:var(--admin-font-mono);margin-top:8px">' + p.n + '</div>'
+                + '<div style="font-size:1.4rem;font-weight:800;font-family:var(--admin-font-mono);margin-top:8px" data-count="dash-stage-' + p.s.id + '">' + p.n + '</div>'
                 + '<div class="admin-meta" style="margin-top:2px">' + sharePct(p.n, p.denom) + ' of records</div>'
                 + '<div class="admin-progress-track" style="margin-top:8px"><div class="admin-progress-fill" style="width:' + Math.max(pct,1).toFixed(1) + '%;background:' + pipelineSegColor(p.s.id) + '"></div></div>'
                 + '</div>'; }).join("")
@@ -20538,7 +20652,15 @@ async function loadAdminRoster(){
 function adminAdmins(){
   if (ADMIN_ROSTER === null){
     loadAdminRoster();
-    return '<div class="admin-card"><p class="admin-meta">Loading admins…</p></div>';
+    Motion.waiting("admins");
+    /* the page's own heading right away, and a row shape for each admin until the list arrives */
+    return '<div class="row-between" style="margin-bottom:20px"><div>'
+      + '<span class="admin-eyebrow">Admin Access</span><h1 class="admin-page-title" style="text-transform:none;font-size:1.5rem">Admins</h1>'
+      + '<p class="admin-meta">Everyone with access to this portal. An invited admin sets their own password from an emailed link - nobody’s password is ever seen or set from here.</p></div></div>'
+      + '<div class="stack" style="gap:10px" role="status" aria-live="polite"><span class="sr-only">Loading admins</span>'
+      + Array(2).fill('<div class="admin-card admin-card--flat" aria-hidden="true"><div class="row" style="gap:12px;align-items:center">' + skelBar(28, "28px", "--r:8px;flex:none")
+        + '<div style="flex:1">' + skelBar(13, "180px") + skelBar(11, "260px", "margin-top:7px;max-width:100%") + '</div></div></div>').join("")
+      + '</div>';
   }
   const STATUS_BADGE = {
     active:  { icon:"check",          cls:"admin-badge--good" },
@@ -20549,7 +20671,7 @@ function adminAdmins(){
     + '<span class="admin-eyebrow">Admin Access</span><h1 class="admin-page-title" style="text-transform:none;font-size:1.5rem">Admins</h1>'
     + '<p class="admin-meta">Everyone with access to this portal. An invited admin sets their own password from an emailed link - nobody’s password is ever seen or set from here.</p></div>'
     + '<button class="admin-btn admin-btn--primary" data-act="invite-admin">' + ic("user-plus") + ' Invite admin</button></div>'
-    + '<div class="stack" style="gap:10px">'
+    + '<div class="stack' + Motion.arrived("admins") + '" style="gap:10px">'
     + ADMIN_ROSTER.map(p => {
         const b = STATUS_BADGE[p.status] || STATUS_BADGE.invited;
         const self = AuthState.profile && AuthState.profile.id === p.id;
@@ -21189,7 +21311,12 @@ function adminStudio(){
 
   let usage;
   const d = st.data;
-  if (st.status === "loading" || st.status === "idle") usage = '<p class="admin-meta">Loading usage…</p>';
+  if (st.status === "loading" || st.status === "idle"){
+    Motion.waiting("studio-usage");
+    usage = '<div role="status" aria-live="polite"><span class="sr-only">Loading usage</span><div class="studio-stats" aria-hidden="true">'
+      + Array(9).fill('<div class="studio-stat">' + skelBar(24, "55%", "--r:6px") + skelBar(11, "75%", "margin-top:7px") + '</div>').join("")
+      + '</div></div>';
+  }
   else if (st.status === "error") usage = '<p class="admin-meta">Could not load usage: ' + E(st.error) + '</p>';
   else {
     const pct = (x, y) => y ? Math.round(100 * x / y) + "%" : "—";
@@ -21198,11 +21325,11 @@ function adminStudio(){
       const c = Math.round(100 * (now - before) / before);
       return '<small class="' + (c >= 0 ? "studio-up" : "studio-down") + '">' + (c >= 0 ? "▲ " : "▼ ") + Math.abs(c) + '%</small>';
     };
-    const stat = (n, label, sub, key) => '<div class="studio-stat' + (key ? " studio-stat--key" : "") + '"><b>' + n + '</b><span>' + label + '</span>' + (sub || "") + '</div>';
+    const stat = (n, label, sub, key) => '<div class="studio-stat' + (key ? " studio-stat--key" : "") + '"><b data-count="studio-' + E(label) + '">' + n + '</b><span>' + label + '</span>' + (sub || "") + '</div>';
     const members = (d.by_member || []).map(m => '<tr data-email="' + E(String(m.email || "").toLowerCase()) + '">'
       + '<td class="t-title">' + E(m.email || "") + '</td><td class="studio-n">' + m.pictures + '</td><td class="studio-n">' + m.paint + ' / ' + m.pixel + '</td>'
       + '<td>' + E(fmtDate(m.first)) + '</td><td>' + E(m.last ? fmtDate(new Date(Number(m.last)).toISOString()) : "--") + '</td><td class="studio-n">' + E(formatBytes(Number(m.bytes))) + '</td></tr>').join("");
-    usage = '<div class="studio-stats">'
+    usage = '<div class="studio-stats' + Motion.arrived("studio-usage") + '">'
       + stat(d.opened, "Times opened", change(d.opened, d.opened_before), true)
       + stat(d.signin_shown, "Saw Sign in", '<small>' + d.signed_in + ' signed in</small>', true)
       + stat(d.joined, "Joined from it", '<small>' + pct(d.joined, d.signin_shown) + ' of Sign in</small>', true)
@@ -26021,6 +26148,247 @@ function canSetStatus(col, rec, status){
 }
 
 /* ============================================================
+   29b. MOTION
+   The small movements after each render: a new page fades in, rows of cards come in one after another, numbers
+   count up, and the marker under the current page slides along each nav. The timings live in the --mo-* CSS tokens;
+   the rules for reading and showing a number are pure (and tested in test/motion.test.js).
+   ============================================================ */
+/* BEGIN motion-pure */
+/** A number shown as text, read so it can count up without losing its look: the words around it, its decimal
+    places, thousands commas and leading zeros. Anything that is not one plain number gives null and never moves:
+    a date, a time, a year, a phone number, an id, "1 in 4". */
+function motionParseCount(text){
+  const t = String(text == null ? "" : text);
+  const m = t.match(/^(\D*?)(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(\D*)$/);
+  if (!m) return null;
+  const prefix = m[1], whole = m[2], frac = m[3] || "", suffix = m[4];
+  if (/[\/:#]\s*$|[A-Za-z]-$/.test(prefix) || /^[\/:\-.]/.test(suffix)) return null;
+  const grouped = whole.indexOf(",") >= 0;
+  const digits = whole.replace(/,/g, "");
+  const value = parseFloat(digits + frac);
+  if (!isFinite(value)) return null;
+  if (!grouped && !frac && !prefix.trim() && !suffix.trim() && digits.length === 4 && value >= 1900 && value <= 2100) return null;
+  return { prefix: prefix, suffix: suffix, value: value, decimals: frac ? frac.length - 1 : 0, grouped: grouped,
+    pad: (!grouped && digits.length > 1 && digits.charAt(0) === "0") ? digits.length : 0 };
+}
+/** The number v, written the way motionParseCount() found it. */
+function motionFormatCount(spec, v){
+  const parts = Math.max(0, v).toFixed(spec.decimals).split(".");
+  let whole = parts[0];
+  if (spec.grouped) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (spec.pad) whole = whole.padStart(spec.pad, "0");
+  return spec.prefix + whole + (parts.length > 1 ? "." + parts[1] : "") + spec.suffix;
+}
+/** How long a count takes: 0 when nothing changed, 400 to 800 ms otherwise, a little longer for a bigger jump. */
+function motionCountMs(from, to, max){
+  const span = Math.abs(to - from);
+  if (!span) return 0;
+  return Math.round(Math.min(max || 800, 400 + Math.log10(span + 1) * 70));
+}
+/** Ease-out: starts quickly, lands softly. */
+function motionEase(t){ return t >= 1 ? 1 : 1 - Math.pow(1 - t, 3); }
+/** The delay before the i-th card comes in; from the cap-th card on, they all come together. */
+function motionStaggerDelay(i, step, cap){ return Math.min(i, cap) * step; }
+/* END motion-pure */
+
+const Motion = {
+  STAGGER_CAP: 8,
+  lastPath: null,
+  values: {},   /* data-count key -> the value last shown, so a changed number counts on from there */
+  slots: {},    /* nav marker -> where it last sat, so the next page's marker slides from there */
+  waits: {},    /* loading areas showing a skeleton right now */
+  observers: {},
+
+  reduced(){ return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); },
+  /** A --mo-* timing token, in ms. */
+  ms(name, fallback){
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const n = parseFloat(raw);
+    return isFinite(n) ? (/ms$/.test(raw) ? n : n * 1000) : fallback;
+  },
+  /** Run fn once el first comes into view (at once where there is no IntersectionObserver). */
+  whenSeen(el, fn, margin){
+    if (!("IntersectionObserver" in window)){ fn(); return; }
+    margin = margin || "0px 0px -32px 0px";
+    let io = this.observers[margin];
+    if (!io){
+      io = this.observers[margin] = new IntersectionObserver(entries => entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        io.unobserve(en.target);
+        const run = en.target.__moSeen;
+        delete en.target.__moSeen;
+        if (run) run();
+      }), { rootMargin: margin });
+    }
+    el.__moSeen = fn;
+    io.observe(el);
+  },
+
+  /** Called at the end of every render(). The page fade, the card reveals and moving focus happen only when the
+      address changed (a filter or a tick box re-drawing the same page never animates it again). */
+  afterRender(){
+    const path = String(Router.current()).split("?")[0];
+    const first = this.lastPath === null;
+    const changed = path !== this.lastPath;
+    this.lastPath = path;
+    const main = $("#main");
+    if (!main) return;
+    const area = main.querySelector(".admin-content") || main;
+    if (changed && !this.reduced()){
+      area.classList.add("mo-page-in");
+      area.addEventListener("animationend", function done(e){
+        if (e.target !== area) return;
+        area.classList.remove("mo-page-in");
+        area.removeEventListener("animationend", done);
+      });
+      this.stagger(area);
+    }
+    this.counts(main);
+    this.indicators();
+    /* The link that was clicked is gone with the old page, so focus would fall back to the very top. Start the
+       next Tab at the new page's content instead (only when nothing else, a dialog say, has taken focus). */
+    if (changed && !first && (!document.activeElement || document.activeElement === document.body)){
+      area.setAttribute("tabindex", "-1");
+      area.focus({ preventScroll: true });
+    }
+  },
+
+  /** Rows of cards come in one after another the first time they scroll into view. Every grid on the public pages;
+      on the admin pages only the rows marked data-stagger, so forms never move. */
+  stagger(area){
+    const step = this.ms("--mo-stagger", 50), dur = this.ms("--mo-dur-reveal", 320), cap = this.STAGGER_CAP;
+    const sel = document.body.classList.contains("is-admin") ? "[data-stagger]" : ".grid, [data-stagger]";
+    area.querySelectorAll(sel).forEach(grid => {
+      if (grid.parentElement && grid.parentElement.closest(".mo-stagger")) return;
+      const kids = Array.prototype.filter.call(grid.children, k => k.nodeType === 1 && k.tagName !== "STYLE" && k.tagName !== "SCRIPT");
+      if (kids.length < 2) return;
+      kids.forEach((k, i) => k.style.setProperty("--mo-i", String(Math.min(i, cap))));
+      grid.classList.add("mo-stagger");
+      this.whenSeen(grid, () => {
+        grid.classList.add("mo-stagger--in");
+        setTimeout(() => {
+          grid.classList.remove("mo-stagger", "mo-stagger--in");
+          kids.forEach(k => k.style.removeProperty("--mo-i"));
+        }, dur + motionStaggerDelay(kids.length, step, cap) + 120);
+      });
+    });
+  },
+
+  /** A loading area shows its skeleton: remember it, so the content that replaces it can settle in. */
+  waiting(key){ this.waits[key] = true; return ""; },
+  /** The class for content that just replaced its skeleton (once; a later re-draw of the same content stays still). */
+  arrived(key){
+    if (!this.waits[key]) return "";
+    delete this.waits[key];
+    return this.reduced() ? "" : " mo-arrive";
+  },
+
+  /** Numbers marked data-count="key" count up the first time they come into view, and count on from the old value
+      when the number changes. A screen reader hears only the final number. */
+  counts(root){
+    root.querySelectorAll("[data-count]").forEach(el => {
+      const key = el.getAttribute("data-count");
+      const text = el.textContent.trim();
+      const spec = motionParseCount(text);
+      const had = Object.prototype.hasOwnProperty.call(this.values, key);
+      const prev = this.values[key];
+      if (!spec){ delete this.values[key]; return; }
+      this.values[key] = spec.value;
+      if (this.reduced() || (had && prev === spec.value)) return;
+      if (had) this.countUp(el, spec, text, prev);
+      else this.whenSeen(el, () => this.countUp(el, spec, text, 0), "0px 0px 40px 0px");
+    });
+  },
+  countUp(el, spec, text, from){
+    if (!el.isConnected) return;
+    const ms = motionCountMs(from, spec.value, this.ms("--mo-dur-count", 650) + 150);
+    if (!ms) return;
+    const shown = document.createElement("span");
+    shown.className = "mo-count";
+    shown.setAttribute("aria-hidden", "true");
+    const said = document.createElement("span");
+    said.className = "sr-only";
+    said.textContent = text;
+    el.textContent = "";
+    el.append(shown, said);
+    shown.textContent = text;
+    const wide = shown.getBoundingClientRect().width;
+    shown.textContent = motionFormatCount(spec, from);
+    shown.style.minWidth = Math.ceil(Math.max(wide, shown.getBoundingClientRect().width)) + "px";
+    const t0 = performance.now();
+    const tick = now => {
+      if (!shown.isConnected) return;
+      const p = Math.min(1, (now - t0) / ms);
+      if (p >= 1){ el.textContent = text; return; }
+      shown.textContent = motionFormatCount(spec, from + (spec.value - from) * motionEase(p));
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  },
+
+  /** The marker under the current page in the header, a section's tab row and the phone's bottom bar. One marker
+      per nav slides from where it sat on the last page to the current one, sized to the link. */
+  NAVS: [
+    { key: "main",   box: "#app .nav__drawer-list", cur: '.nav__link[aria-current="page"]', kind: "main", row: true },
+    { key: "sub",    box: "#app .subnav__in",       cur: ".subnav__link[aria-current]",     kind: "sub", group: true },
+    { key: "bottom", box: "#app .bottom-nav",       cur: '.bottom-nav__item[aria-current="page"]', kind: "bottom" }
+  ],
+  indicators(quiet){
+    const still = this.reduced();
+    this.NAVS.forEach(n => {
+      const box = $(n.box);
+      const off = () => {
+        delete this.slots[n.key];
+        if (!box) return;
+        box.classList.remove("mo-ind-on");
+        const old = box.querySelector(":scope > .mo-ind");
+        if (old) old.remove();
+      };
+      if (!box || !box.getClientRects().length) return off();
+      /* the header's links only while they are one row; the phone and tablet drawer keeps its own look */
+      if (n.row && getComputedStyle(box).flexDirection !== "row") return off();
+      const cur = box.querySelector(n.cur);
+      if (!cur) return off();
+      let ind = box.querySelector(":scope > .mo-ind");
+      if (!ind){
+        ind = document.createElement("span");
+        ind.className = "mo-ind mo-ind--" + n.kind;
+        ind.setAttribute("aria-hidden", "true");
+        box.prepend(ind);
+      }
+      box.classList.add("mo-ind-on");
+      const b = box.getBoundingClientRect(), c = cur.getBoundingClientRect();
+      const next = {
+        x: Math.round(c.left - b.left - box.clientLeft + box.scrollLeft),
+        y: Math.round(c.top - b.top - box.clientTop + box.scrollTop),
+        w: Math.round(c.width), h: Math.round(c.height),
+        group: n.group ? String((box.closest("nav") || box).getAttribute("aria-label") || "") : ""
+      };
+      const put = g => { ind.style.transform = "translate(" + g.x + "px," + g.y + "px)"; ind.style.width = g.w + "px"; ind.style.height = g.h + "px"; };
+      const prev = this.slots[n.key];
+      const slide = !still && !quiet && prev && prev.group === next.group && (prev.x !== next.x || prev.y !== next.y || prev.w !== next.w);
+      /* start from the old spot with no transition, then let it glide to the new one; anything else just sits */
+      ind.style.transition = "none";
+      put(slide ? prev : next);
+      void ind.offsetWidth;
+      ind.style.transition = "";
+      if (slide) put(next);
+      this.slots[n.key] = next;
+    });
+  },
+  /** Re-seat the markers, without sliding, when the window or the fonts change the links' sizes. */
+  reseat(){
+    if (this._reseat) return;
+    this._reseat = requestAnimationFrame(() => {
+      this._reseat = 0;
+      this.indicators(true);
+    });
+  }
+};
+window.addEventListener("resize", () => Motion.reseat());
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => Motion.reseat());
+
+/* ============================================================
    30. RENDER
    ============================================================ */
 function renderRoute(route){
@@ -26139,6 +26507,9 @@ function render(){
   syncAppManifest();
   updateCanonicalLink();
   updateRobotsMeta();
+  /* last, once the page is drawn, its icons are in and the scroll is set: the page fade, card reveals,
+     count-ups and the nav markers (see MOTION) */
+  try { Motion.afterRender(); } catch(_e){}
 }
 
 /** The public site may be listed by search engines; the Subscriber's Portal (/newsletter) and the admin pages may not. */
