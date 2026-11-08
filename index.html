@@ -4069,6 +4069,21 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 @keyframes mo-pop{ from{ opacity:0; scale:.94; translate:0 16px; } to{ opacity:1; scale:1; translate:0 0; } }
 .mo-arrive{ animation:mo-pop var(--mo-dur-enter) var(--mo-ease-out) both; }
 
+/* A new page's cards in view load as skeletons, one after another (Motion.skeletons): the card's frame is there at
+   once with a soft shimmer inside it, which fades as the card's own content fades up 4px into place. Small and calm:
+   no grow, no bounce, slowing to a stop. */
+.mo-skel--pos{ position:relative; }
+.mo-skel::after{
+  content:""; position:absolute; inset:0; z-index:5; border-radius:inherit; pointer-events:none;
+  background-color:inherit;
+  background-image:linear-gradient(100deg, rgba(30,40,46,.05) 28%, rgba(30,40,46,.11) 45%, rgba(30,40,46,.05) 62%);
+  background-size:200% 100%;
+  animation:mo-skel-out .32s var(--mo-ease-out) var(--mo-skel-delay, 0ms) both, skel-shimmer 1.3s ease-in-out infinite;
+}
+.mo-skel > *{ animation:mo-skel-in .42s var(--mo-ease-out) var(--mo-skel-delay, 0ms) both; }
+@keyframes mo-skel-out{ from{ opacity:1; } to{ opacity:0; } }
+@keyframes mo-skel-in{ from{ opacity:0; translate:0 4px; } to{ opacity:1; translate:0 0; } }
+
 /* Nothing fades or rises in as it is scrolled to (by request): what is further down a page is simply there. */
 
 /* the finder's materials: each choice fades in and grows from smaller, one after another, slowing as it lands */
@@ -4123,7 +4138,8 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 
 /* ---- reduced motion: no movement, no count-ups, no shimmer; the current page and every state still show ---- */
 @media (prefers-reduced-motion: reduce){
-  .mo-page-in, .mo-arrive, .mo-grow > *{ animation:none; }
+  .mo-page-in, .mo-arrive, .mo-grow > *, .mo-skel > *{ animation:none; }
+  .mo-skel::after{ display:none; }
   .mo-sub-down, .mo-sub-up{ overflow:visible; }
   .mo-ind{ transition:none; }
   .nav__links.mo-drawer-in, .nav__links.mo-drawer-in *,
@@ -4131,7 +4147,8 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
   .btn, .card, .nav__link, .subnav__link, .nav__menu-link, .bottom-nav__item{ transition-duration:.01ms; }
 }
 @media print{
-  .mo-grow > *{ opacity:1 !important; animation:none !important; }
+  .mo-grow > *, .mo-skel > *{ opacity:1 !important; animation:none !important; }
+  .mo-skel::after{ display:none !important; }
 }
 
 /* ============================================================ FOCUS
@@ -26329,10 +26346,16 @@ function motionSubMove(hadTabs, hasTabs, firstOrSame){
   if (firstOrSame || hadTabs === hasTabs) return null;
   return hasTabs ? "down" : "up";
 }
+/** When the i-th card in view leaves its skeleton (ms): one after another, 60 ms apart, the twelfth and on together;
+    `elapsed` is how far into the page's entrance a redraw came, so it carries on rather than starting over. */
+function motionSkelDelay(i, elapsed){
+  return 80 + Math.min(i, 11) * 60 - elapsed;
+}
 /* END motion-pure */
 
 const Motion = {
   lastPath: null,
+  skelStart: 0,   /* when the current page's skeleton cascade began */
   values: {},   /* data-count key -> the value last shown, so a changed number counts on from there */
   slots: {},    /* the yellow tab -> where it last sat, so the next page's tab slides from there */
   waits: {},    /* loading areas showing a skeleton right now */
@@ -26421,6 +26444,7 @@ const Motion = {
         area.removeEventListener("animationend", done);
       });
     }
+    if (area === main) this.skeletons(main, changed);
     this.counts(main);
     this.finderGrow(main, "app");
     this.indicators(false);
@@ -26440,6 +26464,33 @@ const Motion = {
       area.setAttribute("tabindex", "-1");
       area.focus({ preventScroll: true });
     }
+  },
+
+  /** A new page's cards come in as skeletons: the frame is there at once, a soft shimmer fills it, then one after
+      another the shimmer fades and the card's own content fades up into place. Only what is in view when the page
+      opens (nothing waits to be scrolled to), never the banner, and never a card that draws its own ::after. A redraw
+      of the same page part way through carries on from where it was. */
+  skeletons(main, changed){
+    const now = performance.now();
+    if (changed) this.skelStart = now;
+    const elapsed = now - this.skelStart;
+    if (this.reduced() || elapsed > 1100) return;
+    const SEL = ".card, .panel, .partner-card";
+    const view = window.innerHeight || 800;
+    const picks = [...main.querySelectorAll(SEL)].filter(el =>
+      !el.closest(".pagehead, .mo-grow, .modal, [hidden]")
+      && !el.querySelector(SEL)
+      && getComputedStyle(el, "::after").content === "none"
+      && (r => r.height > 0 && r.top < view && r.bottom > 0)(el.getBoundingClientRect()));
+    picks.slice(0, 24).forEach((el, i) => {
+      const delay = motionSkelDelay(i, elapsed);
+      if (delay < -380) return;
+      el.style.setProperty("--mo-skel-delay", delay + "ms");
+      const pos = getComputedStyle(el).position === "static";
+      el.classList.add("mo-skel");
+      if (pos) el.classList.add("mo-skel--pos");
+      setTimeout(() => { el.classList.remove("mo-skel", "mo-skel--pos"); el.style.removeProperty("--mo-skel-delay"); }, Math.max(0, delay) + 460);
+    });
   },
 
   /** A loading area shows its skeleton: remember it, so the content that replaces it can settle in. */

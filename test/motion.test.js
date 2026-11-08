@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const pure = index.split("/* BEGIN motion-pure */")[1].split("/* END motion-pure */")[0];
-const M = new Function(pure + "; return { motionParseCount, motionFormatCount, motionCountMs, motionEase, motionSubMove };")();
+const M = new Function(pure + "; return { motionParseCount, motionFormatCount, motionCountMs, motionEase, motionSubMove, motionSkelDelay };")();
 const css = index.split("<style>")[1].split("</style>")[0];
 
 describe("count-up numbers keep their look", () => {
@@ -119,10 +119,26 @@ describe("the motion system in the page", () => {
     // ...except the yellow tab, whose slide to the new tab is the one move the tab bar makes
     expect(css).toContain("#app.mo-settle :is(.nav, .subnav, .ctxbar, .bottom-nav), #app.mo-settle :is(.nav, .subnav, .ctxbar, .bottom-nav) *:not(.mo-ind){ transition:none !important; }");
   });
-  it("never animates the cards (by request): a row of cards is simply there with the page", () => {
-    expect(index).not.toContain("mo-stagger");
-    expect(index).not.toContain("stagger(area");
-    expect(index).not.toContain("motionStaggerDelay");
+  it("brings the cards in view in as skeletons, one after another, with a small calm fade (no grow, no bounce)", () => {
+    expect(M.motionSkelDelay(0, 0)).toBe(80);
+    expect(M.motionSkelDelay(1, 0)).toBe(140);
+    expect(M.motionSkelDelay(3, 0)).toBe(260);
+    expect(M.motionSkelDelay(40, 0)).toBe(M.motionSkelDelay(11, 0));   // a long page doesn't keep its last cards waiting
+    expect(M.motionSkelDelay(2, 100)).toBe(100);                       // a redraw part way through carries on
+    const js = index.split("const Motion = {")[1].split("\n};\n")[0];
+    const after = js.split("afterRender(){")[1].split("\n  },\n")[0];
+    expect(after).toContain("this.skeletons(");
+    const sk = js.split("skeletons(main, changed){")[1].split("\n  },\n")[0];
+    expect(sk).toContain(".pagehead");                   // the banner stays out of it
+    expect(sk).toContain("innerHeight");                 // only what is in view when the page opens
+    expect(sk).toContain('"::after"');                   // never covers a card that draws its own ::after
+    expect(css).toMatch(/\.mo-skel::after\{[^}]*animation:mo-skel-out/);
+    expect(css).toMatch(/\.mo-skel > \*\{[^}]*animation:mo-skel-in [^;]*var\(--mo-ease-out\)/);
+    const inK = css.split("@keyframes mo-skel-in{")[1].split("}\n")[0];
+    expect(inK).not.toContain("scale");
+    const block = css.split("/* ---- reduced motion: no movement")[1].split("}\n}")[0];
+    expect(block).toContain(".mo-skel");
+    expect(css.split("@media print{")[1].split("}\n}")[0]).toContain(".mo-skel");
   });
   it("moves without bounce (by request): fast, then slowing to a soft stop", () => {
     expect(index).not.toContain("--mo-ease-bounce");
