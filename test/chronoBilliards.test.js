@@ -8,7 +8,7 @@ import { readFileSync, existsSync } from "node:fs";
 const page = readFileSync(new URL("../games/chrono-billiards.html", import.meta.url), "utf8");
 const block = page.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
 const R = new Function(
-  block + "; return { TABLE, PHYS, GRADES, GRADE_ORDER, MODES, MAX_LEVEL, CUE_SPOT, makeRng, norm360, degOf, dirOf, railAngle, levelFromDistance, speedOf, stopDistance, speedAfter, pocketsFor, wallOpen, rackBalls, makeWorld, shoot, stepWorld, isMoving, predictShot, bankDeg, pocketPoints, nextCombo, rackSize, trickShots, trickStars, respotCue };"
+  block + "; return { TABLE, PHYS, GRADES, GRADE_ORDER, MODES, MAX_LEVEL, CUE_SPOT, makeRng, norm360, degOf, dirOf, railAngle, levelFromDistance, speedOf, stopDistance, speedAfter, pocketsFor, wallOpen, rackBalls, makeWorld, shoot, stepWorld, isMoving, predictShot, bankDeg, pocketPoints, nextCombo, rackSize, trickShots, trickStars, respotCue, TWO_PLAYER_BALLS, makeCode, readCode, formatCode, twoPlayerTurn, winnerOf, packBalls, unpackBalls };"
 )();
 
 /* a table with just the balls we place, for exact shots */
@@ -218,6 +218,53 @@ describe("scoring", () => {
   });
 });
 
+describe("two players", () => {
+  it("make 6-digit room codes that never start with 0, and read a typed code with or without spaces", () => {
+    for (const n of [0, 1, 99999, 123456, 899999, 900000, 4294967295]) expect(R.makeCode(n)).toMatch(/^[1-9]\d{5}$/);
+    expect(R.readCode(" 482 913 ")).toBe("482913");
+    expect(R.readCode("482913")).toBe("482913");
+    expect(R.readCode("48291")).toBe(null);
+    expect(R.readCode("4829135")).toBe(null);
+    expect(R.readCode("48a913")).toBe(null);
+    expect(R.formatCode("482913")).toBe("482 913");
+  });
+  it("keep the turn after sinking a ball, and pass it on a miss or when the white ball falls in", () => {
+    expect(R.twoPlayerTurn(0, 1, false)).toBe(0);
+    expect(R.twoPlayerTurn(1, 2, false)).toBe(1);
+    expect(R.twoPlayerTurn(0, 0, false)).toBe(1);
+    expect(R.twoPlayerTurn(1, 0, false)).toBe(0);
+    expect(R.twoPlayerTurn(0, 2, true)).toBe(1);
+  });
+  it("play one table of 9 balls on every grade, and whoever sinks more wins", () => {
+    expect(R.TWO_PLAYER_BALLS).toBe(9);
+    for (const g of R.GRADE_ORDER) for (const seed of [3, 77, 2024]) expect(R.rackBalls(g, 9, seed).length).toBe(9);
+    expect(R.winnerOf([5, 4])).toBe(0);
+    expect(R.winnerOf([3, 6])).toBe(1);
+    expect(R.winnerOf([2, 2])).toBe(-1);
+  });
+  it("send the table as small whole numbers and rebuild it on the other screen", () => {
+    const w = R.makeWorld("3", 9, 42);
+    w.balls[0].x = 0.61234567; w.balls[3].alive = false;
+    const packed = R.packBalls(w);
+    expect(JSON.stringify(packed).length).toBeLessThan(400);
+    packed.flat().forEach((n) => expect(Number.isInteger(n)).toBe(true));
+    const w2 = R.makeWorld("3", 9, 42);
+    R.unpackBalls(w2, packed);
+    w.balls.forEach((b, i) => {
+      expect(Math.abs(w2.balls[i].x - b.x)).toBeLessThan(1e-5);
+      expect(Math.abs(w2.balls[i].z - b.z)).toBeLessThan(1e-5);
+      expect(w2.balls[i].alive).toBe(b.alive);
+    });
+  });
+  it("play the same shot exactly the same way on both screens", () => {
+    const a = R.makeWorld("2", 9, 31337), b = R.makeWorld("2", 9, 31337);
+    R.shoot(a, 23, 9); R.shoot(b, 23, 9);
+    run(a); run(b);
+    expect(R.packBalls(b)).toEqual(R.packBalls(a));
+    expect(a.balls.map((x) => [x.x, x.z, x.alive])).toEqual(b.balls.map((x) => [x.x, x.z, x.alive]));
+  });
+});
+
 describe("its place on the Play page", () => {
   const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const sql = readFileSync(new URL("../supabase/chrono-billiards.sql", import.meta.url), "utf8");
@@ -238,6 +285,13 @@ describe("its place on the Play page", () => {
   it("is in the window-fit check", () => {
     expect(index).toContain('["games/chrono-billiards.html",    "#play"]');
   });
+  it("tells families it can be played with a friend online, and about the Hints switch", () => {
+    const row = JSON.parse(sql.split("$j$")[1]);
+    expect(row.players).toBe("1, or 2 online (share a code)");
+    expect(row.rules.join(" ")).toContain("6-digit code");
+    expect(row.rules.join(" ")).toContain("Turn Hints off");
+    expect(index).toContain('players:"1, or 2 online (share a code)"');
+  });
 });
 
 describe("the page", () => {
@@ -251,6 +305,18 @@ describe("the page", () => {
     expect(page).toContain("drawSpeed");
     expect(page).toContain("drawBounce");
     expect(page).not.toContain("telemetry");
+  });
+  it("has a Hints switch on the title screen and a Hints button while playing, and draws no guide when hints are off", () => {
+    expect(page).toMatch(/id="hints-switch"[^>]*role="switch"|role="switch"[^>]*id="hints-switch"/);
+    expect(page).toContain('id="hints-btn"');
+    expect(page).toContain("if (hints && o.aim && o.aim.on) drawGuide(");
+  });
+  it("lets a friend join with a 6-digit code, and asks for nothing else: no names, no chat", () => {
+    expect(page).toContain('data-mode="duo"');
+    expect(page).toMatch(/<input[^>]*id="join-code"[^>]*inputmode="numeric"/);
+    expect((page.match(/<input\b/g) || []).length).toBe(1);
+    expect(page).not.toMatch(/<textarea/);
+    expect(page).toContain("'chronobilliards-room-' + code");
   });
   it("shows how to play along the bottom and keeps emojis out", () => {
     expect(page).toContain('class="howto"');
