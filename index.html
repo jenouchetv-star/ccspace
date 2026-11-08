@@ -217,6 +217,14 @@
   --mo-ease-out:   cubic-bezier(.22,1,.36,1);    /* entrances: quick start, soft landing */
   --mo-ease-state: cubic-bezier(.4,0,.2,1);      /* state changes: even and calm */
   --mo-ease-press: cubic-bezier(.2,.9,.3,1.2);   /* the buttons' small springy lift (a touch of overshoot, no bounce) */
+  /* phones: app-style page moves (see "phones: app-style motion" in the MOTION block) */
+  --mo-dur-push:   .42s;   /* a page sliding in from the right */
+  --mo-dur-pop:    .36s;   /* a page sliding back out to the right */
+  --mo-dur-tab:    .22s;   /* switching tabs: a quick cross-fade */
+  --mo-ease-app:   cubic-bezier(.32,.72,0,1);    /* the curve phone apps use to slide a page: fast, then gliding to a stop */
+  /* a soft spring (lands about 3% past, settles back) for the bottom bar's marker and its icon pop; a browser
+     without linear() falls back to a plain ease */
+  --mo-ease-spring: linear(0, .05 2.3%, .2 5%, .43 8.6%, .64 12.4%, .8 16.2%, .91 20.4%, .98 25.3%, 1.015 30.5%, 1.03 36%, 1.028 42%, 1.016 50%, 1.004 60%, .999 72%, 1);
 
   /* --- textures --- */
   --halftone: radial-gradient(circle at center, rgba(30,52,62,.17) 1.1px, transparent 1.3px);
@@ -4070,11 +4078,65 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 .mo-ind-on > .bottom-nav__item.is-active{ background:transparent; }
 .mo-ind--bottom{ background:rgba(18,115,176,.13); border-radius:12px; }
 
+/* ---- phones: app-style motion ----
+   On a phone the site moves like an app. Going further in, the new page slides in from the right over the old one,
+   which eases a little to the left and dims; going back, the page slides away to the right; switching tabs cross-fades.
+   The old page is a still copy (.mo-ghost) laid over the new one for that moment only: it is not clickable, screen
+   readers skip it, and it is removed the moment the move ends. The header, tab bars and bottom bar stay on top
+   and never move. */
+.mo-ghost{ position:fixed; inset:0; z-index:876; overflow:hidden; pointer-events:none; contain:strict; }
+.mo-ghost__page{ position:absolute; left:0; width:100%; margin:0; }
+.mo-ghost__dim{ position:absolute; inset:0; background:#1E282E; opacity:0; }
+/* going further in: the copy of the old page drifts left and dims under the new one */
+.mo-ghost--push{ z-index:874; }
+.mo-ghost--push .mo-ghost__page{ animation:mo-drift-left var(--mo-dur-push) var(--mo-ease-app) both; }
+.mo-ghost--push .mo-ghost__dim{ animation:mo-dim var(--mo-dur-push) var(--mo-ease-app) both; }
+.mo-push-in{ position:relative; z-index:875; box-shadow:-10px 0 26px rgba(30,40,46,.16); animation:mo-slide-in var(--mo-dur-push) var(--mo-ease-app) both; }
+/* going back: the old page slides away to the right, the page under it eases in from the left */
+.mo-ghost--pop .mo-ghost__page{ box-shadow:-10px 0 26px rgba(30,40,46,.16); animation:mo-slide-out var(--mo-dur-pop) var(--mo-ease-app) both; }
+.mo-pop-in{ animation:mo-ease-back var(--mo-dur-pop) var(--mo-ease-app) both; }
+/* tabs: the old page fades away over the new one */
+.mo-ghost--tab{ animation:mo-fade-away var(--mo-dur-tab) var(--mo-ease-state) both; }
+.mo-tab-in{ animation:mo-tab-in var(--mo-dur-tab) var(--mo-ease-out) both; }
+@keyframes mo-slide-in{ from{ transform:translateX(100%); } to{ transform:none; } }
+@keyframes mo-drift-left{ from{ transform:none; } to{ transform:translateX(-28%); } }
+@keyframes mo-dim{ from{ opacity:0; } to{ opacity:.14; } }
+@keyframes mo-slide-out{ from{ transform:none; } to{ transform:translateX(100%); } }
+@keyframes mo-ease-back{ from{ transform:translateX(-28%); } to{ transform:none; } }
+@keyframes mo-fade-away{ from{ opacity:1; } to{ opacity:0; } }
+@keyframes mo-tab-in{ from{ opacity:.4; transform:scale(.985); } to{ opacity:1; transform:none; } }
+@media (max-width:767px){
+  /* a page waiting off to the right must not widen a phone's screen (which would stretch the bottom bar for that
+     moment); clip, unlike hidden, keeps the sticky header working */
+  #app{ overflow-x:clip; }
+  /* the bottom bar's pill springs to the new tab, and the tab's icon gives a small pop */
+  .mo-ind--bottom{ transition-duration:.46s; transition-timing-function:var(--mo-ease-spring); }
+  .bottom-nav__icon.mo-pop{ animation:mo-pop .46s var(--mo-ease-spring); }
+}
+@media (max-width:1080px){
+  /* the phone and tablet menu: the panel drops in and its rows follow one after another */
+  .nav__links.mo-drawer-in{ animation:mo-drawer-in .3s var(--mo-ease-app) both; }
+  .nav__links.mo-drawer-in .nav__link, .nav__links.mo-drawer-in .nav__drawer-cta{
+    animation:mo-rise .32s var(--mo-ease-out) both; animation-delay:calc(var(--mo-i, 0) * 22ms);
+  }
+}
+@keyframes mo-pop{ 0%{ transform:scale(1); } 40%{ transform:scale(1.16); } 100%{ transform:scale(1); } }
+@keyframes mo-drawer-in{ from{ opacity:0; transform:translateY(-12px); } to{ opacity:1; transform:none; } }
+/* bottom sheets: close by sliding back down (they already slide up to open), and follow a finger dragging them down */
+.sheet-scrim.is-leaving{ pointer-events:none; animation:mo-fade-away .2s var(--mo-ease-state) both; }
+.sheet-scrim.is-leaving .sheet{ animation:mo-sheet-down .22s var(--mo-ease-app) both; }
+.sheet.is-dragging{ animation:none; transition:none; }
+.sheet.is-settling{ transition:transform .32s var(--mo-ease-spring); }
+@keyframes mo-sheet-down{ from{ transform:translateY(var(--mo-drag, 0px)); } to{ transform:translateY(100%); } }
+
 /* ---- reduced motion: no movement, no count-ups, no shimmer; the current page and every state still show ---- */
 @media (prefers-reduced-motion: reduce){
   .mo-page-in, .mo-arrive, .mo-stagger.mo-stagger--in > *{ animation:none; }
   .mo-stagger > *{ opacity:1; }
   .mo-ind{ transition:none; }
+  .mo-ghost{ display:none; }
+  .mo-push-in, .mo-pop-in, .mo-tab-in, .bottom-nav__icon.mo-pop, .nav__links.mo-drawer-in, .nav__links.mo-drawer-in *,
+  .sheet-scrim.is-leaving, .sheet-scrim.is-leaving .sheet{ animation:none; }
   .btn, .card, .nav__link, .subnav__link, .nav__menu-link, .bottom-nav__item{ transition-duration:.01ms; }
 }
 @media print{
@@ -8959,7 +9021,7 @@ const Router = {
     AppState.scrollMemory[Router.current()] = scroller.scrollTop;
     if (this.mode === "path"){
       if (location.pathname + location.search === url){ render(); return; }
-      history.pushState({}, "", url);
+      history.pushState({ mo: Motion.idx + 1 }, "", url);   /* numbered, so Back and Forward can be told apart */
       render();
     } else {
       if (location.hash === url) render();
@@ -9149,10 +9211,23 @@ function openSheet(html, ariaLabel, triggerEl){
   if (SHEET_TRIGGER) SHEET_TRIGGER.setAttribute("aria-expanded", "true");
   const closeBtn = root.querySelector(".sheet__head button");
   if (closeBtn) closeBtn.focus();
+  Motion.dragSheet(root.querySelector(".sheet"));
 }
 function closeSheet(){
-  if (!$("#sheet-root").innerHTML) return;
-  $("#sheet-root").innerHTML = "";
+  const root = $("#sheet-root");
+  if (!root.innerHTML) return;
+  /* the sheet slides back down as it goes: a still, unclickable copy plays that while the real one is gone at once */
+  const leaving = root.firstElementChild;
+  if (leaving && !Motion.reduced()){
+    leaving.classList.add("is-leaving");
+    leaving.removeAttribute("data-act");
+    leaving.querySelectorAll("[id]").forEach(n => n.removeAttribute("id"));
+    leaving.setAttribute("aria-hidden", "true");
+    leaving.inert = true;
+    document.body.appendChild(leaving);
+    setTimeout(() => leaving.remove(), 280);
+  }
+  root.innerHTML = "";
   document.body.classList.remove("no-scroll");
   if (SHEET_TRIGGER && document.contains(SHEET_TRIGGER)){
     SHEET_TRIGGER.setAttribute("aria-expanded", "false");
@@ -26189,6 +26264,20 @@ function motionCountMs(from, to, max){
 function motionEase(t){ return t >= 1 ? 1 : 1 - Math.pow(1 - t, 3); }
 /** The delay before the i-th card comes in; from the cap-th card on, they all come together. */
 function motionStaggerDelay(i, step, cap){ return Math.min(i, cap) * step; }
+/** How a phone moves from one page to the next, like an app: "push" slides a page in from the right (going further
+    in), "pop" slides it back out (Back, or a link to the page before), "tab" cross-fades (the bottom bar, the menu,
+    a section's tabs, or another section's main page). o.back: true/false from the browser's Back/Forward;
+    o.prev: the page before this one; o.tab: the link tapped was a tab. */
+function motionNavKind(from, to, o){
+  o = o || {};
+  if (o.back === true) return "pop";
+  if (o.back === false) return "push";
+  if (o.prev != null && o.prev === to) return "pop";
+  if (o.tab) return "tab";
+  const a = String(from || "").split("/").filter(Boolean), b = String(to || "").split("/").filter(Boolean);
+  if (a.length && a[0] === b[0]) return b.length < a.length ? "pop" : "push";
+  return b.length > 1 ? "push" : "tab";
+}
 /* END motion-pure */
 
 const Motion = {
@@ -26224,6 +26313,142 @@ const Motion = {
     io.observe(el);
   },
 
+  /* ---- phones: app-style page moves (see "phones: app-style motion" in the CSS) ---- */
+  idx: 0,         /* which history entry this is (kept in history.state.mo), to tell Back from Forward */
+  stack: [],      /* the page at each history entry, so a link to the page before slides back */
+  popHint: null,  /* set by the browser's Back/Forward just before its render() */
+  pending: null,  /* the copy of the old page, taken just before render() replaces it */
+  ghost: null,
+  drawerOpening: false,
+  /** App-style moves are for phones, on the public site, with motion allowed. */
+  native(){
+    return !!(window.matchMedia && window.matchMedia("(max-width:767px)").matches)
+      && !document.body.classList.contains("is-admin") && !this.reduced();
+  },
+  onPop(e){
+    const to = e && e.state && typeof e.state.mo === "number" ? e.state.mo : null;
+    /* Safari's own edge-swipe Back already animated the page: don't animate it twice */
+    this.popHint = { back: to === null ? true : to < this.idx, skip: !!(e && e.hasUAVisualTransition) };
+  },
+  /** Was the address just opened a tab: the bottom bar, the menu, a section's tab row? (Read from the old page.) */
+  isTabLink(to){
+    return $$('#app .bottom-nav__item[href], #app .nav__link[href], #app .subnav__link[href], #section-sheet .sheet__item[href]').some(a => {
+      try { return new URL(a.href, location.href).pathname.replace(/^\/+/, "") === to; } catch(_e){ return false; }
+    });
+  },
+  /** Called by render() just before it replaces the page: on a phone, keep a still copy of the old page to slide away. */
+  capture(){
+    const hint = this.popHint;
+    this.popHint = null;
+    this.fromPop = !!hint;
+    this.pending = null;
+    const to = String(Router.current()).split("?")[0];
+    const from = this.lastPath;
+    if (from === null || to === from || (hint && hint.skip) || !this.native()) return;
+    const main = $("#main");
+    if (!main) return;
+    this.drop();
+    const kind = motionNavKind(from, to, hint ? { back: hint.back } : { prev: this.stack[this.idx - 1], tab: this.isTabLink(to) });
+    const r = main.getBoundingClientRect();
+    /* the page and its footer move together, as one screen */
+    const foot = $("#app > .foot");
+    const page = document.createElement("div");
+    const copy = main.cloneNode(true);
+    copy.removeAttribute("id");
+    copy.removeAttribute("tabindex");
+    copy.className = "";
+    page.append(copy);
+    if (foot) page.append(foot.cloneNode(true));
+    page.querySelectorAll("[id]").forEach(n => n.removeAttribute("id"));
+    /* a still copy plays and loads nothing: videos and embeds become still blocks the same size */
+    const live = [].concat(Array.from(main.querySelectorAll("iframe, video, canvas, audio")), foot ? Array.from(foot.querySelectorAll("iframe, video, canvas, audio")) : []);
+    page.querySelectorAll("iframe, video, canvas, audio").forEach((c, i) => {
+      const b = live[i] ? live[i].getBoundingClientRect() : { width: 0, height: 0 };
+      const s = document.createElement("div");
+      const poster = c.tagName === "VIDEO" && c.getAttribute("poster");
+      s.style.cssText = "width:" + b.width + "px;height:" + b.height + "px;max-width:100%;border-radius:inherit;"
+        + (poster ? "background:#1E282E url('" + String(poster).replace(/'/g, "%27") + "') center/cover" : c.tagName === "CANVAS" ? "" : "background:#1E282E");
+      c.replaceWith(s);
+    });
+    this.pending = { page: page, kind: kind, top: r.top, off: r.top + window.scrollY, h: this.docHeight() };
+  },
+  docHeight(){ return Math.max(document.documentElement.scrollHeight, window.innerHeight); },
+  /** The page's own paper background, lined up with the page behind, on a layer that slides over another one. */
+  paintBg(el, h, off){
+    el.style.backgroundColor = "var(--paper)";
+    el.style.backgroundImage = "var(--halftone-lite), linear-gradient(180deg,#E2EDEF 0%, #EEF4F3 26%, var(--paper) 66%, #FDF8EC 100%)";
+    el.style.backgroundSize = "7px 7px, 100% " + h + "px";
+    el.style.backgroundPosition = "0 " + (-off) + "px, 0 " + (-off) + "px";
+    el.style.backgroundRepeat = "repeat, no-repeat";
+  },
+  play(p, main){
+    const wrap = document.createElement("div");
+    wrap.className = "mo-ghost mo-ghost--" + p.kind;
+    wrap.setAttribute("aria-hidden", "true");
+    wrap.inert = true;
+    p.page.classList.add("mo-ghost__page");
+    p.page.style.top = p.top + "px";
+    this.paintBg(p.page, p.h, p.off);
+    wrap.append(p.page);
+    if (p.kind === "push"){
+      const dim = document.createElement("div");
+      dim.className = "mo-ghost__dim";
+      wrap.append(dim);
+      this.paintBg(main, this.docHeight(), main.getBoundingClientRect().top + window.scrollY);
+    }
+    document.body.append(wrap);
+    const moving = [main, $("#app > .foot")].filter(Boolean);
+    moving.forEach(el => el.classList.add("mo-" + p.kind + "-in"));
+    this.ghost = { wrap: wrap, main: main, moving: moving };
+    const ms = this.ms(p.kind === "push" ? "--mo-dur-push" : p.kind === "pop" ? "--mo-dur-pop" : "--mo-dur-tab", 400);
+    this.ghostTimer = setTimeout(() => this.drop(), ms + 60);
+  },
+  /** End a page move at once (it finished, or another page was opened mid-move). */
+  drop(){
+    clearTimeout(this.ghostTimer);
+    const g = this.ghost;
+    this.ghost = null;
+    if (!g) return;
+    g.wrap.remove();
+    g.moving.forEach(el => el.classList.remove("mo-push-in", "mo-pop-in", "mo-tab-in"));
+    ["backgroundColor", "backgroundImage", "backgroundSize", "backgroundPosition", "backgroundRepeat"].forEach(k => { g.main.style[k] = ""; });
+  },
+  /** Bottom sheets follow a finger dragged down on them, and a long or quick drag closes them, like an app's. */
+  dragSheet(sheet){
+    if (!sheet || !("ontouchstart" in window) || this.reduced()) return;
+    let y0 = null, dy = 0, t0 = 0;
+    sheet.addEventListener("touchstart", e => {
+      const list = e.target.closest(".sheet__list, .sheet__body");
+      y0 = (list && list.scrollTop > 0) ? null : e.touches[0].clientY;   /* a list scrolled down scrolls back up first */
+      dy = 0; t0 = performance.now();
+    }, { passive: true });
+    sheet.addEventListener("touchmove", e => {
+      if (y0 === null) return;
+      dy = e.touches[0].clientY - y0;
+      if (dy <= 0 && !sheet.classList.contains("is-dragging")){ if (dy < -6) y0 = null; return; }
+      e.preventDefault();
+      sheet.classList.add("is-dragging");
+      sheet.style.transform = "translateY(" + Math.max(0, dy) + "px)";
+    }, { passive: false });
+    const end = () => {
+      if (y0 === null) return;
+      y0 = null;
+      if (!sheet.classList.contains("is-dragging")) return;
+      sheet.classList.remove("is-dragging");
+      const quick = dy / Math.max(1, performance.now() - t0) > 0.55;
+      if (dy > Math.min(120, sheet.offsetHeight * 0.3) || (quick && dy > 30)){
+        sheet.style.setProperty("--mo-drag", Math.max(0, dy) + "px");
+        closeSheet();
+      } else {
+        sheet.classList.add("is-settling");
+        sheet.style.transform = "";
+        setTimeout(() => sheet.classList.remove("is-settling"), 360);
+      }
+    };
+    sheet.addEventListener("touchend", end);
+    sheet.addEventListener("touchcancel", end);
+  },
+
   /** Called at the end of every render(). The page fade, the card reveals and moving focus happen only when the
       address changed (a filter or a tick box re-drawing the same page never animates it again). */
   afterRender(){
@@ -26231,20 +26456,39 @@ const Motion = {
     const first = this.lastPath === null;
     const changed = path !== this.lastPath;
     this.lastPath = path;
+    const st = history.state;
+    if (changed){
+      if (st && typeof st.mo === "number") this.idx = st.mo;
+      if (!this.fromPop) this.stack.length = this.idx + 1;
+      this.stack[this.idx] = path;
+    }
+    this.fromPop = false;
     const main = $("#main");
     if (!main) return;
     const area = main.querySelector(".admin-content") || main;
-    if (changed && !this.reduced()){
+    const p = this.pending;
+    this.pending = null;
+    if (changed && p) this.play(p, main);
+    else if (changed && !this.reduced()){
       area.classList.add("mo-page-in");
       area.addEventListener("animationend", function done(e){
         if (e.target !== area) return;
         area.classList.remove("mo-page-in");
         area.removeEventListener("animationend", done);
       });
-      this.stagger(area);
     }
+    if (changed && !this.reduced()) this.stagger(area, !!p);
     this.counts(main);
-    this.indicators();
+    this.indicators(false, changed && !first);
+    if (this.drawerOpening){
+      this.drawerOpening = false;
+      const links = $("#nav-links");
+      if (links && links.classList.contains("open") && !this.reduced()){
+        links.querySelectorAll(".nav__link, .nav__drawer-cta").forEach((el, i) => el.style.setProperty("--mo-i", String(Math.min(i, 12))));
+        links.classList.add("mo-drawer-in");
+        setTimeout(() => links.classList.remove("mo-drawer-in"), 700);
+      }
+    }
     /* The link that was clicked is gone with the old page, so focus would fall back to the very top. Start the
        next Tab at the new page's content instead (only when nothing else, a dialog say, has taken focus). */
     if (changed && !first && (!document.activeElement || document.activeElement === document.body)){
@@ -26255,11 +26499,14 @@ const Motion = {
 
   /** Rows of cards come in one after another the first time they scroll into view. Every grid on the public pages;
       on the admin pages only the rows marked data-stagger, so forms never move. */
-  stagger(area){
+  stagger(area, sliding){
     const step = this.ms("--mo-stagger", 50), dur = this.ms("--mo-dur-reveal", 320), cap = this.STAGGER_CAP;
     const sel = document.body.classList.contains("is-admin") ? "[data-stagger]" : ".grid, [data-stagger]";
     area.querySelectorAll(sel).forEach(grid => {
       if (grid.parentElement && grid.parentElement.closest(".mo-stagger")) return;
+      /* while a whole page slides in on a phone, what is already on screen comes with it; rows further down still
+         come in one after another as they are scrolled to */
+      if (sliding && grid.getBoundingClientRect().top < window.innerHeight) return;
       const kids = Array.prototype.filter.call(grid.children, k => k.nodeType === 1 && k.tagName !== "STYLE" && k.tagName !== "SCRIPT");
       if (kids.length < 2) return;
       kids.forEach((k, i) => k.style.setProperty("--mo-i", String(Math.min(i, cap))));
@@ -26333,7 +26580,7 @@ const Motion = {
     { key: "sub",    box: "#app .subnav__in",       cur: ".subnav__link[aria-current]",     kind: "sub", group: true },
     { key: "bottom", box: "#app .bottom-nav",       cur: '.bottom-nav__item[aria-current="page"]', kind: "bottom" }
   ],
-  indicators(quiet){
+  indicators(quiet, navChanged){
     const still = this.reduced();
     this.NAVS.forEach(n => {
       const box = $(n.box);
@@ -26373,6 +26620,11 @@ const Motion = {
       void ind.offsetWidth;
       ind.style.transition = "";
       if (slide) put(next);
+      /* the phone's bottom bar: the tab just opened gives its icon a small pop */
+      if (n.key === "bottom" && navChanged && !still && (!prev || prev.x !== next.x)){
+        const icon = cur.querySelector(".bottom-nav__icon");
+        if (icon) icon.classList.add("mo-pop");
+      }
       this.slots[n.key] = next;
     });
   },
@@ -26386,6 +26638,12 @@ const Motion = {
   }
 };
 window.addEventListener("resize", () => Motion.reseat());
+/* number this history entry, so Back and Forward can be told apart later */
+try {
+  if (Router.mode === "path" && !(history.state && typeof history.state.mo === "number"))
+    history.replaceState(Object.assign({}, history.state || {}, { mo: 0 }), "");
+  Motion.idx = (history.state && history.state.mo) || 0;
+} catch(_e){}
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => Motion.reseat());
 
 /* ============================================================
@@ -26454,6 +26712,8 @@ function render(){
      links) is redundant on any #/admin route. */
   const ownHeader = AppState.route.name === "admin";
   document.body.classList.toggle("has-bottom-nav", !isAdmin);
+  /* on a phone, a still copy of the page being left, for the app-style slide (see MOTION) */
+  try { Motion.capture(); } catch(_e){ Motion.pending = null; }
   $("#app").innerHTML = (ownHeader ? "" : navBar(isAdmin))
     + subNavBar()
     + '<main id="main">' + body + '</main>'
@@ -27041,7 +27301,7 @@ const ACTIONS = {
 
   "nav-toggle": () => {
     if (AppState.navOpen) closeNavDrawer();
-    else { AppState.navOpen = true; rerender(); }
+    else { AppState.navOpen = true; Motion.drawerOpening = true; rerender(); }
   },
 
   "clear-recent": () => {
@@ -29893,7 +30153,7 @@ document.addEventListener("error", (ev) => {
 }, true);
 
 window.addEventListener("hashchange", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); render(); });
-window.addEventListener("popstate", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); AppState.restoringScroll = true; render(); });
+window.addEventListener("popstate", (e) => { Motion.onPop(e); AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); AppState.restoringScroll = true; render(); });
 window.addEventListener("scroll", () => Parallax.onScroll(), { passive:true });
 window.addEventListener("scroll", () => BackToTop.onScroll(), { passive:true });
 window.addEventListener("resize", () => Parallax.refresh());

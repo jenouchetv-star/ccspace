@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const pure = index.split("/* BEGIN motion-pure */")[1].split("/* END motion-pure */")[0];
-const M = new Function(pure + "; return { motionParseCount, motionFormatCount, motionCountMs, motionEase, motionStaggerDelay };")();
+const M = new Function(pure + "; return { motionParseCount, motionFormatCount, motionCountMs, motionEase, motionStaggerDelay, motionNavKind };")();
 const css = index.split("<style>")[1].split("</style>")[0];
 
 describe("count-up numbers keep their look", () => {
@@ -34,6 +34,41 @@ describe("count-up numbers keep their look", () => {
     for (const t of ["1 in 4", "2024", "2026-11-08", "11/08/2026", "555-0142", "12:30", "#1042", "ID-77", "", "Soon", "v2.1.3"]){
       expect(M.motionParseCount(t), t).toBeNull();
     }
+  });
+});
+
+describe("app-style page moves on a phone", () => {
+  const K = (from, to, o) => M.motionNavKind(from, to, o || {});
+  it("pushes in a page further in, like opening something in an app", () => {
+    expect(K("create", "activity/coral-reef")).toBe("push");
+    expect(K("grown-ups/articles", "article/art-ai-literacy")).toBe("push");
+    expect(K("play/online", "play/word-quest")).toBe("push");
+    expect(K("", "stories/the-history-time-machine")).toBe("push");
+  });
+  it("slides back out when going back, by the Back button or a link to the page before", () => {
+    expect(K("activity/coral-reef", "create", { back: true })).toBe("pop");
+    expect(K("article/x", "grown-ups/articles", { prev: "grown-ups/articles" })).toBe("pop");
+    expect(K("play/word-quest", "play")).toBe("pop");
+  });
+  it("cross-fades between tabs: the bottom bar, the menu and a section's tab row", () => {
+    expect(K("", "create")).toBe("tab");
+    expect(K("create", "watch")).toBe("tab");
+    expect(K("create/browse", "create/tech", { tab: true })).toBe("tab");
+    expect(K("activity/coral-reef", "watch", { tab: true })).toBe("tab");
+    expect(K("play", "play/offline", { tab: true })).toBe("tab");
+  });
+  it("goes forward again with Forward", () => {
+    expect(K("create", "activity/coral-reef", { back: false })).toBe("push");
+  });
+  it("copies the old page before render() replaces it, numbers history entries, and stays still for reduced motion", () => {
+    const render = index.split("function render(){")[1].split("\n}\n")[0];
+    expect(render.indexOf("Motion.capture()")).toBeGreaterThan(-1);
+    expect(render.indexOf("Motion.capture()")).toBeLessThan(render.indexOf('$("#app").innerHTML'));
+    expect(index).toContain("history.pushState({ mo: Motion.idx + 1 }");
+    expect(index).toContain("Motion.onPop(e)");
+    expect(index).toContain("hasUAVisualTransition");   // Safari's own swipe-back is not animated twice
+    const block = css.split("/* ---- reduced motion: no movement")[1].split("}\n}")[0];
+    for (const sel of [".mo-ghost{ display:none; }", ".mo-push-in", ".mo-pop-in", ".mo-tab-in", ".sheet-scrim.is-leaving"]) expect(block).toContain(sel);
   });
 });
 
