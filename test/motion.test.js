@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const pure = index.split("/* BEGIN motion-pure */")[1].split("/* END motion-pure */")[0];
-const M = new Function(pure + "; return { motionParseCount, motionFormatCount, motionCountMs, motionEase, motionStaggerDelay, motionNavKind };")();
+const M = new Function(pure + "; return { motionParseCount, motionFormatCount, motionCountMs, motionEase, motionSubMove };")();
 const css = index.split("<style>")[1].split("</style>")[0];
 
 describe("count-up numbers keep their look", () => {
@@ -37,38 +37,21 @@ describe("count-up numbers keep their look", () => {
   });
 });
 
-describe("app-style page moves on a phone", () => {
-  const K = (from, to, o) => M.motionNavKind(from, to, o || {});
-  it("pushes in a page further in, like opening something in an app", () => {
-    expect(K("create", "activity/coral-reef")).toBe("push");
-    expect(K("grown-ups/articles", "article/art-ai-literacy")).toBe("push");
-    expect(K("play/online", "play/word-quest")).toBe("push");
-    expect(K("", "stories/the-history-time-machine")).toBe("push");
-  });
-  it("slides back out when going back, by the Back button or a link to the page before", () => {
-    expect(K("activity/coral-reef", "create", { back: true })).toBe("pop");
-    expect(K("article/x", "grown-ups/articles", { prev: "grown-ups/articles" })).toBe("pop");
-    expect(K("play/word-quest", "play")).toBe("pop");
-  });
-  it("cross-fades between tabs: the bottom bar, the menu and a section's tab row", () => {
-    expect(K("", "create")).toBe("tab");
-    expect(K("create", "watch")).toBe("tab");
-    expect(K("create/browse", "create/tech", { tab: true })).toBe("tab");
-    expect(K("activity/coral-reef", "watch", { tab: true })).toBe("tab");
-    expect(K("play", "play/offline", { tab: true })).toBe("tab");
-  });
-  it("goes forward again with Forward", () => {
-    expect(K("create", "activity/coral-reef", { back: false })).toBe("push");
-  });
-  it("copies the old page before render() replaces it, numbers history entries, and stays still for reduced motion", () => {
+describe("pages on a phone", () => {
+  it("never slide left or right (by request): a phone changes page the way a computer does", () => {
+    for (const gone of ["mo-ghost", "mo-push-in", "mo-pop-in", "mo-tab-in", "mo-slide-in", "mo-slide-out", "mo-drift-left"]) expect(index, gone).not.toContain(gone);
     const render = index.split("function render(){")[1].split("\n}\n")[0];
-    expect(render.indexOf("Motion.capture()")).toBeGreaterThan(-1);
-    expect(render.indexOf("Motion.capture()")).toBeLessThan(render.indexOf('$("#app").innerHTML'));
-    expect(index).toContain("history.pushState({ mo: Motion.idx + 1 }");
-    expect(index).toContain("Motion.onPop(e)");
-    expect(index).toContain("hasUAVisualTransition");   // Safari's own swipe-back is not animated twice
+    expect(render).not.toContain("Motion.capture()");
+    const js = index.split("const Motion = {")[1].split("\n};\n")[0];
+    expect(js).not.toContain("capture(){");
+    expect(js).not.toContain("native(){");
+    expect(index).not.toContain("motionNavKind");
+    expect(index).toContain('history.pushState({}, "", url);');
+  });
+  it("still lets a bottom sheet close by sliding down, and follow a finger", () => {
     const block = css.split("/* ---- reduced motion: no movement")[1].split("}\n}")[0];
-    for (const sel of [".mo-ghost{ display:none; }", ".mo-push-in", ".mo-pop-in", ".mo-tab-in", ".sheet-scrim.is-leaving"]) expect(block).toContain(sel);
+    expect(block).toContain(".sheet-scrim.is-leaving");
+    expect(index).toContain("dragSheet(sheet){");
   });
 });
 
@@ -85,16 +68,11 @@ describe("motion timing", () => {
     expect(M.motionEase(1)).toBe(1);
     expect(M.motionEase(0.5)).toBeGreaterThan(0.5);
   });
-  it("caps the stagger so a long list never feels slow", () => {
-    expect(M.motionStaggerDelay(0, 50, 8)).toBe(0);
-    expect(M.motionStaggerDelay(3, 50, 8)).toBe(150);
-    expect(M.motionStaggerDelay(40, 50, 8)).toBe(400);
-  });
 });
 
 describe("the motion system in the page", () => {
   it("keeps every timing and curve in one set of tokens", () => {
-    for (const t of ["--mo-dur-press", "--mo-dur-state", "--mo-dur-reveal", "--mo-dur-page", "--mo-stagger", "--mo-rise", "--mo-ease-out", "--mo-ease-state"]){
+    for (const t of ["--mo-dur-press", "--mo-dur-state", "--mo-dur-reveal", "--mo-dur-page", "--mo-dur-enter", "--mo-rise", "--mo-ease-out", "--mo-ease-state"]){
       expect(css, t).toContain(t + ":");
     }
   });
@@ -116,22 +94,79 @@ describe("the motion system in the page", () => {
   });
   it("turns off movement, count-ups and shimmer for reduced motion", () => {
     const block = css.split("/* ---- reduced motion: no movement")[1].split("}\n}")[0];
-    for (const sel of [".mo-page-in", ".mo-arrive", ".mo-stagger", ".mo-ind"]) expect(block).toContain(sel);
+    for (const sel of [".mo-page-in", ".mo-arrive", ".mo-grow", ".mo-sub-down", ".mo-sub-up", ".mo-ind"]) expect(block).toContain(sel);
     const js = index.split("const Motion = {")[1].split("\n};\n")[0];
     expect(js).toContain("reduced()");
   });
-  it("marks the current page in every nav; only a section's yellow tab slides, the blue highlights stay put", () => {
+  it("marks the current page in every nav; only a section's yellow tab slides to the new tab, the blue highlights stay put", () => {
     const fn = name => index.split("function " + name + "(")[1].split("\n}\n")[0];
     for (const name of ["navBar", "subNavBar", "bottomNav"]) expect(fn(name), name).toContain('aria-current="');
-    const navs = index.split("const Motion = {")[1].split("\n};\n")[0].split("NAVS: [")[1].split("],")[0];
+    const js = index.split("const Motion = {")[1].split("\n};\n")[0];
+    const navs = js.split("NAVS: [")[1].split("],")[0];
     expect(navs).toContain(".subnav__link[aria-current]");
     expect(navs).not.toContain(".nav__link");          // the header's blue highlight: no slide
     expect(navs).not.toContain(".bottom-nav__item");   // the phone bar's blue pill: no slide
-    expect(css).not.toContain(".mo-ind--main");
-    expect(css).not.toContain(".mo-ind--bottom");
-    // each link still draws its own blue current-page look
+    expect(js.split("afterRender(){")[1].split("\n  },\n")[0]).toContain("this.indicators(false)");
+    expect(css).toMatch(/\.mo-ind\{[^}]*transition:transform var\(--mo-dur-state\) var\(--mo-ease-out\)/);   // slows to a stop, no bounce
+    expect(css).toContain(".mo-ind--sub{");
     expect(css).toContain('.nav__link[aria-current="page"]{ --hl:#8FE3F0; background-size:100% 1.3em; }');
+    expect(css).toContain('.subnav__link[aria-current="page"], .subnav__link[aria-current="location"]{');
     expect(css).toContain(".bottom-nav__item.is-active{ color:var(--cyan-deep); background:rgba(18,115,176,.13); }");
+  });
+  it("keeps the header and the tab bars still on a new page (the link under the pointer doesn't wipe in again)", () => {
+    const render = index.split("function render(){")[1].split("\n}\n")[0];
+    expect(render.slice(render.indexOf('$("#app").innerHTML'))).toContain('classList.add("mo-settle")');
+    // ...except the yellow tab, whose slide to the new tab is the one move the tab bar makes
+    expect(css).toContain("#app.mo-settle :is(.nav, .subnav, .ctxbar, .bottom-nav), #app.mo-settle :is(.nav, .subnav, .ctxbar, .bottom-nav) *:not(.mo-ind){ transition:none !important; }");
+  });
+  it("never animates the cards (by request): a row of cards is simply there with the page", () => {
+    expect(index).not.toContain("mo-stagger");
+    expect(index).not.toContain("stagger(area");
+    expect(index).not.toContain("motionStaggerDelay");
+  });
+  it("moves without bounce (by request): fast, then slowing to a soft stop", () => {
+    expect(index).not.toContain("--mo-ease-bounce");
+    expect(index).not.toContain("--mo-dur-bounce");
+    expect(index).not.toContain("--mo-ease-spring");                         // the sheet settles without overshoot too
+    expect(css).toContain("--mo-ease-press: cubic-bezier(.2,.9,.3,1);");    // and the buttons' lift (it went to 1.2)
+    expect(css).toContain("--mo-ease-out:   cubic-bezier(.22,1,.36,1);");   // fast, then slowing to a soft stop
+    expect(css).toContain(".mo-arrive{ animation:mo-pop var(--mo-dur-enter) var(--mo-ease-out) both; }");
+    const pop = css.split("@keyframes mo-pop{")[1].split("}\n")[0];
+    expect(pop).toContain("scale:");
+    expect(pop).toContain("opacity:0");
+  });
+  it("doesn't bring content in as it is scrolled to (by request): what is further down is simply there", () => {
+    expect(index).not.toContain("revealBelow");
+    expect(index).not.toContain("mo-reveal");
+  });
+  it("cascades the finder's materials in (fade-grow) when the step shows, not when one is ticked", () => {
+    const js = index.split("const Motion = {")[1].split("\n};\n")[0];
+    expect(js).toContain("finderGrow(root, slot, fresh){");
+    expect(js.split("afterRender(){")[1].split("\n  },\n")[0]).toContain('this.finderGrow(main, "app")');
+    expect(index.split("function reopenFinderModal(){")[1].split("\n}\n")[0]).toContain('Motion.finderGrow($("#modal-root"), "sheet")');
+    expect(index).toMatch(/"finder-modal-open": \(\) => \{\s*openModal\(finderModalHTML\(\), null, "modal--sheet finder-modal"\);\s*Motion\.finderGrow\(\$\("#modal-root"\), "sheet", true\);/);
+    expect(css).toMatch(/\.mo-grow > \*\{\s*animation:mo-grow var\(--mo-dur-enter\) var\(--mo-ease-out\) both;/);
+  });
+  it("slides the section tab bar down onto a page with tabs, and up off it when leaving; between two pages with tabs it stays still", () => {
+    expect(M.motionSubMove(false, true, false)).toBe("down");
+    expect(M.motionSubMove(true, false, false)).toBe("up");
+    expect(M.motionSubMove(true, true, false)).toBeNull();
+    expect(M.motionSubMove(false, false, false)).toBeNull();
+    expect(M.motionSubMove(false, true, true)).toBeNull();   // the first page of a visit just shows
+    const render = index.split("function render(){")[1].split("\n}\n")[0];
+    expect(render.indexOf("Motion.keepSub()")).toBeGreaterThan(-1);
+    expect(render.indexOf("Motion.keepSub()")).toBeLessThan(render.indexOf('$("#app").innerHTML'));
+    const after = index.split("const Motion = {")[1].split("\n};\n")[0].split("afterRender(){")[1].split("\n  },\n")[0];
+    expect(after).toContain("this.subMove(");
+  });
+  it("doesn't animate the page banner (by request): it comes with the page like the rest of it", () => {
+    const js = index.split("const Motion = {")[1].split("\n};\n")[0];
+    expect(js).not.toContain("morphHead");
+    expect(js).not.toContain("headOld");
+    expect(css).not.toContain("--mo-dur-head");
+    const after = js.split("afterRender(){")[1].split("\n  },\n")[0];
+    expect(after).not.toContain(".pagehead");
+    expect(after).toContain('area.classList.add("mo-page-in")');
   });
   it("shows skeletons, not loading text, while the admin analytics load", () => {
     const an = index.split("function adminAnalytics(){")[1].split("\n}\n")[0];

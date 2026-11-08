@@ -204,27 +204,22 @@
 
   /* --- motion ---
      One set of timings and curves for every animation on the site, so they all feel related. Change a value here
-     and everything that uses it follows: hover and press feedback, the sliding nav marker, the page change, the
-     card reveals and the count-up numbers (the JS reads --mo-dur-count and --mo-stagger from here too). The rules
+     and everything that uses it follows: hover and press feedback, the page change, content coming in and the
+     count-up numbers (the JS reads --mo-dur-count and --mo-dur-enter from here too). Cards never animate. The rules
      that use them are in the MOTION block near the end of this stylesheet. */
   --mo-dur-press:  .14s;   /* hover and pressed feedback */
-  --mo-dur-state:  .26s;   /* the nav marker sliding, small state changes */
-  --mo-dur-reveal: .32s;   /* cards and loaded content coming in */
+  --mo-dur-state:  .26s;   /* small state changes */
+  --mo-dur-reveal: .32s;   /* the menu's rows coming in */
   --mo-dur-page:   .26s;   /* a new page fading in */
   --mo-dur-count:  650ms;  /* the longest a number takes to count (it scales with the size of the jump, 400ms up) */
-  --mo-stagger:    50ms;   /* the gap between cards in a row; the eighth card on starts together */
-  --mo-rise:       10px;   /* how far a card rises as it comes in */
+  --mo-rise:       10px;   /* how far the menu's rows rise as they come in */
   --mo-ease-out:   cubic-bezier(.22,1,.36,1);    /* entrances: quick start, soft landing */
   --mo-ease-state: cubic-bezier(.4,0,.2,1);      /* state changes: even and calm */
-  --mo-ease-press: cubic-bezier(.2,.9,.3,1.2);   /* the buttons' small springy lift (a touch of overshoot, no bounce) */
-  /* phones: app-style page moves (see "phones: app-style motion" in the MOTION block) */
-  --mo-dur-push:   .42s;   /* a page sliding in from the right */
-  --mo-dur-pop:    .36s;   /* a page sliding back out to the right */
-  --mo-dur-tab:    .22s;   /* switching tabs: a quick cross-fade */
-  --mo-ease-app:   cubic-bezier(.32,.72,0,1);    /* the curve phone apps use to slide a page: fast, then gliding to a stop */
-  /* a soft spring (lands about 3% past, settles back) for the bottom bar's marker and its icon pop; a browser
-     without linear() falls back to a plain ease */
-  --mo-ease-spring: linear(0, .05 2.3%, .2 5%, .43 8.6%, .64 12.4%, .8 16.2%, .91 20.4%, .98 25.3%, 1.015 30.5%, 1.03 36%, 1.028 42%, 1.016 50%, 1.004 60%, .999 72%, 1);
+  --mo-ease-press: cubic-bezier(.2,.9,.3,1);     /* the buttons' small lift: quick, then slowing to a stop (no overshoot) */
+  --mo-ease-app:   cubic-bezier(.32,.72,0,1);    /* fast, then gliding to a stop: sheets, the menu, the banner and tab bar */
+  /* Nothing on the site bounces or overshoots (by request): every move starts quickly and slows as it lands. */
+  --mo-dur-enter:  .5s;    /* cards, scrolled-to content and the finder's choices coming in: fast, then slowing to a stop (--mo-ease-out), no bounce */
+  --mo-dur-sub:    .3s;    /* a section's tab bar sliding down or up */
 
   /* --- textures --- */
   --halftone: radial-gradient(circle at center, rgba(30,52,62,.17) 1.1px, transparent 1.3px);
@@ -1105,6 +1100,22 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
   padding:8px 18px; background:transparent; color:var(--ink); cursor:pointer;
 }
 .seg__opt.is-on{ background:var(--ink); color:var(--paper); }
+
+/* About > Our Partners: a card for each partner, the logo large with its name under it */
+.partners{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 360px));
+  justify-content:center; gap:24px; margin-top:26px;
+}
+.partner-card{
+  display:flex; flex-direction:column; align-items:center; gap:12px;
+  text-align:center; color:var(--ink); text-decoration:none;
+}
+.partner-card__logo{ width:100%; height:auto; object-fit:contain; border-radius:8px; }
+.partner-card__soon{ display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--mute); padding:24px 0; }
+.partner-card__name{ margin:0; font-weight:800; }
+.partner-card__site{ display:inline-flex; align-items:center; gap:6px; color:var(--cyan-deep); font-weight:700; font-size:.92rem; }
+.partner-card--link:hover .partner-card__site, .partner-card--link:focus-visible .partner-card__site{ text-decoration:underline; }
+.partner-card--link:focus-visible{ outline:3px solid var(--cyan-deep); outline-offset:3px; }
 
 /* About > Team: bio cards in two columns, the family portrait large
    beside them - no drop shadow, just the cutout sitting on the page. */
@@ -4051,69 +4062,55 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 .mo-page-in{ animation:mo-page-in var(--mo-dur-page) var(--mo-ease-out); }
 #main:focus, .admin-content:focus{ outline:none; box-shadow:none; }
 
-/* a row of cards comes in one after another, rising a few pixels, the first time it scrolls into view. `translate`
-   (not `transform`) so a card's own hover lift still works the moment it lands. */
+/* Cards never animate (by request): a row of cards is simply there with the page. */
 @keyframes mo-rise{ from{ opacity:0; translate:0 var(--mo-rise); } to{ opacity:1; translate:0 0; } }
-.mo-stagger > *{ opacity:0; }
-.mo-stagger.mo-stagger--in > *{
-  animation:mo-rise var(--mo-dur-reveal) var(--mo-ease-out) both;
-  animation-delay:calc(var(--mo-i, 0) * var(--mo-stagger));
+/* content that was loading in the admin (a skeleton) settles in once it arrives: fades in, grows a little and rises,
+   slowing to a soft stop. `translate` and `scale` (not `transform`) so nothing's own hover lift is thrown off. */
+@keyframes mo-pop{ from{ opacity:0; scale:.94; translate:0 16px; } to{ opacity:1; scale:1; translate:0 0; } }
+.mo-arrive{ animation:mo-pop var(--mo-dur-enter) var(--mo-ease-out) both; }
+
+/* Nothing fades or rises in as it is scrolled to (by request): what is further down a page is simply there. */
+
+/* the finder's materials: each choice fades in and grows from smaller, one after another, slowing as it lands */
+@keyframes mo-grow{ from{ opacity:0; scale:.8; } to{ opacity:1; scale:1; } }
+.mo-grow > *{
+  animation:mo-grow var(--mo-dur-enter) var(--mo-ease-out) both;
+  animation-delay:calc(var(--mo-i, 0) * 45ms);
 }
-/* content that was loading (a skeleton) settles in once it arrives */
-.mo-arrive{ animation:mo-rise var(--mo-dur-reveal) var(--mo-ease-out) both; }
+
+/* a section's tab bar slides down from under the header on arriving at one of its pages, and back up under it on
+   leaving the section; between two of its pages it stays exactly where it is */
+.mo-sub-down, .mo-sub-up{ overflow:hidden; }
+.mo-sub-up{ pointer-events:none; }
+
+/* a new page: the header and tab bars are drawn again, and a link under the pointer would wipe its highlight in again
+   as if hovered for the first time. For a moment after each page is drawn they show their final look at once; only
+   the yellow tab (.mo-ind) still slides to the new tab. */
+#app.mo-settle :is(.nav, .subnav, .ctxbar, .bottom-nav), #app.mo-settle :is(.nav, .subnav, .ctxbar, .bottom-nav) *:not(.mo-ind){ transition:none !important; }
 
 /* a number counting up: the box holds the widest the number gets, so nothing beside it moves while it counts */
 .mo-count{ display:inline-block; font-variant-numeric:tabular-nums; }
 
-/* a section's tab row (Create, Games...): the yellow tab is one shape that slides to the new tab, instead of each
-   tab having its own. It sits behind the words; hover keeps its own look on the links themselves. The header's blue
-   highlight and the phone bar's blue pill do not slide (by request): each link draws its own, as it always did. */
+/* a section's tab row (Create, Games...): the yellow tab is one shape that slides to the new tab and slows to a stop,
+   instead of each tab having its own. It sits behind the words; hover keeps its own look on the links themselves.
+   The header's blue highlight and the phone bar's blue pill do not slide (by request): each link draws its own. */
 .mo-ind{
   position:absolute; left:0; top:0; z-index:0; pointer-events:none; box-sizing:border-box;
-  transition:transform var(--mo-dur-state) var(--mo-ease-state), width var(--mo-dur-state) var(--mo-ease-state), height var(--mo-dur-state) var(--mo-ease-state);
+  transition:transform var(--mo-dur-state) var(--mo-ease-out), width var(--mo-dur-state) var(--mo-ease-out), height var(--mo-dur-state) var(--mo-ease-out);
 }
 .subnav__in.mo-ind-on{ position:relative; }
 .mo-ind-on > .subnav__link{ position:relative; z-index:1; }
 .mo-ind-on > .subnav__link[aria-current]{ background:transparent; border-color:transparent; box-shadow:none; }
 .mo-ind--sub{ background:var(--sun); border:2.5px solid var(--ink); border-radius:12px; box-shadow:2px 2px 0 var(--ink); }
 
-/* ---- phones: app-style motion ----
-   On a phone the site moves like an app. Going further in, the new page slides in from the right over the old one,
-   which eases a little to the left and dims; going back, the page slides away to the right; switching tabs cross-fades.
-   The old page is a still copy (.mo-ghost) laid over the new one for that moment only: it is not clickable, screen
-   readers skip it, and it is removed the moment the move ends. The header, tab bars and bottom bar stay on top
-   and never move. */
-.mo-ghost{ position:fixed; inset:0; z-index:876; overflow:hidden; pointer-events:none; contain:strict; }
-.mo-ghost__page{ position:absolute; left:0; width:100%; margin:0; }
-.mo-ghost__dim{ position:absolute; inset:0; background:#1E282E; opacity:0; }
-/* going further in: the copy of the old page drifts left and dims under the new one */
-.mo-ghost--push{ z-index:874; }
-.mo-ghost--push .mo-ghost__page{ animation:mo-drift-left var(--mo-dur-push) var(--mo-ease-app) both; }
-.mo-ghost--push .mo-ghost__dim{ animation:mo-dim var(--mo-dur-push) var(--mo-ease-app) both; }
-.mo-push-in{ position:relative; z-index:875; box-shadow:-10px 0 26px rgba(30,40,46,.16); animation:mo-slide-in var(--mo-dur-push) var(--mo-ease-app) both; }
-/* going back: the old page slides away to the right, the page under it eases in from the left */
-.mo-ghost--pop .mo-ghost__page{ box-shadow:-10px 0 26px rgba(30,40,46,.16); animation:mo-slide-out var(--mo-dur-pop) var(--mo-ease-app) both; }
-.mo-pop-in{ animation:mo-ease-back var(--mo-dur-pop) var(--mo-ease-app) both; }
-/* tabs: the old page fades away over the new one */
-.mo-ghost--tab{ animation:mo-fade-away var(--mo-dur-tab) var(--mo-ease-state) both; }
-.mo-tab-in{ animation:mo-tab-in var(--mo-dur-tab) var(--mo-ease-out) both; }
-@keyframes mo-slide-in{ from{ transform:translateX(100%); } to{ transform:none; } }
-@keyframes mo-drift-left{ from{ transform:none; } to{ transform:translateX(-28%); } }
-@keyframes mo-dim{ from{ opacity:0; } to{ opacity:.14; } }
-@keyframes mo-slide-out{ from{ transform:none; } to{ transform:translateX(100%); } }
-@keyframes mo-ease-back{ from{ transform:translateX(-28%); } to{ transform:none; } }
+/* Pages never slide left or right on a phone (by request): a phone changes page the way a computer does, the
+   banner carried over and the rest fading in. */
 @keyframes mo-fade-away{ from{ opacity:1; } to{ opacity:0; } }
-@keyframes mo-tab-in{ from{ opacity:.4; transform:scale(.985); } to{ opacity:1; transform:none; } }
-@media (max-width:767px){
-  /* a page waiting off to the right must not widen a phone's screen (which would stretch the bottom bar for that
-     moment); clip, unlike hidden, keeps the sticky header working */
-  #app{ overflow-x:clip; }
-}
 @media (max-width:1080px){
   /* the phone and tablet menu: the panel drops in and its rows follow one after another */
   .nav__links.mo-drawer-in{ animation:mo-drawer-in .3s var(--mo-ease-app) both; }
   .nav__links.mo-drawer-in .nav__link, .nav__links.mo-drawer-in .nav__drawer-cta{
-    animation:mo-rise .32s var(--mo-ease-out) both; animation-delay:calc(var(--mo-i, 0) * 22ms);
+    animation:mo-rise var(--mo-dur-reveal) var(--mo-ease-out) both; animation-delay:calc(var(--mo-i, 0) * 22ms);
   }
 }
 @keyframes mo-drawer-in{ from{ opacity:0; transform:translateY(-12px); } to{ opacity:1; transform:none; } }
@@ -4121,21 +4118,20 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 .sheet-scrim.is-leaving{ pointer-events:none; animation:mo-fade-away .2s var(--mo-ease-state) both; }
 .sheet-scrim.is-leaving .sheet{ animation:mo-sheet-down .22s var(--mo-ease-app) both; }
 .sheet.is-dragging{ animation:none; transition:none; }
-.sheet.is-settling{ transition:transform .32s var(--mo-ease-spring); }
+.sheet.is-settling{ transition:transform .32s var(--mo-ease-out); }
 @keyframes mo-sheet-down{ from{ transform:translateY(var(--mo-drag, 0px)); } to{ transform:translateY(100%); } }
 
 /* ---- reduced motion: no movement, no count-ups, no shimmer; the current page and every state still show ---- */
 @media (prefers-reduced-motion: reduce){
-  .mo-page-in, .mo-arrive, .mo-stagger.mo-stagger--in > *{ animation:none; }
-  .mo-stagger > *{ opacity:1; }
+  .mo-page-in, .mo-arrive, .mo-grow > *{ animation:none; }
+  .mo-sub-down, .mo-sub-up{ overflow:visible; }
   .mo-ind{ transition:none; }
-  .mo-ghost{ display:none; }
-  .mo-push-in, .mo-pop-in, .mo-tab-in, .nav__links.mo-drawer-in, .nav__links.mo-drawer-in *,
+  .nav__links.mo-drawer-in, .nav__links.mo-drawer-in *,
   .sheet-scrim.is-leaving, .sheet-scrim.is-leaving .sheet{ animation:none; }
   .btn, .card, .nav__link, .subnav__link, .nav__menu-link, .bottom-nav__item{ transition-duration:.01ms; }
 }
 @media print{
-  .mo-stagger > *{ opacity:1 !important; animation:none !important; }
+  .mo-grow > *{ opacity:1 !important; animation:none !important; }
 }
 
 /* ============================================================ FOCUS
@@ -9031,7 +9027,7 @@ const Router = {
     AppState.scrollMemory[Router.current()] = scroller.scrollTop;
     if (this.mode === "path"){
       if (location.pathname + location.search === url){ render(); return; }
-      history.pushState({ mo: Motion.idx + 1 }, "", url);   /* numbered, so Back and Forward can be told apart */
+      history.pushState({}, "", url);
       render();
     } else {
       if (location.hash === url) render();
@@ -11050,6 +11046,7 @@ function reopenFinderModal(){
   if (!box) return;
   box.innerHTML = finderModalHTML();
   drawIcons();
+  Motion.finderGrow($("#modal-root"), "sheet");
 }
 /** rerender() only rebuilds #app - the sheet lives in #modal-root, so
     every answer given inside it needs this on top to stay in sync. */
@@ -13101,13 +13098,20 @@ function viewAbout(sub){
     const partners = pageListItems("about/partners", "partners");
     head = cmsHeader("about/partners", "About", 'Our <span class="hl">partners</span>.',
       "Studios and organizations we’re proud to build alongside.", "", {});
-    body = '<div class="panel" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:40px;padding:36px;margin-top:26px">'
-      + partners.map((p,i) => quEditable("partner-logo", partnersId, '<div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">'
-          + (p.logo
-              ? '<img class="skel" src="' + E(thumbSrc(p.logo)) + '" alt="' + E(p.name || "Partner logo") + '" data-full="' + E(p.logo) + '" style="width:300px;max-width:100%;height:auto;object-fit:contain;border-radius:8px" loading="lazy">'
-              : '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--mute)">' + ic("building-2","i-lg") + '<span class="tiny">Logo coming soon</span></div>')
-          + (p.name ? '<p class="tiny mute" style="margin:0;font-weight:800">' + E(p.name) + '</p>' : "")
-          + '</div>', i)).join("")
+    /* one card per partner; a partner with a website opens it in a new tab */
+    body = '<div class="partners">'
+      + partners.map((p,i) => {
+          if (!p.name && !p.logo) return "";
+          const href = partnerHref(p.url);
+          const inner = (p.logo
+              ? '<img class="skel partner-card__logo" src="' + E(thumbSrc(p.logo)) + '" alt="' + E(p.name || "Partner logo") + '" data-full="' + E(p.logo) + '" loading="lazy">'
+              : '<div class="partner-card__soon">' + ic("building-2","i-lg") + '<span class="tiny">Logo coming soon</span></div>')
+            + (p.name ? '<p class="partner-card__name">' + E(p.name) + '</p>' : "")
+            + (href ? '<span class="partner-card__site">' + E(href.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")) + ic("external-link","i") + '</span>' : "");
+          return quEditable("partner-logo", partnersId, href
+            ? '<a class="panel partner-card partner-card--link" href="' + E(href) + '" target="_blank" rel="noopener" aria-label="' + E((p.name || "Partner") + " website (opens in a new tab)") + '">' + inner + '</a>'
+            : '<div class="panel partner-card">' + inner + '</div>', i);
+        }).join("")
       + '</div>';
   }
   else if (sub === "team"){
@@ -23313,11 +23317,12 @@ const PAGE_LIST_BLOCKS = {
     { field:"partners", label:"Partner logos", itemLabel:"Partner",
       fields: [
         { key:"name", label:"Partner name" },
-        { key:"logo", label:"Logo", type:"image" }
+        { key:"logo", label:"Logo", type:"image" },
+        { key:"url", label:"Website (optional)" }
       ],
       fallback: () => [
         { name:"The Twinnovators", logo:"" },
-        { name:"POSCHI", logo:"" },
+        { name:"POSCHI", logo:"", url:"https://www.poschi.app" },
         { name:"", logo:"" },
         { name:"", logo:"" }
       ],
@@ -23402,6 +23407,14 @@ function pageListBlockCfg(key, field){
 
 /** The edited array for one page's content block, or the built-in
     wording when it has not been touched yet. */
+/** A partner's website as a safe link: http(s) only, "www.x.com" gets https:// in front, anything else is no link. */
+function partnerHref(url){
+  const u = String(url || "").trim();
+  if (!u) return "";
+  const full = /^https?:\/\//i.test(u) ? u : (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(u) ? "https://" + u : "");
+  return full;
+}
+
 function pageListItems(key, field){
   const cfg = pageListBlockCfg(key, field);
   const fallback = cfg ? cfg.fallback() : [];
@@ -26309,30 +26322,22 @@ function motionCountMs(from, to, max){
 }
 /** Ease-out: starts quickly, lands softly. */
 function motionEase(t){ return t >= 1 ? 1 : 1 - Math.pow(1 - t, 3); }
-/** The delay before the i-th card comes in; from the cap-th card on, they all come together. */
-function motionStaggerDelay(i, step, cap){ return Math.min(i, cap) * step; }
-/** How a phone moves from one page to the next, like an app: "push" slides a page in from the right (going further
-    in), "pop" slides it back out (Back, or a link to the page before), "tab" cross-fades (the bottom bar, the menu,
-    a section's tabs, or another section's main page). o.back: true/false from the browser's Back/Forward;
-    o.prev: the page before this one; o.tab: the link tapped was a tab. */
-function motionNavKind(from, to, o){
-  o = o || {};
-  if (o.back === true) return "pop";
-  if (o.back === false) return "push";
-  if (o.prev != null && o.prev === to) return "pop";
-  if (o.tab) return "tab";
-  const a = String(from || "").split("/").filter(Boolean), b = String(to || "").split("/").filter(Boolean);
-  if (a.length && a[0] === b[0]) return b.length < a.length ? "pop" : "push";
-  return b.length > 1 ? "push" : "tab";
+/** What a section's tab bar does on a new page: "down" (it slides down onto a page with tabs), "up" (it slides
+    away, leaving the section) or null (it stays exactly as it is: between two pages of a section, on a redraw of the
+    same page, and on the first page of a visit, which simply shows). */
+function motionSubMove(hadTabs, hasTabs, firstOrSame){
+  if (firstOrSame || hadTabs === hasTabs) return null;
+  return hasTabs ? "down" : "up";
 }
 /* END motion-pure */
 
 const Motion = {
-  STAGGER_CAP: 8,
   lastPath: null,
   values: {},   /* data-count key -> the value last shown, so a changed number counts on from there */
-  slots: {},    /* nav marker -> where it last sat, so the next page's marker slides from there */
+  slots: {},    /* the yellow tab -> where it last sat, so the next page's tab slides from there */
   waits: {},    /* loading areas showing a skeleton right now */
+  growKeys: {}, /* the finder's materials step last shown, in the page ("app") and in the phone sheet ("sheet") */
+  subOld: null, /* the tab bars of the page being left, so they can slide away (see keepSub) */
   observers: {},
 
   reduced(){ return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); },
@@ -26360,106 +26365,7 @@ const Motion = {
     io.observe(el);
   },
 
-  /* ---- phones: app-style page moves (see "phones: app-style motion" in the CSS) ---- */
-  idx: 0,         /* which history entry this is (kept in history.state.mo), to tell Back from Forward */
-  stack: [],      /* the page at each history entry, so a link to the page before slides back */
-  popHint: null,  /* set by the browser's Back/Forward just before its render() */
-  pending: null,  /* the copy of the old page, taken just before render() replaces it */
-  ghost: null,
   drawerOpening: false,
-  /** App-style moves are for phones, on the public site, with motion allowed. */
-  native(){
-    return !!(window.matchMedia && window.matchMedia("(max-width:767px)").matches)
-      && !document.body.classList.contains("is-admin") && !this.reduced();
-  },
-  onPop(e){
-    const to = e && e.state && typeof e.state.mo === "number" ? e.state.mo : null;
-    /* Safari's own edge-swipe Back already animated the page: don't animate it twice */
-    this.popHint = { back: to === null ? true : to < this.idx, skip: !!(e && e.hasUAVisualTransition) };
-  },
-  /** Was the address just opened a tab: the bottom bar, the menu, a section's tab row? (Read from the old page.) */
-  isTabLink(to){
-    return $$('#app .bottom-nav__item[href], #app .nav__link[href], #app .subnav__link[href], #section-sheet .sheet__item[href]').some(a => {
-      try { return new URL(a.href, location.href).pathname.replace(/^\/+/, "") === to; } catch(_e){ return false; }
-    });
-  },
-  /** Called by render() just before it replaces the page: on a phone, keep a still copy of the old page to slide away. */
-  capture(){
-    const hint = this.popHint;
-    this.popHint = null;
-    this.fromPop = !!hint;
-    this.pending = null;
-    const to = String(Router.current()).split("?")[0];
-    const from = this.lastPath;
-    if (from === null || to === from || (hint && hint.skip) || !this.native()) return;
-    const main = $("#main");
-    if (!main) return;
-    this.drop();
-    const kind = motionNavKind(from, to, hint ? { back: hint.back } : { prev: this.stack[this.idx - 1], tab: this.isTabLink(to) });
-    const r = main.getBoundingClientRect();
-    /* the page and its footer move together, as one screen */
-    const foot = $("#app > .foot");
-    const page = document.createElement("div");
-    const copy = main.cloneNode(true);
-    copy.removeAttribute("id");
-    copy.removeAttribute("tabindex");
-    copy.className = "";
-    page.append(copy);
-    if (foot) page.append(foot.cloneNode(true));
-    page.querySelectorAll("[id]").forEach(n => n.removeAttribute("id"));
-    /* a still copy plays and loads nothing: videos and embeds become still blocks the same size */
-    const live = [].concat(Array.from(main.querySelectorAll("iframe, video, canvas, audio")), foot ? Array.from(foot.querySelectorAll("iframe, video, canvas, audio")) : []);
-    page.querySelectorAll("iframe, video, canvas, audio").forEach((c, i) => {
-      const b = live[i] ? live[i].getBoundingClientRect() : { width: 0, height: 0 };
-      const s = document.createElement("div");
-      const poster = c.tagName === "VIDEO" && c.getAttribute("poster");
-      s.style.cssText = "width:" + b.width + "px;height:" + b.height + "px;max-width:100%;border-radius:inherit;"
-        + (poster ? "background:#1E282E url('" + String(poster).replace(/'/g, "%27") + "') center/cover" : c.tagName === "CANVAS" ? "" : "background:#1E282E");
-      c.replaceWith(s);
-    });
-    this.pending = { page: page, kind: kind, top: r.top, off: r.top + window.scrollY, h: this.docHeight() };
-  },
-  docHeight(){ return Math.max(document.documentElement.scrollHeight, window.innerHeight); },
-  /** The page's own paper background, lined up with the page behind, on a layer that slides over another one. */
-  paintBg(el, h, off){
-    el.style.backgroundColor = "var(--paper)";
-    el.style.backgroundImage = "var(--halftone-lite), linear-gradient(180deg,#E2EDEF 0%, #EEF4F3 26%, var(--paper) 66%, #FDF8EC 100%)";
-    el.style.backgroundSize = "7px 7px, 100% " + h + "px";
-    el.style.backgroundPosition = "0 " + (-off) + "px, 0 " + (-off) + "px";
-    el.style.backgroundRepeat = "repeat, no-repeat";
-  },
-  play(p, main){
-    const wrap = document.createElement("div");
-    wrap.className = "mo-ghost mo-ghost--" + p.kind;
-    wrap.setAttribute("aria-hidden", "true");
-    wrap.inert = true;
-    p.page.classList.add("mo-ghost__page");
-    p.page.style.top = p.top + "px";
-    this.paintBg(p.page, p.h, p.off);
-    wrap.append(p.page);
-    if (p.kind === "push"){
-      const dim = document.createElement("div");
-      dim.className = "mo-ghost__dim";
-      wrap.append(dim);
-      this.paintBg(main, this.docHeight(), main.getBoundingClientRect().top + window.scrollY);
-    }
-    document.body.append(wrap);
-    const moving = [main, $("#app > .foot")].filter(Boolean);
-    moving.forEach(el => el.classList.add("mo-" + p.kind + "-in"));
-    this.ghost = { wrap: wrap, main: main, moving: moving };
-    const ms = this.ms(p.kind === "push" ? "--mo-dur-push" : p.kind === "pop" ? "--mo-dur-pop" : "--mo-dur-tab", 400);
-    this.ghostTimer = setTimeout(() => this.drop(), ms + 60);
-  },
-  /** End a page move at once (it finished, or another page was opened mid-move). */
-  drop(){
-    clearTimeout(this.ghostTimer);
-    const g = this.ghost;
-    this.ghost = null;
-    if (!g) return;
-    g.wrap.remove();
-    g.moving.forEach(el => el.classList.remove("mo-push-in", "mo-pop-in", "mo-tab-in"));
-    ["backgroundColor", "backgroundImage", "backgroundSize", "backgroundPosition", "backgroundRepeat"].forEach(k => { g.main.style[k] = ""; });
-  },
   /** Bottom sheets follow a finger dragged down on them, and a long or quick drag closes them, like an app's. */
   dragSheet(sheet){
     if (!sheet || !("ontouchstart" in window) || this.reduced()) return;
@@ -26503,20 +26409,11 @@ const Motion = {
     const first = this.lastPath === null;
     const changed = path !== this.lastPath;
     this.lastPath = path;
-    const st = history.state;
-    if (changed){
-      if (st && typeof st.mo === "number") this.idx = st.mo;
-      if (!this.fromPop) this.stack.length = this.idx + 1;
-      this.stack[this.idx] = path;
-    }
-    this.fromPop = false;
     const main = $("#main");
     if (!main) return;
     const area = main.querySelector(".admin-content") || main;
-    const p = this.pending;
-    this.pending = null;
-    if (changed && p) this.play(p, main);
-    else if (changed && !this.reduced()){
+    /* the new page fades in, banner and all (the banner has no move of its own, by request); pages never slide */
+    if (changed && !this.reduced()){
       area.classList.add("mo-page-in");
       area.addEventListener("animationend", function done(e){
         if (e.target !== area) return;
@@ -26524,9 +26421,10 @@ const Motion = {
         area.removeEventListener("animationend", done);
       });
     }
-    if (changed && !this.reduced()) this.stagger(area, !!p);
     this.counts(main);
+    this.finderGrow(main, "app");
     this.indicators(false);
+    this.subMove(first || !changed);
     if (this.drawerOpening){
       this.drawerOpening = false;
       const links = $("#nav-links");
@@ -26542,30 +26440,6 @@ const Motion = {
       area.setAttribute("tabindex", "-1");
       area.focus({ preventScroll: true });
     }
-  },
-
-  /** Rows of cards come in one after another the first time they scroll into view. Every grid on the public pages;
-      on the admin pages only the rows marked data-stagger, so forms never move. */
-  stagger(area, sliding){
-    const step = this.ms("--mo-stagger", 50), dur = this.ms("--mo-dur-reveal", 320), cap = this.STAGGER_CAP;
-    const sel = document.body.classList.contains("is-admin") ? "[data-stagger]" : ".grid, [data-stagger]";
-    area.querySelectorAll(sel).forEach(grid => {
-      if (grid.parentElement && grid.parentElement.closest(".mo-stagger")) return;
-      /* while a whole page slides in on a phone, what is already on screen comes with it; rows further down still
-         come in one after another as they are scrolled to */
-      if (sliding && grid.getBoundingClientRect().top < window.innerHeight) return;
-      const kids = Array.prototype.filter.call(grid.children, k => k.nodeType === 1 && k.tagName !== "STYLE" && k.tagName !== "SCRIPT");
-      if (kids.length < 2) return;
-      kids.forEach((k, i) => k.style.setProperty("--mo-i", String(Math.min(i, cap))));
-      grid.classList.add("mo-stagger");
-      this.whenSeen(grid, () => {
-        grid.classList.add("mo-stagger--in");
-        setTimeout(() => {
-          grid.classList.remove("mo-stagger", "mo-stagger--in");
-          kids.forEach(k => k.style.removeProperty("--mo-i"));
-        }, dur + motionStaggerDelay(kids.length, step, cap) + 120);
-      });
-    });
   },
 
   /** A loading area shows its skeleton: remember it, so the content that replaces it can settle in. */
@@ -26621,8 +26495,7 @@ const Motion = {
   },
 
   /** The yellow tab in a section's tab row: one marker slides from the tab of the last page to the current one,
-      sized to the link. (The header's blue highlight and the phone bar's blue pill were taken off this, by request:
-      they stay put on each link, as they always did.) */
+      sized to the link. (The header's blue highlight and the phone bar's blue pill stay put on each link, by request.) */
   NAVS: [
     { key: "sub", box: "#app .subnav__in", cur: ".subnav__link[aria-current]", kind: "sub", group: true }
   ],
@@ -26638,8 +26511,6 @@ const Motion = {
         if (old) old.remove();
       };
       if (!box || !box.getClientRects().length) return off();
-      /* the header's links only while they are one row; the phone and tablet drawer keeps its own look */
-      if (n.row && getComputedStyle(box).flexDirection !== "row") return off();
       const cur = box.querySelector(n.cur);
       if (!cur) return off();
       let ind = box.querySelector(":scope > .mo-ind");
@@ -26659,6 +26530,7 @@ const Motion = {
       };
       const put = g => { ind.style.transform = "translate(" + g.x + "px," + g.y + "px)"; ind.style.width = g.w + "px"; ind.style.height = g.h + "px"; };
       const prev = this.slots[n.key];
+      /* only between two tabs of the same section; arriving at a section, the tab is simply on its page */
       const slide = !still && !quiet && prev && prev.group === next.group && (prev.x !== next.x || prev.y !== next.y || prev.w !== next.w);
       /* start from the old spot with no transition, then let it glide to the new one; anything else just sits */
       ind.style.transition = "none";
@@ -26669,22 +26541,84 @@ const Motion = {
       this.slots[n.key] = next;
     });
   },
-  /** Re-seat the markers, without sliding, when the window or the fonts change the links' sizes. */
+  /** Re-seat the yellow tab, without sliding, when the window or the fonts change the links' sizes. */
   reseat(){
     if (this._reseat) return;
     this._reseat = requestAnimationFrame(() => {
       this._reseat = 0;
       this.indicators(true);
     });
+  },
+
+  /** The finder's "What materials do you have?" choices cascade in, fading and growing, each time that step comes
+      into view: on opening the page, going back to step 1, or opening the phone sheet; never when a choice is ticked
+      (the same step drawn again). slot: "app" (the page) or "sheet" (the phone sheet); fresh: the sheet just opened. */
+  finderGrow(root, slot, fresh){
+    const box = root ? root.querySelector(".opts--materials") : null;
+    const key = box ? String(Router.current()).split("?")[0] + "|" + (AppState.finderStep || 1) : "";
+    const was = this.growKeys[slot];
+    this.growKeys[slot] = key;
+    if (!box || this.reduced() || (!fresh && was === key)) return;
+    const kids = Array.prototype.slice.call(box.children);
+    kids.forEach((k, i) => k.style.setProperty("--mo-i", String(Math.min(i, 14))));
+    box.classList.add("mo-grow");
+    setTimeout(() => {
+      box.classList.remove("mo-grow");
+      kids.forEach(k => k.style.removeProperty("--mo-i"));
+    }, this.ms("--mo-dur-enter", 500) + Math.min(kids.length, 14) * 45 + 100);
+  },
+
+  /** Called by render() just before it replaces the page: keep a copy of the section tab bars being left (the
+      desktop row and the phone bar), in case the next page has none and they should slide away. */
+  keepSub(){
+    const bars = $$("#app > .subnav, #app > .ctxbar");
+    this.subOld = bars.length ? bars.map(b => {
+      const c = b.cloneNode(true);
+      c.querySelectorAll("[id]").forEach(n => n.removeAttribute("id"));
+      c.setAttribute("aria-hidden", "true");
+      c.inert = true;
+      return c;
+    }) : null;
+  },
+  /** A section's tab bar slides down onto a page with tabs and slides up off a page leaving them; between two pages
+      with tabs it never moves (see motionSubMove). */
+  subMove(firstOrSame){
+    const old = this.subOld;
+    this.subOld = null;
+    const now = $$("#app > .subnav, #app > .ctxbar");
+    const move = motionSubMove(!!old, now.length > 0, firstOrSame);
+    if (!move || this.reduced()) return;
+    if (move === "down"){ now.forEach(b => this.slideBar(b, true)); return; }
+    /* leaving: the old bars go back in under the header for a moment, and slide up away */
+    const head = $("#app > .nav");
+    let at = head;
+    old.forEach(b => {
+      if (at) at.after(b); else $("#app").prepend(b);
+      at = b;
+      this.slideBar(b, false);
+    });
+  },
+  slideBar(bar, down){
+    const h = bar.offsetHeight;
+    if (!h){ if (!down) bar.remove(); return; }
+    const inner = bar.firstElementChild;
+    const o = { duration: this.ms("--mo-dur-sub", 300), easing: "cubic-bezier(.32,.72,0,1)", fill: "both" };
+    bar.classList.add(down ? "mo-sub-down" : "mo-sub-up");
+    const tall = [{ height: "0px" }, { height: h + "px" }];
+    const slid = [{ transform: "translateY(-100%)" }, { transform: "none" }];
+    const a = bar.animate(down ? tall : tall.reverse(), o);
+    if (inner) inner.animate(down ? slid : slid.reverse(), o);
+    a.onfinish = a.oncancel = () => {
+      a.onfinish = a.oncancel = null;
+      if (!down){ bar.remove(); return; }
+      /* landed: let go of the held end frame, so the bar is back to its own size and position */
+      bar.getAnimations().forEach(x => x.cancel());
+      if (inner) inner.getAnimations().forEach(x => x.cancel());
+      bar.classList.remove("mo-sub-down");
+    };
   }
 };
 window.addEventListener("resize", () => Motion.reseat());
-/* number this history entry, so Back and Forward can be told apart later */
-try {
-  if (Router.mode === "path" && !(history.state && typeof history.state.mo === "number"))
-    history.replaceState(Object.assign({}, history.state || {}, { mo: 0 }), "");
-  Motion.idx = (history.state && history.state.mo) || 0;
-} catch(_e){}
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => Motion.reseat());
 
 /* ============================================================
@@ -26754,7 +26688,8 @@ function render(){
   const ownHeader = AppState.route.name === "admin";
   document.body.classList.toggle("has-bottom-nav", !isAdmin);
   /* on a phone, a still copy of the page being left, for the app-style slide (see MOTION) */
-  try { Motion.capture(); } catch(_e){ Motion.pending = null; }
+  /* the section tab bars being left, so they can slide away if the next page has none (see MOTION) */
+  try { Motion.keepSub(); } catch(_e){ Motion.subOld = null; }
   /* the same page drawn again (sign-in, fresh data): its entrances carry on rather than start over (see .rise) */
   const moSame = Motion.lastPath !== null && String(Router.current()).split("?")[0] === Motion.lastPath;
   if (!moSame) Motion.drawnAt = performance.now();
@@ -26764,6 +26699,10 @@ function render(){
     + (isAdmin ? "" : footer())
     + (isAdmin ? "" : bottomNav());
   $("#app").classList.toggle("mo-resume", moSame);
+  /* the header and tab bars were drawn again: show them as they are, without replaying a hover (see .mo-settle) */
+  $("#app").classList.add("mo-settle");
+  clearTimeout(Motion.settleTimer);
+  Motion.settleTimer = setTimeout(() => $("#app").classList.remove("mo-settle"), 320);
   $("#app").style.setProperty("--mo-elapsed", moSame ? Math.round(performance.now() - (Motion.drawnAt || 0)) + "ms" : "0ms");
 
   if (Router.mode === "path"){
@@ -27661,6 +27600,7 @@ const ACTIONS = {
   },
   "finder-modal-open": () => {
     openModal(finderModalHTML(), null, "modal--sheet finder-modal");
+    Motion.finderGrow($("#modal-root"), "sheet", true);
   },
 
   /* ---- games ---- */
@@ -30199,7 +30139,7 @@ document.addEventListener("error", (ev) => {
 }, true);
 
 window.addEventListener("hashchange", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); render(); });
-window.addEventListener("popstate", (e) => { Motion.onPop(e); AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); AppState.restoringScroll = true; render(); });
+window.addEventListener("popstate", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); AppState.restoringScroll = true; render(); });
 window.addEventListener("scroll", () => Parallax.onScroll(), { passive:true });
 window.addEventListener("scroll", () => BackToTop.onScroll(), { passive:true });
 window.addEventListener("resize", () => Parallax.refresh());
