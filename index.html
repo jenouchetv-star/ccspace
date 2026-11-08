@@ -12520,6 +12520,41 @@ window.addEventListener("message", (ev) => {
   else if (d.ccsCamera === "stop" && CamRelay.win === ev.source) camRelayStop();
 });
 
+/* A sealed game (a members-only game such as Math Runner runs in a frame with no storage of its own) asks the site
+   to keep a small save for it on this device, such as the most coins for each grade: { ccsSave: "set", game, data }
+   keeps it, { ccsSave: "get", game } answers that frame alone with { ccsSave: "data", game, data }. */
+/* BEGIN game-save-pure */
+const GAME_SAVE_PREFIX = "ccs-game-save:", GAME_SAVE_MAX = 4096, GAME_SAVE_GAMES = 30;
+function gameSaveKey(name){ return typeof name === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(name) ? GAME_SAVE_PREFIX + name : null; }
+function gameSaveText(data){
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  let t = null;
+  try { t = JSON.stringify(data); } catch(_e){ return null; }
+  return t && t.length <= GAME_SAVE_MAX ? t : null;
+}
+/* END game-save-pure */
+window.addEventListener("message", (ev) => {
+  const d = ev.data;
+  if (!d || typeof d !== "object" || (d.ccsSave !== "get" && d.ccsSave !== "set")) return;
+  const frame = Array.from(document.querySelectorAll("iframe[sandbox]")).find(f => f.contentWindow === ev.source);
+  if (!frame || /allow-same-origin/.test(frame.getAttribute("sandbox") || "")) return;
+  const key = gameSaveKey(d.game);
+  if (!key) return;
+  try {
+    if (d.ccsSave === "set"){
+      const text = gameSaveText(d.data);
+      if (!text) return;
+      /* a handful of games at most, so no game can fill this device's storage */
+      if (localStorage.getItem(key) === null && Object.keys(localStorage).filter(k => k.indexOf(GAME_SAVE_PREFIX) === 0).length >= GAME_SAVE_GAMES) return;
+      localStorage.setItem(key, text);
+      return;
+    }
+    let data = null;
+    try { data = JSON.parse(localStorage.getItem(key) || "null"); } catch(_e){ data = null; }
+    ev.source.postMessage({ ccsSave: "data", game: d.game, data: data }, "*");
+  } catch(_e){ /* storage blocked, or the frame is gone: the game just starts without its record */ }
+});
+
 function closeGameStage(){
   if (!$(".gamestage")) return false;
   const frame = $("#gamestage-frame");

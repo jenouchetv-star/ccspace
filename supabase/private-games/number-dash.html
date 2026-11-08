@@ -35,6 +35,8 @@
   .ask__label { font-size:.85rem; font-weight:900; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); }
   .ask__q { display:flex; align-items:center; justify-content:center; gap:12px; font-size:clamp(2.2rem, 6vw, 3.6rem); font-weight:900; line-height:1.05; letter-spacing:.01em; font-variant-numeric:tabular-nums; }
   .ask__q svg { width:.9em; height:.9em; flex:none; }
+  .ask { max-width:calc(100vw - 32px); box-sizing:border-box; }
+  #ask-q, .res b { min-width:0; overflow-wrap:anywhere; }
   .ask.is-pick { border-color:var(--gold); box-shadow:0 0 0 8px rgba(255,210,63,.25), 0 18px 40px rgba(0,0,0,.4); }
   .ask.is-pick .ask__label { animation:blink .6s ease-in-out infinite alternate; }
   @keyframes blink { to { opacity:.45; } }
@@ -191,22 +193,45 @@ const DOOR_RULES = {
   g5: { add: [20, 100], sub: [20, 100], mul: [2, 10], div: [2, 10], step: 5 },
   g6: { add: [50, 200], sub: [50, 200], mul: [2, 12], div: [2, 12], step: 10 }
 };
-/* the most coins the bag holds, so the numbers stay ones each grade can think about */
-const BAG_MAX = { k: 50, g1: 120, g2: 500, g3: 1000, g4: 9999, g5: 9999, g6: 9999 };
-function bagMax(levelId){ return BAG_MAX[levelId] || 9999; }
 function doorLabel(d){ return d.op + d.n; }
-/** The coins after running through a door: never below zero, always whole (sharing rounds down), never past
-    the bag's size when a grade is given. */
-function applyDoor(coins, d, levelId){
-  let c = d.op === "+" ? coins + d.n : d.op === "−" ? coins - d.n : d.op === "×" ? coins * d.n : Math.floor(coins / d.n);
-  c = Math.max(0, c);
-  return levelId ? Math.min(bagMax(levelId), c) : c;
+/* There is no cap on the coins. A run of ×12 doors soon passes what an ordinary number holds exactly, so the
+   game keeps its coins as a BigInt (12n): every sum stays exact, however big the pile gets. */
+/** The coins after running through a door: never below zero, always whole (sharing rounds down), never capped.
+    Gives back the same kind of number it was given (a BigInt for a BigInt). */
+function applyDoor(coins, d){
+  const big = typeof coins === "bigint", c = BigInt(coins), n = BigInt(d.n);
+  let r = d.op === "+" ? c + n : d.op === "−" ? c - n : d.op === "×" ? c * n : c / n;   /* BigInt division rounds down */
+  if (r < 0n) r = 0n;
+  return big ? r : Number(r);
 }
+/** One more coin. */
+function addCoin(coins){ return BigInt(coins) + 1n; }
 /** The doors (by lane) that leave the most coins. */
 function bestDoors(coins, doors){
-  const after = doors.map(d => applyDoor(coins, d));
-  const top = Math.max(...after);
+  const after = doors.map(d => BigInt(applyDoor(BigInt(coins), d)));
+  let top = after[0];
+  for (const v of after) if (v > top) top = v;
   return after.map((v, i) => v === top ? i : -1).filter(i => i >= 0);
+}
+/** A coin count the way a kid reads a big number: 1,234,567. */
+function formatCoins(coins){ return String(BigInt(coins)).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+/** The most coins for each grade, from a save: whole numbers only (old saves were plain numbers, new ones are
+    text, since a save can't hold a BigInt), and only real grades. */
+function readBest(saved){
+  const out = {};
+  if (!saved || typeof saved !== "object") return out;
+  for (const lvl of LEVELS){
+    const v = saved[lvl.id];
+    const s = typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? String(v) : typeof v === "string" ? v : "";
+    if (/^\d{1,4000}$/.test(s)) out[lvl.id] = BigInt(s);
+  }
+  return out;
+}
+/** Two records together: the higher number for each grade. */
+function mergeBest(a, b){
+  const out = Object.assign({}, a);
+  for (const [id, v] of Object.entries(b || {})) if (out[id] === undefined || v > out[id]) out[id] = v;
+  return out;
 }
 /** Three different doors for a gate, in random lanes: at least one that adds and one that takes away. */
 function makeDoors(levelId, rand){
@@ -804,11 +829,40 @@ const PACE = { k: 0.72, g1: 0.78, g2: 0.84, g3: 0.9, g4: 0.94, g5: 0.97, g6: 1 }
 const Game = {
   mode: "title", level: "k", runner: "chike", rand: makeRng(Date.now() & 0xffff),
   distance: 0, speed: 0, nextRowAt: 0, rowCount: 0, slowT: 0, boostT: 0, superMeter: SUPER.full, superOn: false, superHeld: false,
-  coins: 0, shown: 0, hearts: 3, streak: 0, right: 0, asked: 0, gate: null, best: {}
+  coins: 0n, shown: 0n, hearts: 3, streak: 0, right: 0, asked: 0, gate: null, best: {}, bestBefore: 0n
 };
-try { Game.best = JSON.parse(localStorage.getItem("number-dash-best-coins") || "{}") || {}; Game.runner = localStorage.getItem("number-dash-runner") || "chike"; } catch (_e) { Game.best = {}; }
+try { Game.best = readBest(JSON.parse(localStorage.getItem("number-dash-best-coins") || "{}")); Game.runner = localStorage.getItem("number-dash-runner") || "chike"; } catch (_e) { Game.best = {}; }
 Runner.setLook(Game.runner);
-function saveBest(){ try { localStorage.setItem("number-dash-best-coins", JSON.stringify(Game.best)); } catch (_e) { /* a sealed game can't keep it: fine */ } }
+/* The most coins for each grade. Played on the site, the game sits in a sealed frame that can't keep anything
+   itself, so the site keeps the record for it on this device (by message); opened on its own, it keeps it here. */
+const SAVE_NAME = "math-runner";
+function bestText(){ const o = {}; for (const [id, v] of Object.entries(Game.best)) o[id] = String(v); return o; }
+function saveBest(){
+  try { localStorage.setItem("number-dash-best-coins", JSON.stringify(bestText())); } catch (_e) { /* a sealed game can't keep it here */ }
+  try { if (parent !== window) parent.postMessage({ ccsSave: "set", game: SAVE_NAME, data: { best: bestText() } }, "*"); } catch (_e) { /* no site around it */ }
+}
+addEventListener("message", (ev) => {
+  const d = ev.data;
+  if (ev.source !== parent || !d || typeof d !== "object" || d.ccsSave !== "data" || d.game !== SAVE_NAME) return;
+  Game.best = mergeBest(Game.best, readBest(d.data && d.data.best));
+});
+try { if (parent !== window) parent.postMessage({ ccsSave: "get", game: SAVE_NAME }, "*"); } catch (_e) { /* no site around it */ }
+/** A new best is noted the moment the coins pass it, so leaving in the middle of a run still keeps it (saved
+    half a second later, so a burst of coins is one save). */
+let bestPending = 0;
+function noteBest(){
+  const prev = Game.best[Game.level];
+  if (prev !== undefined ? Game.coins <= prev : Game.coins === 0n) return;
+  Game.best[Game.level] = Game.coins;
+  if (!bestPending) bestPending = setTimeout(() => { bestPending = 0; saveBest(); }, 500);
+}
+/* a coin count in its box: smaller type for a longer number, down to a size that still reads easily; a number
+   longer than that wraps onto another line, after a comma */
+function paintCoins(el, coins, fitAt){
+  const t = formatCoins(coins);
+  el.textContent = t.replace(/,/g, ",​");
+  el.style.fontSize = t.length > fitAt ? Math.max(0.5, fitAt / t.length) + "em" : "";
+}
 
 const HEART = '<svg viewBox="0 0 24 24" fill="#ff5a6e"><path d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z"/></svg>';
 function paintHud(){
@@ -827,7 +881,8 @@ function startRun(levelId){
   /* let go of the menu button that started the run, so no key can press it again */
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   Things.clear(); Runner.reset();
-  Object.assign(Game, { distance: 0, speed: 0, nextRowAt: 40, rowCount: 0, slowT: 0, boostT: 0, superMeter: SUPER.full, superOn: false, coins: 0, shown: 0, hearts: 3, streak: 0, right: 0, asked: 0, gate: null });
+  Object.assign(Game, { distance: 0, speed: 0, nextRowAt: 40, rowCount: 0, slowT: 0, boostT: 0, superMeter: SUPER.full, superOn: false, coins: 0n, shown: 0n, hearts: 3, streak: 0, right: 0, asked: 0, gate: null, bestBefore: Game.best[levelId] || 0n });
+  $("ask-q").style.fontSize = "";
   $("ask").classList.remove("is-pick", "is-up", "is-down"); $("ask-label").textContent = "Your coins"; $("ask-q").textContent = "0";
   showScreen(null); $("hud").hidden = false; paintHud(); paintKeys(); paintGrades();
   Game.mode = "countdown";
@@ -843,10 +898,10 @@ function startRun(levelId){
 }
 function endRun(){
   Game.mode = "over";
-  const prev = Game.best[Game.level] || 0;
-  if (Game.coins > prev){ Game.best[Game.level] = Game.coins; saveBest(); }
-  $("over-title").textContent = Game.coins > prev && prev > 0 ? "New best!" : Game.right >= 5 ? "Great run!" : "Nice running!";
-  $("r-score").textContent = Game.coins; $("r-right").textContent = Game.right + " of " + Game.asked; $("r-best").textContent = Game.best[Game.level] || Game.coins;
+  const prev = Game.bestBefore;
+  noteBest(); saveBest();
+  $("over-title").textContent = Game.coins > prev && prev > 0n ? "New best!" : Game.right >= 5 ? "Great run!" : "Nice running!";
+  paintCoins($("r-score"), Game.coins, 7); $("r-right").textContent = Game.right + " of " + Game.asked; paintCoins($("r-best"), Game.best[Game.level] || Game.coins, 7);
   $("ask").classList.remove("is-pick");
   setTimeout(() => { showScreen("over"); focusFirst("over"); }, 900);
 }
@@ -911,7 +966,7 @@ function update(dt){
       else {
         const res = hitTest(t, { lane, y: R.y, sliding: R.slide > 0 });
         if (res === "hit" && Game.superOn){ smash(t); }
-        else if (res === "collect"){ Game.coins = Math.min(bagMax(Game.level), Game.coins + 1); Game.superMeter = superCoin(Game.superMeter); Sfx.play("coin"); Fx.burst(new THREE.Vector3(LANES[t.lane], 1, 0), [0xffd23f, 0xfff3c4], { n: 8, size: 0.05, speed: 2, up: 2, life: 0.5 }); t.mesh.visible = false; }
+        else if (res === "collect"){ Game.coins = addCoin(Game.coins); noteBest(); Game.superMeter = superCoin(Game.superMeter); Sfx.play("coin"); Fx.burst(new THREE.Vector3(LANES[t.lane], 1, 0), [0xffd23f, 0xfff3c4], { n: 8, size: 0.05, speed: 2, up: 2, life: 0.5 }); t.mesh.visible = false; }
         else if (res === "hit" && R.invuln <= 0) onHit(t);
       }
       paintHud();
@@ -921,9 +976,12 @@ function update(dt){
   Runner.update(dt, Math.max(sp, 6), running || Game.mode === "paused", Game.mode === "title");
   /* the coin count rolls up or down to the new number, so a kid sees it change */
   if (Game.shown !== Game.coins){
-    const d = Game.coins - Game.shown, step = Math.max(1, Math.abs(d) * Math.min(1, dt * 7));
-    Game.shown = Math.abs(d) <= step ? Game.coins : Game.shown + Math.sign(d) * step;
-    $("ask-q").textContent = Math.round(Game.shown);
+    /* a share of the gap each frame (in thousandths, so it works on a BigInt of any size), at least one coin */
+    const d = Game.coins - Game.shown, gap = d < 0n ? -d : d;
+    let step = gap * BigInt(Math.round(Math.min(1, dt * 7) * 1000)) / 1000n;
+    if (step < 1n) step = 1n;
+    Game.shown = gap <= step ? Game.coins : Game.shown + (d < 0n ? -step : step);
+    paintCoins($("ask-q"), Game.shown, 9);
   }
   Fx.update(dt, sp);
   Streaks.update(dt, sp, running, Game.superOn);
@@ -950,8 +1008,8 @@ function update(dt){
 
 function onGate(t, lane){
   const doors = t.doors, door = doors[lane], before = Game.coins;
-  const after = applyDoor(before, door, Game.level), best = bestDoors(before, doors);
-  Game.asked++; Game.coins = after;
+  const after = applyDoor(before, door), best = bestDoors(before, doors);
+  Game.asked++; Game.coins = after; noteBest();
   const panels = t.mesh.userData.panels, at = new THREE.Vector3(LANES[lane], 1.6, 0);
   for (const i of best){ panels[i].curtain.material.color.set(0x3dff9a); panels[i].curtain.material.opacity = 0.5; }
   const ask = $("ask");

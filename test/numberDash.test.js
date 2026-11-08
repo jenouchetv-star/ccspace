@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 /* Math Runner (file: number-dash) is a subscribers-only game: its source sits in supabase/private-games and its rules in a LOGIC block. */
 const html = readFileSync(new URL("../supabase/private-games/number-dash.html", import.meta.url), "utf8");
 const logic = html.slice(html.indexOf("/*LOGIC-START*/"), html.indexOf("/*LOGIC-END*/"));
-const L = new Function(logic + "; return { LEVELS, LANES, makeRng, makeDoors, doorLabel, applyDoor, bestDoors, bagMax, makeRow, hitTest, speedAt, MAX_SPEED, START_SPEED, SUPER, superStep, superCoin };")();
+const L = new Function(logic + "; return { LEVELS, LANES, makeRng, makeDoors, doorLabel, applyDoor, addCoin, bestDoors, formatCoins, readBest, mergeBest, makeRow, hitTest, speedAt, MAX_SPEED, START_SPEED, SUPER, superStep, superCoin };")();
 
 describe("the doors", () => {
   it("has a level for each grade, Kindergarten to 6th grade", () => {
@@ -29,10 +29,31 @@ describe("the doors", () => {
     expect(L.applyDoor(13, { op: "÷", n: 4 })).toBe(3);
   });
 
-  it("keeps the bag to a size each grade can think about", () => {
-    expect(L.applyDoor(L.bagMax("k"), { op: "+", n: 5 }, "k")).toBe(L.bagMax("k"));
-    expect(L.bagMax("k")).toBeLessThan(L.bagMax("g3"));
-    expect(L.bagMax("g3")).toBeLessThanOrEqual(L.bagMax("g6"));
+  it("has no cap on the coins, in any grade", () => {
+    for (const lvl of L.LEVELS){
+      expect(L.applyDoor(9999, { op: "+", n: 5 }, lvl.id)).toBe(10004);
+      expect(L.applyDoor(9999n, { op: "×", n: 12 }, lvl.id)).toBe(119988n);
+    }
+    expect(L.addCoin(9999n)).toBe(10000n);
+    expect(html).not.toContain("BAG_MAX");
+    expect(html).not.toContain("bagMax");
+  });
+
+  it("keeps a huge pile of coins exact, past what an ordinary number can hold", () => {
+    const pile = 10n ** 30n + 7n;
+    expect(L.applyDoor(pile, { op: "×", n: 12 })).toBe(12n * 10n ** 30n + 84n);
+    expect(L.applyDoor(pile, { op: "÷", n: 4 })).toBe((10n ** 30n + 7n) / 4n);
+    expect(L.applyDoor(pile, { op: "+", n: 200 })).toBe(10n ** 30n + 207n);
+    expect(L.applyDoor(5n, { op: "−", n: 10 })).toBe(0n);
+    expect(L.bestDoors(pile, [{ op: "+", n: 200 }, { op: "×", n: 2 }, { op: "÷", n: 3 }])).toEqual([1]);
+  });
+
+  it("writes big coin counts with commas", () => {
+    expect(L.formatCoins(0n)).toBe("0");
+    expect(L.formatCoins(999n)).toBe("999");
+    expect(L.formatCoins(9999n)).toBe("9,999");
+    expect(L.formatCoins(1234567n)).toBe("1,234,567");
+    expect(L.formatCoins(10n ** 21n)).toBe("1,000,000,000,000,000,000,000");
   });
 
   it("knows which door gives the most, and that depends on how many coins you have", () => {
@@ -157,6 +178,30 @@ describe("super speed", () => {
   it("gets a top-up from each coin, never past full", () => {
     expect(L.superCoin(1)).toBeCloseTo(1 + L.SUPER.coin);
     expect(L.superCoin(L.SUPER.full)).toBe(L.SUPER.full);
+  });
+});
+
+describe("the most coins, kept for each grade", () => {
+  it("reads a saved record, and ignores anything that isn't a whole number or a grade", () => {
+    expect(L.readBest({ k: "50", g6: "123456789012345678901234567890" })).toEqual({ k: 50n, g6: 123456789012345678901234567890n });
+    expect(L.readBest({ g1: 120 })).toEqual({ g1: 120n });                 /* the old saves were plain numbers */
+    expect(L.readBest({ g2: "-5", g3: "1e9", g4: "abc", zz: "9", g5: "" })).toEqual({});
+    expect(L.readBest(null)).toEqual({});
+    expect(L.readBest("nope")).toEqual({});
+  });
+  it("keeps the higher number for each grade when two records meet", () => {
+    expect(L.mergeBest({ k: 50n, g1: 3n }, { k: 20n, g2: 9n })).toEqual({ k: 50n, g1: 3n, g2: 9n });
+    expect(L.mergeBest({ g6: 10n ** 25n }, { g6: 10n ** 25n + 1n })).toEqual({ g6: 10n ** 25n + 1n });
+  });
+  it("saves through the site, since the sealed game can't keep anything itself", () => {
+    expect(html).toContain('ccsSave: "get", game: SAVE_NAME');
+    expect(html).toContain('ccsSave: "set", game: SAVE_NAME');
+    expect(html).toContain('const SAVE_NAME = "math-runner"');
+  });
+  it("notes a new best as soon as the coins pass it, so leaving mid-run keeps it", () => {
+    const update = html.split("function onGate(")[1].split("\n}\n")[0];
+    expect(update).toContain("noteBest()");
+    expect(html.split("function update(dt){")[1].split("\n}\n")[0]).toContain("noteBest()");
   });
 });
 
