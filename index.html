@@ -4065,29 +4065,17 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 /* a number counting up: the box holds the widest the number gets, so nothing beside it moves while it counts */
 .mo-count{ display:inline-block; font-variant-numeric:tabular-nums; }
 
-/* the marker under the current page in a nav: one shape per nav that slides to the new page, instead of each link
-   having its own. It sits behind the words; hover keeps its own look on the links themselves. */
+/* a section's tab row (Create, Games...): the yellow tab is one shape that slides to the new tab, instead of each
+   tab having its own. It sits behind the words; hover keeps its own look on the links themselves. The header's blue
+   highlight and the phone bar's blue pill do not slide (by request): each link draws its own, as it always did. */
 .mo-ind{
   position:absolute; left:0; top:0; z-index:0; pointer-events:none; box-sizing:border-box;
   transition:transform var(--mo-dur-state) var(--mo-ease-state), width var(--mo-dur-state) var(--mo-ease-state), height var(--mo-dur-state) var(--mo-ease-state);
 }
-/* the header: the blue highlighter stroke the current page has always had */
-.nav__drawer-list.mo-ind-on{ position:relative; }
-.mo-ind-on > .nav__link, .mo-ind-on > .nav__item > .nav__link{ position:relative; z-index:1; }
-.mo-ind-on .nav__link[aria-current="page"]{ background-size:0 1.3em; }
-.mo-ind--main{
-  font-size:calc(.96rem + 1px);
-  background:linear-gradient(180deg,transparent 40%,#8FE3F0 40%,#8FE3F0 96%,transparent 96%) 0 50% / 100% 1.3em no-repeat;
-}
-/* a section's tab row: the yellow tab */
 .subnav__in.mo-ind-on{ position:relative; }
 .mo-ind-on > .subnav__link{ position:relative; z-index:1; }
 .mo-ind-on > .subnav__link[aria-current]{ background:transparent; border-color:transparent; box-shadow:none; }
 .mo-ind--sub{ background:var(--sun); border:2.5px solid var(--ink); border-radius:12px; box-shadow:2px 2px 0 var(--ink); }
-/* the phone's bottom bar: the soft blue pill */
-.mo-ind-on > .bottom-nav__item{ position:relative; z-index:1; }
-.mo-ind-on > .bottom-nav__item.is-active{ background:transparent; }
-.mo-ind--bottom{ background:rgba(18,115,176,.13); border-radius:12px; }
 
 /* ---- phones: app-style motion ----
    On a phone the site moves like an app. Going further in, the new page slides in from the right over the old one,
@@ -4120,9 +4108,6 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
   /* a page waiting off to the right must not widen a phone's screen (which would stretch the bottom bar for that
      moment); clip, unlike hidden, keeps the sticky header working */
   #app{ overflow-x:clip; }
-  /* the bottom bar's pill springs to the new tab, and the tab's icon gives a small pop */
-  .mo-ind--bottom{ transition-duration:.46s; transition-timing-function:var(--mo-ease-spring); }
-  .bottom-nav__icon.mo-pop{ animation:mo-pop .46s var(--mo-ease-spring); }
 }
 @media (max-width:1080px){
   /* the phone and tablet menu: the panel drops in and its rows follow one after another */
@@ -4131,7 +4116,6 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
     animation:mo-rise .32s var(--mo-ease-out) both; animation-delay:calc(var(--mo-i, 0) * 22ms);
   }
 }
-@keyframes mo-pop{ 0%{ transform:scale(1); } 40%{ transform:scale(1.16); } 100%{ transform:scale(1); } }
 @keyframes mo-drawer-in{ from{ opacity:0; transform:translateY(-12px); } to{ opacity:1; transform:none; } }
 /* bottom sheets: close by sliding back down (they already slide up to open), and follow a finger dragging them down */
 .sheet-scrim.is-leaving{ pointer-events:none; animation:mo-fade-away .2s var(--mo-ease-state) both; }
@@ -4146,7 +4130,7 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
   .mo-stagger > *{ opacity:1; }
   .mo-ind{ transition:none; }
   .mo-ghost{ display:none; }
-  .mo-push-in, .mo-pop-in, .mo-tab-in, .bottom-nav__icon.mo-pop, .nav__links.mo-drawer-in, .nav__links.mo-drawer-in *,
+  .mo-push-in, .mo-pop-in, .mo-tab-in, .nav__links.mo-drawer-in, .nav__links.mo-drawer-in *,
   .sheet-scrim.is-leaving, .sheet-scrim.is-leaving .sheet{ animation:none; }
   .btn, .card, .nav__link, .subnav__link, .nav__menu-link, .bottom-nav__item{ transition-duration:.01ms; }
 }
@@ -26507,7 +26491,7 @@ const Motion = {
     }
     if (changed && !this.reduced()) this.stagger(area, !!p);
     this.counts(main);
-    this.indicators(false, changed && !first);
+    this.indicators(false);
     if (this.drawerOpening){
       this.drawerOpening = false;
       const links = $("#nav-links");
@@ -26601,14 +26585,13 @@ const Motion = {
     requestAnimationFrame(tick);
   },
 
-  /** The marker under the current page in the header, a section's tab row and the phone's bottom bar. One marker
-      per nav slides from where it sat on the last page to the current one, sized to the link. */
+  /** The yellow tab in a section's tab row: one marker slides from the tab of the last page to the current one,
+      sized to the link. (The header's blue highlight and the phone bar's blue pill were taken off this, by request:
+      they stay put on each link, as they always did.) */
   NAVS: [
-    { key: "main",   box: "#app .nav__drawer-list", cur: '.nav__link[aria-current="page"]', kind: "main", row: true },
-    { key: "sub",    box: "#app .subnav__in",       cur: ".subnav__link[aria-current]",     kind: "sub", group: true },
-    { key: "bottom", box: "#app .bottom-nav",       cur: '.bottom-nav__item[aria-current="page"]', kind: "bottom" }
+    { key: "sub", box: "#app .subnav__in", cur: ".subnav__link[aria-current]", kind: "sub", group: true }
   ],
-  indicators(quiet, navChanged){
+  indicators(quiet){
     const still = this.reduced();
     this.NAVS.forEach(n => {
       const box = $(n.box);
@@ -26648,11 +26631,6 @@ const Motion = {
       void ind.offsetWidth;
       ind.style.transition = "";
       if (slide) put(next);
-      /* the phone's bottom bar: the tab just opened gives its icon a small pop */
-      if (n.key === "bottom" && navChanged && !still && (!prev || prev.x !== next.x)){
-        const icon = cur.querySelector(".bottom-nav__icon");
-        if (icon) icon.classList.add("mo-pop");
-      }
       this.slots[n.key] = next;
     });
   },

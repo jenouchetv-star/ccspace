@@ -120,11 +120,18 @@ describe("the motion system in the page", () => {
     const js = index.split("const Motion = {")[1].split("\n};\n")[0];
     expect(js).toContain("reduced()");
   });
-  it("marks the current page in every nav it slides along", () => {
+  it("marks the current page in every nav; only a section's yellow tab slides, the blue highlights stay put", () => {
     const fn = name => index.split("function " + name + "(")[1].split("\n}\n")[0];
     for (const name of ["navBar", "subNavBar", "bottomNav"]) expect(fn(name), name).toContain('aria-current="');
-    const motion = index.split("const Motion = {")[1].split("\n};\n")[0];
-    for (const sel of ['.nav__link[aria-current="page"]', ".subnav__link[aria-current]", '.bottom-nav__item[aria-current="page"]']) expect(motion).toContain(sel);
+    const navs = index.split("const Motion = {")[1].split("\n};\n")[0].split("NAVS: [")[1].split("],")[0];
+    expect(navs).toContain(".subnav__link[aria-current]");
+    expect(navs).not.toContain(".nav__link");          // the header's blue highlight: no slide
+    expect(navs).not.toContain(".bottom-nav__item");   // the phone bar's blue pill: no slide
+    expect(css).not.toContain(".mo-ind--main");
+    expect(css).not.toContain(".mo-ind--bottom");
+    // each link still draws its own blue current-page look
+    expect(css).toContain('.nav__link[aria-current="page"]{ --hl:#8FE3F0; background-size:100% 1.3em; }');
+    expect(css).toContain(".bottom-nav__item.is-active{ color:var(--cyan-deep); background:rgba(18,115,176,.13); }");
   });
   it("shows skeletons, not loading text, while the admin analytics load", () => {
     const an = index.split("function adminAnalytics(){")[1].split("\n}\n")[0];
