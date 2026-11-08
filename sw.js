@@ -9,7 +9,7 @@
    the whole update mechanism: a new version number means a new cache name,
    which means install() re-fetches everything and activate() deletes the
    old caches, so nobody is left running stale HTML against a new build. */
-const CACHE_VERSION = "ccs-v146";
+const CACHE_VERSION = "ccs-v147";
 const SHELL_CACHE = CACHE_VERSION + "-shell";
 const RUNTIME_CACHE = CACHE_VERSION + "-runtime";
 
@@ -69,6 +69,40 @@ self.addEventListener("message", (event) => {
 function isStaticAsset(url){
   return /^\/(assets|games|books)\//.test(url.pathname)
     || /\.(?:png|jpg|jpeg|webp|svg|gif|ico|woff2?|ttf)$/i.test(url.pathname);
+}
+
+/* Pictures uploaded through the admin (book covers, characters, articles, activity photos) live in Supabase
+   Storage, which serves them with "Cache-Control: private, no-cache", so without this a phone downloads every
+   one again on every visit. Each upload gets its own file name (a timestamp in front), so a stored copy never
+   goes stale; keeping them here, cache-first, makes a repeat visit's pictures appear at once. Only pictures:
+   videos and anything else from Supabase pass straight through. The copies sit in this version's runtime cache,
+   so the next deploy starts them fresh. */
+const STORAGE_PUBLIC = "https://wdctkfhwygwwulipwnys.supabase.co/storage/v1/object/public/";
+const STORAGE_MAX = 300;
+function isStoragePicture(request, url){
+  return url.href.indexOf(STORAGE_PUBLIC) === 0
+    && (request.destination === "image" || /\.(?:png|jpe?g|webp|gif|avif|svg)$/i.test(url.pathname));
+}
+async function storageCacheFirst(request){
+  const cache = await caches.open(RUNTIME_CACHE);
+  const hit = await cache.match(request.url);
+  if (hit) return hit;
+  try {
+    /* asked for with CORS (Supabase allows it), so the stored copy is a normal response and also works for a
+       picture drawn onto a canvas */
+    const res = await fetch(request.url, { mode: "cors", credentials: "omit" });
+    if (res && res.ok){
+      await cache.put(request.url, res.clone());
+      trimStorage(cache);
+    }
+    return res;
+  } catch (err) {
+    return fetch(request);
+  }
+}
+async function trimStorage(cache){
+  const keys = (await cache.keys()).filter(k => k.url.indexOf(STORAGE_PUBLIC) === 0);
+  for (let i = 0; i < keys.length - STORAGE_MAX; i++) await cache.delete(keys[i]);
 }
 
 function isGoogleFonts(url){
@@ -148,6 +182,11 @@ self.addEventListener("fetch", (event) => {
 
   if (isGoogleFonts(url)) {
     event.respondWith(cacheFirst(request));
+    return;
+  }
+
+  if (isStoragePicture(request, url)) {
+    event.respondWith(storageCacheFirst(request));
     return;
   }
 
