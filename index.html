@@ -1244,6 +1244,17 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
 @keyframes rise{ to{ opacity:1; transform:none; } }
 .d1{animation-delay:.05s}.d2{animation-delay:.14s}.d3{animation-delay:.23s}
 .d4{animation-delay:.32s}.d5{animation-delay:.41s}.d6{animation-delay:.5s}
+/* The page often redraws itself a few times in its first second (sign-in, fresh data). Each redraw builds the
+   page anew, which would start these entrances over from invisible: a flicker. On a redraw of the same page,
+   render() marks #app mo-resume and says how long the page has been showing (--mo-elapsed), and each entrance
+   carries on from that point instead; once it has finished, it simply stays finished. */
+#app.mo-resume .rise{ animation-delay:calc(0s - var(--mo-elapsed, 0s)); }
+#app.mo-resume .rise.d1{ animation-delay:calc(.05s - var(--mo-elapsed, 0s)); }
+#app.mo-resume .rise.d2{ animation-delay:calc(.14s - var(--mo-elapsed, 0s)); }
+#app.mo-resume .rise.d3{ animation-delay:calc(.23s - var(--mo-elapsed, 0s)); }
+#app.mo-resume .rise.d4{ animation-delay:calc(.32s - var(--mo-elapsed, 0s)); }
+#app.mo-resume .rise.d5{ animation-delay:calc(.41s - var(--mo-elapsed, 0s)); }
+#app.mo-resume .rise.d6{ animation-delay:calc(.5s - var(--mo-elapsed, 0s)); }
 
 @media (max-width:820px){
   .hero__veil{
@@ -5394,6 +5405,8 @@ function heroHeading(){
 
 /* One timer, cleared on each render so a re-render never leaves two running. */
 let HERO_WORD_TIMER = null;
+/* where the typing word is (which word, the letters showing, typing or erasing), so a redraw carries on from it */
+let HERO_WORD_AT = { at: 0, text: "", phase: "hold" };
 
 function rotateHeroWord(){
   if (HERO_WORD_TIMER){ clearTimeout(HERO_WORD_TIMER); HERO_WORD_TIMER = null; }
@@ -5408,20 +5421,30 @@ function rotateHeroWord(){
 
   const words = pageListItems("home", "heroWords");
   const TYPE = 45, ERASE = 25;
-  let at = 0;
+  /* A redraw of the same page (render() marks #app mo-resume) carries on with the word, and the letters, it was
+     on; coming back to the page starts again from the first word. */
+  const resume = $("#app").classList.contains("mo-resume") && HERO_WORD_AT.at < words.length;
+  let at = resume ? HERO_WORD_AT.at : 0;
+  if (resume){
+    now.textContent = HERO_WORD_AT.text;
+    now.classList.toggle("heroword__now--tight", words[at] === "out of this world");
+  }
+  const keep = phase => { HERO_WORD_AT = { at: at, text: now.textContent, phase: phase }; };
 
   const gone = () => !document.body.contains(slot);
   const step = (fn, ms) => { HERO_WORD_TIMER = setTimeout(fn, ms); };
 
   function hold(){
+    keep("hold");
     const wait = Math.max(600, HERO_WORD_MS - (words[at].length * (TYPE + ERASE)));
     step(erase, wait);
   }
   function erase(){
     if (gone()) return;
     const text = now.textContent;
-    if (!text.length){ at = (at + 1) % words.length; return step(type, 120); }
+    if (!text.length){ at = (at + 1) % words.length; keep("type"); return step(type, 120); }
     now.textContent = text.slice(0, -1);
+    keep("erase");
     step(erase, ERASE);
   }
   function type(){
@@ -5431,11 +5454,14 @@ function rotateHeroWord(){
     const text = now.textContent;
     if (text.length >= target.length) return hold();
     now.textContent = target.slice(0, text.length + 1);
+    keep("type");
     step(type, TYPE);
   }
 
   slot.classList.add("is-typing");
-  hold();
+  if (resume && HERO_WORD_AT.phase === "erase") erase();
+  else if (resume && HERO_WORD_AT.phase === "type") type();
+  else hold();
 }
 
 function paceMarquee(){
@@ -26716,11 +26742,16 @@ function render(){
   document.body.classList.toggle("has-bottom-nav", !isAdmin);
   /* on a phone, a still copy of the page being left, for the app-style slide (see MOTION) */
   try { Motion.capture(); } catch(_e){ Motion.pending = null; }
+  /* the same page drawn again (sign-in, fresh data): its entrances carry on rather than start over (see .rise) */
+  const moSame = Motion.lastPath !== null && String(Router.current()).split("?")[0] === Motion.lastPath;
+  if (!moSame) Motion.drawnAt = performance.now();
   $("#app").innerHTML = (ownHeader ? "" : navBar(isAdmin))
     + subNavBar()
     + '<main id="main">' + body + '</main>'
     + (isAdmin ? "" : footer())
     + (isAdmin ? "" : bottomNav());
+  $("#app").classList.toggle("mo-resume", moSame);
+  $("#app").style.setProperty("--mo-elapsed", moSame ? Math.round(performance.now() - (Motion.drawnAt || 0)) + "ms" : "0ms");
 
   if (Router.mode === "path"){
     $$('#app a[href^="#/"]').forEach(a => a.setAttribute("href", Router.href(a.getAttribute("href"))));

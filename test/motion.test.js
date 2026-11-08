@@ -98,6 +98,18 @@ describe("the motion system in the page", () => {
       expect(css, t).toContain(t + ":");
     }
   });
+  it("lets a redraw of the same page carry on its entrance instead of starting it over (no flicker on load)", () => {
+    const render = index.split("function render(){")[1].split("\n}\n")[0];
+    const swap = render.indexOf('$("#app").innerHTML');
+    expect(render.indexOf("moSame")).toBeGreaterThan(-1);
+    expect(render.indexOf("moSame")).toBeLessThan(swap);
+    expect(render.slice(swap)).toContain('classList.toggle("mo-resume", moSame)');
+    expect(render.slice(swap)).toContain('"--mo-elapsed"');
+    for (const d of ["", ".d1", ".d2", ".d3", ".d4", ".d5", ".d6"]) expect(css).toContain("#app.mo-resume .rise" + d + "{ animation-delay:calc(");
+    // the typing word keeps the word it is on when the page redraws
+    const rot = index.split("function rotateHeroWord(){")[1].split("\n}\n")[0];
+    expect(rot).toContain("HERO_WORD_AT");
+  });
   it("runs after every render", () => {
     const render = index.split("function render(){")[1].split("\n}\n")[0];
     expect(render).toContain("Motion.afterRender()");
