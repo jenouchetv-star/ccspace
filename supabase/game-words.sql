@@ -19,6 +19,7 @@ with w(id, patch) as (values
   ('game-bridge-challenge', $j${"vocabWord":"load","vocabSay":"LOHD · noun","vocabMeaning":"The weight that a bridge or building has to hold up.","vocabExample":"In The Bridge Challenge, every coin adds to the load. How many can your paper bridge hold?"}$j$::jsonb),
   ('game-story-relay', $j${"vocabWord":"narrator","vocabSay":"NAIR-ay-ter · noun","vocabMeaning":"The person who tells a story.","vocabExample":"In Story Relay, everyone takes a turn as the narrator by adding one sentence."}$j$::jsonb),
   ('game-freeze-swap', $j${"vocabWord":"transform","vocabSay":"trans-FORM · verb","vocabMeaning":"To change into something different.","vocabExample":"When the music stops in Freeze and Swap, transform into a new animal, machine or character."}$j$::jsonb),
-  ('game-word-quest', $j${"vocabWord":"vocabulary","vocabSay":"voh-KAB-yuh-lair-ee · noun","vocabMeaning":"All the words you know and understand.","vocabExample":"In Word Quest, tap a word to hear it. Every word you find and say grows your vocabulary!"}$j$::jsonb)
+  ('game-word-quest', $j${"vocabWord":"vocabulary","vocabSay":"voh-KAB-yuh-lair-ee · noun","vocabMeaning":"All the words you know and understand.","vocabExample":"In Word Quest, tap a word to hear it. Every word you find and say grows your vocabulary!"}$j$::jsonb),
+  ('game-echo-matrix', $j${"vocabWord":"sequence","vocabSay":"SEE-kwens · noun","vocabMeaning":"A set of things that come one after another, in an order.","vocabExample":"In Echo Matrix, watch the sequence of lights, then tap it back in the same order!"}$j$::jsonb)
 )
 update games g set data = g.data || w.patch, updated_at = now() from w where g.id = w.id;
