@@ -123,6 +123,11 @@
   .chike.talk .chike__say{ opacity:1; transform:none; }
   .chike__say.good{ border-color:var(--good); } .chike__say.oops{ border-color:var(--warn); }
   @media (max-width:760px){ .chike__face{ width:48px; height:48px; } .chike__say{ max-width:220px; font-size:12.5px; padding:7px 10px; } }
+  /* the shelf under the build: the picture to copy is at the top right, so Chike's words sit under his face */
+  .stage.tall .chike{ flex-direction:column; align-items:flex-start; gap:9px; }
+  .stage.tall .chike__say{ max-width:100%; transform:translateY(-6px); }
+  .stage.tall .chike.talk .chike__say{ transform:none; }
+  .stage.tall .chike__say::before{ left:18px; top:-7px; margin-top:0; border-bottom:0; border-top:inherit; }
 
   /* the card that pops up over the table when the build matches */
   .win{ position:absolute; inset:0; z-index:5; display:grid; place-items:center; padding:16px; background:rgba(10,12,14,.18); }
@@ -220,6 +225,17 @@
     .glist .t{ font-size:11px; justify-content:center; }
     .side{ grid-row:4; flex-direction:row; overflow:visible; }
     .side .panel{ flex:1; }
+    /* the digital hand is a slim strip, so the table keeps the screen: a small hand picture (camera on only)
+       beside what it sees, and the camera button */
+    .cam{ display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"pic status btn"; align-items:center; column-gap:10px; padding:8px 10px; }
+    .cam .panel-head{ display:none; }
+    .cam canvas{ grid-area:pic; width:76px; border-radius:8px; }
+    .cam .status{ grid-area:status; min-width:0; gap:9px; }
+    .cam .face{ width:36px; height:36px; border-radius:10px; } .cam .face svg.hand{ width:26px; height:26px; }
+    .cam .status .name{ font-size:13px; }
+    #btn-camera{ grid-area:btn; width:auto; }
+    :root:not([data-mode="camera"]) .cam canvas{ display:none; }
+    :root:not([data-mode="camera"]) .cam{ grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"status btn"; }
     .bar h1{ font-size:14px; }
     .bar .mark{ display:none; }
   }
@@ -460,17 +476,37 @@
   /* ---------------- the table, measured in blocks ---------------- */
   /* The canvas is 17 blocks wide and 10 tall: a build area 10 blocks wide on the left, and on the right the
      picture to copy above a shelf of blocks. Everything sits on the same table line. */
+  /* Usually (TALL) the build area runs the full width, the picture to copy sits above its right side, and the blocks
+     wait on a shelf under the build, so the build gets as big as it can. Only a very wide, short table keeps the
+     shelf on the right. The shelf's floor is SF. */
   var SW = 17, SH = 10, GY = 9, BX0 = 0.5, BX1 = 10.5, RX0 = 11, RX1 = 16.6, ROWS = 6, EPS = 1e-6, DEPTH = 0.16;
+  var TALL = false, SF = 9, CX0 = 11, CX1 = 16.6;
   var L = { U:40, ox:0, oy:0, W:0, H:0 }, DPR = 1;
   var cv = $("stage"), ctx = cv.getContext("2d");
   function sx(u){ return L.ox + u * L.U; }
   function sy(u){ return L.oy + u * L.U; }
+  function fitStage(){
+    L.U = Math.min(L.W / SW, L.H / SH);
+    L.ox = (L.W - SW * L.U) / 2; L.oy = (L.H - SH * L.U) / 2;
+    /* with the picture to copy at the top right, Chike's words go under his face and stop short of the picture */
+    $("stage-box").classList.toggle("tall", TALL);
+    $("chike").style.maxWidth = TALL ? Math.max(140, sx(CX0) - 22) + "px" : "";
+  }
+  function setShape(tall){
+    TALL = tall; SW = tall ? 11 : 17; GY = tall ? 10 : 9;
+    RX0 = tall ? 0.5 : 11; RX1 = tall ? 10.5 : 16.6;   /* the shelf */
+    CX0 = tall ? 5.3 : 11; CX1 = tall ? 10.5 : 16.6;   /* the picture to copy */
+    SH = tall ? 14.5 : 10; SF = GY;
+  }
   function layoutStage(){
     var r = cv.getBoundingClientRect();
     DPR = Math.min(2, window.devicePixelRatio || 1);
     cv.width = Math.max(1, Math.round(r.width * DPR)); cv.height = Math.max(1, Math.round(r.height * DPR));
-    L.W = r.width; L.H = r.height; L.U = Math.min(r.width / SW, r.height / SH);
-    L.ox = (r.width - SW * L.U) / 2; L.oy = (r.height - SH * L.U) / 2;
+    L.W = r.width; L.H = r.height;
+    /* whichever shape gives the bigger blocks: the shelf under the build, unless the screen is very wide and short */
+    var tall = Math.min(r.width / 11, r.height / 14.5) >= Math.min(r.width / 17, r.height / 10) * 0.97;
+    if (tall !== TALL){ setShape(tall); if (blocks.length) packShelf(blocks); }
+    fitStage();
   }
 
   var ci = 0, blocks = [], shelves = [], held = null, heldPos = { x:0, y:0 }, grab = { dx:0, dy:0 }, hover = null, seq = 0;
@@ -493,13 +529,17 @@
       if (!r){ r = { items:[], w:-gap, h:0 }; rows.push(r); }
       r.items.push(b); r.w += gap + b.w; r.h = Math.max(r.h, b.h);
     });
-    var base = 0; shelves = [];
+    /* on a tall screen the shelf sits under the build, below the ruler, with a board under its bottom row too */
+    var total = rows.reduce(function(s, r){ return s + r.h; }, 0) + 0.45 * Math.max(0, rows.length - 1);
+    SF = TALL ? GY + 0.95 + total : GY;
+    var base = 0; shelves = TALL ? [0] : [];
     rows.forEach(function(r, k){
       var x = RX0 + 0.15 + (maxW - r.w) / 2;
       if (k) shelves.push(base - 0.12);
-      r.items.forEach(function(b){ b.hx = x; b.hy = GY - base - b.h; x += b.w + gap; });
+      r.items.forEach(function(b){ b.hx = x; b.hy = SF - base - b.h; x += b.w + gap; });
       base += r.h + 0.45;
     });
+    if (TALL){ SH = SF + 0.35; if (L.W) fitStage(); }
   }
 
   /* where a block is drawn when it's not moving: on the build or on its shelf spot */
@@ -556,6 +596,7 @@
   function dropPlan(b, r){
     var ux = (r.x - L.ox) / L.U - BX0;
     if (ux + b.w / 2 > (BX1 - BX0) + 0.15) return { tray:true };
+    if (TALL && (r.y - L.oy) / L.U + b.h / 2 > GY + 0.4) return { tray:true };   /* let go over the shelf: back it goes */
     var x = Math.max(0, Math.min(BX1 - BX0 - b.w, Math.round(ux * 2) / 2)), y = landY(b, x);
     if (y + b.h > ROWS + EPS) return { x:x, y:y, tooHigh:true };
     var temp = { x:x, y:y, w:b.w, h:b.h }, tip = findTip(placed().concat([temp]));
@@ -732,16 +773,18 @@
       c.fillText(String(i), tx, sy(GY) + U * 0.45);
     }
     /* the line between the build area and the shelf */
-    c.save(); c.setLineDash([4, 5]); c.strokeStyle = TK["--border-2"];
-    c.beginPath(); c.moveTo(Math.round(sx(10.75)) + .5, sy(4.0)); c.lineTo(Math.round(sx(10.75)) + .5, sy(GY)); c.stroke(); c.restore();
+    if (!TALL){
+      c.save(); c.setLineDash([4, 5]); c.strokeStyle = TK["--border-2"];
+      c.beginPath(); c.moveTo(Math.round(sx(10.75)) + .5, sy(4.0)); c.lineTo(Math.round(sx(10.75)) + .5, sy(GY)); c.stroke(); c.restore();
+    }
     /* shelf boards between rows of blocks */
     c.fillStyle = TK["--page-edge"];
-    shelves.forEach(function(base){ rr(c, sx(RX0 + 0.05), sy(GY - base), (RX1 - RX0 - 0.1) * U, Math.max(3, U * 0.1), 2); c.fill(); });
+    shelves.forEach(function(base){ rr(c, sx(RX0 + 0.05), sy(SF - base), (RX1 - RX0 - 0.1) * U, Math.max(3, U * 0.1), 2); c.fill(); });
   }
   /* the picture to copy, in the top right corner */
   function drawCard(){
     var c = ctx, U = L.U, ch = CH[ci];
-    var x = sx(RX0), y = sy(0.35), w = (RX1 - RX0) * U, h = 3.4 * U, pad = Math.max(8, U * 0.25);
+    var x = sx(CX0), y = sy(0.35), w = (CX1 - CX0) * U, h = 3.4 * U, pad = Math.max(8, U * 0.25);
     rr(c, x, y, w, h, Math.max(8, U * 0.22)); c.fillStyle = TK["--surface-2"]; c.fill(); c.strokeStyle = TK["--border"]; c.lineWidth = 1; c.stroke();
     var fs = Math.max(9, Math.round(U * 0.22));
     c.font = "600 " + fs + "px Geist, sans-serif"; c.fillStyle = TK["--muted"]; c.textAlign = "left";
@@ -952,6 +995,7 @@
   var state = { mode:"off", gesture:null, candidate:null, frames:0, holdStart:0, holdDone:false, seen:0, track:[], cooldown:0 };
   function showGesture(g){
     var info = g ? GESTURES[g] : null;
+    document.documentElement.setAttribute("data-mode", state.mode);   /* a phone shows the hand picture only with the camera on */
     if (held && state.mode === "camera"){ $("g-face").innerHTML = handSVG("pinch"); $("g-name").textContent = "Carrying a block"; $("g-does").textContent = "Open your fingers to drop it"; }
     else {
       $("g-face").innerHTML = info ? handSVG(g) : icon(state.mode === "camera" ? "eye" : state.mode === "keys" ? "mouse" : "camera", "hand");
@@ -1263,7 +1307,7 @@
     CH:CH, get ci(){ return ci; }, get blocks(){ return blocks; }, get run(){ return run; }, load:loadChallenge, matches:matches, findTip:findTip, classify:classify,
     onResults:onResults, state:state, rectOf:rectOf, poseLm:poseLm,
     /* put a shelf block straight onto the build at x (in blocks), as if it had been carried there and dropped */
-    drop:function(i, x){ var b = blocks[i], r = rectOf(b); if (!run.started){ run.started = true; run.t0 = now(); } held = b; b.state = "held"; heldPos.x = sx(BX0 + x); heldPos.y = r.y; release(); }
+    drop:function(i, x){ var b = blocks[i], r = rectOf(b); if (!run.started){ run.started = true; run.t0 = now(); } held = b; b.state = "held"; heldPos.x = sx(BX0 + x); heldPos.y = TALL ? sy(GY - ROWS) : r.y; release(); }
   };
 })();
 </script>
