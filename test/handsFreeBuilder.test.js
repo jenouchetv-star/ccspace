@@ -2,7 +2,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 
-const html = readFileSync(new URL("../supabase/private-games/hands-free-builder.html", import.meta.url), "utf8");
+// read with plain line endings, however git checked the file out (Windows checkouts get \r\n)
+const html = readFileSync(new URL("../supabase/private-games/hands-free-builder.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const phone = html.split("@media (max-width:540px){")[1].split("\n  }\n")[0];
 
 describe("the building table", () => {
