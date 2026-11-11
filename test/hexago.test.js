@@ -255,6 +255,21 @@ describe("the 25 levels", () => {
     const all = kinds(25);
     for (const k of ["ramp", "bridge", "gate", "mover", "bumper", "tramp", "white"]) expect(all.has(k), k).toBe(true);
   });
+  it("are full of diamonds, with hills to roll down from level 4 and moving platforms from level 9", () => {
+    for (const L of G.LEVELS){
+      expect(L.tiles.filter(t => t.diamond).length, `level ${L.id} diamonds`).toBeGreaterThanOrEqual(8);
+      const ramps = L.tiles.filter(t => t.kind === "ramp");
+      if (L.id >= 4){
+        expect(ramps.length, `level ${L.id} ramps`).toBeGreaterThanOrEqual(3);
+        expect(ramps.some(t => t.h >= 2), `level ${L.id} rolls down from a hill`).toBe(true);
+      }
+      if (L.id >= 9) expect(L.movers.length, `level ${L.id} platforms`).toBeGreaterThanOrEqual(2);
+    }
+    // the tip for a piece shows on the first level that has it
+    const first = k => G.LEVELS.find(L => k === "mover" ? L.movers.length : L.tiles.some(t => t.kind === k));
+    expect(first("ramp").tutorialEvents).toContain("ramp");
+    expect(first("mover").tutorialEvents).toContain("mover");
+  });
   it("are longer than the old ones", () => {
     for (const L of G.LEVELS) expect(L.tiles.length + L.movers.length, `level ${L.id}`).toBeGreaterThanOrEqual(28);
   });

@@ -588,6 +588,8 @@ LevelBuilder.prototype = {
   back(name){ Object.assign(this, this.marks[name]); return this; },
   /** n ramp tiles rolling toward dir, each a step lower; then lay the landing with go(dir, tok, -1) */
   slide(dir, n){ for (let i = 0; i < n; i++) this.go(dir, "R" + dir, i ? -1 : 0); return this; },
+  /** a hill: climb n steps up the screen on tok tiles, then roll back down n ramps toward dir to a land tile */
+  hill(n, tok, dir, land){ return this.up(n, tok, 1).slide(dir, n).go(dir, land || tok, -1); },
   /** a gap of n cells crossed by a moving platform that rides back and forth along it, then the far shore */
   ferry(dir, n, tok, dh, phase){
     const path = []; let q = this.q, r = this.r;
@@ -617,118 +619,125 @@ LevelBuilder.prototype = {
 
 /* ---------------------------------------------------------------- the 25 levels ---------------------------------------------------------------- */
 const LEVEL_SRC = [
-  /* ---- Neon City: the basics */
+  /* ---- Neon City: the basics (and a first hill to roll down) */
   { id: 1, title: "First Bounce", theme: "city", seed: 101, tutorial: ["steer", "portal"], make: b => b.start().side(D.L, "8").side(D.R, "8")
-    .up(5, "8").side(D.R, "8d").up(4, "8").go(D.R, "8").go(D.R, "8").up(5, "8").side(D.L, "8d").up(4, "8")
-    .go(D.L, "8").go(D.L, "8").up(4, "8").side(D.R, "8D").up(5, "8").go(D.R, "8").up(4, "8").side(D.L, "8d").up(3, "8").up(1, "P") },
+    .up(5, "8").side(D.R, "8d").up(4, "8d").go(D.R, "8").go(D.R, "8").up(5, "8").side(D.L, "8d").up(4, "8d")
+    .go(D.L, "8").go(D.L, "8").up(4, "8").side(D.R, "8D").up(5, "8").go(D.R, "8d").up(4, "8").side(D.L, "8d").up(3, "8d").up(1, "P") },
   { id: 2, title: "Color Shift", theme: "city", seed: 202, tutorial: ["durability"], make: b => b.start()
-    .up(4, "6").go(D.R, "5").go(D.R, "5").up(4, "5").side(D.L, "G").up(3, "4").go(D.L, "5").go(D.L, "5").go(D.L, "4d")
-    .up(4, "5").go(D.R, "4").up(4, "4").side(D.R, "G").up(4, "5").go(D.L, "4").go(D.L, "4d").up(4, "5").go(D.R, "5").go(D.R, "5")
+    .up(4, "6").go(D.R, "5").go(D.R, "5d").up(4, "5d").side(D.L, "G").up(3, "4").go(D.L, "5").go(D.L, "5").go(D.L, "4d")
+    .up(4, "5").go(D.R, "4d").up(4, "4d").side(D.R, "Gd").up(4, "5").go(D.L, "4").go(D.L, "4d").up(4, "5d").go(D.R, "5").go(D.R, "5")
     .up(3, "4").side(D.L, "4D").up(2, "5").up(1, "P") },
   { id: 3, title: "Last Light", theme: "city", seed: 303, tutorial: ["red"], make: b => b.start()
-    .up(3, "6").up(3, "2").side(D.R, "G").up(2, "1").go(D.R, "3").go(D.R, "1d").up(3, "2").side(D.L, "G")
-    .up(3, "1").go(D.L, "3").go(D.L, "2").up(4, "2").side(D.R, "1D").up(3, "3").go(D.R, "2").up(3, "1").side(D.L, "G")
+    .up(3, "6d").up(3, "2").side(D.R, "Gd").up(2, "1d").go(D.R, "3").go(D.R, "1d").up(3, "2d").side(D.L, "G")
+    .up(3, "1").go(D.L, "3d").go(D.L, "2").up(4, "2").side(D.R, "1D").up(3, "3d").go(D.R, "2").up(3, "1").side(D.L, "Gd")
     .up(3, "2").go(D.L, "1d").up(3, "2").up(1, "P") },
-  { id: 4, title: "Fork in the Road", theme: "city", seed: 404, tutorial: ["fork"], make: b => b.start()
-    .up(3, "7").mark("fork").up(6, "6").mark("after")
+  { id: 4, title: "Fork in the Road", theme: "city", seed: 404, tutorial: ["fork", "ramp"], make: b => b.start()
+    .up(3, "7d").mark("fork").up(6, "6").mark("after")
     .back("fork").go(D.L, "3").go(D.L, "2d").up(2, "2").go(D.UR, "2D").go(D.UR, "2d")
     .back("after").up(3, "6").go(D.R, "6").mark("fork2").up(6, "6").mark("after2")
     .back("fork2").go(D.R, "3").go(D.R, "2d").up(2, "2").go(D.UL, "2D").go(D.UL, "2d")
-    .back("after2").up(3, "6").go(D.L, "6").up(4, "6").up(1, "P") },
+    .back("after2").up(3, "6").go(D.L, "6").hill(3, "6d", D.UL, "6").up(3, "6").up(1, "P") },
   { id: 5, title: "Second Chance", theme: "city", seed: 505, tutorial: ["hover"], make: b => b.start()
     .up(2, "8").side(D.L, "8D").side(D.R, "8D").up(3, "8").side(D.R, "8D").up(2, "8d").mark("tip").go(D.R, "1")
     .back("tip").up(4, "7").side(D.L, "7d").up(1, "C").up(5, "7").go(D.R, "7").go(D.R, "7d").up(5, "7").side(D.L, "7D")
-    .up(4, "7").go(D.L, "7").go(D.L, "7").up(4, "7").up(1, "P") },
+    .up(2, "7").hill(3, "7d", D.UR, "7").go(D.L, "7").go(D.L, "7").up(3, "7").up(1, "P") },
 
-  /* ---- Canyon: hills and ramps */
+  /* ---- Canyon: hills, ramps and walls */
   { id: 6, title: "Up the Steps", theme: "canyon", seed: 606, tutorial: ["steps"], make: b => b.start()
-    .up(2, "8").up(4, "8", 1).side(D.R, "8d").up(3, "8").go(D.R, "8").up(3, "8", 1).side(D.L, "8D").up(2, "8")
-    .up(4, "8", -1).go(D.L, "8").go(D.L, "8d").up(3, "8", 1).up(3, "8").go(D.R, "8").go(D.R, "8").up(3, "8", -1)
-    .side(D.L, "8d").up(3, "8").up(1, "P") },
+    .up(2, "8").up(4, "8d", 1).side(D.R, "8d").up(3, "8").go(D.R, "8").up(3, "8", 1).side(D.L, "8D").up(2, "8")
+    .slide(D.UL, 4).go(D.UL, "8d", -1).go(D.R, "8").go(D.R, "8d").up(3, "8", 1).up(3, "8d").go(D.R, "8").go(D.R, "8")
+    .slide(D.UL, 3).go(D.UL, "8", -1).side(D.L, "8d").up(3, "8").up(1, "P") },
   { id: 7, title: "Too High", theme: "canyon", seed: 707, tutorial: ["wall"], make: b => b.start()
-    .up(3, "8").mark("a").up(1, "8", 2).up(4, "8").mark("c").back("a").go(D.R, "8", 1)
-    .back("c").go(D.L, "8").up(2, "8").mark("b").up(1, "8", 2).up(3, "8").mark("d").back("b").go(D.L, "8", 1)
+    .up(3, "8").mark("a").up(1, "8", 2).up(4, "8d").mark("c").back("a").go(D.R, "8", 1)
+    .back("c").go(D.L, "8").up(2, "8").mark("b").up(1, "8", 2).up(3, "8d").mark("d").back("b").go(D.L, "8", 1)
     .back("d").go(D.L, "8d").up(3, "8").mark("e").up(1, "8", 2).up(3, "8").mark("f").back("e").go(D.R, "8", 1)
-    .back("f").side(D.R, "8D").up(3, "8").up(1, "P") },
+    .back("f").side(D.R, "8D").slide(D.UL, 3).go(D.UL, "8d", -1).up(2, "8d").up(1, "P") },
   { id: 8, title: "Slide Down", theme: "canyon", seed: 808, tutorial: ["ramp"], make: b => b.start()
-    .up(3, "8").up(3, "8", 1).go(D.R, "8").slide(D.R, 2).go(D.R, "8d", -1).up(3, "8", 1).up(2, "8", 1)
-    .go(D.L, "8").slide(D.L, 3).go(D.L, "8", -1).up(3, "8").side(D.R, "8D").up(3, "8", 1).up(2, "8", 1)
+    .up(3, "8d").up(3, "8", 1).go(D.R, "8d").slide(D.R, 2).go(D.R, "8d", -1).up(3, "8d", 1).up(2, "8", 1)
+    .go(D.L, "8").slide(D.L, 3).go(D.L, "8d", -1).up(3, "8").side(D.R, "8D").up(3, "8d", 1).up(2, "8", 1)
     .go(D.R, "8").slide(D.R, 2).go(D.R, "8d", -1).up(3, "8").up(1, "P") },
-  { id: 9, title: "Mesa Loop", theme: "canyon", seed: 909, make: b => b.start()
-    .up(2, "7").up(3, "7", 1).go(D.R, "7").go(D.R, "7d").up(2, "7", 1).slide(D.UL, 2).go(D.UL, "7", -1).up(1, "C")
-    .up(3, "6", 1).go(D.L, "6").go(D.L, "6D").up(2, "6", 1).go(D.R, "6").slide(D.UR, 3).go(D.UR, "6", -1).up(3, "6")
-    .up(3, "6", 1).go(D.L, "6d").slide(D.L, 2).go(D.L, "6", -1).up(3, "6").up(1, "P") },
+  { id: 9, title: "Mesa Loop", theme: "canyon", seed: 909, tutorial: ["mover"], make: b => b.start()
+    .up(2, "7d").up(3, "7", 1).go(D.R, "7").go(D.R, "7d").up(2, "7d", 1).slide(D.UL, 2).go(D.UL, "7", -1).up(1, "C")
+    .up(3, "6d", 1).go(D.L, "6").go(D.L, "6D").up(2, "6", 1).go(D.R, "6").slide(D.UR, 3).go(D.UR, "6", -1).up(2, "6")
+    .up(1, "G").ferry(D.UL, 2, "Gd").up(3, "6", 1).go(D.L, "6d").slide(D.L, 2).go(D.L, "6", -1).up(2, "6d")
+    .up(1, "G").ferry(D.UR, 2, "G").up(2, "6").up(1, "P") },
   { id: 10, title: "Canyon Run", theme: "canyon", seed: 1010, make: b => b.start()
-    .up(3, "6").up(3, "6", 1).mark("x").up(1, "6", 2).up(2, "6").mark("y").back("x").go(D.L, "6", 1)
-    .back("y").up(3, "5d").slide(D.UL, 2).go(D.UL, "5", -1).up(1, "C").up(3, "5", 1).go(D.L, "5").go(D.L, "5D").up(3, "5", 1)
-    .go(D.R, "5").slide(D.R, 2).go(D.R, "5", -1).up(3, "5").mark("z").up(1, "5", 2).up(3, "5").mark("w").back("z").go(D.L, "5", 1)
-    .back("w").up(3, "5", -1).up(2, "5").up(1, "P") },
+    .up(3, "6d").up(3, "6", 1).mark("x").up(1, "6", 2).up(2, "6d").mark("y").back("x").go(D.L, "6", 1)
+    .back("y").up(3, "5d").slide(D.UL, 2).go(D.UL, "5", -1).up(1, "C").ferry(D.UR, 2, "G").up(3, "5", 1).go(D.L, "5").go(D.L, "5D").up(3, "5", 1)
+    .go(D.R, "5").slide(D.R, 2).go(D.R, "5d", -1).up(3, "5").mark("z").up(1, "5", 2).up(3, "5d").mark("w").back("z").go(D.L, "5", 1)
+    .back("w").slide(D.UL, 3).go(D.UL, "5d", -1).up(1, "G").ferry(D.UR, 2, "G").up(2, "5").up(1, "P") },
 
   /* ---- Reactor: switches, bridges, gates, moving platforms, bumpers */
   { id: 11, title: "Power Switch", theme: "reactor", seed: 1111, tutorial: ["switch"], make: b => b.start()
-    .up(4, "7").mark("s").go(D.L, "7").go(D.L, "Oa").back("s").up(1, "7").bridge(D.UL, 3, "a").up(1, "G")
-    .up(4, "7d").go(D.R, "7").go(D.R, "Ob").go(D.L).go(D.L).up(1, "7").bridge(D.UR, 3, "b").up(4, "7").side(D.L, "7D")
-    .up(3, "7").mark("t").go(D.R, "7").go(D.R, "Oc").back("t").up(1, "7").bridge(D.UL, 2, "c").up(3, "7").up(1, "P") },
+    .up(4, "7d").mark("s").go(D.L, "7").go(D.L, "Oa").back("s").up(1, "7").bridge(D.UL, 3, "a").up(1, "G").ferry(D.UR, 2, "G")
+    .up(4, "7d").go(D.R, "7").go(D.R, "Ob").go(D.L).go(D.L).up(1, "7").bridge(D.UR, 3, "b").up(2, "7").side(D.L, "7D")
+    .hill(3, "7d", D.UL, "7").up(2, "7").mark("t").go(D.R, "7").go(D.R, "Oc").back("t").up(1, "7").bridge(D.UL, 2, "c")
+    .up(2, "7d").up(1, "G").ferry(D.UR, 2, "G").up(1, "P") },
   { id: 12, title: "Locked Gates", theme: "reactor", seed: 1212, tutorial: ["gate"], make: b => b.start()
-    .up(3, "7").mark("s").go(D.R, "7").go(D.R, "7d").go(D.R, "Oa").back("s").up(2, "7").up(1, "#a").up(4, "7")
-    .mark("t").go(D.L, "7").go(D.L, "7").go(D.L, "Ob").back("t").up(2, "7").up(1, "#b").up(3, "7").side(D.R, "7D").up(3, "7")
-    .mark("u").go(D.R, "7").go(D.R, "Oc").back("u").up(2, "7").up(1, "#c").up(3, "7").up(1, "P") },
+    .up(3, "7d").mark("s").go(D.R, "7").go(D.R, "7d").go(D.R, "Oa").back("s").up(2, "7").up(1, "#a").up(1, "G").ferry(D.UL, 2, "G").up(2, "7d")
+    .mark("t").go(D.L, "7").go(D.L, "7d").go(D.L, "Ob").back("t").up(2, "7").up(1, "#b").hill(3, "7d", D.UR, "7").side(D.R, "7D").up(2, "7")
+    .mark("u").go(D.R, "7").go(D.R, "Oc").back("u").up(2, "7").up(1, "#c").up(1, "G").ferry(D.UR, 2, "G").up(2, "7d").up(1, "P") },
   { id: 13, title: "Ferry", theme: "reactor", seed: 1313, tutorial: ["mover"], make: b => b.start()
-    .up(3, "8").up(1, "G").ferry(D.UL, 2, "G").up(3, "8").go(D.R, "8d").up(1, "G").ferry(D.UR, 3, "G").up(4, "8")
-    .side(D.L, "8D").ferry(D.UL, 2, "G").up(3, "8").go(D.L, "8").up(1, "G").ferry(D.UR, 2, "G").up(3, "8").up(1, "P") },
+    .up(3, "8d").up(1, "G").ferry(D.UL, 2, "Gd").up(3, "8").go(D.R, "8d").up(1, "G").ferry(D.UR, 3, "G").up(4, "8d")
+    .side(D.L, "8D").ferry(D.UL, 2, "G").hill(3, "8d", D.UR, "8").go(D.L, "8").up(1, "G").ferry(D.R, 3, "G")
+    .up(1, "G").ferry(D.UR, 2, "G").up(3, "8d").up(1, "P") },
   { id: 14, title: "Bumper Alley", theme: "reactor", seed: 1414, tutorial: ["bumper"], make: b => b.start()
-    .up(3, "8").up(1, "G").up(1, "B0").up(1, "G").up(2, "8").go(D.R, "G").go(D.R, "B1").go(D.R, "G").up(3, "8d")
-    .up(1, "G").up(1, "B0").up(1, "B1").up(1, "G").up(3, "8").side(D.L, "8D").up(1, "G").up(1, "B1").up(1, "G").up(2, "8")
-    .go(D.L, "G").go(D.L, "B0").go(D.L, "G").up(3, "8").up(1, "P") },
+    .up(3, "8d").up(1, "G").up(1, "B0").up(1, "G").up(2, "8").go(D.R, "G").go(D.R, "B1").go(D.R, "G").up(3, "8d")
+    .up(1, "G").ferry(D.UL, 2, "G").up(1, "B0").up(1, "B1").up(1, "G").hill(3, "8d", D.UL, "8").side(D.L, "8D")
+    .up(1, "G").up(1, "B1").up(1, "G").up(2, "8").go(D.L, "G").go(D.L, "B0").go(D.L, "Gd")
+    .up(1, "G").ferry(D.UR, 2, "G").up(2, "8d").up(1, "P") },
   { id: 15, title: "Reactor Core", theme: "reactor", seed: 1515, make: b => b.start()
-    .up(3, "7").mark("s").go(D.R, "7").go(D.R, "Oa").back("s").up(2, "7").up(1, "#a").up(2, "7").up(1, "G").ferry(D.UL, 2, "G")
-    .up(2, "6d").up(1, "C").up(1, "B0").up(1, "G").up(3, "6", 1).go(D.L, "6").go(D.L, "Ob").go(D.R).go(D.R)
-    .up(1, "6").bridge(D.UL, 2, "b").up(3, "6").side(D.R, "6D").up(1, "G").up(1, "B1").up(2, "6").up(1, "G")
+    .up(3, "7d").mark("s").go(D.R, "7").go(D.R, "Oa").back("s").up(2, "7").up(1, "#a").up(2, "7d").up(1, "G").ferry(D.UL, 2, "Gd")
+    .up(2, "6d").up(1, "C").up(1, "B0").up(1, "G").up(3, "6d", 1).go(D.L, "6").go(D.L, "Ob").go(D.R).go(D.R)
+    .up(1, "6").bridge(D.UL, 2, "b").up(1, "6").slide(D.UL, 3).go(D.UL, "6d", -1).side(D.R, "6D").up(1, "G").up(1, "B1").up(2, "6d").up(1, "G")
     .ferry(D.UR, 2, "G").up(3, "6").up(1, "P") },
 
   /* ---- Sky Arena: trampolines and launchers */
   { id: 16, title: "Big Bounce", theme: "sky", seed: 1616, tutorial: ["tramp"], make: b => b.start()
-    .up(3, "8").go(D.UL, "T").leap(D.UL, "8").up(3, "8").go(D.UR, "T").leap(D.UR, "8d").up(2, "8").go(D.R, "8")
-    .go(D.UL, "T").leap(D.UL, "8").up(3, "8").go(D.UR, "T").leap(D.UR, "8D").up(3, "8").go(D.L, "8")
-    .go(D.UL, "T").leap(D.UL, "8d").up(3, "8").up(1, "P") },
+    .up(3, "8d").go(D.UL, "T").leap(D.UL, "8d").up(3, "8").go(D.UR, "T").leap(D.UR, "8d", 3).slide(D.UR, 3).go(D.UR, "8", -1)
+    .up(1, "G").ferry(D.UL, 2, "G").up(2, "8").go(D.R, "8")
+    .go(D.UL, "T").leap(D.UL, "8").up(3, "8d").go(D.UR, "T").leap(D.UR, "8D").up(2, "8").up(1, "G").ferry(D.UR, 2, "G").up(1, "8").go(D.L, "8")
+    .go(D.UL, "T").leap(D.UL, "8d").up(3, "8d").up(1, "P") },
   { id: 17, title: "High Ledges", theme: "sky", seed: 1717, make: b => b.start()
-    .up(3, "8").go(D.UL, "T").leap(D.UL, "8", 2).up(3, "8").go(D.UR, "T").leap(D.UR, "8d", 3).up(2, "8")
-    .go(D.R, "8").slide(D.R, 3).go(D.R, "8", -1).up(3, "8").go(D.UL, "T").leap(D.UL, "8D", 2).up(3, "8")
-    .go(D.L, "8").slide(D.L, 2).go(D.L, "8", -1).up(3, "8").up(1, "P") },
+    .up(3, "8d").go(D.UL, "T").leap(D.UL, "8d", 2).up(3, "8").go(D.UR, "T").leap(D.UR, "8d", 3).up(2, "8d")
+    .go(D.R, "8").slide(D.R, 3).go(D.R, "8", -1).up(1, "G").ferry(D.UL, 2, "G").up(2, "8").go(D.UL, "T").leap(D.UL, "8D", 2).up(3, "8d")
+    .go(D.L, "8").slide(D.L, 2).go(D.L, "8", -1).up(1, "G").ferry(D.UR, 2, "Gd").up(2, "8").up(1, "P") },
   { id: 18, title: "Wild Launch", theme: "sky", seed: 1818, tutorial: ["launcher"], make: b => b.start()
-    .up(3, "8").up(1, "W").split("G", "G", "8").up(4, "8d").up(1, "W").split("8", "8", "8").up(3, "8").side(D.R, "8D")
-    .up(2, "8").up(1, "W").split("G", "G", "8").up(3, "8").up(1, "P") },
+    .up(3, "8d").up(1, "W").split("Gd", "Gd", "8").up(4, "8d").up(1, "W").split("8", "8", "8").up(1, "G").ferry(D.UL, 2, "G").up(1, "8").side(D.R, "8D")
+    .hill(3, "8d", D.UR, "8").up(1, "W").split("G", "G", "8").up(2, "8").up(1, "G").ferry(D.UR, 2, "G").up(1, "8d").up(1, "P") },
   { id: 19, title: "Cloud Ferry", theme: "sky", seed: 1919, make: b => b.start()
-    .up(3, "7").up(1, "G").ferry(D.UR, 3, "G").up(2, "7").go(D.UL, "T").leap(D.UL, "7d", 1).up(3, "7").up(1, "C")
-    .ferry(D.UL, 2, "G").up(2, "7").go(D.UR, "T").leap(D.UR, "7D", 2).up(2, "7").slide(D.UL, 2).go(D.UL, "7", -1).up(2, "7")
-    .up(1, "G").ferry(D.UR, 2, "G").up(3, "7").up(1, "P") },
+    .up(3, "7d").up(1, "G").ferry(D.UR, 3, "Gd").up(2, "7").go(D.UL, "T").leap(D.UL, "7d", 1).up(3, "7d").up(1, "C")
+    .ferry(D.UL, 2, "G").up(2, "7").go(D.UR, "T").leap(D.UR, "7D", 2).up(2, "7d", 1).slide(D.UL, 4).go(D.UL, "7", -1).up(2, "7")
+    .up(1, "G").ferry(D.UR, 2, "G").up(3, "7d").up(1, "P") },
   { id: 20, title: "Thunder Run", theme: "sky", seed: 2020, make: b => b.start()
-    .up(3, "6").up(1, "W").split("G", "G", "6").up(2, "6").go(D.UL, "T").leap(D.UL, "6d", 2).up(2, "6").up(1, "C")
-    .up(1, "G").ferry(D.UR, 2, "G").up(3, "6").up(1, "G").up(1, "B0").up(1, "G").up(2, "6").slide(D.UL, 2).go(D.UL, "6D", -1)
-    .up(3, "6").up(1, "W").split("6", "6", "6").up(3, "6").up(1, "P") },
+    .up(3, "6d").up(1, "W").split("Gd", "Gd", "6").up(2, "6").go(D.UL, "T").leap(D.UL, "6d", 2).up(2, "6d").up(1, "C")
+    .up(1, "G").ferry(D.UR, 2, "G").up(3, "6d").up(1, "G").up(1, "B0").up(1, "G").up(2, "6", 1).slide(D.UL, 4).go(D.UL, "6D", -1)
+    .up(3, "6").up(1, "W").split("6", "6", "6").up(1, "G").ferry(D.UR, 2, "G").up(2, "6d").up(1, "P") },
 
   /* ---- Cosmic Rift: everything together */
   { id: 21, title: "Fracture", theme: "cosmic", seed: 2121, make: b => b.start()
-    .up(3, "6").up(3, "6", 1).mark("s").go(D.L, "6").go(D.L, "Oa").back("s").up(1, "6").bridge(D.UR, 3, "a").up(2, "6d")
-    .up(3, "5", 1).go(D.R, "5").slide(D.R, 2).go(D.R, "5D", -1).up(4, "5").go(D.UL, "T").leap(D.UL, "5", 2).up(3, "5")
-    .up(1, "G").ferry(D.UR, 2, "G").up(3, "5").up(1, "P") },
+    .up(3, "6d").up(3, "6", 1).mark("s").go(D.L, "6").go(D.L, "Oa").back("s").up(1, "6").bridge(D.UR, 3, "a").up(2, "6d")
+    .up(3, "5d", 1).go(D.R, "5").slide(D.R, 3).go(D.R, "5D", -1).up(3, "5").go(D.UL, "T").leap(D.UL, "5", 2).up(1, "5").slide(D.UL, 3).go(D.UL, "5d", -1)
+    .up(1, "G").ferry(D.UR, 2, "G").up(1, "5").up(1, "G").ferry(D.UL, 2, "Gd").up(2, "5d").up(1, "P") },
   { id: 22, title: "No Wasted Hops", theme: "cosmic", seed: 2222, make: b => b.start()
-    .up(3, "2").up(1, "G").up(3, "1", 1).go(D.R, "1").go(D.R, "1d").up(1, "G").up(4, "1").go(D.L, "2").up(2, "1", 1)
-    .up(1, "C").up(3, "1").go(D.R, "1").up(3, "1", -1).side(D.L, "1D").up(2, "1").up(1, "G").up(3, "1", 1).go(D.L, "1")
-    .up(3, "2").up(1, "P") },
+    .up(3, "2d").up(1, "G").up(3, "1d", 1).go(D.R, "1").go(D.R, "1d").up(1, "G").ferry(D.UR, 2, "G").up(4, "1").go(D.L, "2d").up(2, "1", 1)
+    .up(1, "C").up(3, "1d").go(D.R, "1").slide(D.UL, 3).go(D.UL, "1", -1).side(D.L, "1D").up(2, "1").up(1, "G").ferry(D.UL, 2, "G")
+    .up(3, "1", 1).go(D.L, "1d").up(3, "2").up(1, "P") },
   { id: 23, title: "Uncertain Paths", theme: "cosmic", seed: 2323, make: b => b.start()
-    .up(3, "6").up(1, "W").split("G", "G", "6").up(2, "6").up(1, "G").ferry(D.UL, 2, "G").up(2, "6d").up(1, "C")
-    .up(1, "G").up(1, "B1").up(1, "G").up(2, "6").up(1, "W").split("6", "6", "6").up(3, "6").side(D.R, "6D").up(2, "6")
-    .go(D.UL, "T").leap(D.UL, "6", 2).up(3, "6").up(1, "P") },
+    .up(3, "6d").up(1, "W").split("Gd", "Gd", "6").up(2, "6").up(1, "G").ferry(D.UL, 2, "G").up(2, "6d").up(1, "C")
+    .up(1, "G").up(1, "B1").up(1, "G").up(2, "6d").up(1, "W").split("6", "6", "6").up(3, "6").side(D.R, "6D").up(2, "6")
+    .go(D.UL, "T").leap(D.UL, "6d", 2).up(1, "6", 1).slide(D.UR, 3).go(D.UR, "6", -1).up(1, "G").ferry(D.UL, 2, "G").up(2, "6d").up(1, "P") },
   { id: 24, title: "Final Approach", theme: "cosmic", seed: 2424, make: b => b.start()
-    .up(3, "5").up(3, "5", 1).go(D.R, "5").slide(D.R, 2).go(D.R, "5d", -1).up(2, "5").up(1, "C").mark("s")
-    .go(D.L, "5").go(D.L, "Oa").back("s").up(2, "5").up(1, "#a").up(2, "5").up(1, "G").ferry(D.UR, 2, "G").up(2, "5")
-    .up(1, "C").go(D.UL, "T").leap(D.UL, "5D", 2).up(3, "4").up(1, "G").up(1, "B0").up(1, "G").up(3, "4").up(1, "P") },
+    .up(3, "5d").up(3, "5", 1).go(D.R, "5").slide(D.R, 3).go(D.R, "5d", -1).up(2, "5").up(1, "C").mark("s")
+    .go(D.L, "5").go(D.L, "Oa").back("s").up(2, "5d").up(1, "#a").up(2, "5").up(1, "G").ferry(D.UR, 2, "G").up(2, "5d")
+    .up(1, "C").go(D.UL, "T").leap(D.UL, "5D", 2).up(1, "4", 1).slide(D.UR, 3).go(D.UR, "4d", -1)
+    .up(1, "G").up(1, "B0").up(1, "G").ferry(D.UL, 2, "G").up(2, "4d").up(1, "P") },
   { id: 25, title: "HexaGone!", theme: "cosmic", seed: 2525, make: b => b.start()
-    .up(3, "4").up(1, "W").split("G", "G", "4").up(2, "4", 1).up(2, "4", 1).go(D.R, "4").slide(D.R, 2).go(D.R, "4d", -1)
-    .up(1, "C").mark("s").go(D.L, "4").go(D.L, "Oa").back("s").up(1, "4").bridge(D.UL, 2, "a").up(2, "4").up(1, "G")
+    .up(3, "4d").up(1, "W").split("Gd", "Gd", "4").up(2, "4", 1).up(2, "4d", 1).go(D.R, "4").slide(D.R, 3).go(D.R, "4d", -1)
+    .up(1, "C").mark("s").go(D.L, "4").go(D.L, "Oa").back("s").up(1, "4").bridge(D.UL, 2, "a").up(2, "4d").up(1, "G")
     .ferry(D.UR, 2, "G").up(2, "3").up(1, "C").up(1, "G").up(1, "B1").up(1, "G").go(D.UL, "T").leap(D.UL, "3D", 2)
-    .up(2, "3").mark("t").go(D.R, "3").go(D.R, "Ob").back("t").up(1, "3").up(1, "#b").up(3, "3").up(1, "P") }
+    .up(2, "3d").mark("t").go(D.R, "3").go(D.R, "Ob").back("t").up(1, "3").up(1, "#b").up(1, "3").slide(D.UL, 3).go(D.UL, "3d", -1)
+    .up(1, "G").ferry(D.UR, 2, "G").up(1, "3d").up(1, "P") }
 ];
 const THEME_OF = { city: "Neon City", canyon: "Canyon", reactor: "Reactor", sky: "Sky Arena", cosmic: "Cosmic Rift" };
 /* Every level has its own sky and weather inside its world: sky = [top, middle, horizon]; fog = [colour, density];
@@ -1220,28 +1229,28 @@ const WITNESS = {
   1: { main: "2121122110121212122321212121112121212" },
   2: { main: "21210112121233221112112212322110121212" },
   3: { main: "212121210112122321212111212122212" },
-  4: { main: "21212121212111212121222121" },
-  5: { main: "212112122121212110121212122321212", cps: {"c1":"212110121212122321212"} },
-  6: { main: "212121211121212122321212101121212" },
-  7: { main: "21122122213112221122112212" },
+  4: { main: "21212121212111212121222126662121" },
+  5: { main: "2121121221212121101212121212166632212", cps: {"c1":"2121101212121212166632212"} },
+  6: { main: "21212121112121266660112121016662121" },
+  7: { main: "21122122213112221122122666121" },
   8: { main: "21212100662121233666121212110661212" },
-  9: { main: "212110122661212321166612121233661212", cps: {"c1":"212321166612121233661212"} },
-  10: { main: "21212131121212662122321106612131121212121", cps: {"c1":"122321106612131121212121"} },
-  11: { main: "21223012221212100332111121212100332221212" },
-  12: { main: "211003322121223300112121211032212121" },
-  13: { main: "212141414141414141622221114141414141414166611112121222212241414141414141415252525252525261112121" },
-  14: { main: "2121212100112121212121212332212" },
-  15: { main: "2110322121222212122121233001222112221211112121", cps: {"c1":"22121233001222112221211112121"} },
-  16: { main: "2122212111211221211122222121" },
-  17: { main: "21222121112100666212221223662121" },
-  18: { main: "212161212126232112216232121" },
-  19: { main: "212141414141414166611112122212122221112126621252525252525261111212", cps: {"c1":"22221112126621252525252525261111212"} },
-  20: { main: "2121623212221211112121212126621216232121", cps: {"c1":"11112121212126621216232121"} },
-  21: { main: "21212230111112121006621212221211112121" },
-  22: { main: "21212110121222121211121212122212", cps: {"c1":"1211121212122212"} },
-  23: { main: "212162321252525252526222121211212162321122221212", cps: {"c1":"211212162321122221212"} },
-  24: { main: "212121006621233001212121111212221212212121", cps: {"c1":"33001212121111212221212212121","c2":"2221212212121"} },
-  25: { main: "2121623212101001222121111212112221103221212", cps: {"c1":"1222121111212112221103221212","c2":"2112221103221212"} }
+  9: { main: "2121101226612123211666121222212336612141414141416111212", cps: {"c1":"2123211666121222212336612141414141416111212"} },
+  10: { main: "2121213112121266211112232110661213112126662111121", cps: {"c1":"11112232110661213112126662111121"} },
+  11: { main: "212230122211112121003321111212126662100332221211112" },
+  12: { main: "21100332212222123330001212121666110322126111121" },
+  13: { main: "21214141414141414162222111414141414141416661111212122221216662510011111212" },
+  14: { main: "21212121001121414141414141416222212121266621212332401111212" },
+  15: { main: "211032212122221212212123300122226661221211112121", cps: {"c1":"2212123300122226661221211112121"} },
+  16: { main: "2122212111166622221122121112125252525252525261112222121" },
+  17: { main: "21222121112100666246222212221223662111121" },
+  18: { main: "21216121212623222212121666162321211112" },
+  19: { main: "21214141414141416661111212221212222111212666621252525252525261111212", cps: {"c1":"2222111212666621252525252525261111212"} },
+  20: { main: "212162321222121111212121212666621216232111121", cps: {"c1":"1111212121212666621216232111121"} },
+  21: { main: "21212230111112121006662122212666211112525252526222121" },
+  22: { main: "212121101111212221212116662122221222121", cps: {"c1":"12116662122221222121"} },
+  23: { main: "2121623212525252525262221212112121623211222211666252525252526222121", cps: {"c1":"2112121623211222211666252525252526222121"} },
+  24: { main: "212121006662123300121212525252526111121222166612216222212", cps: {"c1":"3300121212525252526111121222166612216222212","c2":"222166612216222212"} },
+  25: { main: "21216232121006662330012221211112121122211032212666211112", cps: {"c1":"330012221211112121122211032212666211112","c2":"21122211032212666211112"} }
 };
 /*WITNESS-END*/
 const LEVELS = LEVEL_SRC.map(src => {
