@@ -189,9 +189,13 @@
     .hud-hint{ display:none; }
   }
   @media (max-width:480px){
-    .lvl-grid{ grid-template-columns:repeat(3, minmax(0, 1fr)); }
     .card{ padding:20px; }
-    .tip{ bottom:max(96px, calc(env(safe-area-inset-bottom) + 96px)); }
+  }
+  /* phones: the tip sits up top under the HUD, and short messages at the bottom, so neither covers the ball */
+  @media (max-width:760px) and (orientation:portrait){
+    .tip{ top:72px; bottom:auto; }
+    .hover-tag{ top:auto; bottom:max(96px, calc(env(safe-area-inset-bottom) + 96px)); }
+    .toast{ top:auto; bottom:max(96px, calc(env(safe-area-inset-bottom) + 96px)); }
   }
   @media (prefers-reduced-motion: reduce){ .toast, .tog::after{ transition:none; } }
 
@@ -371,7 +375,7 @@
     <table class="ctl">
       <thead><tr><th>Action</th><th>Keyboard</th><th>Controller</th><th>Touch</th></tr></thead>
       <tbody>
-        <tr><td>Steer</td><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or arrows</td><td>Left stick</td><td>Drag anywhere</td></tr>
+        <tr><td>Steer</td><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or arrows</td><td>Left stick</td><td>Tap a tile next to the ball, or drag</td></tr>
         <tr><td>Bounce in place</td><td>Let go</td><td>Let go</td><td>Lift your finger</td></tr>
         <tr><td>Turn the camera a little</td><td><kbd>Q</kbd> <kbd>E</kbd> or right-drag</td><td>Right stick</td><td>Not needed</td></tr>
         <tr><td>Pause</td><td><kbd>Esc</kbd></td><td>Start / Menu</td><td>Pause button</td></tr>
@@ -2044,7 +2048,11 @@ function screenInput(){
   const l = Math.hypot(x, y);
   return l > 1 ? { x: x / l, y: y / l } : { x, y };
 }
-function worldInput(){ const s = screenInput(); return screenToWorld(s.x, s.y, app.yaw); }
+function worldInput(){
+  if (app.tapT > 0) return app.tapVec;
+  const s = screenInput();
+  return screenToWorld(s.x, s.y, app.yaw);
+}
 addEventListener("keydown", e => {
   Sound.unlock();
   setDevice("keyboard");
@@ -2140,29 +2148,57 @@ function bindPointer(){
     if (app.state === "INTRO"){ skipIntro(); return; }
     if (app.state !== "PLAYING") return;
     if (e.pointerType === "mouse" && e.button === 2){ touch.orbitId = e.pointerId; touch.orbitX = e.clientX; cv.setPointerCapture(e.pointerId); return; }
-    if (e.pointerType !== "mouse" && touch.id === null){
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    /* a finger (or a click): a quick tap hops toward the tapped tile; a drag steers like a stick */
+    if (touch.id === null){
       touch.id = e.pointerId; touch.ox = e.clientX; touch.oy = e.clientY; touch.vec = { x: 0, y: 0 };
-      const st = $("stick"); st.style.left = e.clientX + "px"; st.style.top = e.clientY + "px"; st.classList.remove("hidden"); st.firstElementChild.style.transform = "";
+      touch.t0 = performance.now(); touch.moved = false; touch.mouse = e.pointerType === "mouse";
       cv.setPointerCapture(e.pointerId);
     }
   });
   cv.addEventListener("pointermove", e => {
     if (e.pointerId === touch.orbitId){ app.yawTarget = clampYaw(app.yawTarget - (e.clientX - touch.orbitX) * 0.004); touch.orbitX = e.clientX; return; }
-    if (e.pointerId !== touch.id) return;
+    if (e.pointerId !== touch.id || touch.mouse) return;
     let dx = e.clientX - touch.ox, dy = e.clientY - touch.oy;
     const l = Math.hypot(dx, dy), max = 56;
+    if (l >= 14 && !touch.moved){
+      touch.moved = true;
+      const st = $("stick"); st.style.left = touch.ox + "px"; st.style.top = touch.oy + "px"; st.classList.remove("hidden");
+    }
+    if (!touch.moved) return;
     if (l > max){ dx *= max / l; dy *= max / l; }
-    touch.vec = l < 10 ? { x: 0, y: 0 } : { x: dx / max, y: -dy / max };
+    touch.vec = { x: dx / max, y: -dy / max };
     $("stick").firstElementChild.style.transform = "translate(" + dx + "px," + dy + "px)";
   });
   const up = e => {
     if (e.pointerId === touch.orbitId) touch.orbitId = null;
     if (e.pointerId !== touch.id) return;
-    touch.id = null; touch.vec = { x: 0, y: 0 }; $("stick").classList.add("hidden");
+    if (e.type === "pointerup" && !touch.moved && performance.now() - touch.t0 < 400) tapHop(e.clientX, e.clientY);
+    touch.id = null; touch.vec = { x: 0, y: 0 }; $("stick").classList.add("hidden"); $("stick").firstElementChild.style.transform = "";
   };
   cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
 }
 function clampYaw(y){ return Math.max(-0.6, Math.min(0.6, y)); }
+/** A tap (or click) on the board: find the spot on the tiles under the finger and hop toward it from the tile the next hop
+    starts from. It goes in like a quick key press, so the usual rules apply (a late tap counts for the next hop).
+    Tapping the ball's own tile keeps it bouncing in place. */
+const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
+function tapHop(x, y){
+  const S = app.sim;
+  if (app.state !== "PLAYING" || !S) return;
+  const r = GL.renderer.domElement.getBoundingClientRect();
+  _ndc.set((x - r.left) / r.width * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+  _ray.setFromCamera(_ndc, GL.camera);
+  const o = _ray.ray.origin, d = _ray.ray.direction;
+  if (d.y >= -1e-4) return;
+  const k = -o.y / d.y, px = o.x + d.x * k, pz = o.z + d.z * k;
+  const AIR = CONFIG.BOUNCE - CONFIG.DWELL;
+  const aimNow = S.mode === "bounce" && S.phase === "air" && S.t / AIR < CONFIG.LOCK;
+  const base = aimNow ? S.from : S.to, b = hexToWorld(base.q, base.r);
+  const dx = px - b.x, dz = pz - b.z, l = Math.hypot(dx, dz);
+  if (l < CONFIG.R * 0.75) return;
+  app.tapVec = { x: dx / l, z: dz / l }; app.tapT = 0.1;
+}
 
 /* ---------------------------------------------------------------- screens ---------------------------------------------------------------- */
 const SCREENS = ["s-title", "s-levels", "s-settings", "s-confirm", "s-controls", "s-pause", "s-fail", "s-results", "s-campaign", "s-error"];
@@ -2254,7 +2290,7 @@ function buildTitleStrip(){ $("t-strip").innerHTML = DUR_COLORS.slice(1).reverse
 
 const TIPS = {
   steer: { k: "Steer", keyboard: "The ball bounces by itself. Steer with <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or the arrow keys, and let go to bounce in place.",
-    gamepad: "The ball bounces by itself. Steer with the left stick, and let go to bounce in place.", touch: "The ball bounces by itself. Drag anywhere to steer, and lift your finger to bounce in place." },
+    gamepad: "The ball bounces by itself. Steer with the left stick, and let go to bounce in place.", touch: "The ball bounces by itself. Tap a tile next to the ball to hop onto it, or drag anywhere to steer." },
   portal: { k: "Goal", all: "Bounce onto the glowing gate to finish the level." },
   durability: { k: "Countdown", all: "The number on a tile is how many landings it has left. Each landing takes one, and the colour changes as it counts down." },
   red: { k: "Red tiles", all: "Red means one last landing. Landing is safe, but when you bounce off, it falls away." },
@@ -2265,7 +2301,9 @@ const TIPS = {
   launcher: { k: "White launchers", all: "White tiles throw the ball to one of the dashed rings, picked at random. You can't steer while flying." },
   checkpoint: { k: "Checkpoints", all: "Landing on a flag tile saves your place. Retry starts you there." },
   shortcut: { k: "Shortcut", all: "Fill the meter, then hop off the end of the short branch near the start and glide to the little tile by the portal." },
-  hovering: { k: "Hovering", all: "Steer to a tile. The ball lands as soon as it's over one." }
+  hovering: { k: "Hovering", all: "Steer to a tile. The ball lands as soon as it's over one." },
+  /* the touch version of "steer", kept separately so someone who first played with keys still gets told about tapping */
+  steertouch: { k: "Steer", all: "The ball bounces by itself. Tap a tile next to the ball to hop onto it, or drag anywhere to steer." }
 };
 function tipText(key){ const t = TIPS[key]; return t ? (t.all || t[app.device] || t.keyboard) : ""; }
 function tipOnce(key){
@@ -2289,7 +2327,7 @@ function updateTips(dt){
 function updateHints(){
   const h = $("h-hint"), L = app.level;
   const txt = { keyboard: "<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows to steer &nbsp;·&nbsp; <kbd>Esc</kbd> to pause",
-    gamepad: "Left stick to steer &nbsp;·&nbsp; Menu to pause", touch: "Drag anywhere to steer" }[app.device];
+    gamepad: "Left stick to steer &nbsp;·&nbsp; Menu to pause", touch: "Tap a tile next to the ball, or drag to steer" }[app.device];
   h.innerHTML = txt;
   h.classList.toggle("hidden", !(L && L.id <= 2));
   $("t-foot").textContent = { keyboard: "Keyboard: arrows to choose, Enter to pick, Esc to go back.", gamepad: "Controller: stick or D-pad to choose, A to pick, B to go back.", touch: "Tap to choose. Drag on the game to steer." }[app.device];
@@ -2329,7 +2367,7 @@ function skipIntro(){ if (app.state === "INTRO") beginPlay(true); }
 function beginPlay(snapCamera){
   app.state = "PLAYING"; app.acc = 0; app.intro = null; lastFrame = performance.now();
   if (snapCamera) placeCamera(true);
-  for (const k of app.level.tutorialEvents) tipOnce(k);
+  for (const k of app.level.tutorialEvents) tipOnce(k === "steer" && app.device === "touch" ? "steertouch" : k);
 }
 function pause(){
   if (app.state !== "PLAYING" && app.state !== "INTRO") return;
@@ -2441,6 +2479,7 @@ function frame(now){
 function stepGame(dt){
   if (app.state !== "PLAYING") return;
   const S = app.sim;
+  if (app.tapT > 0) app.tapT -= dt;
   const orbit = (keys.has("KeyE") ? 1 : 0) - (keys.has("KeyQ") ? 1 : 0) + pad.orbit;
   if (orbit) app.yawTarget = clampYaw(app.yawTarget - orbit * 1.3 * dt);
   app.acc += dt;
@@ -2470,8 +2509,10 @@ function cameraGoal(out, look){
   const portrait = innerWidth / innerHeight < 0.8 ? 1.25 : 1;
   const d = GL.cam.dist * portrait;
   out.set(focus.x + Math.sin(app.yaw) * 8.4 * d, 7.4 * d, focus.z + Math.cos(app.yaw) * 8.4 * d);
-  /* look a few tiles down the route: the hops ahead stay in view, and so does the level's sky above the horizon */
-  look.set(focus.x - Math.sin(app.yaw) * 6.5, 0.4, focus.z - Math.cos(app.yaw) * 6.5);
+  /* look a few tiles down the route: the hops ahead stay in view, and so does the level's sky above the horizon.
+     A tall phone screen has room above already, so it looks less far ahead and the ball sits higher, clear of the thumbs. */
+  const ahead = portrait > 1 ? 2.6 : 6.5;
+  look.set(focus.x - Math.sin(app.yaw) * ahead, 0.4, focus.z - Math.cos(app.yaw) * ahead);
 }
 const _goal = new V3(), _look = new V3();
 function placeCamera(snap){
@@ -2657,6 +2698,8 @@ function wire(){
 /* ---------------------------------------------------------------- start ---------------------------------------------------------------- */
 function boot(){
   loadSave();
+  /* a phone or tablet is a touch device from the start, so the first tips talk about tapping, not keys */
+  try { if (matchMedia("(pointer: coarse)").matches && !matchMedia("(pointer: fine)").matches) app.device = "touch"; } catch (_e) { /* keyboard it is */ }
   buildTitleStrip();
   wire();
   if (!initGL()){ app.state = "ERROR"; showScreen("s-error"); return; }
