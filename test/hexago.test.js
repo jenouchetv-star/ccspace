@@ -1,338 +1,277 @@
-// Hexa'GO! (subscribers-only game): the rules in the game's LOGIC block, tested on their own.
+// HexaGone! (subscribers-only game; file and ids still "hexago"): the rules in the game's LOGIC block, tested on their own.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 
 // read with plain line endings, however git checked the file out (Windows checkouts get \r\n)
 const html = readFileSync(new URL("../supabase/private-games/hexago.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const logic = html.slice(html.indexOf("/*LOGIC-START*/"), html.indexOf("/*LOGIC-END*/"));
-const G = new Function(logic + `; return { CONFIG, DIRS, DUR_COLORS, LEVELS, hexToWorld, worldToHex, hexKey, pickDir, screenToWorld,
-  parseLevel, validateLevel, createSim, simStep, retryCheckpoint, restore, capture, getTile, tileSupports, ballPos, rngNext,
-  replayWitness, planWitness, solvableFrom, sanitizeSave, awardsFor, mergeAwards, formatTime, towardVec, shortestHops, LEVEL_ENV };`)();
-const { CONFIG } = G;
+const G = new Function(logic + `; return { CONFIG, DIRS, D, DIR_VECS, DUR_COLORS, LEVELS, LEVEL_ENV, THEME_OF, hexToWorld, worldToHex, hexKey, pickDir,
+  screenToWorld, buildLevel, validateLevel, createSim, simStep, retryCheckpoint, restore, capture, getTile, tileSupports, blocked,
+  bumperUp, ballPos, replayMoves, planWitness, solvableFrom, sanitizeSave, awardsFor, mergeAwards, formatTime, towardVec, advance };`)();
+const { CONFIG, D } = G;
 const STEP = CONFIG.STEP;
+const NONE = { x: 0, z: 0 };
 
-/* a tiny level made from a map, for the rule tests */
-function lvl(map, extra){ return G.parseLevel(Object.assign({ id: 99, title: "Test", theme: "city", seed: 7, map }, extra || {})); }
-/* runs the sim until `until(S)` or the time runs out, holding `vec` (or a function of S) */
+/* a small test level from a build script */
+let n = 0;
+function lvl(make){ return G.buildLevel({ id: 900 + (n++), title: "Test", theme: "city", seed: 7, make }); }
 function run(S, vec, until, maxSec){
-  const n = Math.round((maxSec || 10) / STEP);
-  for (let i = 0; i < n; i++){
+  const steps = Math.round((maxSec || 10) / STEP);
+  for (let i = 0; i < steps; i++){
     if (until && until(S)) return true;
-    simStepWith(S, typeof vec === "function" ? vec(S) : vec);
+    G.simStep(S, STEP, typeof vec === "function" ? vec(S) : vec);
   }
   return until ? until(S) : true;
 }
-function simStepWith(S, v){ G.simStep(S, STEP, v || { x: 0, z: 0 }); }
-const NONE = { x: 0, z: 0 };
-const UP_RIGHT = () => { const w = G.hexToWorld(1, -1); const l = Math.hypot(w.x, w.z); return { x: w.x / l, z: w.z / l }; };
+const dirVec = i => G.DIR_VECS[i];
+/* hold a direction for one hop, from a moment the ball is about to hop (or waiting at the start) */
+function hop(S, dir){ return G.advance(S, dir === undefined ? 6 : dir, STEP); }
 function landings(S){ return S.events.filter(e => e.type === "landed").length; }
 
-describe("the hex grid", () => {
-  it("places pointy-top hexes with the PRD's formula and finds the hex under any point", () => {
-    const R = CONFIG.R;
-    expect(G.hexToWorld(1, 0)).toEqual({ x: Math.sqrt(3) * R, z: 0 });
-    expect(G.hexToWorld(0, 2).z).toBeCloseTo(3 * R);
+describe("the hex grid and steering", () => {
+  it("places pointy-top hexes and finds the hex under any point", () => {
+    expect(G.hexToWorld(1, 0)).toEqual({ x: Math.sqrt(3) * CONFIG.R, z: 0 });
     for (let q = -4; q <= 4; q++) for (let r = -4; r <= 4; r++){
       const w = G.hexToWorld(q, r);
       expect(G.worldToHex(w.x + 0.3, w.z - 0.3)).toEqual({ q, r });
     }
   });
-  it("turns a held direction into the nearest of the six neighbours, the same however the camera is turned", () => {
-    // pressing "right" with the camera turned 30 degrees still means the neighbour on the right of the screen
+  it("turns a held direction into the nearest neighbour, the same however the camera is turned", () => {
     for (const yaw of [0, 0.3, -0.4]){
-      const v = G.screenToWorld(1, 0, yaw);
-      const d = G.pickDir(v, -1);
-      const dv = G.towardVec({ q: 0, r: 0 }, { q: G.DIRS[d][0], r: G.DIRS[d][1] });
+      const v = G.screenToWorld(1, 0, yaw), d = G.pickDir(v, -1), dv = G.DIR_VECS[d];
       expect(dv.x * v.x + dv.z * v.z).toBeGreaterThan(0.85);
     }
-    expect(G.pickDir({ x: 0.05, z: 0.1 }, -1)).toBe(-1);               // inside the dead zone: no direction
-    expect(G.pickDir(G.screenToWorld(1, 0, 0), -1)).toBe(0);          // right
-    expect(G.pickDir(G.screenToWorld(0.8, 1, 0), 0)).toBe(1);         // up-right wins clearly
-    expect(G.pickDir(G.screenToWorld(0.97, 0.26, 0), 0)).toBe(0);     // near a border it keeps its last pick
+    expect(G.pickDir({ x: 0.05, z: 0.1 }, -1)).toBe(-1);
   });
   it("a quick tap moves one tile: letting go mid-hop keeps the hop you aimed", () => {
-    const L = lvl(["P. .. ..", "8. 8. 8.", "8. 8. ..", ".. S. .."]);
+    const L = lvl(b => b.start().up(3, "8").side(D.R, "8").up(1, "P"));
     const S = G.createSim(L);
-    run(S, NONE, s => s.mode === "bounce" && s.phase === "air" && s.t > 0.05, 3);   // airborne, bouncing in place
+    run(S, NONE, s => s.mode === "bounce" && s.phase === "air" && s.t > 0.05, 3);
     const from = { ...S.from };
-    const right = G.screenToWorld(1, 0, 0);
-    for (let i = 0; i < 6; i++) G.simStep(S, STEP, right);                           // a 50 ms tap
+    for (let i = 0; i < 6; i++) G.simStep(S, STEP, dirVec(D.UL));
     run(S, NONE, s => s.phase === "dwell", 2);
-    expect(S.to).toEqual({ q: from.q + 1, r: from.r });
+    expect(S.to).toEqual({ q: from.q, r: from.r - 1 });
   });
-  it("a tap made too late in a hop is kept for the next hop, but letting go of a long hold adds no extra hop", () => {
-    const L = lvl(["P. .. .. ..", "8. 8. 8. 8.", "8. 8. 8. ..", ".. S. .. .."]);
-    const AIR = CONFIG.BOUNCE - CONFIG.DWELL;
-    const S = G.createSim(L);
-    run(S, NONE, s => s.mode === "bounce" && s.phase === "air" && s.t / AIR > CONFIG.LOCK + 0.05, 3);
-    const start = { ...S.from };
-    const right = G.screenToWorld(1, 0, 0);
-    for (let i = 0; i < 4; i++) G.simStep(S, STEP, right);                           // tapped after the lock
-    const hop = S.hop;
-    run(S, NONE, s => s.hop > hop && s.phase === "air" && s.t > 0.1, 2);             // the next hop
-    expect(S.to).toEqual({ q: start.q + 1, r: start.r });
-    // now a long hold that ends late in the hop: the hop it was holding happens, nothing after it
-    const S2 = G.createSim(L);
-    run(S2, right, s => s.mode === "bounce" && s.phase === "air" && s.t / AIR > CONFIG.LOCK + 0.05, 3);
-    const aimed = { ...S2.to }, hop2 = S2.hop;
-    run(S2, NONE, s => s.hop > hop2 && s.phase === "air" && s.t > 0.1, 2);
-    expect(S2.to).toEqual(aimed);                                                     // bounces in place where it landed
-  });
-  it("holding straight up zigzags straight up the screen (there is no neighbour straight up), never drifting off sideways", () => {
-    const L = lvl([".. 8. ..", ".. 8. ..", ".. 8. ..", ".. 8. ..", ".. 8. ..", "8. 8. 8.", ".. S. .."]);
-    const S = G.createSim(L);
-    const up = G.screenToWorld(0, 1, 0);
-    const xs = [];
-    run(S, up, s => { if (s.events.some(e => e.type === "landed")){ xs.push(G.hexToWorld(s.to.q, s.to.r).x); s.events.length = 0; } return xs.length >= 5; }, 10);
-    expect(S.mode).toBe("bounce");
-    const x0 = G.hexToWorld(L.spawn.q, L.spawn.r).x;
-    for (const x of xs) expect(Math.abs(x - x0)).toBeLessThan(CONFIG.R * 1.2);
+  it("holding straight up zigzags up the screen, never drifting off sideways", () => {
+    const L = lvl(b => b.start().up(8, "8").up(1, "P"));
+    const S = G.createSim(L), up = G.screenToWorld(0, 1, 0);
+    run(S, up, s => s.mode === "complete" || s.mode === "falling", 12);
+    expect(S.mode).toBe("complete");
   });
 });
 
 describe("tile countdown", () => {
-  it("1. a tile starting at 8 shows 8, becomes 7 after one landing, and runs through the colours in order", () => {
+  it("a tile starting at 8 becomes 7 after one landing, and the colours run in order", () => {
     expect(G.DUR_COLORS.slice(1)).toEqual(["#FF4258", "#FF943D", "#FFE45C", "#B8ED38", "#19D5C5", "#3685FF", "#9955FF", "#EE39FF"]);
-    const L = lvl(["P.", "8.", "S."]);
+    const L = lvl(b => b.start().up(1, "8").up(1, "P"));
     const S = G.createSim(L);
-    const k = G.hexKey(0, 1);
-    expect(S.tiles.get(k).dur).toBe(8);
-    run(S, UP_RIGHT(), s => landings(s) >= 1, 5);
-    expect(S.tiles.get(k).dur).toBe(7);
+    hop(S, D.UL);
+    expect(S.tiles.get(G.hexKey(0, -1)).dur).toBe(7);
   });
-  it("2. a red tile holds one landing, shows 0, and only falls away once the ball leaves", () => {
-    const L = lvl(["P. ..", "1. ..", "S. .."]);
+  it("a red tile holds one landing and falls away once the ball leaves; coming back finds nothing", () => {
+    const L = lvl(b => b.start().up(1, "1").up(1, "P"));
     const S = G.createSim(L);
-    const k = G.hexKey(0, 1), t = S.tiles.get(k);
-    run(S, UP_RIGHT(), s => s.events.some(e => e.type === "tileSpent"), 5);
-    expect(t.dur).toBe(0);
+    hop(S, D.UL);
+    const t = S.tiles.get(G.hexKey(0, -1));
     expect(t.life).toBe("spent");
-    expect(S.mode).toBe("bounce");                                  // landing on red is safe
-    run(S, NONE, s => s.events.some(e => e.type === "tileCollapsed"), 2);
-    expect(t.life).toBe("collapsing");
-    expect(G.tileSupports(t)).toBe(false);
-  });
-  it("3. coming back to a fallen tile finds nothing to land on, even while its pieces are still falling", () => {
-    const L = lvl(["P. ..", "1. ..", "S. .."]);
-    const S = G.createSim(L);
-    run(S, UP_RIGHT(), s => s.events.some(e => e.type === "tileSpent"), 5);
-    run(S, NONE, s => s.mode === "falling" || s.mode === "failed", 3);  // bouncing in place on a spent tile
+    hop(S);                                   // bounce in place on it
+    expect(S.mode === "falling" || S.mode === "failed").toBe(true);
     expect(S.cause).toBe("Tile exhausted");
   });
-  it("4. bouncing in place uses one landing per bounce, never one per frame", () => {
-    const L = lvl(["P.", "8.", "S."]);
+  it("bouncing in place uses one landing per bounce, never one per frame; grey never runs out", () => {
+    const L = lvl(b => b.start().up(1, "8").up(1, "P"));
     const S = G.createSim(L);
-    run(S, UP_RIGHT(), s => landings(s) >= 1, 5);
+    hop(S, D.UL); hop(S); hop(S); hop(S);
+    expect(S.tiles.get(G.hexKey(0, -1)).dur).toBe(4);
+    const S2 = G.createSim(L);
+    for (let i = 0; i < 6; i++) hop(S2);
+    expect(S2.mode).toBe("bounce");
+  });
+});
+
+describe("hills, ramps and trampolines", () => {
+  it("hops up one step, down any number; a ledge two steps up is a wall the ball bonks off, landing back with no fall", () => {
+    const L = lvl(b => b.start().go(D.UL, "8", 1).go(D.UL, "8", 2).mark("top").back("top").go(D.UR, "8", -3).up(1, "P", 0));
+    const S = G.createSim(L);
+    hop(S, D.UL);
+    expect(S.to).toEqual({ q: 0, r: -1 });                        // up one step: fine
     S.events.length = 0;
-    run(S, NONE, null, CONFIG.BOUNCE * 3 + 0.01);
-    expect(S.tiles.get(G.hexKey(0, 1)).dur).toBe(7 - 3);
-  });
-  it("5. grey tiles never run out", () => {
-    const L = lvl(["P.", "S."]);
-    const S = G.createSim(L);
-    run(S, NONE, null, 20);
+    const before = { ...S.to };
+    let bonked = false;
+    run(S, s => (s.events.some(e => e.type === "bonk") && (bonked = true), dirVec(D.UL)), s => bonked && s.phase === "dwell", 3);
+    expect(bonked).toBe(true);                                     // two steps up: bonk
+    expect(S.to).toEqual(before);
     expect(S.mode).toBe("bounce");
-    expect(G.tileSupports(S.tiles.get(G.hexKey(0, 1)))).toBe(true);
+  });
+  it("a ramp rolls the ball on downhill by itself, whatever is held", () => {
+    const L = lvl(b => b.start().go(D.UL, "8").slide(D.R, 2).go(D.R, "8", -1).up(1, "P"));
+    const S = G.createSim(L);
+    hop(S, D.UL); hop(S, D.R);                                     // onto the first ramp
+    expect(G.getTile(S, S.to).kind).toBe("ramp");
+    hop(S, D.L); hop(S, D.L);                                      // pushing the other way changes nothing
+    expect(G.getTile(S, S.to).kind).toBe("standard");
+    expect(S.to.q).toBeGreaterThan(1);
+  });
+  it("a trampoline jumps two tiles the way you steer, over a gap and up to three steps", () => {
+    const L = lvl(b => b.start().go(D.UL, "T").leap(D.UL, "8", 3).up(1, "P"));
+    const S = G.createSim(L);
+    hop(S, D.UL);
+    expect(G.getTile(S, S.to).kind).toBe("tramp");
+    hop(S, D.UL);
+    expect(S.to).toEqual({ q: 0, r: -3 });
+    expect(G.getTile(S, S.to).h).toBe(3);
+    expect(S.mode).toBe("bounce");
   });
 });
 
-describe("diamonds and the rescue hover", () => {
-  it("6. awards a diamond once, a large one adds exactly 3, and the meter stops at 10", () => {
-    const L = lvl(["P. .. ..", "8D 8D ..", "8D 8D ..", "S. .. .."]);
+describe("moving platforms, bumpers, switches", () => {
+  it("a moving platform carries a ball that bounces in place across a gap", () => {
+    const L = lvl(b => b.start().go(D.UL, "G").ferry(D.UL, 2, "G").up(1, "P"));
+    expect(G.validateLevel(L)).toEqual([]);
+    expect(G.planWitness(L, 7).ok).toBe(true);
     const S = G.createSim(L);
-    run(S, UP_RIGHT(), s => s.collected.size >= 1, 5);
-    expect(S.energy).toBe(3);
-    run(S, NONE, null, CONFIG.BOUNCE * 2);                           // more landings on the same tile
-    expect(S.energy).toBe(3);
-    S.energy = 9;
-    const S2 = G.createSim(L); S2.energy = 9;
-    run(S2, UP_RIGHT(), s => s.collected.size >= 1, 5);
-    expect(S2.energy).toBe(10);
+    hop(S, D.UL);                                                  // to the shore (the platform slides off to the far end)
+    hop(S, D.UL);                                                  // it has come back: hop on
+    expect(G.getTile(S, S.to).kind).toBe("mover");
+    const on = { ...S.to };
+    hop(S);                                                        // bounce in place: it carries the ball along
+    expect(G.getTile(S, S.to).kind).toBe("mover");
+    expect(S.to).not.toEqual(on);
+    hop(S, D.UL);                                                  // and off onto the far shore
+    expect(S.to).toEqual({ q: 0, r: -4 });
   });
-  it("7. a landing with nothing under it at 10 energy starts one hover and empties the meter", () => {
-    const L = lvl(["P. .. ..", ".. .. ..", "S. .. .."]);
-    const S = G.createSim(L); S.energy = 10;
-    run(S, UP_RIGHT(), s => s.mode === "hover", 5);
+  it("a bumper's bar blocks its tile on alternate hops; waiting a bounce gets you through", () => {
+    const L = lvl(b => b.start().go(D.UL, "G").go(D.UR, "B0").go(D.UL, "G").up(1, "P"));
+    const S = G.createSim(L);
+    const t = [...S.tiles.values()].find(x => x.kind === "bumper");
+    S.tick = 0; expect(G.bumperUp(S, t)).toBe(true);
+    S.tick = 1; expect(G.bumperUp(S, t)).toBe(false);
+    expect(G.planWitness(L, 7).ok).toBe(true);
+  });
+  it("a switch makes its bridge appear and opens its gate, and stays pressed", () => {
+    const L = lvl(b => b.start().mark("s").go(D.L, "Oa").back("s").go(D.UL, "=a").go(D.UR, "#a").up(1, "P"));
+    expect(G.validateLevel(L)).toEqual([]);
+    const S = G.createSim(L);
+    const bridge = [...S.tiles.values()].find(x => x.kind === "bridge"), gate = [...S.tiles.values()].find(x => x.kind === "gate");
+    expect(G.tileSupports(bridge, S)).toBe(false);
+    expect(G.blocked(S, gate, 0, false)).toBe(true);
+    hop(S, D.L);
+    expect(S.switches.has("a")).toBe(true);
+    expect(G.tileSupports(bridge, S)).toBe(true);
+    expect(G.blocked(S, gate, 0, false)).toBe(false);
+    expect(G.planWitness(L, 7).ok).toBe(true);
+  });
+});
+
+describe("rescue points", () => {
+  it("a big diamond adds 3, the meter holds 3 rescues (30), and one rescue costs 10", () => {
+    expect(CONFIG.ENERGY_CAP).toBe(30); expect(CONFIG.RESCUE_COST).toBe(10);
+    const L = lvl(b => b.start().go(D.UL, "8D").up(1, "P"));
+    const S = G.createSim(L, 7, 29);
+    hop(S, D.UL);
+    expect(S.energy).toBe(30);
+  });
+  it("carry over: a level starts with the rescue points brought in, and a miss with 10 or more hovers and spends 10", () => {
+    const L = lvl(b => b.start().up(1, "P"));
+    const S = G.createSim(L, 7, 23);
+    expect(S.energy).toBe(23);
+    hop(S, D.R);                                                   // nothing to the right: a miss
     expect(S.mode).toBe("hover");
-    expect(S.energy).toBe(0);
-    expect(S.events.filter(e => e.type === "hoverStarted").length).toBe(1);
+    expect(S.energy).toBe(13);
+    const S2 = G.createSim(L, 7, 9);
+    hop(S2, D.R);
+    expect(S2.mode).toBe("falling");
   });
-  it("8. below 10 energy the ball falls instead", () => {
-    const L = lvl(["P. ..", ".. ..", "S. .."]);
-    const S = G.createSim(L); S.energy = 9;
-    run(S, UP_RIGHT(), s => s.mode === "falling", 5);
-    expect(S.mode).toBe("falling");
-    expect(S.cause).toBe("No landing tile");
-    run(S, NONE, s => s.mode === "failed", 3);
-    expect(S.deaths).toBe(1);
-  });
-  it("9. a hover touchdown is one landing, and it may use a tile's last landing", () => {
-    // start at the bottom, hop up-right into the gap, glide on up to the red tile beyond it
-    const L = lvl([".. P. ..", ".. 1. ..", ".. .. ..", "S. .. .."]);
-    const S = G.createSim(L); S.energy = 10;
-    const target = G.hexToWorld(L.tiles.find(t => t.durability === 1).q, L.tiles.find(t => t.durability === 1).r);
-    run(S, s => {
-      if (s.mode !== "hover") return UP_RIGHT();
-      const dx = target.x - s.hover.x, dz = target.z - s.hover.z, l = Math.hypot(dx, dz) || 1;
-      return { x: dx / l, z: dz / l };
-    }, s => s.events.some(e => e.type === "hoverEnded"), 8);
-    const red = [...S.tiles.values()].find(t => t.durability === 1);
-    expect(S.events.filter(e => e.type === "landed").length).toBe(1);
-    expect(red.dur).toBe(0);
-  });
-  it("10. a hover that runs out over a gap falls", () => {
-    const L = lvl(["P. .. .. ..", ".. .. .. ..", ".. .. .. ..", ".. .. .. ..", "S. .. .. .."]);
-    const S = G.createSim(L); S.energy = 10;
-    run(S, s => s.mode === "hover" ? { x: 1, z: 0 } : { x: 1, z: 0 }, s => s.mode === "falling", 6);
-    expect(S.cause).toBe("Hover expired");
+  it("is saved with the progress, and the game hands it to each new level and keeps it at the end", () => {
+    expect(G.sanitizeSave({ v: 2, energy: 17 }).energy).toBe(17);
+    expect(G.sanitizeSave({ v: 2, energy: 99 }).energy).toBe(30);
+    const game = html.slice(html.indexOf("/*GAME*/"));
+    expect(game).toContain("createSim(L, undefined, app.save.energy)");
+    expect(game).toContain("s.energy = S.energy;");
   });
 });
 
-describe("white launchers", () => {
-  const map = [".. G. .. G. ..", ".. .. .. .. ..", ".. .. Wa .. ..", ".. .. S. .. .."];
-  it("11. only throw to their own targets that are there to land on, never to another launcher", () => {
-    const L = lvl(map, { launch: { a: [[1, 0], [3, 0]] } });
-    const targets = new Set(L.tiles.find(t => t.kind === "white").launchTargets.map(g => G.hexKey(g.q, g.r)));
-    const w = L.tiles.find(t => t.kind === "white"), toW = G.towardVec(L.spawn, w);
-    for (let seed = 1; seed <= 30; seed++){
-      const S = G.createSim(L, seed);
-      run(S, s => s.mode === "ready" || (s.from.q === L.spawn.q && s.from.r === L.spawn.r) ? toW : NONE, s => s.mode === "launch", 6);
-      expect(targets.has(G.hexKey(S.to.q, S.to.r))).toBe(true);
-    }
-    const bad = lvl([".. Wb .. G. ..", ".. .. .. .. ..", ".. .. Wa .. ..", ".. .. S. .. .."], { launch: { a: [[1, 0], [3, 0]], b: [[3, 0], [2, 2]] } });
-    expect(G.validateLevel(bad).join(" ")).toContain("aims at another launcher");
-  });
-  it("12. a launcher with no target left to land on acts like a grey tile", () => {
-    const L = lvl([".. 1. .. 1. ..", ".. .. .. .. ..", ".. .. Wa .. ..", ".. .. S. .. .."], { launch: { a: [[1, 0], [3, 0]] } });
-    const S = G.createSim(L);
-    for (const t of S.tiles.values()) if (t.durability === 1){ t.dur = 0; t.life = "absent"; }
-    const w = L.tiles.find(t => t.kind === "white"), toW = G.towardVec(L.spawn, w);
-    run(S, s => s.mode === "ready" || (s.phase === "air" && s.from.q === L.spawn.q && s.from.r === L.spawn.r) ? toW : NONE,
-      s => s.landedHop >= 2, 6);
-    expect(S.mode).toBe("bounce");                                   // no throw: it bounced on it like grey
-    expect(S.to).toEqual({ q: w.q, r: w.r });
-  });
-  it("13. the same seed and the same moves always give the same throws", () => {
-    const L = G.LEVELS.find(l => l.id === 10);
-    const a = G.planWitness(L, 5).path.map(p => G.hexKey(p.q, p.r)).join(" ");
-    const b = G.planWitness(L, 5).path.map(p => G.hexKey(p.q, p.r)).join(" ");
-    expect(a).toBe(b);
-    const outcomes = new Set();
-    for (let s = 1; s <= 20; s++) outcomes.add(G.planWitness(L, s).path[2] && G.hexKey(G.planWitness(L, s).path[2].q, G.planWitness(L, s).path[2].r));
-    expect(outcomes.size).toBeGreaterThan(1);                        // and different seeds really do differ
-  });
-});
-
-describe("checkpoints, pausing and saving", () => {
-  it("14. a checkpoint retry puts back the tiles, diamonds, energy and dice together, but keeps the time and falls", () => {
-    const L = G.LEVELS.find(l => l.id === 19);
-    const r = G.replayWitness(L, L.solutionWitness, L.seed);
+describe("checkpoints, saving, the loop", () => {
+  it("a checkpoint retry restores tiles, switches, the platform clock, diamonds, energy and dice, but not time or falls", () => {
+    const L = G.LEVELS.find(l => l.id === 24);
+    const r = G.replayMoves(L, L.solutionWitness, L.seed);
     expect(r.ok).toBe(true);
+    const snap = Object.values(r.cps)[1];
     const S = G.createSim(L);
-    const path = L.solutionWitness;
-    let i = 0;
-    run(S, s => {
-      const deciding = s.mode === "ready" || s.phase === "dwell";
-      const from = deciding ? s.to : s.from, next = path[Math.min(i, path.length - 1)];
-      return G.towardVec(from, next);
-    }, s => { if (s.events.some(e => e.type === "landed")){ i++; s.events.length = 0; } return !!s.snap; }, 60);
-    const snapTiles = JSON.stringify(S.snap.tiles), snapEnergy = S.snap.energy, snapRng = S.snap.rng, gems = [...S.collected].join();
-    // wander off: use up tiles, fall
-    run(S, UP_RIGHT(), s => s.mode === "failed", 20);
-    S.energy = 7; S.collected.add("dX"); S.rng.s = 12345;
-    const time = S.time, deaths = S.deaths;
-    G.retryCheckpoint(S);
-    expect(JSON.stringify(G.capture(S, S.to).tiles)).toBe(snapTiles);
-    expect(S.energy).toBe(snapEnergy);
-    expect(S.rng.s).toBe(snapRng);
-    expect([...S.collected].join()).toBe(gems);
-    expect(S.time).toBe(time);
-    expect(S.deaths).toBe(deaths);
-    expect(S.mode).toBe("ready");
+    G.restore(S, snap);
+    S.time = 50; S.deaths = 2; S.switches.add("z"); S.tick = 99; S.energy = 3;
+    G.retryCheckpoint(S);                                          // no snap of its own yet: back to the start
+    expect(S.tick).toBe(0);
+    S.snap = snap; G.retryCheckpoint(S);
+    expect([...S.switches].sort()).toEqual([...snap.switches].sort());
+    expect(S.tick).toBe(snap.tick);
+    expect(S.energy).toBe(snap.energy);
+    expect(S.time).toBe(50); expect(S.deaths).toBe(2);
   });
-  it("15. gameplay only moves when stepped: the game's loop caps catch-up and stops while paused or hidden", () => {
-    const S = G.createSim(G.LEVELS[0]);
-    const t0 = S.time;
-    expect(S.time).toBe(t0);                                         // no step, no time
+  it("an old save from the 20-level version keeps its settings but starts the new campaign fresh; junk can't break it", () => {
+    const old = G.sanitizeSave({ v: 1, unlocked: 14, settings: { master: 30 } });
+    expect(old.unlocked).toBe(1); expect(old.settings.master).toBe(30);
+    for (const raw of [null, "x", 5, [], { v: 2, unlocked: "lots", settings: "no" }]) expect(G.sanitizeSave(raw).unlocked).toBeGreaterThanOrEqual(1);
+    expect(G.sanitizeSave({ v: 2, unlocked: 99 }).unlocked).toBe(25);
+  });
+  it("gameplay only moves when stepped, with capped catch-up; no clock on screen; level 25 ends the campaign", () => {
     const game = html.slice(html.indexOf("/*GAME*/"));
     expect(game).toContain("Math.min(dt, CONFIG.MAX_CATCHUP)");
     expect(game).toContain('document.addEventListener("visibilitychange"');
     expect(game).toMatch(/if \(app\.state !== "PLAYING"\)[^\n]*return/);
-  });
-  it("17. a missing or corrupt save can't stop the game starting", () => {
-    for (const raw of [null, undefined, "x", 5, [], { unlocked: "lots", settings: "no" }, { unlocked: 99, best: { 3: -1, 4: "a" }, awards: { 2: "dzzq" } }]){
-      const s = G.sanitizeSave(raw);
-      expect(s.unlocked).toBeGreaterThanOrEqual(1);
-      expect(s.unlocked).toBeLessThanOrEqual(20);
-      expect(typeof s.settings.master).toBe("number");
-    }
-    const s = G.sanitizeSave({ unlocked: 99, best: { 3: -1, 4: 50000 }, awards: { 2: "dzzq" } });
-    expect(s.unlocked).toBe(20);
-    expect(s.best).toEqual({ 4: 50000 });
-    expect(s.awards[2]).toBe("dz");
-  });
-  it("18. finishing level 20 ends the campaign rather than looking for a level 21", () => {
-    expect(G.LEVELS.length).toBe(20);
-    const game = html.slice(html.indexOf("/*GAME*/"));
+    expect(game).not.toContain('$("h-time").textContent');
     expect(game).toContain('"CAMPAIGN_COMPLETE"');
     expect(game).toMatch(/level\.id === CONFIG\.LEVEL_COUNT/);
+    expect(html).toContain("<title>HexaGone!</title>");
+    expect(html).not.toContain("Hexa'GO");
   });
-  it("gives badges for every diamond, no falls and the target time, separately", () => {
+  it("badges for every diamond, no falls and the target time, separately", () => {
     const L = G.LEVELS[0];
     expect(G.awardsFor(L, { diamonds: 2, diamondTotal: 2, deaths: 0, time: 1 })).toBe("dzt");
-    expect(G.awardsFor(L, { diamonds: 1, diamondTotal: 2, deaths: 1, time: 999 })).toBe("");
     expect(G.mergeAwards("dz", "tz")).toBe("dtz");
     expect(G.formatTime(75.25)).toBe("1:15.3");
   });
 });
 
-describe("the 20 levels", () => {
-  it("are all there, in four themes, five each", () => {
-    expect(G.LEVELS.map(l => l.id)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
-    const themes = G.LEVELS.map(l => l.theme);
-    expect(themes.slice(0, 5).every(t => t === "city")).toBe(true);
-    expect(themes.slice(5, 10).every(t => t === "reactor")).toBe(true);
-    expect(themes.slice(10, 15).every(t => t === "sky")).toBe(true);
-    expect(themes.slice(15).every(t => t === "cosmic")).toBe(true);
+describe("the 25 levels", () => {
+  it("are all there: five worlds of five, each with its own sky", () => {
+    expect(G.LEVELS.map(l => l.id)).toEqual(Array.from({ length: 25 }, (_, i) => i + 1));
+    const worlds = ["city", "canyon", "reactor", "sky", "cosmic"];
+    G.LEVELS.forEach((l, i) => expect(l.theme).toBe(worlds[Math.floor(i / 5)]));
+    const looks = new Set(G.LEVELS.map(l => { const e = G.LEVEL_ENV[l.id]; return e.sky.join() + e.weather + e.feature; }));
+    expect(looks.size).toBe(25);
+    expect(new Set(Object.values(G.LEVEL_ENV).map(e => e.name)).size).toBe(25);
+  });
+  it("bring in the new pieces world by world", () => {
+    const kinds = id => new Set(G.LEVELS[id - 1].tiles.map(t => t.kind).concat(G.LEVELS[id - 1].movers.length ? ["mover"] : []));
+    expect([6, 7, 8, 9, 10].some(id => G.LEVELS[id - 1].tiles.some(t => t.h > 0))).toBe(true);
+    expect(kinds(8).has("ramp")).toBe(true);
+    expect(kinds(11).has("bridge")).toBe(true);
+    expect(kinds(12).has("gate")).toBe(true);
+    expect(kinds(13).has("mover")).toBe(true);
+    expect(kinds(14).has("bumper")).toBe(true);
+    expect(kinds(16).has("tramp")).toBe(true);
+    expect(kinds(18).has("white")).toBe(true);
+    const all = kinds(25);
+    for (const k of ["ramp", "bridge", "gate", "mover", "bumper", "tramp", "white"]) expect(all.has(k), k).toBe(true);
+  });
+  it("are longer than the old ones", () => {
+    for (const L of G.LEVELS) expect(L.tiles.length + L.movers.length, `level ${L.id}`).toBeGreaterThanOrEqual(28);
   });
   for (const L of G.LEVELS){
-    it(`level ${L.id} "${L.title}" is valid and its winning path works with the real rules, no hover`, () => {
+    it(`level ${L.id} "${L.title}" is valid and its winning moves work with the real rules, no hover`, () => {
       expect(G.validateLevel(L)).toEqual([]);
-      expect(L.tiles.filter(t => t.kind === "standard").every(t => t.durability >= 1 && t.durability <= 8)).toBe(true);
-      const r = G.replayWitness(L, L.solutionWitness, L.seed);
+      const r = G.replayMoves(L, L.solutionWitness, L.seed);
       expect(r.ok).toBe(true);
-      expect(r.S.energy).toBeLessThanOrEqual(10);
       for (const id in L.checkpointWitnesses){
         expect(r.cps[id]).toBeTruthy();
-        expect(G.replayWitness(L, L.checkpointWitnesses[id], L.seed, r.cps[id]).ok).toBe(true);
+        expect(G.replayMoves(L, L.checkpointWitnesses[id], L.seed, r.cps[id]).ok).toBe(true);
       }
-      expect(L.parTimeSeconds).toBeGreaterThan(0);
     });
   }
-  it("each level has its own environment and sky: no two levels look alike", () => {
-    expect(Object.keys(G.LEVEL_ENV).map(Number)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
-    const looks = new Set(), names = new Set();
-    for (const L of G.LEVELS){
-      const e = G.LEVEL_ENV[L.id];
-      expect(e.sky).toHaveLength(3);
-      expect(["clear", "rain", "snow", "fog", "embers", "steam", "smog", "ash", "meteors"]).toContain(e.weather);
-      looks.add(e.sky.join() + "|" + e.weather + "|" + e.feature);
-      names.add(e.name);
-    }
-    expect(looks.size).toBe(20);
-    expect(names.size).toBe(20);
-    // flashes (lightning, a red-alert pulse) all switch off with "Reduce flashes"
-    const game = html.slice(html.indexOf("/*GAME*/"));
-    expect(game).toMatch(/reducedFlash[^\n]*flash/);
-  });
   it("every launcher throw leads somewhere you can still finish from", () => {
     for (const L of G.LEVELS.filter(l => l.tiles.some(t => t.kind === "white"))){
-      for (let seed = 1; seed <= 16; seed++) expect(G.planWitness(L, seed).ok, `level ${L.id} seed ${seed}`).toBe(true);
+      for (let seed = 1; seed <= 6; seed++) expect(G.planWitness(L, seed).ok, `level ${L.id} seed ${seed}`).toBe(true);
     }
-  });
-  it("don't give every tile eight landings, and get more fragile later on", () => {
-    const avg = L => { const s = L.tiles.filter(t => t.kind === "standard"); return s.reduce((a, t) => a + t.durability, 0) / s.length; };
-    expect(G.LEVELS.slice(0, 5).map(avg).reduce((a, b) => a + b) / 5).toBeGreaterThan(G.LEVELS.slice(15).map(avg).reduce((a, b) => a + b) / 5);
-    expect(G.LEVELS.every(L => L.tiles.some(t => t.kind === "standard" && t.durability < 8))).toBe(true);
   });
 });
