@@ -3793,6 +3793,28 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
 .astat__num{ font-size:clamp(1.8rem,4vw,2.4rem); font-weight:800; line-height:1; color:var(--ink); font-variant-numeric:tabular-nums; }
 @media (prefers-reduced-motion: reduce){ .astat{ transform:none; } }
 .astat__label{ font-size:.88rem; line-height:1.4; }
+/* an article table: a short header row, then one row per item - the first column bold, the last a black age badge.
+   On a phone each row becomes its own small card, with the column names written in front of each cell. */
+.atable{ overflow-x:auto; }
+.atable table{ width:100%; border-collapse:collapse; font-size:.95rem; line-height:1.45; }
+.atable th{ text-align:left; font-size:.74rem; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-mute);
+  padding:0 14px 10px; border-bottom:2px solid var(--ink); white-space:nowrap; }
+.atable td{ padding:14px; vertical-align:top; border-bottom:1px solid rgba(30,34,38,.14); }
+.atable tbody tr:nth-child(even) td{ background:rgba(255,255,255,.55); }
+.atable tbody tr:last-child td{ border-bottom:0; }
+.atable th:first-child, .atable td:first-child{ padding-left:4px; }
+.atable td:first-child{ font-weight:800; width:30%; }
+.atable td.atable__tag{ width:1%; white-space:nowrap; text-align:right; }
+.atable th:last-child{ text-align:right; }
+@media (max-width:520px){
+  .atable thead{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  .atable table, .atable tbody, .atable tr, .atable td{ display:block; width:auto; }
+  .atable tr{ padding:14px 0; border-bottom:1px solid rgba(30,34,38,.14); }
+  .atable tbody tr:last-child{ border-bottom:0; }
+  .atable td, .atable tbody tr:nth-child(even) td{ padding:2px 0; border:0; background:none; }
+  .atable td:first-child{ width:auto; padding-left:0; font-size:1.02rem; }
+  .atable td.atable__tag{ width:auto; text-align:left; margin-top:8px; }
+}
 @media (max-width:520px){ .afig{ padding:20px 18px; margin:32px 0; } .abar{ grid-template-columns:1fr auto; } .abar__label{ grid-column:1 / -1; } }
 /* "Report a problem" inside a Help answer: a button that reads like a link */
 .more__body .more__link{ font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
@@ -13929,6 +13951,16 @@ function articleFigureHTML(f){
       + items.map(p => '<li><b>' + E(p.label) + ':</b> age ' + E(p.start) + ', ' + E(p.startNote || "started") + '; age ' + E(p.end) + ', ' + E(p.endNote || "first big win")
           + ' (' + ((Number(p.end) || 0) - (Number(p.start) || 0)) + ' years).</li>').join("")
       + '</ul></details>';
+  } else if (f.type === "table"){
+    /* a plain table: `columns` names the columns, each of `rows` is a list of cells in the same order. With `tag` set,
+       the last column is drawn as a black badge (an age range, say). */
+    const cols = f.columns || [], last = cols.length - 1;
+    inner = '<div class="atable"><table>'
+      + (cols.length ? '<thead><tr>' + cols.map(c => '<th scope="col">' + E(c) + '</th>').join("") + '</tr></thead>' : "")
+      + '<tbody>' + (f.rows || []).map(r => '<tr>' + (r || []).map((c, i) =>
+          i === 0 ? '<td>' + E(c) + '</td>'
+          : f.tag && i === last ? '<td class="atable__tag"><span class="chip chip--ink">' + E(c) + '</span></td>'
+          : '<td>' + E(c) + '</td>').join("") + '</tr>').join("") + '</tbody></table></div>';
   } else if (f.type === "pie"){
     /* a ring cut into the parts of a whole (the same `bars` list), the first part's number in the middle and a key
        beside it. Each circle is 100 units around, so a part's value (out of the total) is its arc length. */
@@ -13962,7 +13994,7 @@ function articleFigureHTML(f){
     }).join("") + '</div>';
   }
   /* an icon for what the numbers are about (the chart's own, or a plain chart mark) */
-  const icon = f.icon || (f.type === "stats" ? "chart-no-axes-column" : f.type === "pie" ? "chart-pie" : f.type === "columns" ? "chart-column" : f.type === "span" ? "chart-gantt" : "chart-bar");
+  const icon = f.icon || (f.type === "stats" ? "chart-no-axes-column" : f.type === "pie" ? "chart-pie" : f.type === "columns" ? "chart-column" : f.type === "span" ? "chart-gantt" : f.type === "table" ? "table" : "chart-bar");
   return '<figure class="afig">'
     + (f.title ? '<figcaption class="afig__title"><span class="afig__icon">' + ic(icon) + '</span><span>' + E(f.title) + '</span></figcaption>' : "")
     + inner
