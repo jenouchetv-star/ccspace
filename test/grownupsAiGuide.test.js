@@ -37,9 +37,22 @@ describe("the Parent & Teacher Guide", () => {
     expect(html).not.toContain(".guide__try");
   });
   it("shows the While they make tips in one card, as columns rather than separate cards", () => {
-    expect(html).toContain(`+ '<div class="panel guide__tips"><div class="grid tips-grid">'`);
+    expect(html).toContain(`+ '<div class="guide__pair"><div class="panel guide__tips"><div class="grid tips-grid">'`);
     expect(html).toContain(`quEditable("grownup-tip", grownupsId0, '<div class="guide__tip">'`);
     expect(html).toContain(".guide__tips .tips-grid > *{");
+  });
+  it("gives the stories and While they make their own taped photos, alternating sides like the home and class rows", () => {
+    const page = html.slice(html.indexOf('photo("homePhoto")'), html.indexOf('<div class="panel guide__end">'));
+    /* stories: the photo on the left, the card on the right */
+    expect(page).toContain(`'<div class="guide__pair guide__pair--story">' + photo("storyPhoto") + '<div class="panel guide__story">`);
+    /* While they make: the card on the left, the photo on the right */
+    expect(page).toContain(`+ '</div></div>' + photo("tipsPhoto") + '</div>'`);
+    expect(html).toContain('{ key:"storyPhoto", section:"Stories", label:"Photo beside it", type:"image"');
+    expect(html).toContain('{ key:"tipsPhoto", section:"While they make", label:"Photo beside the tips", type:"image"');
+    expect(html).toContain('src:"assets/grownups/story-idea.jpg"');
+    expect(html).toContain('src:"assets/grownups/while-they-make.jpg"');
+    /* beside a photo, the story card's columns and the tips stack */
+    expect(html).toContain(".guide__pair .guide__storycols, .guide__pair .guide__tips .tips-grid{ grid-template-columns:1fr; }");
   });
   it("keeps the tape on top of the home and class photos, which fill their box and would otherwise cover it", () => {
     expect(html).toContain(".guide__photo::before{ z-index:1; }");
