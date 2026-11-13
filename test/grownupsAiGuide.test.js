@@ -50,7 +50,7 @@ describe("the Parent & Teacher Guide", () => {
     expect(html).toContain('{ key:"storyPhoto", section:"Stories", label:"Photo beside it", type:"image"');
     expect(html).toContain('{ key:"tipsPhoto", section:"While they make", label:"Photo beside the tips", type:"image"');
     expect(html).toContain('src:"assets/grownups/story-idea.jpg"');
-    expect(html).toContain('src:"assets/grownups/while-they-make.jpg"');
+    expect(html).toContain('src:"assets/grownups/while-they-make-birdhouse.jpg"');
     /* beside a photo, the story card's columns and the tips stack */
     expect(html).toContain(".guide__pair .guide__storycols, .guide__pair .guide__tips .tips-grid{ grid-template-columns:1fr; }");
   });
