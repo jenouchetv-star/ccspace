@@ -36,6 +36,14 @@ describe("the Parent & Teacher Guide", () => {
     for (const k of ["tryEyebrow", "tryId", "tryPhoto", "tryButton", "exampleButton"]) expect(html).not.toContain('{ key:"' + k + '"');
     expect(html).not.toContain(".guide__try");
   });
+  it("shows the While they make tips in one card, as columns rather than separate cards", () => {
+    expect(html).toContain(`+ '<div class="panel guide__tips"><div class="grid tips-grid">'`);
+    expect(html).toContain(`quEditable("grownup-tip", grownupsId0, '<div class="guide__tip">'`);
+    expect(html).toContain(".guide__tips .tips-grid > *{");
+  });
+  it("keeps the tape on top of the home and class photos, which fill their box and would otherwise cover it", () => {
+    expect(html).toContain(".guide__photo::before{ z-index:1; }");
+  });
 });
 
 describe("the Parent & Teacher Guide's Creating with AI section", () => {
