@@ -390,6 +390,9 @@ describe("how the site wires the portal in", () => {
     // Gemini, Claude or ChatGPT, everywhere in the box: the heading, the grown-up note, the steps, a button each, and the file note
     expect(box).toContain('E(e.aiPromptTitle || "Make your own with AI")');   // the heading says AI; the box below names Gemini, Claude and ChatGPT
     expect(box).toContain("Then use Gemini, Claude or ChatGPT together, on the grown-up’s account.");
+    /* the grown-up note points parents to our guide on when and how kids should use AI */
+    expect(box).toContain('<a href="#/article/art-kids-ai-guide">Read our guide for parents on kids and AI</a>');
+    expect(html).toContain(".pprompt__ask a{");
     expect(box).toContain("Open <b>Gemini</b>, <b>Claude</b> or <b>ChatGPT</b> and paste the words in the box.");
     expect(box).toContain('href="https://claude.ai/new" target="_blank" rel="noopener noreferrer">\' + ic("external-link") + \' Open Claude</a>');
     expect(box).toContain('href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">\' + ic("external-link") + \' Open ChatGPT</a>');
@@ -735,8 +738,15 @@ describe("Activity and AI Lesson entries", () => {
   it("open like a story: the word card, the text, then the steps", () => {
     const page = body("portalEntryHTML");
     expect(page).toContain('const storyLike = e.layout === "article" || e.layout === "activity" || e.layout === "lesson";');
-    expect(page).toContain("portalWordHTML(e) + text + portalHowToHTML(e) + portalPromptHTML(e) + portalActionsRow(e, ex ? \"\" : shareBtn)");
-    expect(page).toContain("(storyLike ? (example ? example + shareTop : media) + portalWordHTML(e) + text + portalHowToHTML(e)");
+    expect(page).toContain("portalWordHTML(e) + text + portalStepsAndPrompt(e) + portalActionsRow(e, ex ? \"\" : shareBtn)");
+    expect(page).toContain("(storyLike ? (example ? example + shareTop : media) + portalWordHTML(e) + text + portalStepsAndPrompt(e)");
+  });
+  it("puts an AI lesson's Check what AI made after Make your own with AI, and an activity's What to do before it", () => {
+    const order = new Function("portalPromptHTML", "portalHowToHTML",
+      "function portalStepsAndPrompt(" + body("portalStepsAndPrompt") + "\nreturn portalStepsAndPrompt;")(() => "[prompt]", () => "[steps]");
+    expect(order({ layout: "lesson" })).toBe("[prompt][steps]");
+    expect(order({ layout: "activity" })).toBe("[steps][prompt]");
+    expect(order({ layout: "article" })).toBe("[steps][prompt]");
   });
   it("puts Share right under an AI lesson's example, not at the bottom", () => {
     const page = body("portalEntryHTML");
