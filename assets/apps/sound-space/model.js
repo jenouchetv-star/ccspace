@@ -145,6 +145,12 @@
     return quantizeStep(pressSec - lat, startSec, tempo, total, grid);
   }
 
+  // A held note counts a square once 30% of it has been held, so a natural
+  // early release still keeps the length that was meant.
+  function recordedLength(heldSec, stepSec) {
+    return Math.max(1, Math.ceil(heldSec / stepSec - 0.3 - 1e-9));
+  }
+
   function validateSong(obj, catalogIds) {
     const bad = (error) => ({ ok: false, error });
     if (!obj || typeof obj !== "object" || Array.isArray(obj)) return bad("not_an_object");
@@ -276,6 +282,7 @@
     resizeSong,
     quantizeStep,
     recordedStep,
+    recordedLength,
     validateSong,
     applyPattern,
     createHistory

@@ -5,6 +5,24 @@
     return 60 / tempo / (grid || 2);
   }
 
+  // The soft tick used for the count-in and for the beat while recording.
+  // Returns the oscillator so the caller can silence it early.
+  function makeClick(ctx, dest, when, accent) {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = accent ? 1568 : 1046;
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(accent ? 0.5 : 0.32, when + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.07);
+    g.gain.linearRampToValueAtTime(0, when + 0.075);
+    o.connect(g);
+    g.connect(dest);
+    o.start(when);
+    o.stop(when + 0.09);
+    return o;
+  }
+
   // Events for notes with fromStep <= step < toStep, honoring mute/solo.
   function compileEvents(song, fromStep, toStep) {
     const anySolo = song.tracks.some((t) => t.solo);
@@ -678,6 +696,7 @@
     let live = [];
     let cb = null;
     let lastReported = null;
+    let click = false;
 
     function total() {
       return SS.model.totalSteps(song);
@@ -702,6 +721,10 @@
         for (let i = 0; i < due.skipped && !ended; i++) advance();
         for (let i = 0; i < due.steps && !ended; i++) {
           if (step >= total()) step = 0;
+          if (click && step % spc() === 0) {
+            const o = makeClick(ctx, master.bus, nextTime, (step / spc()) % 4 === 0);
+            live.push({ src: o, when: nextTime });
+          }
           const evs = compileEvents(song, step, step + 1);
           for (const ev of evs) {
             const made = voices.play(Object.assign({}, ev, { dur: ev.len * stepDur }), nextTime, master.bus);
@@ -724,6 +747,7 @@
     function start(s, opts) {
       if (handle !== null) api.stop();
       song = s;
+      click = !!(opts && opts.click);
       master = makeMaster(ctx);
       step = ((opts && opts.fromStep) || 0) % total();
       stepDur = stepSeconds(song.tempo, song.grid);
@@ -809,6 +833,7 @@
 
   SS.engine = Object.assign(SS.engine || {}, {
     stepSeconds,
+    makeClick,
     compileEvents,
     stepsToSchedule,
     exportFrames,

@@ -834,7 +834,7 @@ const HELP = [
   ["Playing", "Drum pads", "drum pads kit beat",
     "<p>Drum tracks get 8 pads. Tap them, or use " + K("A") + " to " + K("K") + " on your computer.</p>"],
   ["Recording", "Record what you play", "record count-in click overdub",
-    "<p>Press <b>Record</b>, then play the keys or pads. Your notes snap to the nearest square. With <b>Count-in</b> on, you hear 1, 2, 3, 4 first. With <b>Loop</b> on, recording keeps going and each time round adds more notes. With Loop off, it records once and stops. Recording keeps notes, never sound from a microphone.</p>"],
+    "<p>Press <b>Record</b>, then play the keys or pads. Your notes snap to the nearest square. You hear a soft click on every beat while you record, so you can keep time. With <b>Count-in</b> on, you hear 1, 2, 3, 4 first. With <b>Loop</b> on, recording keeps going and each time round adds more notes. With Loop off, it records once and stops. Recording keeps notes, never sound from a microphone.</p>"],
   ["The grid", "Add and change notes", "grid notes tap square longer length drag",
     "<p>Tap a square to add a note, and tap a note to take it away. Higher notes are higher up. Drag the right edge of a note to make it longer.</p><p>With the keyboard: the arrow keys move around the grid, " + K("Space") + " or " + K("Enter") + " adds or removes a note, and " + K("Shift") + " with the left and right arrows makes a note shorter or longer.</p>"],
   ["The grid", "Counts and speed", "counts length speed tempo beats 4 8 16",
@@ -1243,7 +1243,7 @@ function beginRecording(){
   recTimers.forEach(clearTimeout); recTimers = [];
   recording = true; recPending = []; recChanged = false;
   recTotal = M.totalSteps(song); recStepSec = E.stepSeconds(song.tempo, song.grid);
-  player.start(song, { fromStep:0 });
+  player.start(song, { fromStep:0, click:true });
   recStart = ctx.currentTime + 0.06;
   if (!playedOnce){ playedOnce = true; count("song_played"); }
   /* Loop off: record one pass, then stop recording (the song plays to its end) */
@@ -1290,7 +1290,7 @@ function insertRecorded(p){
 }
 function recordUp(p, evTs){
   if (p.oneShot || !ctx) return;
-  const len = Math.max(1, Math.round((pressTime(evTs) - outLatency() - p.t) / recStepSec));
+  const len = M.recordedLength(pressTime(evTs) - outLatency() - p.t, recStepSec);
   p.len = len;
   if (p.inserted && len > 1){
     const t = trackById(p.trackId); if (!t) return;
@@ -1822,6 +1822,7 @@ function convertStash(from, to){
 }
 function setGridTo(g){
   const from = spc(), r = M.setGrid(song, g);
+  if (M.noteSquares(pickedNote, g) === null) pickedNote = "eighth";
   convertStash(from, g);
   song = r.song;
   commit(); renderAll(true);

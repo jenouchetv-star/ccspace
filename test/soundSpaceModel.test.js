@@ -289,4 +289,14 @@ describe("Sound Space model", () => {
       expect(t2.notes.map((n) => n.step)).toEqual([6, 22]);
     });
   });
+
+  it("a recorded note counts a square once 30% of it is held", () => {
+    const m = M();
+    const step = 0.3;
+    const cases = [[3.4, 4], [2.2, 2], [2.31, 3], [1.7, 2], [1.1, 1], [0.85, 1], [0.2, 1]];
+    for (const [steps, want] of cases) {
+      expect(m.recordedLength(steps * step, step), `${steps} steps`).toBe(want);
+      expect(m.recordedLength(steps * 0.15, 0.15), `${steps} steps grid 4`).toBe(want);
+    }
+  });
 });

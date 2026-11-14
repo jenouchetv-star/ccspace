@@ -111,6 +111,22 @@ describe("Sound Space app page", () => {
     expect(picker).toMatch(/<svg/);
   });
 
+  it("recording uses the song clock for a soft click, and Help says so", () => {
+    expect(html).toMatch(/player\.start\(song, \{ fromStep:0, click:true \}\)/);
+    expect(html).toMatch(/soft click on every beat/);
+  });
+
+  it("going back to eighths drops a sixteenth pick", () => {
+    const fn = section(/function setGridTo\(/, "}\nfunction");
+    expect(fn).toMatch(/noteSquares\(pickedNote, g\) === null\) pickedNote = "eighth"/);
+  });
+
+  it("recording lengths use recordedLength, not rounding", () => {
+    const fn = section(/function recordUp\(/, "function onStep");
+    expect(fn).toContain("M.recordedLength(");
+    expect(fn).not.toContain("Math.round");
+  });
+
   it("loads the built modules", () => {
     for (const f of ["model.js", "engine.js", "wav.js", "instruments.js"]) {
       expect(html).toContain(`<script src="sound-space/${f}"></script>`);

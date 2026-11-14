@@ -357,6 +357,41 @@ describe("Sound Space sound making", () => {
       expect(cents, "midi " + midi).toBeLessThan(1);
     }
   });
+  it("recording click: one soft tick per count on the audio clock, accent every fourth, none on plain play or export", () => {
+    const run = (opts) => {
+      const song = SS.model.newSong(); song.counts = 8;
+      const ctx = fakeCtx();
+      const voices = { play: () => [] };
+      const hzOf = new Map();
+      const make = ctx.createOscillator;
+      ctx.createOscillator = () => {
+        const o = make();
+        let hz = 0;
+        Object.defineProperty(o, "frequency", { value: { get value() { return hz; }, set value(v) { hz = v; }, setValueAtTime() {}, linearRampToValueAtTime() {} } });
+        return o;
+      };
+      let tick = null;
+      const player = SS.engine.createPlayer(ctx, voices, { setInterval: (fn) => ((tick = fn), 1), clearInterval: () => {} });
+      player.start(song, opts);
+      for (let i = 0; i < 200; i++) { ctx.currentTime += 0.025; tick(); }
+      const clicks = ctx.sources().filter((s) => s.kind === "osc").map((s) => ({ at: s.startedAt, hz: s.frequency.value }));
+      return { clicks, player, ctx };
+    };
+    const on = run({ click: true });
+    expect(on.clicks.length).toBeGreaterThanOrEqual(8);
+    const beat = 0.6;
+    on.clicks.slice(0, 8).forEach((c, k) => {
+      expect(c.at - on.clicks[0].at).toBeCloseTo(k * beat, 6);
+      expect(c.hz).toBe(k % 4 === 0 ? 1568 : 1046);
+    });
+    // loop pass keeps clicking on the same pulse
+    expect(on.clicks[8].at - on.clicks[0].at).toBeCloseTo(8 * beat, 6);
+    on.player.stop();
+    for (const s of on.ctx.sources()) expect(s.stoppedAt).toBeLessThanOrEqual(on.ctx.currentTime);
+    expect(run({}).clicks.length).toBe(0);
+    expect(run({ fromStep: 0 }).clicks.length).toBe(0);
+  });
+
   it("sixteenth grid: stepSeconds halves, export length keeps counts and speed, the player steps by sixteenths", () => {
     expect(SS.engine.stepSeconds(100, 4)).toBeCloseTo(0.15, 10);
     const a = SS.model.newSong();
