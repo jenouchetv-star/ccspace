@@ -275,9 +275,13 @@ svg.lucide{ width:17px; height:17px; flex:none; stroke-width:1.75; }
 .start span.t{ font-size:12px; color:var(--mute); padding:0 14px 14px; }
 @media (prefers-reduced-motion:reduce){ .start{ transition:none; } .start:hover{ transform:none; } }
 .gallery{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; }
-.art{ border:var(--line); border-radius:12px; background:var(--surface); overflow:hidden; display:flex; flex-direction:column; }
-.art__open{ display:block; padding:12px; border:0; background:var(--surface-2); aspect-ratio:4/3; }
-.art__open img{ width:100%; height:100%; object-fit:contain; display:block; border-radius:3px; }
+.art{ border:var(--line); border-radius:12px; background:var(--surface); overflow:hidden; display:flex; flex-direction:column; transition:transform .12s ease, box-shadow .12s ease; }
+.art__open{ display:block; padding:12px; border:0; background:var(--surface-2); aspect-ratio:4/3; cursor:pointer; }
+.art__open img{ width:100%; height:100%; object-fit:contain; display:block; border-radius:3px; transition:transform .18s ease; }
+/* Recent cards lift like the starter tiles when pointed at or reached with the keyboard */
+.art:hover, .art:has(.art__open:focus-visible){ transform:translateY(-2px); box-shadow:var(--pop); }
+.art:hover .art__open img, .art:has(.art__open:focus-visible) .art__open img{ transform:scale(1.04); }
+@media (prefers-reduced-motion:reduce){ .art, .art__open img{ transition:none; } .art:hover, .art:has(.art__open:focus-visible), .art:hover .art__open img, .art:has(.art__open:focus-visible) .art__open img{ transform:none; } }
 .art__open img.px{ image-rendering:pixelated; }
 .art__body{ padding:8px 6px 8px 12px; display:flex; align-items:center; gap:6px; border-top:var(--line); }
 .art__name{ flex:1; min-width:0; font-weight:600; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -1677,7 +1681,7 @@ async function renderGallery(){
   g.innerHTML = list.length ? list.map(p => '<article class="art">'
       + '<button type="button" class="art__open" data-open="' + esc(p.id) + '" aria-label="Open ' + esc(p.title) + '">'
       + (p.thumb ? '<img src="' + esc(p.thumb) + '" alt=""' + (p.kind === "pixel" ? ' class="px"' : "") + '>' : "") + '</button>'
-      + '<div class="art__body"><span class="art__name">' + esc(p.title) + '<span class="art__when">' + esc(when(p.updated)) + '</span></span>'
+      + '<div class="art__body"><span class="art__name">' + esc(p.title) + '<span class="art__when">' + esc([when(p.updated), fileSize(p)].filter(Boolean).join(" · ")) + '</span></span>'
       + '<button type="button" class="btn btn--ghost iconbtn" data-del="' + esc(p.id) + '" aria-label="Delete ' + esc(p.title) + '" title="Delete"><i data-lucide="trash-2"></i></button></div>'
       + '</article>').join("")
     : '<p class="empty">Nothing yet. Pick a page above to start.</p>';
@@ -1685,6 +1689,17 @@ async function renderGallery(){
   /* the examples use the app's font for their words, so wait for it */
   (document.fonts ? document.fonts.ready : Promise.resolve()).then(drawExamples, drawExamples);
   if (!store.ok && !cloud.on()) toast("This browser can’t keep art between visits. Use Save a project file to keep it.");
+}
+/** How big the picture's file is (its project data, without the small gallery picture), e.g. "48 KB" or "1.2 MB". */
+function fileSize(p){
+  let n = 0;
+  try { const copy = Object.assign({}, p); delete copy.thumb; n = new Blob([JSON.stringify(copy)]).size; } catch (e){ return ""; }
+  return sizeText(n);
+}
+function sizeText(n){
+  if (!(n > 0)) return "";
+  if (n < 1000000) return Math.max(1, Math.round(n / 1000)) + " KB";
+  return (Math.round(n / 100000) / 10).toFixed(1) + " MB";
 }
 function when(t){
   if (!t) return "";
