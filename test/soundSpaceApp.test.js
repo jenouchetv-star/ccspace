@@ -145,9 +145,156 @@ describe("Sound Space app page", () => {
     const css = cssText();
     expect(css).toMatch(/#home, #editor\{[^}]*width:100vw;[^}]*height:100dvh;/);
     expect(css).toMatch(/\.launch\{[^}]*width:100vw;[^}]*height:100dvh;/);
-    // no centered, max-width frame around Home, the loading card or Sign in
-    expect(css).not.toMatch(/\.home__inner\{[^}]*max-width/);
-    expect(css).not.toMatch(/\.(splash|signin)\{[^}]*width:min\(/);
+    // Home's content sits in Art Space's centered column (owner); the editor stays edge to edge
+    expect(css).toMatch(/\.home__inner\{ max-width:1080px; margin:0 auto; \}/);
+    expect(css).toMatch(/\.starts\{ display:grid; grid-template-columns:repeat\(3,minmax\(0,1fr\)\); gap:14px; \}/);
+    expect(css).toMatch(/\.gallery\{ display:grid; grid-template-columns:repeat\(auto-fill,minmax\(180px,1fr\)\); gap:14px; \}/);
+  });
+
+  it("the loading card and Sign in follow Art Space's design, with a real Sound Space picture", () => {
+    const art = readFileSync(new URL("../assets/apps/art-studio.html", import.meta.url), "utf8");
+    const launchOf = (src) => src.slice(src.indexOf('<div id="launch" class="launch">'), src.indexOf("</div>\n\n", src.indexOf('<div id="launch" class="launch">')));
+    const classes = (src) => new Set([...launchOf(src).matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/)));
+    const ours = classes(html);
+    for (const c of classes(art)) expect(ours.has(c), c).toBe(true);
+    expect(existsSync(new URL("../assets/studio/sound-space-splash.jpg", import.meta.url))).toBe(true);
+    const css = cssText();
+    expect(css).toMatch(/\.splash__left::before\{[^}]*studio\/sound-space-splash\.jpg/);
+    expect(css).toMatch(/\.splash__art\{[^}]*studio\/sound-space-splash\.jpg/);
+    expect(html).toContain("<b>Song: My Space Beat, made in Sound Space</b>");
+    expect(html).toMatch(/class="signin__bg"><img src="[^"]*studio\/sound-space-splash\.jpg"/);
+    // the dimmed layer still fills the whole window
+    expect(css).toMatch(/\.launch\{[^}]*height:100dvh;[^}]*place-items:center/);
+  });
+
+  it("Home follows Art Space's Home: pixel field, account space, New, tiles, Recent cards", () => {
+    const home = section(/<main id="home"/, "</main>");
+    expect(home).toContain('<div id="home-fx" class="home__fx" aria-hidden="true"></div>');
+    expect(home).toContain('<div id="space" class="space" role="status" aria-live="polite" hidden></div>');
+    expect(home).toMatch(/<h1 id="home-title">New<\/h1>\s*<p class="home__lede" id="home-lede">/);
+    expect(home).toMatch(/<h2>Recent <button type="button" class="btn" data-act="open-file">/);
+    expect(html).toContain('<script src="../lib/pixelblast.js"></script>');
+    for (const c of ["art__open", "art__body", "art__name", "art__when"]) expect(html).toContain(`class="${c}"`);
+    expect(html).toContain('<p class="empty">');
+  });
+
+  describe("page helpers", () => {
+    const block = html.split("/* ---- helpers the tests run on their own")[1].split("/* ---- end of helpers")[0];
+    const { scheduleCountIn, setTrackInstrument, sizeText, fileSize, loadLayout, saveLayout, LAYOUT_KEY } = new Function(block.slice(block.indexOf("*/") + 2) + "; return { scheduleCountIn, setTrackInstrument, sizeText, fileSize, loadLayout, saveLayout, LAYOUT_KEY };")();
+
+    function fakeAudio() {
+      const param = () => ({ setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, cancelScheduledValues() {} });
+      const ac = {
+        currentTime: 1,
+        oscs: [],
+        createOscillator() {
+          const o = { type: "", frequency: { value: 0 }, stops: [], connected: true, connect() {}, disconnect() { this.connected = false; }, start(t) { this.startAt = t; }, stop(t) { this.stops.push(t); } };
+          ac.oscs.push(o);
+          return o;
+        },
+        createGain() { return { gain: param(), connected: true, connect() {}, disconnect() { this.connected = false; } }; },
+      };
+      return ac;
+    }
+
+    it("shows a song's size the way Art Space does", () => {
+      expect(sizeText(999)).toBe("1 KB");
+      expect(sizeText(48_200)).toBe("48 KB");
+      expect(sizeText(1_250_000)).toBe("1.3 MB");
+      expect(sizeText(0)).toBe("");
+      expect(fileSize({ title: "x".repeat(2400) })).toBe("2 KB");
+      expect(html).toMatch(/\[when\(s\.updatedMs\), fileSize\(s\)\]\.filter\(Boolean\)\.join\(" · "\)/);
+    });
+
+    it("remembers the editor layout through the storage helper, and copes when storage is blocked", () => {
+      const all = { tracks: true, library: true, overview: true, keys: true, focus: null };
+      const mem = new Map();
+      const storage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)) };
+      expect(LAYOUT_KEY).toBe("ss-layout");
+      expect(loadLayout(storage)).toEqual(all);
+      const focused = { tracks: false, library: false, overview: false, keys: true, focus: { tracks: true, library: false, overview: true } };
+      expect(saveLayout(storage, focused)).toBe(true);
+      expect(loadLayout(storage)).toEqual(focused);
+      const blocked = { getItem() { throw new Error("SecurityError"); }, setItem() { throw new Error("SecurityError"); } };
+      expect(loadLayout(blocked)).toEqual(all);
+      expect(saveLayout(blocked, focused)).toBe(false);
+      expect(loadLayout(null)).toEqual(all);
+      mem.set("ss-layout", "{not json");
+      expect(loadLayout(storage)).toEqual(all);
+      mem.set("ss-layout", JSON.stringify({ tracks: "no", keys: false }));
+      expect(loadLayout(storage)).toEqual({ ...all, keys: false });
+    });
+
+    it("Stop during the count-in silences the clicks still to come", () => {
+      const ac = fakeAudio();
+      const c = scheduleCountIn(ac, {}, 60, 1.1);
+      expect(ac.oscs.map((o) => o.startAt)).toEqual([1.1, 2.1, 3.1, 4.1]);
+      ac.currentTime = 1.5;
+      c.cancel();
+      for (const o of ac.oscs) {
+        expect(Math.min(...o.stops)).toBeLessThanOrEqual(1.5);
+        expect(o.connected).toBe(false);
+      }
+    });
+
+    it("changing to an instrument that plays a different way forgets the notes Counts was hiding", async () => {
+      const { loadSS } = await import("./helpers/soundSpace.js");
+      const SS = loadSS("model.js", "engine.js", "instruments.js");
+      const M = SS.model, byId = SS.instruments.byId;
+      let song = M.newSong();
+      const t = M.addTrack(song, "grand-piano");
+      [0, 9, 12, 15].forEach((step) => M.toggleNote(t, step, 60 + step));
+      let r = M.resizeSong(song, 4, {});
+      song = r.song;
+      let stash = r.stash;
+      const track = song.tracks[0];
+      expect(stash[track.id].length).toBe(3);
+      expect(setTrackInstrument(stash, track, "hip-hop-kit", byId)).toEqual({ cleared: true });
+      expect(stash[track.id]).toBeUndefined();
+      r = M.resizeSong(song, 8, stash);
+      expect(r.song.tracks[0].notes).toEqual([]);
+
+      // with no visible notes left, the hidden ones are still forgotten
+      let s2 = M.newSong();
+      const t2 = M.addTrack(s2, "drum-machine");
+      M.toggleNote(t2, 12, 0);
+      r = M.resizeSong(s2, 4, {});
+      s2 = r.song;
+      expect(s2.tracks[0].notes).toEqual([]);
+      expect(setTrackInstrument(r.stash, s2.tracks[0], "violin", byId)).toEqual({ cleared: false });
+      expect(r.stash[s2.tracks[0].id]).toBeUndefined();
+
+      // the same kind of instrument keeps its notes and what Counts is keeping
+      let s3 = M.newSong();
+      const t3 = M.addTrack(s3, "grand-piano");
+      M.toggleNote(t3, 0, 60); M.toggleNote(t3, 12, 64);
+      r = M.resizeSong(s3, 4, {});
+      expect(setTrackInstrument(r.stash, r.song.tracks[0], "synth-lead", byId)).toEqual({ cleared: false });
+      expect(r.song.tracks[0].notes.length).toBe(1);
+      expect(r.stash[r.song.tracks[0].id].length).toBe(1);
+    });
+  });
+
+  it("has labelled toggles to show, hide and fold parts of the editor", () => {
+    const btn = (id) => (html.match(new RegExp(`<button[^>]*id="${id}"[^>]*>`)) || [""])[0];
+    for (const [id, act, label] of [["tg-tracks", "toggle-tracks", "Tracks panel"], ["tg-lib", "toggle-lib", "Beats and patterns panel"], ["tg-focus", "focus", "Focus"]]) {
+      const b = btn(id);
+      expect(b, id).toContain(`data-act="${act}"`);
+      expect(b).toMatch(/aria-pressed="(true|false)"/);
+      expect(b).toContain(`aria-label="${label}"`);
+      expect(b).toMatch(/title="[^"]+"/);
+    }
+    for (const [id, act, ctl] of [["ov-toggle", "toggle-overview", "ss-overview"], ["kbd-toggle", "toggle-keys", "kbd"]]) {
+      const b = btn(id);
+      expect(b, id).toContain(`data-act="${act}"`);
+      expect(b).toContain('aria-expanded="true"');
+      expect(b).toContain(`aria-controls="${ctl}"`);
+    }
+    // each side panel has its own hide button in its header
+    expect(html).toMatch(/<div class="panel__head"><h3>Tracks<\/h3><button[^>]*data-act="toggle-tracks"[^>]*aria-label="Hide tracks"/);
+    expect(html).toMatch(/<h3>Beats and patterns<\/h3><button[^>]*data-act="toggle-lib"[^>]*aria-label="Hide beats and patterns"/);
+    // the shortcuts are in help
+    expect(html).toContain('"Show and hide parts"');
   });
 
   it("closes through the site and never uses the microphone", () => {

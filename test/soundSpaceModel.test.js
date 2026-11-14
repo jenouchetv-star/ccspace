@@ -79,6 +79,28 @@ describe("Sound Space model", () => {
     expect(m.quantizeStep(4.79, 0, 100, 16)).toBe(0);
   });
 
+  it("a recorded press lands on the square the kid heard, after taking off the speakers' delay", () => {
+    const m = M();
+    // 100 bpm: a square is 0.3 s; 4 counts = 8 squares = 2.4 s a pass; recording started at 10 s
+    const start = 10, sq = 0.3;
+    // pressed exactly as the kick on square 2 came out of the speakers, 0.1 s after it was played
+    expect(m.recordedStep(start + 2 * sq + 0.1, start, 100, 8, 0.1)).toBe(2);
+    // the same press without the correction would be read 0.1 s late; a slightly late kid then lands a square late
+    expect(m.recordedStep(start + 2 * sq + 0.1 + 0.06, start, 100, 8, 0)).toBe(3);
+    expect(m.recordedStep(start + 2 * sq + 0.1 + 0.06, start, 100, 8, 0.1)).toBe(2);
+    // a little early or a little late still lands on the square
+    expect(m.recordedStep(start + 4 * sq - 0.12 + 0.1, start, 100, 8, 0.1)).toBe(4);
+    expect(m.recordedStep(start + 4 * sq + 0.12 + 0.1, start, 100, 8, 0.1)).toBe(4);
+    // just before the loop comes round, it belongs to the first square of the next pass
+    expect(m.recordedStep(start + 8 * sq - 0.05 + 0.1, start, 100, 8, 0.1)).toBe(0);
+    // second pass, square 6
+    expect(m.recordedStep(start + 2.4 + 6 * sq + 0.1, start, 100, 8, 0.1)).toBe(6);
+    // no latency known (or a bad value) means no correction
+    expect(m.recordedStep(start + 2 * sq, start, 100, 8, undefined)).toBe(2);
+    expect(m.recordedStep(start + 2 * sq, start, 100, 8, -1)).toBe(2);
+    expect(m.recordedStep(start + 2 * sq, start, 100, 8, NaN)).toBe(2);
+  });
+
   it("opening a file checks every field", () => {
     const m = M();
     const ids = new Set(["piano"]);

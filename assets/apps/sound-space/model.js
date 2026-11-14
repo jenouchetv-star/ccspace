@@ -117,6 +117,15 @@
     return ((k % total) + total) % total;
   }
 
+  // The square a recorded press belongs to. A kid presses when they HEAR the
+  // beat, and sound reaches the speakers `latencySec` after the audio clock
+  // says it plays (outputLatency + baseLatency), so the press is moved back by
+  // that much before snapping to the nearest square.
+  function recordedStep(pressSec, startSec, tempo, total, latencySec) {
+    const lat = isNum(latencySec) && latencySec > 0 ? latencySec : 0;
+    return quantizeStep(pressSec - lat, startSec, tempo, total);
+  }
+
   function validateSong(obj, catalogIds) {
     const bad = (error) => ({ ok: false, error });
     if (!obj || typeof obj !== "object" || Array.isArray(obj)) return bad("not_an_object");
@@ -207,6 +216,7 @@
     setNoteLength,
     resizeSong,
     quantizeStep,
+    recordedStep,
     validateSong,
     applyPattern,
     createHistory
