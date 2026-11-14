@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 
-const html = readFileSync(new URL("../games/spacetime-sandbox-simulator.html", import.meta.url), "utf8");
+/* subscribers only: the code lives in the Subscriber's Portal (portal_game_files pg-solar-system-sandbox), never on the public site */
+const html = readFileSync(new URL("../supabase/private-games/solar-system-sandbox.html", import.meta.url), "utf8");
 const site = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 /* the game's small pure helpers and its fact sheet, run on their own */
@@ -75,8 +76,16 @@ describe("Solar System Sandbox: the page", () => {
     expect(srcs).toEqual([
       "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
       "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js",
-      "game-sound.js"
+      "/games/game-sound.js"
     ]);
+  });
+  it("is subscribers only: no public copy, the Play card leads to the portal, and site files load from root paths inside the sealed frame", () => {
+    expect(existsSync(new URL("../games/spacetime-sandbox-simulator.html", import.meta.url))).toBe(false);
+    const start = site.indexOf('G({ id:"game-spacetime"'), row = site.slice(start, site.indexOf('leadsTo:', start));
+    expect(row).toContain('kind:"members"');
+    expect(row).toContain('portalSlug:"solar-system-sandbox"');
+    expect(row).toContain('path:""');
+    expect(html).toContain('const TEX = "/assets/games/solar-system/";');
   });
   it("uses NASA maps that are really in the site's assets folder", () => {
     const names = [...new Set([...html.matchAll(/tex\("([a-z-]+\.jpg)"\)/g)].map(m => m[1]))];
