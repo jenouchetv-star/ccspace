@@ -138,6 +138,17 @@ describe("Sound Space app page", () => {
     expect(html).not.toMatch(/row\.drum \? "" : '<i class="grip">/);
   });
 
+  it("live notes start at once, on a compressor-free bus, and Help words the drum lengths plainly", () => {
+    const audio = section(/function audio\(/, "/* touch screens");
+    expect(audio).not.toContain("createDynamicsCompressor");
+    expect(audio).toContain("E.createLiveBus(ctx)");
+    const on = section(/function noteOn\(/, "function noteOff");
+    expect(on).toContain("voices.play(ev, c.currentTime, g)");
+    expect(on).not.toContain("0.005");
+    expect(html).toContain("On drums, a longer hit just draws a longer bar. The drum sounds the same.");
+    expect(html).not.toContain("how long until the next beat");
+  });
+
   it("loads the built modules", () => {
     for (const f of ["model.js", "engine.js", "wav.js", "instruments.js"]) {
       expect(html).toContain(`<script src="sound-space/${f}"></script>`);

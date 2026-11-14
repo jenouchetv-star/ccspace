@@ -665,6 +665,38 @@
   }
 
   // Master chain: bus -> limiter -> destination.
+  // The shaper sees the signal at half level (SHAPER_PRE) so it has headroom up
+  // to +-2 before it runs out of curve. Inside the curve, `u` is the real
+  // level: straight through up to 0.7, then a smooth tanh shoulder, so loud
+  // chords round off instead of clipping hard. Output stays inside +-1.
+  const SHAPER_PRE = 0.5;
+  function softClipCurve(n) {
+    const c = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const u = ((i / (n - 1)) * 2 - 1) / SHAPER_PRE;
+      const a = Math.abs(u);
+      const y = a <= 0.7 ? a : 0.7 + 0.3 * Math.tanh((a - 0.7) / 0.3);
+      c[i] = u < 0 ? -y : y;
+    }
+    return c;
+  }
+
+  // The path for notes played live: a volume gain, a half-level step, then a
+  // soft clipper. No look-ahead (a compressor adds a few ms of delay, which is
+  // felt when playing). Returns the volume gain.
+  function createLiveBus(ctx) {
+    const bus = ctx.createGain();
+    const pre = ctx.createGain();
+    pre.gain.value = SHAPER_PRE;
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = softClipCurve(2049);
+    shaper.oversample = "none";
+    bus.connect(pre);
+    pre.connect(shaper);
+    shaper.connect(ctx.destination);
+    return bus;
+  }
+
   function makeMaster(ctx) {
     const bus = ctx.createGain();
     const comp = ctx.createDynamicsCompressor();
@@ -834,6 +866,8 @@
   SS.engine = Object.assign(SS.engine || {}, {
     stepSeconds,
     makeClick,
+    softClipCurve,
+    createLiveBus,
     compileEvents,
     stepsToSchedule,
     exportFrames,

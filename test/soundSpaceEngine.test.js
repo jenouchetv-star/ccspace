@@ -387,6 +387,32 @@ describe("Sound Space sound making", () => {
     expect(run(b, 8)).toEqual(one);
   });
 
+  it("the live bus is a gain into a zero-latency soft clipper, with no compressor", () => {
+    const ctx = fakeCtx();
+    ctx.createWaveShaper = () => makeNode(ctx, "shaper", { curve: null, oversample: "none" });
+    const bus = SS.engine.createLiveBus(ctx);
+    const gain = ctx.nodes.find((n) => n.kind === "gain");
+    const pre = ctx.nodes.filter((n) => n.kind === "gain")[1];
+    const shaper = ctx.nodes.find((n) => n.kind === "shaper");
+    expect(ctx.nodes.some((n) => n.kind === "comp")).toBe(false);
+    expect(bus).toBe(gain);
+    expect(gain.connected).toContain(pre);
+    expect(pre.connected).toContain(shaper);
+    expect(pre.gain.value).toBe(0.5);
+    expect(shaper.connected).toContain(ctx.destination);
+    expect(shaper.oversample).toBe("none");
+    const c = shaper.curve;
+    expect(c.length).toBeGreaterThan(64);
+    // the shaper sees half level, so the real level is twice its input
+    const x = (i) => 2 * ((i / (c.length - 1)) * 2 - 1);
+    for (let i = 0; i < c.length; i++) {
+      expect(Math.abs(c[i])).toBeLessThanOrEqual(1);
+      if (i) expect(c[i]).toBeGreaterThanOrEqual(c[i - 1]);
+      if (Math.abs(x(i)) <= 0.3 && Math.abs(x(i)) > 0.01) expect(Math.abs(c[i] / x(i) - 1)).toBeLessThan(0.03);
+    }
+    expect(c[0]).toBeCloseTo(-c[c.length - 1], 10);
+  });
+
   it("recording click: one soft tick per count on the audio clock, accent every fourth, none on plain play or export", () => {
     const run = (opts) => {
       const song = SS.model.newSong(); song.counts = 8;

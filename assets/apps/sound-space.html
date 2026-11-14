@@ -836,7 +836,7 @@ const HELP = [
   ["Recording", "Record what you play", "record count-in click overdub",
     "<p>Press <b>Record</b>, then play the keys or pads. Your notes snap to the nearest square. You hear a soft click on every beat while you record, so you can keep time. With <b>Count-in</b> on, you hear 1, 2, 3, 4 first. With <b>Loop</b> on, recording keeps going and each time round adds more notes. With Loop off, it records once and stops. Recording keeps notes, never sound from a microphone.</p>"],
   ["The grid", "Add and change notes", "grid notes tap square longer length drag",
-    "<p>Tap a square to add a note, and tap a note to take it away. Higher notes are higher up. Drag the right edge of a note to make it longer. Pick a note shape above the grid to choose how long the next note will be. On drums, the length shows how long until the next beat, and the drum sounds the same.</p><p>With the keyboard: the arrow keys move around the grid, " + K("Space") + " or " + K("Enter") + " adds or removes a note, and " + K("Shift") + " with the left and right arrows makes a note shorter or longer.</p>"],
+    "<p>Tap a square to add a note, and tap a note to take it away. Higher notes are higher up. Drag the right edge of a note to make it longer. Pick a note shape above the grid to choose how long the next note will be. On drums, a longer hit just draws a longer bar. The drum sounds the same.</p><p>With the keyboard: the arrow keys move around the grid, " + K("Space") + " or " + K("Enter") + " adds or removes a note, and " + K("Shift") + " with the left and right arrows makes a note shorter or longer.</p>"],
   ["The grid", "Counts and speed", "counts length speed tempo beats 4 8 16",
     "<p><b>Counts</b> sets how long the song is: 4, 8 or 16 counts. Each count has 2 squares. Making it shorter hides the rest, and making it longer again brings it back. <b>Speed</b> is how many counts a minute, from 60 to 160.</p>"],
   ["Start", "Show and hide parts", "hide show panel focus tracks library beats overview keys pads fold collapse layout",
@@ -960,9 +960,7 @@ function audio(){
     voices = E.createVoices(ctx, I, SAMPLE_BASE);
     player = E.createPlayer(ctx, voices);
     player.onStep(onStep);
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -10; comp.knee.value = 6; comp.ratio.value = 12; comp.attack.value = 0.003; comp.release.value = 0.1;
-    liveBus = ctx.createGain(); liveBus.connect(comp); comp.connect(ctx.destination);
+    liveBus = E.createLiveBus(ctx);   /* gain into a soft clipper: no compressor look-ahead delay on live notes */
     if (song) song.tracks.forEach(t => ensureLoaded(t.instrumentId));
   }
   if (ctx.state === "suspended") ctx.resume().catch(() => {});
@@ -1015,7 +1013,7 @@ function noteOn(key, track, pitch, evTs){
   const g = c.createGain(); g.connect(liveBus);
   const ev = { instrumentId:track.instrumentId, pitch, len:1, vel:0.9, gain:track.volume * 0.9, dur: oneShot ? 0.6 : 4 };
   let srcs = [];
-  try { srcs = voices.play(ev, c.currentTime + 0.005, g) || []; } catch(e){}
+  try { srcs = voices.play(ev, c.currentTime, g) || []; } catch(e){}
   held.set(key, { g, srcs, oneShot, rec: recordDown(track, pitch, oneShot, evTs) });
   lightKey(key, track, pitch, true);
 }
