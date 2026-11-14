@@ -65,15 +65,16 @@ describe("Sound Space app page", () => {
     expect(html).not.toMatch(/art-studio-icon\.svg/);
   });
 
-  it("shows Home with Empty song, Hip hop/pop starter, Lullaby starter and Music lessons, and no other starters", () => {
+  it("shows Home with exactly Empty song, Hip hop/pop starter and Music lessons, and no other starters", () => {
     const home = section(/<main id="home"/, "</main>");
     expect(home.length).toBeGreaterThan(0);
-    for (const label of ["Empty song", "Hip hop/pop starter", "Lullaby starter", "Music lessons", "Recent", "Open a file"]) {
+    for (const label of ["Empty song", "Hip hop/pop starter", "Music lessons", "Recent", "Open a file"]) {
       expect(home).toContain(label);
     }
-    expect(html).not.toContain("March starter");
-    expect(html).not.toContain("Space starter");
-    expect([...home.matchAll(/data-start="/g)].length).toBe(4);
+    expect([...home.matchAll(/<b>([^<]+)<\/b>/g)].map((m) => m[1])).toEqual(["Empty song", "Hip hop/pop starter", "Music lessons"]);
+    expect([...home.matchAll(/data-start="([^"]+)"/g)].map((m) => m[1])).toEqual(["empty", "hiphop-pop", "lessons"]);
+    for (const gone of ["Lullaby starter", "March starter", "Space starter"]) expect(html).not.toContain(gone);
+    expect(html).not.toMatch(/data-pv="lullaby"|lullaby:/);
   });
 
   it("has every control the design names", () => {
@@ -180,7 +181,7 @@ describe("Sound Space app page", () => {
 
   describe("page helpers", () => {
     const block = html.split("/* ---- helpers the tests run on their own")[1].split("/* ---- end of helpers")[0];
-    const { scheduleCountIn, setTrackInstrument, sizeText, fileSize, loadLayout, saveLayout, LAYOUT_KEY } = new Function(block.slice(block.indexOf("*/") + 2) + "; return { scheduleCountIn, setTrackInstrument, sizeText, fileSize, loadLayout, saveLayout, LAYOUT_KEY };")();
+    const { scheduleCountIn, setTrackInstrument, sizeText, fileSize, loadLayout, saveLayout, LAYOUT_KEY, statusFor } = new Function(block.slice(block.indexOf("*/") + 2) + "; return { scheduleCountIn, setTrackInstrument, sizeText, fileSize, loadLayout, saveLayout, LAYOUT_KEY, statusFor };")();
 
     function fakeAudio() {
       const param = () => ({ setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, cancelScheduledValues() {} });
@@ -223,6 +224,18 @@ describe("Sound Space app page", () => {
       expect(loadLayout(storage)).toEqual(all);
       mem.set("ss-layout", JSON.stringify({ tracks: "no", keys: false }));
       expect(loadLayout(storage)).toEqual({ ...all, keys: false });
+    });
+
+    it("never claims a song is saved when this browser blocks saving", () => {
+      expect(statusFor(true)).toEqual({ text: "Saved on this device", bad: false });
+      expect(statusFor(false)).toEqual({ text: "Not saved: this browser blocked saving", bad: true });
+      // the markup starts neutral, and every song that opens gets the honest status straight away
+      expect(html).toContain('<small id="status" role="status"></small>');
+      const open = html.slice(html.indexOf("function openSong("), html.indexOf("async function showHome("));
+      expect(open).toMatch(/song = s;[^]*?freshStatus\(\);/);
+      expect(html).toMatch(/function freshStatus\(\)\{ const st = statusFor\(dbOk\); setStatus\(st\.text, st\.bad\); \}/);
+      // the "can't keep songs" toast shows once a session, not on every Home repaint
+      expect(html).toMatch(/if \(!dbOk && !blockedToastShown\)\{ blockedToastShown = true; toast\(/);
     });
 
     it("Stop during the count-in silences the clicks still to come", () => {
@@ -293,6 +306,9 @@ describe("Sound Space app page", () => {
     // each side panel has its own hide button in its header
     expect(html).toMatch(/<div class="panel__head"><h3>Tracks<\/h3><button[^>]*data-act="toggle-tracks"[^>]*aria-label="Hide tracks"/);
     expect(html).toMatch(/<h3>Beats and patterns<\/h3><button[^>]*data-act="toggle-lib"[^>]*aria-label="Hide beats and patterns"/);
+    // hiding a panel from its own header hands keyboard focus to the app bar toggle
+    expect(html).toContain('if (act === "toggle-tracks"){ const inside = !!b.closest(".panel"); toggleTracks(); if (inside) $("#tg-tracks").focus(); return; }');
+    expect(html).toContain('if (act === "toggle-lib"){ const inside = !!b.closest(".panel"); toggleLib(); if (inside) $("#tg-lib").focus(); return; }');
     // the shortcuts are in help
     expect(html).toContain('"Show and hide parts"');
   });

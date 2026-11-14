@@ -595,10 +595,6 @@ body.kbd-collapsed #kbd{ display:none; }
         <span class="start__art" data-pv="hiphop" style="background:#FBE8FD" aria-hidden="true"></span>
         <b>Hip hop/pop starter</b><span class="t">Drums, bass and piano</span>
       </button>
-      <button type="button" class="start" data-start="lullaby">
-        <span class="start__art" data-pv="lullaby" style="background:#E6EEFF" aria-hidden="true"></span>
-        <b>Lullaby starter</b><span class="t">Music box and strings</span>
-      </button>
       <button type="button" class="start" data-start="lessons">
         <span class="start__art" data-pv="lessons" style="background:#EEE9FF" aria-hidden="true"></span>
         <b>Music lessons</b><span class="t">Short lessons, one music word each</span>
@@ -620,7 +616,7 @@ body.kbd-collapsed #kbd{ display:none; }
     <div class="title">
       <label class="sr-only" for="title-in">Song name</label>
       <input id="title-in" maxlength="60" autocomplete="off" spellcheck="false">
-      <small id="status" role="status">Saved on this device</small>
+      <small id="status" role="status"></small>
     </div>
     <span class="grow"></span>
     <button type="button" class="btn icon" data-act="undo" id="undo-btn" aria-label="Undo" title="Undo  Ctrl+Z"><i data-lucide="undo-2"></i></button>
@@ -926,8 +922,8 @@ async function deleteSong(id){ return dbDo("readwrite", st => { if (st) return s
 
 let saveTimer = 0;
 function setStatus(t, bad){ const el = $("#status"); el.textContent = t; el.classList.toggle("bad", !!bad); }
-/* TASK 10: once Save project file exists, this message also says "Use Save project file." */
-const NOT_SAVED = "Not saved: this browser blocked saving";
+/* the status for a song that has nothing waiting to save, honest when this browser blocks saving */
+function freshStatus(){ const st = statusFor(dbOk); setStatus(st.text, st.bad); }
 function queueSave(){
   if (!song) return;
   clearTimeout(saveTimer);
@@ -938,7 +934,7 @@ async function saveNow(){
   if (!song) return;
   try {
     await saveSong(song);
-    if (dbOk) setStatus("Saved on this device"); else setStatus(NOT_SAVED, true);
+    freshStatus();
   } catch(e){ setStatus("Couldn’t save just now", true); }
 }
 
@@ -1100,6 +1096,9 @@ function loadLayout(storage){
 function saveLayout(storage, state){
   try { if (!storage) return false; storage.setItem(LAYOUT_KEY, JSON.stringify(state)); return true; } catch(e){ return false; }
 }
+/* The save status a song starts with. TASK 10: once Save project file exists, NOT_SAVED also says "Use Save project file." */
+const NOT_SAVED = "Not saved: this browser blocked saving";
+function statusFor(saving){ return saving ? { text:"Saved on this device", bad:false } : { text:NOT_SAVED, bad:true }; }
 /* ---- end of helpers ---- */
 
 /* ============================================================
@@ -1140,6 +1139,9 @@ function redo(){ if (!hist || busy()) return; const s = hist.redo(); if (s){ rep
 function openSong(s, opts){
   stopAll();
   song = s; stash = {}; playedOnce = false;
+  clearTimeout(saveTimer); saveTimer = 0;
+  freshStatus();
+  openDb().then(() => { if (song === s && !saveTimer) freshStatus(); });
   hist = M.createHistory(100); hist.push(song);
   sel = song.tracks.length ? song.tracks[0].id : null;
   gridFocus = { r:0, c:0 };
@@ -1903,7 +1905,6 @@ function paintStarts(){
   const art = {
     empty: gridPreview("", [], true),
     hiphop: gridPreview(CAT.drums.color, cells(["0,0","0,2","0,4","0,6","0,8","0,10","0,12","0,14","1,4","1,12","2,7","2,15","3,0","3,3","3,8","3,10"])),
-    lullaby: gridPreview(CAT.keys.color, cells(["3,0","2,2","1,4","0,6","1,8","2,10","1,12","3,14","3,1","1,5","0,7"])),
     lessons: '<svg viewBox="0 0 160 90" aria-hidden="true"><g fill="' + CAT.strings.color + '" stroke="' + CAT.strings.color + '" stroke-width="4" stroke-linecap="round">'
       + '<ellipse cx="44" cy="66" rx="11" ry="8" stroke="none" transform="rotate(-20 44 66)"/><ellipse cx="84" cy="58" rx="11" ry="8" stroke="none" transform="rotate(-20 84 58)"/>'
       + '<path d="M54 63V22M94 55V14" fill="none"/><path d="M54 22L94 14" stroke-width="9" fill="none"/>'
@@ -1912,6 +1913,7 @@ function paintStarts(){
   $$("[data-pv]").forEach(el => { el.innerHTML = art[el.dataset.pv] || ""; });
 }
 paintStarts();
+let blockedToastShown = false;
 async function paintHome(){
   let list = [];
   try { list = await listSongs(); } catch(e){}
@@ -1927,7 +1929,7 @@ async function paintHome(){
       + '</article>';
   }).join("") : '<p class="empty">Nothing yet. Pick a way to start above.</p>';
   icons();
-  if (!dbOk) toast("This browser can’t keep songs between visits.");
+  if (!dbOk && !blockedToastShown){ blockedToastShown = true; toast("This browser can’t keep songs between visits."); }
 }
 async function openStored(id){
   let raw = null;
@@ -1987,8 +1989,8 @@ document.addEventListener("click", async e => {
   if (act === "help") return openHelp();
   if (act === "open-file") return $("#file-in").click();
   if (act === "lib-close"){ document.body.classList.remove("lib-open"); applyLayout(); return; }
-  if (act === "toggle-tracks") return toggleTracks();
-  if (act === "toggle-lib") return toggleLib();
+  if (act === "toggle-tracks"){ const inside = !!b.closest(".panel"); toggleTracks(); if (inside) $("#tg-tracks").focus(); return; }
+  if (act === "toggle-lib"){ const inside = !!b.closest(".panel"); toggleLib(); if (inside) $("#tg-lib").focus(); return; }
   if (act === "focus") return toggleFocus();
   if (act === "toggle-overview") return setLayout({ overview:!layout.overview });
   if (act === "toggle-keys") return setLayout({ keys:!layout.keys });
