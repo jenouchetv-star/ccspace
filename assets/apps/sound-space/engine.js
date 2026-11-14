@@ -178,19 +178,19 @@
       const damp = p.damp === undefined ? 0.996 : p.damp;
       const bright = p.brightness === undefined ? 1 : p.brightness;
       let seed = 777;
-      for (let i = 0; i < len; i++) {
-        if (i < period) {
-          seed = (seed * 1664525 + 1013904223) >>> 0;
-          const raw = (seed / 4294967296) * 2 - 1;
-          d[i] = bright < 1 && i > 0 ? bright * raw + (1 - bright) * d[i - 1] : raw;
-        } else {
-          d[i] = damp * 0.5 * (d[i - period] + d[i - period + 1]);
-        }
+      const burst = Math.min(period, len);
+      for (let i = 0; i < burst; i++) {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        const raw = (seed / 4294967296) * 2 - 1;
+        d[i] = bright < 1 && i > 0 ? bright * raw + (1 - bright) * d[i - 1] : raw;
       }
+      // The pick-position comb goes on the burst, before the loop runs, so
+      // every later period carries the notch.
       if (p.pick > 0) {
         const k = Math.max(1, Math.round(period * p.pick));
-        for (let i = Math.min(period, len) - 1; i >= k; i--) d[i] -= d[i - k];
+        for (let i = burst - 1; i >= k; i--) d[i] -= d[i - k];
       }
+      for (let i = period; i < len; i++) d[i] = damp * 0.5 * (d[i - period] + d[i - period + 1]);
       // Averaging makes the loop P - 0.5 samples long; retune so pitch is exact.
       const rate = (freq * (period - 0.5)) / sr;
       const e = envelope(ctx, dest, when, Math.max(dur, 0.1), vel * 0.6, { ring: p.ring || 0.4 });
@@ -257,7 +257,8 @@
         // A slow wobble on the filter cutoff.
         const l = osc(ctx, "sine", p.lfo, when, e.end);
         const lg = ctx.createGain();
-        lg.gain.value = p.lfoDepth || cutoff * 0.8;
+        // Never swing the cutoff below ~60 Hz.
+        lg.gain.value = Math.min(p.lfoDepth || cutoff * 0.8, Math.max(cutoff * 0.7 - 60, 0));
         l.connect(lg);
         lg.connect(f.frequency);
         out.push(l);

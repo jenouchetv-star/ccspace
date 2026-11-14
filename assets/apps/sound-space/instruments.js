@@ -187,7 +187,7 @@
   codeFx("Jump", "jump");
   codeFx("Power-up", "powerup");
   codeFx("Bubbles", "bubbles");
-  codeFx("Rocket", "boom");
+  codeFx("Rocket", "rocket");
 
   const byIdMap = new Map(LIST.map((x) => [x.id, x]));
   function byId(id) {

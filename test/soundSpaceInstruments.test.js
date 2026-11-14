@@ -253,6 +253,35 @@ describe("code sounds do not collapse into each other", () => {
     );
   });
 
+  it("pick position shapes the whole note, not just the first period", () => {
+    const grab = (pick) => {
+      const ctx = fakeCtx();
+      const rec = { id: "pk", kind: "pitched", source: "code", range: [36, 96], recipe: { type: "pluck", damp: 0.996, pick } };
+      SS.engine
+        .createVoices(ctx, { byId: () => rec }, "x")
+        .play({ instrumentId: "pk", pitch: 60, len: 2, gain: 0.8, dur: 0.5 }, 0, ctx.destination);
+      return ctx.sources().find((n) => n.kind === "buf").buffer.getChannelData(0);
+    };
+    const plain = grab(undefined);
+    const combed = grab(0.2);
+    const period = Math.round(44100 / (440 * Math.pow(2, -9 / 12)));
+    let diff = 0;
+    for (let i = 10 * period; i < 10 * period + 50; i++) diff += Math.abs(plain[i] - combed[i]);
+    expect(diff).toBeGreaterThan(0.01);
+    // and no jump where the loop takes over
+    expect(Math.abs(combed[period] - combed[period - 1])).toBeLessThan(1.5);
+  });
+
+  it("Wobble bass LFO never drops the cutoff below 60 Hz and Rocket has its own effect", () => {
+    const ctx = fakeCtx();
+    SS.engine.createVoices(ctx, I, "x").play({ instrumentId: "wobble-bass", pitch: 40, len: 2, gain: 0.8, dur: 0.5 }, 0, ctx.destination);
+    const lfoGain = ctx.nodes.find((n) => n.kind === "gain" && n.gain.value > 0 && n.gain.events.length === 0);
+    const f = ctx.nodes.find((n) => n.kind === "filter");
+    const low = Math.min(...f.frequency.events.map((e) => e[1]));
+    expect(lfoGain.gain.value).toBeLessThanOrEqual(low - 60 + 1e-9);
+    expect(I.byId("rocket").recipe.params.effect).toBe("rocket");
+  });
+
   it("Wobble bass has a real LFO on its filter and the effects list is covered", () => {
     const wob = I.byId("wobble-bass");
     const ctx = fakeCtx();
