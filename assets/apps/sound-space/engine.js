@@ -163,32 +163,60 @@
     },
 
     // Karplus-Strong: a noise burst circulating through an averaging delay.
+    // brightness (0..1) softens the burst, pick (0..0.5) combs it for a pick
+    // position, tail sets the ring length, ring the fade, bend (semitones)
+    // starts the note sharp and settles, layer (semitones) adds a second
+    // voice at layerGain.
     pluck(ctx, dest, freq, when, dur, vel, p) {
       const sr = ctx.sampleRate;
-      const ring = Math.min(Math.max(dur, 0.1) + 0.5, 2.5);
+      const tail = p.tail === undefined ? 0.5 : p.tail;
+      const ring = Math.min(Math.max(dur, 0.1) + tail, 2.5);
       const len = Math.max(Math.round(sr * ring), 64);
       const period = Math.max(2, Math.round(sr / freq));
       const buf = ctx.createBuffer(1, len, sr);
       const d = buf.getChannelData(0);
       const damp = p.damp === undefined ? 0.996 : p.damp;
+      const bright = p.brightness === undefined ? 1 : p.brightness;
       let seed = 777;
       for (let i = 0; i < len; i++) {
         if (i < period) {
           seed = (seed * 1664525 + 1013904223) >>> 0;
-          d[i] = (seed / 4294967296) * 2 - 1;
+          const raw = (seed / 4294967296) * 2 - 1;
+          d[i] = bright < 1 && i > 0 ? bright * raw + (1 - bright) * d[i - 1] : raw;
         } else {
           d[i] = damp * 0.5 * (d[i - period] + d[i - period + 1]);
         }
       }
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
+      if (p.pick > 0) {
+        const k = Math.max(1, Math.round(period * p.pick));
+        for (let i = Math.min(period, len) - 1; i >= k; i--) d[i] -= d[i - k];
+      }
       // Averaging makes the loop P - 0.5 samples long; retune so pitch is exact.
-      src.playbackRate.value = (freq * (period - 0.5)) / sr;
-      const e = envelope(ctx, dest, when, Math.max(dur, 0.1), vel * 0.6, { ring: 0.4 });
-      src.start(when);
-      src.stop(e.end);
-      src.connect(e.gain);
-      return [src];
+      const rate = (freq * (period - 0.5)) / sr;
+      const e = envelope(ctx, dest, when, Math.max(dur, 0.1), vel * 0.6, { ring: p.ring || 0.4 });
+      const voice = (r, g) => {
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.playbackRate.value = r;
+        if (p.bend) {
+          src.playbackRate.setValueAtTime(r * Math.pow(2, p.bend / 12), when);
+          src.playbackRate.exponentialRampToValueAtTime(r, when + 0.18);
+        }
+        src.start(when);
+        src.stop(e.end);
+        if (g === 1) {
+          src.connect(e.gain);
+        } else {
+          const lg = ctx.createGain();
+          lg.gain.value = g;
+          src.connect(lg);
+          lg.connect(e.gain);
+        }
+        return src;
+      };
+      const out = [voice(rate, 1)];
+      if (p.layer) out.push(voice(rate * Math.pow(2, p.layer / 12), p.layerGain || 0.5));
+      return out;
     },
 
     additive(ctx, dest, freq, when, dur, vel, p) {
@@ -224,7 +252,17 @@
       o2.detune.value = p.detune === undefined ? 7 : p.detune;
       o1.connect(f);
       o2.connect(f);
-      return [o1, o2];
+      const out = [o1, o2];
+      if (p.lfo) {
+        // A slow wobble on the filter cutoff.
+        const l = osc(ctx, "sine", p.lfo, when, e.end);
+        const lg = ctx.createGain();
+        lg.gain.value = p.lfoDepth || cutoff * 0.8;
+        l.connect(lg);
+        lg.connect(f.frequency);
+        out.push(l);
+      }
+      return out;
     },
 
     chip(ctx, dest, freq, when, dur, vel, p) {
@@ -246,13 +284,14 @@
     },
 
     // Code kits: slot 0..7 = Kick, Snare, Closed hat, Open hat, Clap,
-    // Low tom, High tom, Cymbal.
+    // Low tom, High tom, Cymbal. params.style picks a row of DRUM_STYLES.
     noiseDrum(ctx, dest, freq, when, dur, vel, p) {
       const slot = (p.slot | 0) & 7;
+      const st = Object.assign({}, DRUM_STYLES.classic, DRUM_STYLES[p.style]);
       const v = vel * 0.7;
       const tone = (f0, f1, decay, gain) => {
         const e = hit(ctx, dest, when, v * gain, decay);
-        const o = osc(ctx, "sine", f0, when, e.end);
+        const o = osc(ctx, st.wave, f0, when, e.end);
         o.frequency.setValueAtTime(f0, when);
         o.frequency.exponentialRampToValueAtTime(f1, when + Math.min(0.12, decay));
         o.connect(e.gain);
@@ -268,71 +307,229 @@
       };
       switch (slot) {
         case 0:
-          return [tone(150, 45, 0.35, 1)];
+          return [tone.apply(null, st.kick)];
         case 1:
-          return [noise("highpass", 1200, 0.18, 0.8), tone(220, 150, 0.1, 0.5)];
+          return [noise.apply(null, st.snareNoise), tone.apply(null, st.snareTone)];
         case 2:
-          return [noise("highpass", 7000, 0.05, 0.5)];
+          return [noise("highpass", st.hat[0], st.hat[1], st.hat[2])];
         case 3:
-          return [noise("highpass", 7000, 0.35, 0.5)];
+          return [noise("highpass", st.openHat[0], st.openHat[1], st.openHat[2])];
         case 4: {
+          const [cut, q, sp, len] = st.clap;
           const e = ctx.createGain();
           e.gain.setValueAtTime(0, when);
           for (let i = 0; i < 3; i++) {
-            const t = when + i * 0.012;
+            const t = when + i * sp;
             e.gain.linearRampToValueAtTime(v * 0.8, t + ATTACK);
-            e.gain.linearRampToValueAtTime(v * 0.1, t + 0.011);
+            e.gain.linearRampToValueAtTime(v * 0.1, t + sp * 0.9);
           }
-          e.gain.linearRampToValueAtTime(v * 0.8, when + 0.036 + ATTACK);
-          e.gain.exponentialRampToValueAtTime(0.0001, when + 0.2);
-          e.gain.linearRampToValueAtTime(0, when + 0.2 + RELEASE);
+          e.gain.linearRampToValueAtTime(v * 0.8, when + 3 * sp + ATTACK);
+          e.gain.exponentialRampToValueAtTime(0.0001, when + len);
+          e.gain.linearRampToValueAtTime(0, when + len + RELEASE);
           e.connect(dest);
-          const n = noiseSource(ctx, when, when + 0.23);
-          const f = filterNode(ctx, "bandpass", 1500, 1.2);
+          const n = noiseSource(ctx, when, when + len + 0.03);
+          const f = filterNode(ctx, "bandpass", cut, q);
           n.connect(f);
           f.connect(e);
           return [n];
         }
         case 5:
-          return [tone(120, 70, 0.3, 0.9)];
+          return [tone.apply(null, st.lowTom)];
         case 6:
-          return [tone(200, 120, 0.25, 0.9)];
+          return [tone.apply(null, st.highTom)];
         default:
-          return [noise("highpass", 5000, 1.2, 0.4)];
+          return [noise.apply(null, st.cymbal)];
       }
     },
 
-    // One-shot effects; params.effect picks which.
+    // One-shot effects; params.effect picks which. Each name has its own sound.
     fx(ctx, dest, freq, when, dur, vel, p) {
       const kind = (p.params && p.params.effect) || p.effect || "laser";
       const v = vel * 0.5;
-      const sweepTone = (type, f0, f1, decay) => {
-        const e = hit(ctx, dest, when, v, decay);
-        const o = osc(ctx, type, f0, when, e.end);
-        o.frequency.setValueAtTime(f0, when);
-        o.frequency.exponentialRampToValueAtTime(f1, when + decay);
+      // A tone gliding f0 to f1, starting `at` seconds in.
+      const tone = (type, f0, f1, decay, at, gain) => {
+        const t = when + (at || 0);
+        const e = hit(ctx, dest, t, v * (gain === undefined ? 1 : gain), decay);
+        const o = osc(ctx, type, f0, t, e.end);
+        o.frequency.setValueAtTime(f0, t);
+        o.frequency.exponentialRampToValueAtTime(f1, t + decay);
         o.connect(e.gain);
-        return [o];
+        return o;
+      };
+      // Filtered noise with the cutoff gliding c0 to c1.
+      const hiss = (type, c0, c1, decay, q, gain) => {
+        const e = hit(ctx, dest, when, v * (gain === undefined ? 1 : gain), decay);
+        const n = noiseSource(ctx, when, e.end);
+        const f = filterNode(ctx, type, c0, q);
+        f.frequency.setValueAtTime(c0, when);
+        f.frequency.exponentialRampToValueAtTime(c1, when + decay);
+        n.connect(f);
+        f.connect(e.gain);
+        return n;
       };
       switch (kind) {
         case "rise":
-          return sweepTone("triangle", 200, 1600, 0.6);
+          return [tone("triangle", 200, 1600, 0.6)];
         case "bubble":
-          return sweepTone("sine", 300, 900, 0.15);
-        case "boom": {
-          const e = hit(ctx, dest, when, v * 1.2, 1.0);
-          const n = noiseSource(ctx, when, e.end);
-          const f = filterNode(ctx, "lowpass", 400, 1);
-          n.connect(f);
-          f.connect(e.gain);
-          return [n].concat(sweepTone("sine", 90, 35, 0.8));
-        }
+          return [tone("sine", 300, 900, 0.15)];
+        case "boom":
+          return [hiss("lowpass", 400, 400, 1.0, 1, 1.2), tone("sine", 90, 35, 0.8)];
+        case "pop":
+          return [tone("sine", 700, 120, 0.07)];
+        case "boing":
+          return [tone("triangle", 160, 560, 0.12), tone("triangle", 560, 200, 0.4, 0.12)];
+        case "zoom":
+          return [tone("sawtooth", 120, 1400, 0.5), tone("square", 60, 700, 0.5, 0, 0.4)];
+        case "whoosh":
+          return [hiss("bandpass", 300, 3000, 0.7, 1.5)];
         case "sparkle":
-          return sweepTone("sine", 2400, 3600, 0.4);
+          return [tone("sine", 2400, 3600, 0.4), tone("sine", 3000, 4500, 0.3, 0.1)];
+        case "splash":
+          return [hiss("highpass", 2500, 2500, 0.5, 0.7), tone("sine", 400, 1000, 0.15)];
+        case "chime":
+          return [
+            tone("sine", 880, 880, 1.2),
+            tone("sine", 1319, 1319, 0.9, 0, 0.6),
+            tone("sine", 1760, 1760, 0.7, 0, 0.4),
+          ];
+        case "coin":
+          return [tone("square", 988, 988, 0.08, 0, 0.6), tone("square", 1319, 1319, 0.4, 0.08, 0.6)];
+        case "jump":
+          return [tone("square", 250, 750, 0.22, 0, 0.6)];
+        case "powerup":
+          return [262, 330, 392, 523, 659].map((f, i) => tone("square", f, f, 0.1, i * 0.07, 0.5));
+        case "bubbles":
+          return [tone("sine", 300, 800, 0.12), tone("sine", 450, 1100, 0.1, 0.13), tone("sine", 250, 650, 0.14, 0.26)];
+        case "rocket":
+          return [hiss("lowpass", 700, 700, 1.3, 1, 1), tone("sawtooth", 70, 180, 1.2, 0, 0.5)];
         default:
-          return sweepTone("sawtooth", 1800, 160, 0.3);
+          return [tone("sawtooth", 1800, 160, 0.3)];
       }
     },
+  };
+
+  // Tones are [f0, f1, decay, gain]. Snare noise and cymbal are [filter,
+  // cutoff, decay, gain, q]. Hats are [cutoff, decay, gain]. Clap is
+  // [cutoff, q, spread seconds, length seconds].
+  const DRUM_STYLES = {
+    classic: {
+      wave: "sine",
+      kick: [150, 45, 0.35, 1],
+      snareNoise: ["highpass", 1200, 0.18, 0.8],
+      snareTone: [220, 150, 0.1, 0.5],
+      hat: [7000, 0.05, 0.5],
+      openHat: [7000, 0.35, 0.5],
+      clap: [1500, 1.2, 0.012, 0.2],
+      lowTom: [120, 70, 0.3, 0.9],
+      highTom: [200, 120, 0.25, 0.9],
+      cymbal: ["highpass", 5000, 1.2, 0.4],
+    },
+    "808": {
+      kick: [120, 40, 0.5, 1],
+      snareNoise: ["highpass", 1500, 0.22, 0.8],
+      snareTone: [200, 140, 0.12, 0.5],
+      hat: [8000, 0.04, 0.45],
+      openHat: [8000, 0.3, 0.45],
+      clap: [1400, 1.2, 0.013, 0.22],
+      lowTom: [100, 60, 0.35, 0.9],
+      highTom: [160, 90, 0.3, 0.9],
+      cymbal: ["highpass", 6000, 1.0, 0.4],
+    },
+    electro: {
+      wave: "triangle",
+      kick: [180, 50, 0.25, 1],
+      snareNoise: ["highpass", 2000, 0.14, 0.8],
+      snareTone: [260, 180, 0.08, 0.5],
+      hat: [9000, 0.03, 0.45],
+      openHat: [9000, 0.2, 0.45],
+      clap: [2000, 1.5, 0.01, 0.16],
+      lowTom: [140, 90, 0.22, 0.9],
+      highTom: [240, 150, 0.18, 0.9],
+      cymbal: ["highpass", 8000, 0.8, 0.4],
+    },
+    hiphop: {
+      kick: [100, 50, 0.4, 1],
+      snareNoise: ["highpass", 900, 0.22, 0.8],
+      snareTone: [180, 120, 0.12, 0.5],
+      hat: [6000, 0.06, 0.5],
+      openHat: [6000, 0.3, 0.5],
+      clap: [1100, 1, 0.015, 0.24],
+      lowTom: [90, 55, 0.32, 0.9],
+      highTom: [140, 85, 0.28, 0.9],
+      cymbal: ["highpass", 4500, 1.0, 0.4],
+    },
+    lofi: {
+      kick: [90, 45, 0.3, 0.8],
+      snareNoise: ["bandpass", 700, 0.2, 0.5, 0.8],
+      snareTone: [160, 110, 0.14, 0.4],
+      hat: [3500, 0.07, 0.3],
+      openHat: [3500, 0.28, 0.3],
+      clap: [900, 0.8, 0.016, 0.3],
+      lowTom: [80, 50, 0.28, 0.7],
+      highTom: [120, 75, 0.24, 0.7],
+      cymbal: ["bandpass", 3000, 0.9, 0.25, 0.5],
+    },
+    trap: {
+      kick: [90, 30, 0.9, 1.1],
+      snareNoise: ["highpass", 1800, 0.15, 0.8],
+      snareTone: [240, 160, 0.09, 0.5],
+      hat: [10000, 0.025, 0.5],
+      openHat: [10000, 0.2, 0.5],
+      clap: [1700, 1.3, 0.009, 0.18],
+      lowTom: [110, 45, 0.5, 0.9],
+      highTom: [170, 70, 0.4, 0.9],
+      cymbal: ["highpass", 7000, 0.8, 0.4],
+    },
+    dance: {
+      kick: [160, 55, 0.3, 1],
+      snareNoise: ["highpass", 2200, 0.2, 0.8],
+      snareTone: [250, 170, 0.1, 0.5],
+      hat: [8500, 0.04, 0.5],
+      openHat: [8500, 0.25, 0.5],
+      clap: [1600, 1.1, 0.011, 0.21],
+      lowTom: [130, 80, 0.26, 0.9],
+      highTom: [210, 130, 0.22, 0.9],
+      cymbal: ["highpass", 7500, 1.1, 0.4],
+    },
+    chip: {
+      wave: "square",
+      kick: [200, 40, 0.15, 0.6],
+      snareNoise: ["bandpass", 3000, 0.1, 0.7, 0.5],
+      snareTone: [300, 200, 0.06, 0.3],
+      hat: [9500, 0.03, 0.4],
+      openHat: [9500, 0.15, 0.4],
+      clap: [3200, 0.6, 0.008, 0.12],
+      lowTom: [150, 100, 0.12, 0.5],
+      highTom: [250, 170, 0.1, 0.5],
+      cymbal: ["highpass", 6500, 0.25, 0.3],
+    },
+    toy: {
+      kick: [300, 120, 0.12, 0.8],
+      snareNoise: ["bandpass", 2500, 0.08, 0.6, 3],
+      snareTone: [500, 350, 0.05, 0.4],
+      hat: [11000, 0.04, 0.3],
+      openHat: [11000, 0.12, 0.3],
+      clap: [2500, 3, 0.014, 0.1],
+      lowTom: [400, 300, 0.12, 0.7],
+      highTom: [600, 450, 0.1, 0.7],
+      cymbal: ["bandpass", 8000, 0.3, 0.3, 4],
+    },
+  };
+
+  const FX_EFFECTS = [
+    "rise", "bubble", "boom", "laser", "pop", "boing", "zoom", "whoosh", "sparkle",
+    "splash", "chime", "coin", "jump", "powerup", "bubbles", "rocket",
+  ];
+
+  // The settings each recipe type reads (slot is supplied by the player).
+  const RECIPE_PARAMS = {
+    fm: ["ratio", "index", "ring"],
+    pluck: ["damp", "brightness", "pick", "tail", "ring", "bend", "layer", "layerGain"],
+    additive: ["partials"],
+    subtractive: ["wave", "cutoff", "q", "sweep", "attack", "release", "detune", "lfo", "lfoDepth"],
+    chip: ["duty"],
+    noiseDrum: ["style"],
+    fx: ["effect"],
   };
 
   function fetchArrayBufferDefault(url) {
@@ -616,6 +813,9 @@
     exportFrames,
     createVoices,
     createPlayer,
+    DRUM_STYLES,
+    FX_EFFECTS,
+    RECIPE_PARAMS,
     renderOffline,
   });
 })(typeof window !== "undefined" ? window : globalThis);

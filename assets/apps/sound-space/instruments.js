@@ -113,15 +113,15 @@
   recPitched("strings", "Dan tranh", 50, 86);
   recPitched("strings", "Strumstick", 48, 79);
   codePitched("strings", "Plucked strings", 40, 88, "pluck", { damp: 0.996 });
-  codePitched("strings", "Nylon pluck", 40, 84, "pluck", { damp: 0.99 });
-  codePitched("strings", "Bright pluck", 48, 92, "pluck", { damp: 0.998 });
-  codePitched("strings", "Twelve-string shimmer", 48, 92, "pluck", { damp: 0.997 });
-  codePitched("strings", "Banjo-style pluck", 48, 84, "pluck", { damp: 0.985 });
-  codePitched("strings", "Koto-style pluck", 48, 88, "pluck", { damp: 0.993 });
+  codePitched("strings", "Nylon pluck", 40, 84, "pluck", { damp: 0.99, brightness: 0.35, tail: 0.3 });
+  codePitched("strings", "Bright pluck", 48, 92, "pluck", { damp: 0.998, brightness: 1, pick: 0.15 });
+  codePitched("strings", "Twelve-string shimmer", 48, 92, "pluck", { damp: 0.997, brightness: 0.8, layer: 12, layerGain: 0.5 });
+  codePitched("strings", "Banjo-style pluck", 48, 84, "pluck", { damp: 0.985, brightness: 1, pick: 0.12, tail: 0.15, ring: 0.2 });
+  codePitched("strings", "Koto-style pluck", 48, 88, "pluck", { damp: 0.993, brightness: 0.9, pick: 0.3, bend: 0.6 });
   codePitched("strings", "Synth strings", 36, 90, "subtractive", { wave: "sawtooth", cutoff: 2200, q: 1, sweep: 1.1, attack: 0.25, release: 0.3, detune: 14 });
   codePitched("strings", "Glass strings", 48, 96, "additive", { partials: [1, 0.1, 0.4, 0.05, 0.2] });
   codePitched("strings", "Space strings", 36, 90, "subtractive", { wave: "sawtooth", cutoff: 900, q: 2, sweep: 1.4, attack: 0.6, release: 0.6, detune: 20 });
-  codePitched("strings", "Pizzicato pluck", 48, 88, "pluck", { damp: 0.98 });
+  codePitched("strings", "Pizzicato pluck", 48, 88, "pluck", { damp: 0.98, brightness: 0.6, tail: 0.05, ring: 0.12 });
 
   // ---- Brass and winds -----------------------------------------------------
   recPitched("winds", "Trumpet", 52, 88);
@@ -155,15 +155,15 @@
   codePitched("bass", "Soft bass", 28, 60, "additive", { partials: [1, 0.3, 0.1] });
   codePitched("bass", "Synth bass", 28, 64, "subtractive", { wave: "sawtooth", cutoff: 700, q: 3, sweep: 2.5 });
   codePitched("bass", "Sub bass", 24, 55, "additive", { partials: [1, 0.05] });
-  codePitched("bass", "Wobble bass", 28, 60, "subtractive", { wave: "sawtooth", cutoff: 500, q: 8, sweep: 4, detune: 12 });
+  codePitched("bass", "Wobble bass", 28, 60, "subtractive", { wave: "sawtooth", cutoff: 500, q: 8, sweep: 4, detune: 12, lfo: 3, lfoDepth: 400 });
   codePitched("bass", "Square bass", 28, 64, "subtractive", { wave: "square", cutoff: 600, q: 1, sweep: 1.5 });
-  codePitched("bass", "Plucked synth bass", 28, 64, "pluck", { damp: 0.99 });
+  codePitched("bass", "Plucked synth bass", 28, 64, "pluck", { damp: 0.99, brightness: 0.4, tail: 0.3 });
   codePitched("bass", "Funky bass", 28, 64, "subtractive", { wave: "sawtooth", cutoff: 900, q: 6, sweep: 3.5, release: 0.03 });
   codePitched("bass", "Rubber bass", 28, 64, "fm", { ratio: 1, index: 3, ring: 0.3 });
   codePitched("bass", "Deep pad bass", 24, 60, "subtractive", { wave: "sawtooth", cutoff: 400, q: 1, sweep: 1.3, attack: 0.3, release: 0.4 });
   codePitched("bass", "Chip-tune bass", 28, 64, "chip", { duty: 0.5 });
-  codePitched("bass", "Electric-style bass", 28, 64, "pluck", { damp: 0.994 });
-  codePitched("bass", "Picked synth bass", 28, 64, "pluck", { damp: 0.975 });
+  codePitched("bass", "Electric-style bass", 28, 64, "pluck", { damp: 0.994, brightness: 0.55, pick: 0.2 });
+  codePitched("bass", "Picked synth bass", 28, 64, "pluck", { damp: 0.975, brightness: 0.9, tail: 0.1, ring: 0.15 });
   codePitched("bass", "Boom bass", 24, 52, "fm", { ratio: 1, index: 0.5, ring: 1 });
   codePitched("bass", "Hum bass", 28, 60, "additive", { partials: [1, 0.5, 0.2] });
 
@@ -175,19 +175,18 @@
   recFx("Vibraslap");
   recFx("Thunder sheet-style gong scrape");
   recFx("Bell tree");
-  // Nearest effect the engine supports: rise, bubble, boom, sparkle, laser.
-  codeFx("Pop", "bubble");
-  codeFx("Boing", "bubble");
+  codeFx("Pop", "pop");
+  codeFx("Boing", "boing");
   codeFx("Laser", "laser");
-  codeFx("Zoom", "rise");
-  codeFx("Whoosh", "rise");
+  codeFx("Zoom", "zoom");
+  codeFx("Whoosh", "whoosh");
   codeFx("Sparkle", "sparkle");
-  codeFx("Splash", "bubble");
-  codeFx("Chime", "sparkle");
-  codeFx("Coin", "sparkle");
-  codeFx("Jump", "rise");
-  codeFx("Power-up", "rise");
-  codeFx("Bubbles", "bubble");
+  codeFx("Splash", "splash");
+  codeFx("Chime", "chime");
+  codeFx("Coin", "coin");
+  codeFx("Jump", "jump");
+  codeFx("Power-up", "powerup");
+  codeFx("Bubbles", "bubbles");
   codeFx("Rocket", "boom");
 
   const byIdMap = new Map(LIST.map((x) => [x.id, x]));
