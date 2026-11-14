@@ -128,6 +128,36 @@
     "Space": [["F7", "G", "E7", "A7"], [2]],
   };
 
+  // ---- a second bass line and a second, different progression for every style (variety: owner) -----------------
+  const BASS2 = {
+    "Pop": "0:F1:1 2:F2:1 3:F1:1 4:G1:1 6:G2:1 7:G1:1 8:E1:1 10:E2:1 11:B1:1 12:A1:2 14:C2:1 15:E2:1",
+    "Hip hop": "0:D2:2 3:A1:1 4:G1:3 7:B1:1 8:C2:2 10:G1:1 11:E2:1 12:A1:3 15:G1:1",
+    "Rock": "0:C2:1 1:C2:1 2:G1:1 3:C2:1 4:D2:1 5:D2:1 6:A1:1 7:D2:1 8:F1:1 9:F1:1 10:C2:1 11:F2:1 12:C2:2 14:G1:1 15:C2:1",
+    "Funk": "0:A1:1 1:A2:1 3:A1:1 4:D2:1 6:C2:1 7:D2:1 8:A1:1 10:G2:1 11:A2:1 12:E2:1 13:E1:1 15:G1:1",
+    "Reggae": "2:F1:1 3:A1:1 6:G1:1 7:B1:1 10:C2:1 11:E2:1 14:A1:1 15:C2:1",
+    "Latin": "0:A1:2 3:E2:1 4:G1:2 7:D2:1 8:F1:2 11:C2:1 12:E1:2 15:B1:1",
+    "Lo-fi": "0:D2:3 3:F2:1 4:G1:3 7:B1:1 8:C2:2 10:E2:2 12:A1:4",
+    "Electronic": "0:A1:1 2:A1:1 4:C2:1 6:C2:1 8:G1:1 10:G1:1 12:D2:1 14:D2:1 15:D3:1",
+    "March": "0:F1:2 2:A1:2 4:C2:2 6:E2:2 8:G1:2 10:B1:2 12:C2:2 14:E2:2",
+    "Lullaby": "0:C2:4 4:A1:4 8:D2:4 12:G1:3 15:B1:1",
+    "Spooky": "0:E1:3 3:E1:1 4:A1:2 6:C2:1 7:E2:1 8:E1:2 10:G1:1 11:B1:1 12:B1:3 15:F2:1",
+    "Space": "0:C2:4 4:E1:4 8:A1:3 11:E2:1 12:F1:4",
+  };
+  const CHORDS2 = {
+    "Pop": [["F", "G", "E", "A"], [0, 2]],
+    "Hip hop": [["D7", "G", "C7", "A7"], [0, 3]],
+    "Rock": [["C", "D", "F", "C"], [0, 1, 2, 3]],
+    "Funk": [["A7", "D7", "A7", "E7"], [1, 2]],
+    "Reggae": [["F", "G", "C", "A"], [1, 3]],
+    "Latin": [["A", "G", "F", "E"], [0, 2, 3]],
+    "Lo-fi": [["D7", "G7", "C7", "A7"], [0, 2]],
+    "Electronic": [["A", "C", "G", "D"], [0, 1, 3]],
+    "March": [["C", "E", "G", "C"], [0, 1]],
+    "Lullaby": [["C", "A", "D", "G"], [0, 2]],
+    "Spooky": [["E", "A", "E", "B"], [0, 3]],
+    "Space": [["C7", "E7", "A7", "F7"], [0]],
+  };
+
   // ---- effects rhythms: 8 counts on eighths ------------------------------------------------------------------------
   const FX = [
     ["Pop", "Party pops", "x.......x..x...."],
@@ -186,8 +216,8 @@
     add("drums", style, label + ", fast hats", 8, 4, fast);
   }
 
-  function expandBass(style, src) {
-    const seed = line(src), label = style + " bass line";
+  function expandBass(style, label, src) {
+    const seed = line(src);
     add("bass", style, label, 8, 2, seed);
     add("bass", style, label + ", short", 4, 2, seed.filter((n) => n.step < 8));
     add("bass", style, label + ", long", 16, 2, seed.concat(shift(seed, 16).map((n) => (n.step >= 28 ? nt(n.step, n.pitch + 12, n.len, n.vel) : n))));
@@ -239,8 +269,8 @@
     const i = toIdx(root), degs = sym.indexOf("7") > 0 ? [0, 2, 4, 6] : [0, 2, 4];
     return degs.map((d) => fromIdx(i + d));
   }
-  function expandChords(style, prog, hits) {
-    const label = style + " chords", ch = prog.map(chordTones);
+  function expandChords(style, label, prog, hits) {
+    const ch = prog.map(chordTones);
     const block = [], stabs = [], slow = [], roll = [];
     ch.forEach((tones, i) => {
       tones.forEach((m) => {
@@ -268,9 +298,11 @@
 
   STYLES.forEach((style) => {
     DRUMS.filter((d) => d[0] === style).forEach((d) => expandDrums(style, d[1], d[2]));
-    expandBass(style, BASS[style]);
+    expandBass(style, style + " bass line", BASS[style]);
+    expandBass(style, style + " bass line 2", BASS2[style]);
     MELODY.filter((m) => m[0] === style).forEach((m) => expandMelody(style, m[1], m[2]));
-    expandChords(style, CHORDS[style][0], CHORDS[style][1]);
+    expandChords(style, style + " chords", CHORDS[style][0], CHORDS[style][1]);
+    expandChords(style, style + " chords 2", CHORDS2[style][0], CHORDS2[style][1]);
     FX.filter((f) => f[0] === style).forEach((f) => expandFx(style, f[1], f[2]));
   });
 

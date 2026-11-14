@@ -54,6 +54,17 @@
     return p(d);
   }
   // a bass clef badge in a round chip, its top left at x, y (14 x 14)
+  // the bass versions' mark: a big bass clef (about 24 x 26), its top left at x, y; it reads as "bass" at tile size
+  const bigClef = (x, y) => "<!--big clef-->" + p("M" + (x + 1.5) + " " + (y + 8) + "a8 8 0 1 1 16 1.5c0 9-7 15-16 18") + c(x + 4, y + 8, 3.4, "D") + c(x + 21.5, y + 5, 2.3, "D") + c(x + 21.5, y + 14, 2.3, "D");
+  // a five-point star as a polygon
+  function starPoly(cx, cy, R, rr, fill) {
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5, d = i % 2 ? rr : R;
+      pts.push((cx + d * Math.cos(a)).toFixed(1) + "," + (cy + d * Math.sin(a)).toFixed(1));
+    }
+    return '<polygon points="' + pts.join(" ") + '" fill="' + fill + '"/>';
+  }
   const clef = (x, y) => c(x + 7, y + 7, 8, "F") + p("M" + (x + 2.5) + " " + (y + 5.5) + "a4 4 0 1 1 6.5 3c0 3-3 5-6.5 6.5") + c(x + 2.8, y + 5.6, 1.4, "D") + c(x + 12.2, y + 4.2, 0.9, "D") + c(x + 12.2, y + 8.6, 0.9, "D");
   // a four-point sparkle
   const star = (x, y, s, fill) => p("M" + x + " " + (y - s) + "Q" + x + " " + y + " " + (x + s) + " " + y + "Q" + x + " " + y + " " + x + " " + (y + s) + "Q" + x + " " + y + " " + (x - s) + " " + y + "Q" + x + " " + y + " " + x + " " + (y - s) + "Z", fill || "F");
@@ -116,7 +127,8 @@
     "toy-kit": drumBody(9, 20, 30, 14) + p("M9 24l5 10 5-10 5 10 5-10 5 10 5-10", null) + p("M17 17L8 5M31 17l9-12") + c(8, 5, 2.6, "D") + c(40, 5, 2.6, "D"),
 
     // Keys and mallets
-    "grand-piano": p("M6 6h15c13 0 21 9 21 20v10H6z", "F") + p("M6 22l20-14") + kb(6, 31, 36, 9, 9),
+    // seen from the side, its lid propped up (the harpsichord is seen from above, with two keyboards)
+    "grand-piano": "<!--lid-->" + p("M4 20L36 5l3 4L10 20z", "F") + p("M30 9l-1 11") + r(3, 20, 42, 9, "F", 2) + p("M10 20v9") + p("M7 29v13M41 29v13M24 29v10M20 39h8") + c(7, 43, 1.6, "D") + c(41, 43, 1.6, "D"),
     "upright-piano": r(6, 5, 36, 22, "F", 2) + r(10, 9, 28, 8, null, 1) + kb(4, 27, 40, 8, 10) + p("M8 35v8M40 35v8"),
     "harpsichord": p("M5 7h14l24 21v6H5z", "F") + kb(5, 29, 26, 5, 7) + kb(5, 35, 26, 5, 7) + p("M9 40v4M27 40v4M41 34v10"),
     "pipe-organ": r(4, 34, 40, 10, "F", 1.5) + [[6, 20], [12, 12], [18, 6], [24, 4], [30, 6], [36, 12], [42, 20]].map((q) => r(q[0] - 2.2, q[1], 4.4, 34 - q[1], "F", 2)).join("") + p("M8 39h32"),
@@ -184,17 +196,18 @@
     // Bass
     "double-bass": fiddle(17, 28, true) + p("M17 10V3M17 45.5v-1") + c(17, 3, 1.8, "D") + p("M33 6l8 36"),
     "plucked-double-bass": fiddle(17, 28, true) + p("M17 10V3M17 45.5v-1") + c(17, 3, 1.8, "D") + p("M34 22c3 2 3 6 0 8M39 19c5 4 5 10 0 14"),
-    "tuba-bass": tuba(2, 4) + clef(31, 31),
-    "bassoon-bass": bassoon(0, 2) + clef(29, 30),
-    "low-marimba": bars(3, 6, 4, 7, 0, 14, 0, 2.5) + [6.5, 16, 25.5, 35].map((x, i) => r(x - 2, 21, 4, 22 - i * 2, "F", 2)).join("") + clef(31, 2),
-    "timpani-bass": timp(0, 10) + clef(31, 2),
+    "tuba-bass": bigClef(2, 3) + p("M25 20h20l-4 7H29z", "F") + p("M30 27h10v11a5 5 0 0 1-10 0z", "F") + r(41, 29, 4.5, 2.2, "D", 1) + r(41, 33, 4.5, 2.2, "D", 1),
+    "bassoon-bass": bigClef(2, 3) + r(32, 8, 7, 36, "F", 2) + p("M35.5 8c0-3 4-4 7-2M39 36h3v8h-3") + c(35.5, 18, 1.2, "D") + c(35.5, 24, 1.2, "D") + c(35.5, 30, 1.2, "D"),
+    "low-marimba": bigClef(2, 2) + [0, 1, 2, 3, 4].map((i) => r(4 + i * 8.4, 31, 6.6, 7, "F", 1.2) + p("M" + (7.3 + i * 8.4).toFixed(1) + " 38V" + (46 - i))).join("") + mallet(44, 6, 34, 22, 3),
+    "timpani-bass": bigClef(2, 2) + p("M16 28h28c0 8-6 12-14 12S16 36 16 28z", "F") + e(30, 28, 14, 3) + p("M21 39l-2 6M39 39l2 6") + mallet(44, 4, 36, 18, 2.6),
     "soft-bass": p("M3 34c7-14 14-14 21 0s14 14 21 0V44H3z", "F") + p("M3 22c7-8 14-8 21 0s14 8 21 0"),
     "synth-bass": r(4, 22, 40, 20, "F", 3) + c(12, 30, 3.4) + c(22, 30, 3.4) + r(30, 27, 10, 8, "D", 1.5) + wave("saw", 8, 11, 32, 5, 3),
     "sub-bass": r(5, 4, 38, 40, "F", 3) + c(24, 26, 12) + c(24, 26, 5, "D") + c(24, 10, 2.4),
     "wobble-bass": p("M3 24c3-2 4-2 6 0s3 3 5 0 4-12 7-12 4 24 7 24 4-12 7-12 3 3 5 0 3-2 5 0") + p("M3 40h42M3 8h42") + r(19, 33, 10, 5, "F", 1.5),
     "square-bass": p("M3 38V20h10v18h10V20h10v18h10V20h2v24H3z", "F") + p("M3 12h42"),
     "plucked-synth-bass": p("M17 3h14l2 18H15z", "F") + c(13, 8, 1.6, "D") + c(13, 14, 1.6, "D") + c(35, 8, 1.6, "D") + c(35, 14, 1.6, "D") + p("M24 21v6") + wave("tri", 4, 37, 40, 5, 3),
-    "funky-bass": p("M12 44c-5-3-6-10-2-14 2-2 1-5 4-7 3-2 6 0 8 1l12-19 3 2-11 19c2 2 3 5 1 8-3 5-9 12-15 10z", "F") + c(16, 34, 2.4, "D") + p("M33 31l7-3-4 6 6-1"),
+    // a star-shaped body (the electric-style bass has the usual long body)
+    "funky-bass": p("M16 28L36 7l3 3L19 31z", "F") + p("M35 5l5-2 4 4-2 5z", "F") + starPoly(14, 33, 12, 5.2, "F") + c(14, 33, 2.4, "D") + p("M33 30l7-2M35 37h7"),
     "rubber-bass": p("M8 24c0-8 6-12 16-12s16 4 16 12-6 12-16 12S8 32 8 24z", "F") + p("M14 24c0-4 4-6 10-6s10 2 10 6-4 6-10 6-10-2-10-6z") + p("M4 42c2-2 4-2 6 0M38 42c2-2 4-2 6 0"),
     "deep-pad-bass": p("M3 22c7-6 14-6 21 0s14 6 21 0") + p("M3 30c7-6 14-6 21 0s14 6 21 0V44H3z", "F") + p("M3 38c7-6 14-6 21 0s14 6 21 0"),
     "chip-tune-bass": pix(3, 15, 3, ["+++++.....+++++", "#...#.....#...#", "#...#.....#...#", "#...#.....#...#", "#...#######...#", "###############"]) + p("M5 10h38"),

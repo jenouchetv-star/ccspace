@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
+import { loadSS } from "./helpers/soundSpace.js";
 
 const pageUrl = new URL("../assets/apps/sound-space.html", import.meta.url);
 const html = existsSync(pageUrl) ? readFileSync(pageUrl, "utf8") : "";
@@ -244,7 +245,7 @@ describe("Sound Space app page", () => {
 
   describe("page helpers", () => {
     const block = html.split("/* ---- helpers the tests run on their own")[1].split("/* ---- end of helpers")[0];
-    const { scheduleCountIn, setTrackInstrument, sizeText, fileSize, loadLayout, saveLayout, LAYOUT_KEY, statusFor } = new Function(block.slice(block.indexOf("*/") + 2) + "; return { scheduleCountIn, setTrackInstrument, sizeText, fileSize, loadLayout, saveLayout, LAYOUT_KEY, statusFor };")();
+    const { scheduleCountIn, setTrackInstrument, sizeText, fileSize, loadLayout, saveLayout, LAYOUT_KEY, statusFor, lessonPanel } = new Function(block.slice(block.indexOf("*/") + 2) + "; return { scheduleCountIn, setTrackInstrument, sizeText, fileSize, loadLayout, saveLayout, LAYOUT_KEY, statusFor, lessonPanel };")();
 
     function fakeAudio() {
       const param = () => ({ setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, cancelScheduledValues() {} });
@@ -260,6 +261,26 @@ describe("Sound Space app page", () => {
       };
       return ac;
     }
+
+    it("knows which hideable part of the editor holds each lesson target", () => {
+      const span = (re, endTag) => { const m = re.exec(html); return [m.index, html.indexOf(endTag, m.index)]; };
+      const parts = {
+        tracks: span(/<aside class="panel left" id="ss-tracks"/, "</aside>"),
+        library: span(/<aside class="panel right" id="ss-library"/, "</aside>"),
+        keys: span(/<div class="kbd" id="kbd">/, "</section>"),
+      };
+      const SS = loadSS("model.js", "instruments.js", "icons.js", "library.js", "lessons.js");
+      const targets = [...new Set(SS.lessons.LESSONS.flatMap((l) => l.steps.map((s) => s.target)))];
+      for (const t of targets) {
+        const at = html.indexOf(`id="${t.slice(1)}"`);
+        const inside = Object.keys(parts).find((k) => at >= parts[k][0] && at < parts[k][1]) || null;
+        expect(lessonPanel(t), t).toBe(inside);
+      }
+      expect(lessonPanel("#ss-tracks")).toBe("tracks");
+      expect(lessonPanel("#ss-library")).toBe("library");
+      expect(lessonPanel("#ss-pads")).toBe("keys");
+      expect(lessonPanel("#ss-play")).toBe(null);
+    });
 
     it("shows a song's size the way Art Space does", () => {
       expect(sizeText(999)).toBe("1 KB");
@@ -349,6 +370,30 @@ describe("Sound Space app page", () => {
       expect(r.song.tracks[0].notes.length).toBe(1);
       expect(r.stash[r.song.tracks[0].id].length).toBe(1);
     });
+  });
+
+  it("a lesson step shows the hidden panel that holds its control", () => {
+    const fn = section(/function revealLessonTarget\(/, "\nfunction ");
+    expect(fn).toContain("lessonPanel(");
+    expect(fn).toContain("setLayout({ tracks:true })");
+    expect(fn).toContain("setLayout({ library:true })");
+    expect(fn).toContain("setLayout({ keys:true })");
+    expect(fn).toMatch(/narrowLib\.matches[\s\S]*classList\.add\("lib-open"\)/);
+    expect(section(/function startLesson\(/, "\nfunction ")).toContain("revealLessonTarget(");
+    expect(section(/function nextLessonStep\(/, "\nfunction ")).toContain("revealLessonTarget(");
+  });
+
+  it("phones keep each track's M and S buttons, which lesson 3 uses", () => {
+    const phone = html.slice(html.indexOf("@media (max-width:640px)"), html.indexOf("@media (prefers-reduced-motion:reduce)", html.indexOf("@media (max-width:640px)")));
+    expect(phone).toContain(".track__vol{ display:none; }");
+    expect(phone).not.toMatch(/\.msb[^{]*\{[^}]*display:none/);
+    expect(phone).not.toMatch(/\.ms\{[^}]*display:none/);
+  });
+
+  it("Play counts for a lesson even when the song is already playing", () => {
+    const fn = section(/function play\(/, "\nfunction ");
+    expect(fn).not.toContain('lessonEvent("play")');   // the lesson checks ui.playing instead, one rule for every Play step
+    expect(html).toContain("playing:!!(player && player.playing)");
   });
 
   it("has labelled toggles to show, hide and fold parts of the editor", () => {

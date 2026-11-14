@@ -4,12 +4,15 @@
   // Music lessons: each opens a ready-made song and walks a kid through 3-5 small steps, one music word each.
   // A step: { text, target: the id of the control its tip card sits beside, check(song, ui) => true once done }.
   // ui: { selectedTrackId, playing, recording, events } where events counts what the kid did since the step
-  // began: play, record, keys (piano keys), pads (drum or effect pads), grid (taps on the grid), use (library Use).
+  // began: record, keys (piano keys), pads (drum or effect pads), grid (taps on the grid), use (library Use).
+  // Every "Press Play" step passes while the song is playing (played), so a kid whose song is already looping
+  // is never stuck.
 
   const L = SS.library;
   const inst = (t) => SS.instruments.byId(t.instrumentId);
   const tracks = (song, test) => song.tracks.filter((t) => { const i = inst(t); return !!i && test(i); });
   const did = (ui, name) => (ui && ui.events && ui.events[name]) || 0;
+  const played = (ui) => !!(ui && ui.playing);
   const sq = (song) => song.grid || 2;
   const hit = (t, step, pitch) => t.notes.some((n) => n.step === step && n.pitch === pitch);
   const isKit = (i) => i.kind === "kit";
@@ -30,7 +33,7 @@
         { instrumentId: "classic-kit", volume: 0.85, notes: [{ step: 0, pitch: KICK, len: 1, vel: 0.9 }] },
       ]),
       steps: [
-        { text: "Press Play. You hear a kick drum on count 1, then quiet.", target: "#ss-play", check: (s, ui) => did(ui, "play") > 0 },
+        { text: "Press Play. You hear a kick drum on count 1, then quiet.", target: "#ss-play", check: (s, ui) => played(ui) },
         { text: "Tap the Kick row on counts 2, 3 and 4 too. Now the kick plays on every count. That steady pulse is the beat.", target: "#ss-grid",
           check: (s) => any(s, isKit, (t) => [0, 1, 2, 3].every((c) => hit(t, c * sq(s), KICK))) },
         { text: "Add a Clap on counts 2 and 4, then clap along with it.", target: "#ss-grid",
@@ -53,7 +56,7 @@
           check: (s) => any(s, isTune, (t) => t.notes.length >= 4 && Math.max.apply(null, t.notes.map((n) => n.pitch)) - Math.min.apply(null, t.notes.map((n) => n.pitch)) >= 5) },
         { text: "Make a note longer. Pick the half note here, then tap an empty square. You can also drag a note's right edge.", target: "#ss-note-len",
           check: (s) => any(s, isTune, (t) => t.notes.some((n) => n.len >= 2)) },
-        { text: "Press Play to hear your tune. Notes played one after another make a melody.", target: "#ss-play", check: (s, ui) => did(ui, "play") > 0 },
+        { text: "Press Play to hear your tune. Notes played one after another make a melody.", target: "#ss-play", check: (s, ui) => played(ui) },
       ],
     },
     {
@@ -68,8 +71,8 @@
       steps: [
         { text: "Press Add a track. Open the Bass tab and pick a bass you like.", target: "#ss-add-track", check: (s) => tracks(s, isBass).length > 0 },
         { text: "Tap 4 low notes into the bass grid, right on the counts, where the kick drum plays.", target: "#ss-grid", check: (s) => any(s, isBass, (t) => onCounts(t, s) >= 4) },
-        { text: "Press Play. The bass is the low part that holds the song up.", target: "#ss-play", check: (s, ui) => did(ui, "play") > 0 && any(s, isBass, (t) => t.notes.length > 0) },
-        { text: "Make the bass louder or softer with the slider on its track.", target: "#ss-tracks", check: (s) => any(s, isBass, (t) => t.volume !== 0.8) },
+        { text: "Press Play. The bass is the low part that holds the song up.", target: "#ss-play", check: (s, ui) => played(ui) && any(s, isBass, (t) => t.notes.length > 0) },
+        { text: "Press S on the bass track to hear the bass on its own. Press S again to hear the whole song.", target: "#ss-tracks", check: (s) => any(s, isBass, (t) => t.solo) },
       ],
     },
     {
@@ -82,10 +85,10 @@
         { instrumentId: "classic-kit", pattern: "Island step beat", volume: 0.7 },
       ]),
       steps: [
-        { text: "Press Play. With Loop on, the song plays again and again. A part that repeats is a loop.", target: "#ss-play", check: (s, ui) => did(ui, "play") > 0 },
+        { text: "Press Play. With Loop on, the song plays again and again. A part that repeats is a loop.", target: "#ss-play", check: (s, ui) => played(ui) },
         { text: "Change Counts to 8. The song gets twice as long, and your notes repeat to fill it.", target: "#ss-counts", check: (s) => s.counts === 8 },
         { text: "Now try 16 counts. The line that moves across takes longer to come back round.", target: "#ss-counts", check: (s) => s.counts === 16 },
-        { text: "Turn Loop off, then press Play. Now the song plays once and stops.", target: "#ss-loop", check: (s, ui) => !s.loop && did(ui, "play") > 0 },
+        { text: "Turn Loop off, then press Play. Now the song plays once and stops.", target: "#ss-loop", check: (s, ui) => !s.loop && played(ui) },
       ],
     },
     {
@@ -117,7 +120,7 @@
         { text: "Add a piano and use a chords pattern. Notes played together make a chord.", target: "#ss-library",
           check: (s) => any(s, isTune, (t) => t.notes.some((n) => t.notes.some((m) => m !== n && m.step === n.step))) },
         { text: "Add a sound effect and tap it in once or twice, just for fun.", target: "#ss-add-track", check: (s) => any(s, (i) => i.kind === "fx", (t) => t.notes.length >= 1) },
-        { text: "Press Play to hear it all together. Chords and a bass line under your song make harmony.", target: "#ss-play", check: (s, ui) => did(ui, "play") > 0 },
+        { text: "Press Play to hear it all together. Chords and a bass line under your song make harmony.", target: "#ss-play", check: (s, ui) => played(ui) },
       ],
     },
   ];

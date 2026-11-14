@@ -1204,6 +1204,13 @@ function saveLayout(storage, state){
 /* The save status a song starts with. TASK 10: once Save project file exists, NOT_SAVED also says "Use Save project file." */
 const NOT_SAVED = "Not saved: this browser blocked saving";
 function statusFor(saving){ return saving ? { text:"Saved on this device", bad:false } : { text:NOT_SAVED, bad:true }; }
+/* The part of the editor a layout toggle can hide that holds a lesson step's control, or null when none does. */
+function lessonPanel(target){
+  if (target === "#ss-tracks" || target === "#ss-add-track") return "tracks";
+  if (target === "#ss-library") return "library";
+  if (target === "#ss-keys" || target === "#ss-pads") return "keys";
+  return null;
+}
 /* ---- end of helpers ---- */
 
 /* ============================================================
@@ -1298,7 +1305,6 @@ function play(){
   stopPatternPreview();
   player.start(song, { fromStep:0 });
   if (!playedOnce){ playedOnce = true; count("song_played"); }
-  lessonEvent("play");
   renderTransport();
 }
 function stopAll(){
@@ -2182,6 +2188,7 @@ function startLesson(i){
   openSong(s, { save:true });
   lesson = { l, n:i, step:0, events:{}, ok:false, finished:false };
   $("#tip").hidden = false;
+  revealLessonTarget(l.steps[0].target);
   paintTip();
   clearInterval(lessonTimer); lessonTimer = setInterval(lessonTick, 250);
   lessonTick();
@@ -2228,9 +2235,20 @@ function paintTip(){
 }
 function nextLessonStep(){
   if (!lesson || !lesson.ok) return;
-  if (lesson.step < lesson.l.steps.length - 1){ lesson.step++; lesson.events = {}; lesson.ok = false; }
+  if (lesson.step < lesson.l.steps.length - 1){ lesson.step++; lesson.events = {}; lesson.ok = false; revealLessonTarget(lesson.l.steps[lesson.step].target); }
   else { lesson.finished = true; saveNow(); }
   paintTip();
+}
+/* a step whose control sits in a hidden part (Tracks or the library hidden, Focus on, the keys folded) shows that part
+   again, so the tip always has its control to point at */
+function revealLessonTarget(target){
+  const part = lessonPanel(target);
+  if (part === "tracks" && !layout.tracks) setLayout({ tracks:true });
+  else if (part === "library"){
+    if (narrowLib.matches){ if (!document.body.classList.contains("lib-open")){ document.body.classList.add("lib-open"); renderLibrary(true); applyLayout(); } }
+    else if (!layout.library) setLayout({ library:true });
+  }
+  else if (part === "keys" && !layout.keys) setLayout({ keys:true });
 }
 /* the tip sits beside its control (right, then left, then below or above); a control that is hidden gets the tip
    in the corner instead */

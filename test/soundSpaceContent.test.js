@@ -37,6 +37,21 @@ describe("Sound Space icons", () => {
     });
     expect(new Set(svgs).size).toBe(126);
   });
+
+  // lookalikes from the review: each pair is drawn a different way, and the bass versions carry a big bass clef
+  it("tells look-alike instruments apart at tile size", () => {
+    const svg = SS.icons.svg;
+    const blackKeys = (s) => (s.match(/rx="0\.6"/g) || []).length;
+    expect(blackKeys(svg("harpsichord")), "harpsichord shows its two keyboards from above").toBeGreaterThan(0);
+    expect(svg("grand-piano"), "grand piano is seen from the side with its lid up").toContain("<!--lid-->");
+    expect(blackKeys(svg("grand-piano"))).toBe(0);
+    expect(svg("funky-bass"), "funky bass has a star-shaped body").toContain("<polygon");
+    expect(svg("electric-style-bass")).not.toContain("<polygon");
+    for (const id of ["tuba-bass", "bassoon-bass", "low-marimba", "timpani-bass"]) {
+      expect(svg(id), id).toContain("<!--big clef-->");
+    }
+    for (const id of ["tuba", "bassoon", "timpani", "marimba"]) expect(svg(id), id).not.toContain("<!--big clef-->");
+  });
 });
 
 describe("Sound Space pattern library", () => {
@@ -53,9 +68,9 @@ describe("Sound Space pattern library", () => {
   it("the library meets the size target for each type", () => {
     const n = (t) => P.filter((p) => p.type === t).length;
     expect(n("drums")).toBeGreaterThanOrEqual(40);
-    expect(n("bass")).toBeGreaterThanOrEqual(40);
+    expect(n("bass")).toBeGreaterThanOrEqual(70);
     expect(n("melody")).toBeGreaterThanOrEqual(60);
-    expect(n("chords")).toBeGreaterThanOrEqual(40);
+    expect(n("chords")).toBeGreaterThanOrEqual(70);
     expect(P.every((p) => ["drums", "bass", "melody", "chords", "fx"].includes(p.type))).toBe(true);
     expect(P.filter((p) => p.grid === 4).length).toBeGreaterThanOrEqual(40);
   });
@@ -66,6 +81,18 @@ describe("Sound Space pattern library", () => {
     for (const s of STYLES) {
       for (const t of ["drums", "bass", "melody", "chords"]) {
         expect(P.some((p) => p.style === s && p.type === t), `${s} ${t}`).toBe(true);
+      }
+    }
+  });
+
+  it("every style has two different bass lines and two different chord progressions", () => {
+    for (const s of STYLES) {
+      for (const t of ["bass", "chords"]) {
+        // the seeds: the 8-count eighth-note versions without a variant suffix
+        const seeds = P.filter((p) => p.style === s && p.type === t && p.counts === 8 && p.grid === 2 && !p.name.includes(","));
+        expect(seeds.length, `${s} ${t}`).toBeGreaterThanOrEqual(2);
+        const pitchSets = seeds.map((p) => JSON.stringify([...new Set(p.notes.map((n) => n.pitch))].sort()));
+        expect(new Set(pitchSets).size, `${s} ${t}`).toBe(seeds.length);
       }
     }
   });
@@ -170,11 +197,93 @@ describe("Sound Space music lessons", () => {
     }
   });
 
+  // Each step done the way its tip asks. Play steps are done with the song already playing (Loop is on by default,
+  // so Play does nothing new then): the step must still pass.
+  const kindOf = (t) => I.byId(t.instrumentId);
+  const first = (song, test) => song.tracks.find((t) => test(kindOf(t)));
+  const addWith = (song, id, patternName) => {
+    const t = M.addTrack(song, id);
+    if (patternName) {
+      const p = L.byName(patternName);
+      M.applyPattern(t, L.fitPattern(p, I.byId(id)), p.counts, song.counts, p.grid, song.grid || 2);
+    }
+    return t;
+  };
+  const playing = (song, ui) => { ui.playing = true; };
+  const DO = {
+    "keep-the-beat": [
+      playing,
+      (s) => { const k = first(s, (i) => i.kind === "kit"); for (let c = 1; c < 4; c++) M.toggleNote(k, c * 2, 0); },
+      (s) => { const k = first(s, (i) => i.kind === "kit"); M.toggleNote(k, 2, 4); M.toggleNote(k, 6, 4); },
+      (s, ui) => { ui.events.pads = 4; },
+    ],
+    "first-melody": [
+      (s, ui) => { ui.events.keys = 3; },
+      (s) => { const p = first(s, (i) => i.kind === "pitched"); [60, 64, 67, 72].forEach((m, i) => M.toggleNote(p, i * 2, m)); },
+      (s) => { const p = first(s, (i) => i.kind === "pitched"); M.setNoteLength(p, 0, 60, 2, M.totalSteps(s)); },
+      playing,
+    ],
+    "bass-line": [
+      (s) => { addWith(s, "synth-bass"); },
+      (s) => { const b = first(s, (i) => i.category === "bass"); [0, 4, 8, 12].forEach((st) => M.toggleNote(b, st, 36)); },
+      playing,
+      (s) => { first(s, (i) => i.category === "bass").solo = true; },
+    ],
+    "loops-and-counts": [
+      playing,
+      (s) => { Object.assign(s, M.resizeSong(s, 8, {}).song); },
+      (s) => { Object.assign(s, M.resizeSong(s, 16, {}).song); },
+      (s, ui) => { s.loop = false; ui.playing = true; },
+    ],
+    "record-what-you-play": [
+      (s) => { s.tempo = 85; },
+      (s) => { s.countIn = true; },
+      (s, ui) => { const p = first(s, (i) => i.kind === "pitched"); [60, 62, 64].forEach((m, i) => M.toggleNote(p, i * 2, m)); ui.recording = false; },
+      (s, ui) => { ui.events.grid = 1; },
+    ],
+    "whole-song": [
+      (s) => { addWith(s, "drum-machine", "Boom bap beat"); },
+      (s) => { addWith(s, "synth-bass", "Pop bass line"); },
+      (s) => { addWith(s, "grand-piano", "Pop chords"); },
+      (s) => { const f = addWith(s, "coin"); M.toggleNote(f, 0, 0); },
+      playing,
+    ],
+  };
+
+  it("every lesson can be finished by doing what each tip asks, even with the song already playing", () => {
+    for (const l of LS.LESSONS) {
+      const song = JSON.parse(JSON.stringify(l.startSong));
+      expect(DO[l.id], l.id).toBeDefined();
+      expect(DO[l.id].length, l.id).toBe(l.steps.length);
+      l.steps.forEach((step, i) => {
+        const ui = ui0();
+        expect(step.check(song, ui), `${l.title} step ${i + 1} before`).toBe(false);
+        DO[l.id][i](song, ui);
+        expect(step.check(song, ui), `${l.title} step ${i + 1}: ${step.text}`).toBe(true);
+      });
+    }
+  });
+
+  it("every Play step passes while the song is already playing", () => {
+    for (const l of LS.LESSONS) {
+      l.steps.filter((s) => s.target === "#ss-play").forEach((s) => expect(s.check.toString(), `${l.title}: ${s.text}`).toMatch(/played\(ui\)/));
+    }
+  });
+
+  it("no lesson asks for the track volume slider, which phones hide", () => {
+    for (const l of LS.LESSONS) {
+      for (const s of l.steps) {
+        expect(s.text, s.text).not.toMatch(/slider/i);
+        expect(s.check.toString(), s.text).not.toMatch(/volume/);
+      }
+    }
+  });
+
   it("lesson 1 can be finished", () => {
     const l = LS.LESSONS[0];
     const song = JSON.parse(JSON.stringify(l.startSong));
     const ui = ui0();
-    ui.events.play = 1;
+    ui.playing = true;
     expect(l.steps[0].check(song, ui)).toBe(true);
     const kit = song.tracks.find((t) => I.byId(t.instrumentId).kind === "kit");
     const g = song.grid || 2;
