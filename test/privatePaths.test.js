@@ -20,7 +20,7 @@ const PUBLIC_FILES = ["index.html", "sw.js", "offline.html", "manifest.webmanife
 const HARMLESS_FILES = ["README.md", "package.json", "package-lock.json", "vitest.config.js", ".env.example", ".gitignore", ".assetsignore", "qt=q_95.webp"];
 // Pages never serves the functions/ folder itself: it runs it
 const RUN_NOT_SERVED = ["functions"];
-const BLOCKED_FOLDERS = ["supabase", "test", "docs", "workers", ".github", ".claude"];
+const BLOCKED_FOLDERS = ["supabase", "test", "docs", "scripts", "workers", ".github", ".claude"];
 const BLOCKED_FILES = ["MAINTENANCE.md", "Chikes_Creative_Space_PWA_Mobile_Implementation.md", "Chikes_Creative_Space_Content_Inventory_Updated.md"];
 
 describe("the project's private files are not served by the live site", () => {
