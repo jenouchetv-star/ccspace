@@ -59,6 +59,8 @@ button.sun{background:var(--sun)} button.cy{background:var(--cyan)}
 button.blue{background:var(--blue);color:#fff}
 button.sq{width:46px;padding:0;border-radius:14px}
 :focus-visible{outline:3px solid var(--ink)!important;outline-offset:2px;box-shadow:0 0 0 6px var(--sun)!important}
+/* moving through the menus with a game controller: the same ring the keyboard gets */
+body.pad-nav button:focus,body.pad-nav input:focus{outline:3px solid var(--ink)!important;outline-offset:2px;box-shadow:0 0 0 6px var(--sun)!important}
 .ico{width:1.3em;height:1.3em;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;flex:none}
 
 /* ---- heads-up display ---- */
@@ -722,6 +724,7 @@ let clock;
 function frame(){
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime;
+  pollPad(dt);
   for (let i = falling.length - 1; i >= 0; i--) if (falling[i](dt)) falling.splice(i, 1);
   if (!REDUCED) winners.forEach((w) => { w.chip.position.z = Math.sin(t * 6) * 0.07; w.halo.rotation.z = t * 2; });
   controls.update();
@@ -784,6 +787,68 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "ArrowDown" || ((e.key === "Enter" || e.key === " ") && e.target === renderer.domElement)){ tryDrop(); e.preventDefault(); }
   else if (e.key >= "1" && e.key <= "7"){ moveSel(parseInt(e.key, 10) - 1, "click"); }
 });
+
+/* ---------------- a game controller ----------------
+   Any connected pad (standard mapping) plays the turn on this screen. On the board: the left stick or d-pad left / right
+   picks the column (the chip above the board follows), A or d-pad down drops, Y resets the view, Back goes to the menu.
+   In the menus the stick or d-pad moves between buttons, A presses, B goes back. The 6-digit join code is typed. */
+const PAD = { DEAD: 0.25, STEP: 0.55, FIRST: 0.32, REPEAT: 0.16 };
+const pad = { prev: [], wait: 0, held: false };
+const padModal = () => MODALS.find((id) => !$(id).hidden) || null;
+function padFocusables(box){
+  return [...box.querySelectorAll("button:not([disabled]), input:not([disabled])")].filter((el) => el.getClientRects().length > 0);
+}
+function padMove(box, dx, dy){
+  const list = padFocusables(box), cur = document.activeElement;
+  if (!list.length) return;
+  if (list.indexOf(cur) < 0){ list[0].focus(); return; }
+  const a = cur.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+  let best = null, score = Infinity;
+  for (const el of list){
+    if (el === cur) continue;
+    const b = el.getBoundingClientRect(), vx = b.left + b.width / 2 - ax, vy = b.top + b.height / 2 - ay;
+    const along = vx * dx + vy * dy;
+    if (along <= 4 || Math.abs(vx * dy - vy * dx) > along * 2) continue;
+    /* a button in line with this one wins over one off to the side */
+    const side = dx ? Math.max(0, b.top - a.bottom, a.top - b.bottom) : Math.max(0, b.left - a.right, a.left - b.right);
+    const s = along + side * 2.4 + (side > 0 ? 10000 : 0);
+    if (s < score){ score = s; best = el; }
+  }
+  if (best){ best.focus(); best.scrollIntoView({ block: "nearest" }); }
+}
+function pollPad(dt){
+  let gp = null;
+  try { const list = navigator.getGamepads ? navigator.getGamepads() : []; for (const g of list || []) if (g && g.connected){ gp = g; break; } } catch (e){ gp = null; }
+  if (!gp){ pad.prev = []; pad.held = false; return; }
+  const btn = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
+  const hit = (i) => btn(i) && !pad.prev[i];
+  const dz = (v) => (Math.abs(v) < PAD.DEAD ? 0 : v);
+  const mx = dz(gp.axes[0] || 0) + (btn(15) ? 1 : 0) - (btn(14) ? 1 : 0);
+  const my = dz(gp.axes[1] || 0) + (btn(13) ? 1 : 0) - (btn(12) ? 1 : 0);
+  if (mx || my || gp.buttons.some((b) => b && b.pressed)) document.body.classList.add("pad-nav");
+  /* one step when the stick or d-pad is pushed, then repeats while it is held */
+  let step = 0, stepY = 0, go = false;
+  const m = Math.hypot(mx, my);
+  if (m > PAD.STEP){
+    if (!pad.held){ go = true; pad.held = true; pad.wait = PAD.FIRST; }
+    else { pad.wait -= dt; if (pad.wait <= 0){ go = true; pad.wait = PAD.REPEAT; } }
+  } else if (m < 0.3) pad.held = false;
+  if (go){ if (Math.abs(mx) >= Math.abs(my)) step = Math.sign(mx); else stepY = Math.sign(my); }
+  const box = padModal() ? $(padModal()) : null;
+  if (box){
+    if (step || stepY) padMove(box, step, stepY);
+    if (hit(0)){ const el = document.activeElement; if (padFocusables(box).indexOf(el) >= 0) el.click(); else padMove(box, 0, 0); }
+    if (hit(1)){ const back = { mOnlineMenu: "oBack", mWait: "bCancel" }[box.id]; if (back) $(back).click(); }
+  } else if (!$("hudBot").hidden && $("nogl").hidden){
+    if (step) moveSel(G.sel + step);
+    if (hit(0) || hit(13)) tryDrop();
+    if (hit(3)) $("bCam").click();
+    if (hit(8)) $("bMenu").click();
+  }
+  pad.prev = gp.buttons.map((b) => !!(b && b.pressed));
+}
+window.addEventListener("pointerdown", () => document.body.classList.remove("pad-nav"), true);
+window.addEventListener("keydown", () => document.body.classList.remove("pad-nav"), true);
 
 /* ---------------- playing ---------------- */
 function tryDrop(){
@@ -1129,7 +1194,7 @@ window.__g4 = { G, NET, play, startMatch, select, tryDrop };
 </script>
 </body>
 </html>
-$g4code$, 'bytes', 67794))
+$g4code$, 'bytes', 71711))
 on conflict (id) do update set data = excluded.data, updated_at = now();
 
 insert into portal_entries (id, data)

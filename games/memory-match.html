@@ -547,6 +547,14 @@
             font-size: clamp(.8rem, 2.3vh, 1rem);
         }
 
+        /* A game controller moves the focus without a key press, so the
+           site's focus ring (game-skin.css) is drawn for it here too */
+        body.ccs-pad :focus {
+            outline: 3px solid var(--ink) !important;
+            outline-offset: 2px !important;
+            box-shadow: 0 0 0 6px var(--sun) !important;
+        }
+
         .confetti-container {
             position: absolute;
             top: 0;
@@ -1083,6 +1091,96 @@
                 initGame();
                 focusFirstCard();
             });
+
+            /* BEGIN gamepad */
+            /* A game controller (any pad, standard mapping): the stick or d-pad moves
+               between the cards, or the buttons on the start and win cards; A flips the
+               card or presses the button. These three helpers touch nothing on the page,
+               so test/gamepad-memory-match.test.js can run them. */
+            const PAD_DEAD = 0.25, PAD_STEP = 0.55, PAD_REPEAT = 0.2;
+            // the first connected controller, or null
+            function padFirst(list) {
+                for (const g of Array.from(list || [])) if (g && g.connected) return g;
+                return null;
+            }
+            // the stick and the d-pad as one direction: x to the right, y down
+            function padVector(gp) {
+                const b = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
+                const dz = (v) => Math.abs(v) < PAD_DEAD ? 0 : v;
+                return {
+                    x: dz(gp.axes[0] || 0) + (b(15) ? 1 : 0) - (b(14) ? 1 : 0),
+                    y: dz(gp.axes[1] || 0) + (b(13) ? 1 : 0) - (b(12) ? 1 : 0)
+                };
+            }
+            // the box nearest to boxes[from] in the direction (dx, dy), or -1 at the edge;
+            // a box in the same row (or column) wins over a closer one off to the side
+            function padNearest(boxes, from, dx, dy) {
+                const a = boxes[from], ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+                let best = -1, score = Infinity;
+                boxes.forEach((r, i) => {
+                    if (i === from) return;
+                    const vx = r.left + r.width / 2 - ax, vy = r.top + r.height / 2 - ay;
+                    const along = vx * dx + vy * dy;
+                    if (along <= 4) return;
+                    const inLine = dx ? r.top < a.top + a.height && r.top + r.height > a.top : r.left < a.left + a.width && r.left + r.width > a.left;
+                    const s = (inLine ? 0 : 1e6) + along + Math.abs(vx * dy - vy * dx) * 2.4;
+                    if (s < score) { score = s; best = i; }
+                });
+                return best;
+            }
+            /* END gamepad */
+
+            const pad = { prev: [], nav: 0, t: 0, woke: false };
+            // what the controller can reach: the open card's buttons, or else the cards
+            const padFocusables = () => {
+                const modal = document.querySelector('.modal.show');
+                const els = modal ? modal.querySelectorAll('button:not([disabled])') : cardGrid.querySelectorAll('.card-wrapper');
+                return Array.from(els).filter(el => el.offsetParent !== null);
+            };
+            function padWake() {
+                document.body.classList.add('ccs-pad'); // the focus ring shows for the controller
+                if (pad.woke) return;
+                pad.woke = true;
+                window.dispatchEvent(new Event('pointerdown')); // the sound kit waits for a first press
+            }
+            // a real tap or click hands the board back to the mouse: no ring on a clicked card
+            window.addEventListener('pointerdown', (e) => { if (e.isTrusted) document.body.classList.remove('ccs-pad'); }, true);
+            function padMove(dx, dy) {
+                const list = padFocusables();
+                if (!list.length) return;
+                const i = list.indexOf(document.activeElement);
+                if (i < 0) { list[0].focus(); return; }
+                const j = padNearest(list.map(el => el.getBoundingClientRect()), i, dx, dy);
+                if (j >= 0) list[j].focus();
+            }
+            function pollPad(now) {
+                requestAnimationFrame(pollPad);
+                const dt = Math.min(0.1, Math.max(0, (now - pad.t) / 1000));
+                pad.t = now;
+                let gp = null;
+                try { gp = padFirst(navigator.getGamepads ? navigator.getGamepads() : []); } catch (e) { gp = null; }
+                if (!gp) { pad.prev = []; return; }
+                const b = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
+                const hit = (i) => b(i) && !pad.prev[i];
+                const v = padVector(gp), mag = Math.hypot(v.x, v.y);
+                if (mag > PAD_STEP || gp.buttons.some(x => x && x.pressed)) padWake();
+                const list = padFocusables();
+                // the start or win card takes the controller's focus on its button
+                if (document.body.classList.contains('ccs-pad') && document.querySelector('.modal.show') && list.length && list.indexOf(document.activeElement) < 0) list[0].focus();
+                pad.nav -= dt;
+                if (mag > PAD_STEP) {
+                    if (pad.nav <= 0) {
+                        if (Math.abs(v.x) > Math.abs(v.y)) padMove(Math.sign(v.x), 0); else padMove(0, Math.sign(v.y));
+                        pad.nav = PAD_REPEAT;
+                    }
+                } else if (mag < 0.3) pad.nav = 0;
+                if (hit(0)) {
+                    const el = document.activeElement;
+                    if (list.indexOf(el) >= 0) el.click(); else if (list[0]) list[0].focus();
+                }
+                pad.prev = gp.buttons.map(x => !!(x && x.pressed));
+            }
+            requestAnimationFrame(pollPad);
 
             loadBestTime();
             showStartModal();

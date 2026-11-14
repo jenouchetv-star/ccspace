@@ -1381,6 +1381,7 @@ function frame(){
   if (view.board) drawBoard(ctx, view.board);
   if (S.mode === "play" && S.g && S.g.piece && !S.busy){ drawGhost(ctx); drawPiece(ctx, S.g.piece, 1); }
   drawEffects(ctx, dt);
+  pollPad(dt);
   requestAnimationFrame(frame);
 }
 function drawNext(){
@@ -1831,6 +1832,103 @@ document.addEventListener("keydown", function(e){
 $("levels-btn").addEventListener("click", function(){ sfx("click"); if (S.mode === "play" || S.mode === "paused" || S.mode === "card" || S.mode === "won" || S.mode === "lost") showTitle(); });
 $("pause-btn").addEventListener("click", function(){ if (S.mode === "play") pause(); else if (S.mode === "paused") resume(); });
 document.addEventListener("visibilitychange", function(){ if (document.hidden && S.mode === "play" && !S.busy) pause(); });
+
+/* a game controller (any connected pad, standard mapping), read once a frame from frame().
+   Playing: the stick or d-pad moves (hold to keep moving), down speeds up, up or A turns, B turns the other
+   way, X, Y or RT drops, LB and RB turn too, Start pauses, Back restarts.
+   Level picker and cards: the stick or d-pad moves between the buttons, A presses the one in focus, B goes back
+   (out of pause it keeps playing), Start keeps playing from pause. */
+var PAD = { prev: [], nav: 0, used: false, scope: null, held: {} }, PAD_STEP = .55, PAD_REPEAT = .2;
+function padScope(){
+  if (!cardWrap.hidden) return cardWrap;
+  if (!titleEl.hidden) return titleEl;
+  return null;
+}
+function padList(scope){
+  return [].filter.call(scope.querySelectorAll("button:not([disabled]), summary"), function(el){ return el.offsetParent !== null; });
+}
+function padDefault(scope, list){
+  var el = scope === titleEl ? (titleEl.querySelector(".tile.is-new") || titleEl.querySelector(".tile:not(:disabled)")) : null;
+  return el && list.indexOf(el) >= 0 ? el : list[0];
+}
+function padFocus(el){
+  if (!el) return;
+  try { el.focus({ focusVisible: true, preventScroll: true }); } catch (e){ el.focus(); }
+  el.scrollIntoView({ block: "nearest" });
+}
+function padMove(list, dx, dy){
+  var cur = document.activeElement; if (list.indexOf(cur) < 0) return;
+  var a = cur.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2, best = null, score = Infinity;
+  list.forEach(function(el){
+    if (el === cur) return;
+    var r = el.getBoundingClientRect(), vx = r.left + r.width / 2 - ax, vy = r.top + r.height / 2 - ay, along = vx * dx + vy * dy;
+    if (along <= 4) return;
+    var s = along + Math.abs(vx * dy - vy * dx) * 2.4;
+    if (s < score){ score = s; best = el; }
+  });
+  if (best) padFocus(best);
+}
+/* a held direction acts once, then repeats after a short wait, like the on-screen buttons */
+function padHold(name, on, dt, first, every){
+  var h = PAD.held[name];
+  if (!on){ delete PAD.held[name]; return false; }
+  if (!h){ PAD.held[name] = { t: first }; return true; }
+  h.t -= dt; if (h.t <= 0){ h.t += every; return true; }
+  return false;
+}
+function pollPad(dt){
+  var gp = null;
+  try { gp = [].slice.call(navigator.getGamepads ? navigator.getGamepads() : []).filter(function(g){ return g && g.connected; })[0] || null; } catch (e){ gp = null; }
+  var scope = padScope();
+  if (!gp){ PAD.prev = []; PAD.held = {}; PAD.scope = scope; return; }
+  var b = function(i){ return !!(gp.buttons[i] && gp.buttons[i].pressed); };
+  var hit = function(i){ return b(i) && !PAD.prev[i]; };
+  var ax = gp.axes[0] || 0, ay = gp.axes[1] || 0, horiz = Math.abs(ax) >= Math.abs(ay);
+  var left = b(14) || (horiz && ax < -PAD_STEP), right = b(15) || (horiz && ax > PAD_STEP);
+  var up = b(12) || (!horiz && ay < -PAD_STEP), down = b(13) || (!horiz && ay > PAD_STEP);
+  var rt = !!(gp.buttons[7] && (gp.buttons[7].pressed || gp.buttons[7].value > .5));
+  if (left || right || up || down || gp.buttons.some(function(x){ return x && x.pressed; })) PAD.used = true;
+  if (S.mode === "play" && !scope){
+    if (padHold("left", left && !right, dt, .19, .085)) act("left");
+    if (padHold("right", right && !left, dt, .19, .085)) act("right");
+    if (padHold("down", down, dt, .19, .055)) act("down");
+    if ((up && !PAD.prev.up) || hit(0) || hit(5)) act("turn");
+    if (hit(1) || hit(4)) act("back");
+    if (hit(2) || hit(3) || (rt && !PAD.prev.rt)) act("drop");
+    if (hit(9)) pause();
+    else if (hit(8) && S.g && !S.busy){ closeCard(); startLevel(S.level); }
+  } else {
+    PAD.held = {};
+    if (scope){
+      var list = padList(scope), el = document.activeElement, inList = list.indexOf(el) >= 0;
+      if (scope !== PAD.scope && PAD.used){ PAD.nav = PAD_REPEAT; if (inList) padFocus(el); }
+      else if (PAD.used && inList && !el.matches(":focus-visible")) padFocus(el);
+      var mx = (left ? -1 : 0) + (right ? 1 : 0), my = (up ? -1 : 0) + (down ? 1 : 0);
+      PAD.nav -= dt;
+      if ((mx || my) && PAD.nav <= 0){
+        if (list.indexOf(document.activeElement) < 0) padFocus(padDefault(scope, list));
+        else if (mx) padMove(list, mx, 0); else padMove(list, 0, my);
+        PAD.nav = PAD_REPEAT;
+      } else if (!mx && !my) PAD.nav = 0;
+      if (hit(0)){
+        /* A presses the button that already had the focus; if there was none, it just shows one */
+        if (inList && document.activeElement === el) el.click(); else padFocus(padDefault(scope, list));
+      }
+      if (hit(1)){
+        if (S.mode === "paused") resume();
+        else if (scope === cardWrap) showTitle();
+        else if ($("how").open) $("how").open = false;
+      }
+      if (hit(9) && S.mode === "paused") resume();
+      if (hit(8) && S.g && !S.busy && (S.mode === "paused" || S.mode === "lost" || S.mode === "won")){ closeCard(); startLevel(S.level); }
+    }
+  }
+  PAD.scope = scope;
+  PAD.prev = gp.buttons.map(function(x){ return !!(x && x.pressed); });
+  PAD.prev.up = up; PAD.prev.rt = rt;
+}
+addEventListener("pointerdown", function(){ PAD.used = false; }, true);
+addEventListener("keydown", function(){ PAD.used = false; }, true);
 
 if (window.CCSSound){
   var sb = CCSSound.button({ background: "var(--paper)" });

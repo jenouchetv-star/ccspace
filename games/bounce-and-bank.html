@@ -2686,6 +2686,7 @@
          * The main game loop.
          */
         function gameLoop() {
+            pollPad();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawPegs();
             drawSlots();
@@ -3114,6 +3115,96 @@
             });
 
             window.addEventListener('resize', setupBoard);
+            window.addEventListener('pointerdown', () => { pad.used = false; }, true);
+            window.addEventListener('keydown', () => { pad.used = false; }, true);
+        }
+
+        /**
+         * A game controller (any connected pad, standard mapping), read once
+         * a frame from gameLoop. Playing: the left stick or d-pad moves the
+         * ball (the stick moves faster the further it is pushed), A or d-pad
+         * down drops it. On the ball shop and the result screen the stick or
+         * d-pad moves between the buttons and A presses the one in focus;
+         * Start (or B) starts the round from the shop, and Start presses the
+         * result screen's button.
+         */
+        const PAD_DEAD = 0.25, PAD_STEP = 0.55, PAD_REPEAT = 200;
+        const pad = { prev: [], nav: 0, last: 0, used: false, menu: null };
+        function padMenu() {
+            if (shopOpen) return ballShopModal;
+            if (isGameOver) return gameOverScreen;
+            return null;
+        }
+        function padList(menu) {
+            return [...menu.querySelectorAll('button:not([disabled])'), soundToggle].filter(el => el.offsetParent !== null);
+        }
+        function padDefault(menu) {
+            return menu === ballShopModal ? startRoundBtn : depositAndPlayAgainBtn;
+        }
+        function padFocus(el) {
+            if (!el) return;
+            try { el.focus({ focusVisible: true, preventScroll: true }); } catch (e) { el.focus(); }
+            el.scrollIntoView({ block: 'nearest' });
+        }
+        function padMove(list, dx, dy) {
+            const cur = document.activeElement;
+            const a = cur.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+            let best = null, score = Infinity;
+            for (const el of list) {
+                if (el === cur) continue;
+                const r = el.getBoundingClientRect(), vx = r.left + r.width / 2 - ax, vy = r.top + r.height / 2 - ay;
+                const along = vx * dx + vy * dy;
+                if (along <= 4) continue;
+                const s = along + Math.abs(vx * dy - vy * dx) * 2.4;
+                if (s < score) { score = s; best = el; }
+            }
+            if (best) padFocus(best);
+        }
+        // pressed just after this frame, not inside gameLoop: "Play again" restarts
+        // gameLoop, and doing that mid-frame would leave two loops running
+        function padPress(el) {
+            queueMicrotask(() => el.click());
+        }
+        function pollPad() {
+            const t = performance.now(), dt = Math.min(0.05, (t - (pad.last || t)) / 1000);
+            pad.last = t;
+            let gp = null;
+            try { gp = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find(g => g && g.connected) || null; } catch (e) { gp = null; }
+            const menu = padMenu();
+            if (!gp) { pad.prev = []; pad.menu = menu; return; }
+            const b = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
+            const hit = i => b(i) && !pad.prev[i];
+            const dz = v => Math.abs(v) < PAD_DEAD ? 0 : v;
+            const mx = dz(gp.axes[0] || 0) + (b(15) ? 1 : 0) - (b(14) ? 1 : 0);
+            const my = dz(gp.axes[1] || 0) + (b(13) ? 1 : 0) - (b(12) ? 1 : 0);
+            if (mx || my || gp.buttons.some(x => x && x.pressed)) pad.used = true;
+            if (!menu) {
+                // playing: slide the ball along the top, then drop it
+                if (mx) {
+                    const step = Math.max(-1, Math.min(1, mx)) * getCanvasWidth() * 0.9 * dt;
+                    mousePos.x = Math.max(BALL_RADIUS, Math.min(getCanvasWidth() - BALL_RADIUS, mousePos.x + step));
+                }
+                if (hit(0) || hit(13)) dropBall();
+            } else {
+                const list = padList(menu), el = document.activeElement, inList = list.indexOf(el) >= 0;
+                if (menu !== pad.menu && pad.used) { pad.nav = PAD_REPEAT; padFocus(inList ? el : padDefault(menu)); }
+                else if (pad.used && inList && !el.matches(':focus-visible')) padFocus(el);
+                else if (pad.used && (!el || el === document.body)) padFocus(padDefault(menu)); // a ball just bought greys out its button
+                pad.nav -= dt * 1000;
+                if (Math.hypot(mx, my) > PAD_STEP && pad.nav <= 0) {
+                    if (list.indexOf(document.activeElement) < 0) padFocus(padDefault(menu));
+                    else if (Math.abs(mx) > Math.abs(my)) padMove(list, Math.sign(mx), 0);
+                    else padMove(list, 0, Math.sign(my));
+                    pad.nav = PAD_REPEAT;
+                } else if (Math.hypot(mx, my) < 0.3) pad.nav = 0;
+                if (hit(0)) {
+                    // A presses the button that already had the focus; if there was none, it just shows one
+                    if (inList && document.activeElement === el) padPress(el); else padFocus(padDefault(menu));
+                }
+                if (hit(9) || (hit(1) && menu === ballShopModal)) padPress(padDefault(menu));
+            }
+            pad.menu = menu;
+            pad.prev = gp.buttons.map(x => !!(x && x.pressed));
         }
 
         // Start the game

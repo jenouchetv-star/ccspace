@@ -239,6 +239,8 @@ body{
 .join .row{display:flex;gap:10px}
 .join input{flex:1;min-width:0;font:inherit;font-family:var(--arcade);font-size:1.5rem;letter-spacing:.1em;text-align:center;padding:6px 10px;border:3px solid var(--ink);border-radius:14px;background:#fff;color:var(--ink);user-select:text;-webkit-user-select:text}
 .join input:focus-visible{outline:3px solid var(--ink);outline-offset:2px;box-shadow:0 0 0 6px var(--sun)}
+/* moving through the menus with a game controller: the same two-tone focus ring the keyboard gets */
+body.pad-nav button:focus,body.pad-nav input:focus{outline:3px solid var(--ink) !important;outline-offset:2px !important;box-shadow:0 0 0 6px var(--sun) !important}
 .room-msg{min-height:1.3em;margin:10px 0 4px;font-weight:800;color:var(--red)}
 .room-msg.ok{color:var(--muted)}
 .waiting{display:flex;align-items:center;justify-content:center;gap:6px;font-weight:800;color:var(--muted);margin:14px 0 0}
@@ -789,6 +791,16 @@ function packBalls(world){ return world.balls.map(b => [Math.round(b.x * 1e5), M
 function unpackBalls(world, arr){
   arr.forEach((a, i) => { const b = world.balls[i]; if (!b) return; b.x = a[0] / 1e5; b.z = a[1] / 1e5; b.alive = !!a[2]; b.vx = 0; b.vz = 0; });
 }
+
+/* ---------- a game controller: the stick points the shot, the right trigger (or holding A) sets the speed ---------- */
+const PAD = { DEAD:0.25, STEP:0.55, REPEAT:0.2, TAP:0.25, CHARGE:1.4, MEMO:0.15, FINE:20 };
+function padDead(v, dz){ return Math.abs(v) < dz ? 0 : v; }
+/* the trigger squeezed a little is speed 1, all the way is 10 */
+function triggerLevel(value){ return value < 0.08 ? 0 : Math.max(1, Math.min(MAX_LEVEL, Math.ceil(value * MAX_LEVEL))); }
+/* a trigger springs back fast when let go, so the shot keeps the strongest squeeze of the last moment */
+function releaseLevel(hist, now, memo){ let best = 0; for (const h of hist) if (now - h.t <= memo) best = Math.max(best, h.level); return best; }
+/* holding A charges the speed 1 up to 10 and back down again, so an overshoot comes round again */
+function chargeLevel(t, period){ const u = (Math.max(0, t) / period) % 2, k = u <= 1 ? u : 2 - u; return Math.max(1, Math.min(MAX_LEVEL, 1 + Math.round(k * (MAX_LEVEL - 1)))); }
 /* END pure */
 
 /* ============================================================
@@ -1940,12 +1952,132 @@ function renderScene(v, world, o){
   });
 
   /* ============================================================
+     GAME CONTROLLER: the left stick points the shot where the white ball should go, the d-pad or right stick
+     turns it a degree at a time (d-pad up and down change the speed), the right trigger squeezes the speed and
+     letting go shoots; or tap A to shoot, or hold A to charge the speed and let go. Y = hints, Start = pause.
+     In the menus the stick or d-pad moves between buttons, A presses, B goes back.
+     ============================================================ */
+  const pad = { prev:[], nav:0, rep:0, fine:0, hist:[], rt:false, a:null };
+  function padScope(){
+    for (const id of ["room", "over", "clear", "pause"]) if (!$(id).hidden) return $(id);
+    return st.screen === "title" ? $("title") : null;
+  }
+  function padFocusables(scope){
+    return [...scope.querySelectorAll("button:not([disabled]), input:not([disabled])")].filter(el => el.getClientRects().length > 0);
+  }
+  function padMove(scope, dx, dy){
+    const list = padFocusables(scope), cur = document.activeElement;
+    if (!list.length) return;
+    if (list.indexOf(cur) < 0){ (list.find(el => el.classList.contains("cta")) || list[0]).focus(); return; }
+    const a = cur.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+    let best = null, score = Infinity;
+    for (const el of list){
+      if (el === cur) continue;
+      const b = el.getBoundingClientRect(), vx = b.left + b.width / 2 - ax, vy = b.top + b.height / 2 - ay;
+      const along = vx * dx + vy * dy;
+      if (along <= 4 || Math.abs(vx * dy - vy * dx) > along * 2) continue;
+      /* a button in line with this one (overlapping it sideways) wins over one off to the side, so a wide
+         button (Play) is easy to reach and the stick goes along a row before it drops to the next */
+      const side = dx ? Math.max(0, b.top - a.bottom, a.top - b.bottom) : Math.max(0, b.left - a.right, a.left - b.right);
+      const s = along + side * 2.4 + (side > 0 ? 10000 : 0);
+      if (s < score){ score = s; best = el; }
+    }
+    if (best){ best.focus(); best.scrollIntoView({ block:"nearest" }); }
+  }
+  /* the table angle that points the way the stick points on screen, from the white ball */
+  function padAimDeg(sx, sy){
+    const c = st.world.balls[0], p0 = view.P(c.x, c.z, 0), m = Math.hypot(sx, sy) || 1;
+    for (const r of [80, 30, 10]){
+      const p = view.toTable(p0.x + sx / m * r, p0.y + sy / m * r);
+      if (p && Math.hypot(p.x - c.x, p.z - c.z) > 0.002) return degOf(p.x - c.x, p.z - c.z);
+    }
+    return null;
+  }
+  function padAim(deg, level){
+    deg = norm360(Math.round(deg));
+    if (!st.aim.on || deg !== st.aim.deg || level !== st.aim.level) setAim(deg, level);
+  }
+  function pollPad(dt){
+    let gp = null;
+    try { const list = navigator.getGamepads ? navigator.getGamepads() : []; for (const g of list || []) if (g && g.connected){ gp = g; break; } } catch (e){ gp = null; }
+    if (!gp){ pad.prev = []; pad.hist = []; pad.rt = false; pad.a = null; return; }
+    const now = performance.now() / 1000;
+    const btn = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
+    const val = i => gp.buttons[i] ? (gp.buttons[i].value || (gp.buttons[i].pressed ? 1 : 0)) : 0;
+    const hit = i => btn(i) && !pad.prev[i];
+    const ax = padDead(gp.axes[0] || 0, PAD.DEAD), ay = padDead(gp.axes[1] || 0, PAD.DEAD), rx = padDead(gp.axes[2] || 0, PAD.DEAD);
+    const dx = (btn(15) ? 1 : 0) - (btn(14) ? 1 : 0), dy = (btn(13) ? 1 : 0) - (btn(12) ? 1 : 0), rt = val(7);
+    if (ax || ay || rx || rt > 0.08 || gp.buttons.some(b => b && b.pressed)) document.body.classList.add("pad-nav");
+    const scope = padScope();
+    if (scope){
+      pad.hist = []; pad.rt = false; pad.a = null;
+      const mx = ax + dx, my = ay + dy, el = document.activeElement, list = padFocusables(scope);
+      pad.nav -= dt;
+      if (Math.hypot(mx, my) > PAD.STEP && pad.nav <= 0){
+        if (Math.abs(mx) > Math.abs(my)) padMove(scope, Math.sign(mx), 0); else padMove(scope, 0, Math.sign(my));
+        pad.nav = PAD.REPEAT;
+      } else if (Math.hypot(mx, my) < 0.3) pad.nav = 0;
+      if (hit(0)){ if (list.indexOf(el) >= 0) el.click(); else padMove(scope, 0, 0); }
+      if (hit(1)){ if (scope.id === "room") $("room-close").click(); else if (scope.id === "pause") resume(); }
+      if (hit(9) && scope.id === "pause") resume();
+    } else if (st.screen === "game"){
+      if (hit(9)){ pause(); pad.prev = gp.buttons.map(b => !!(b && b.pressed)); return; }
+      if (hit(3) && !$("hints-btn").disabled) setHints(!st.hints);
+      if (!canAim()){ pad.hist = []; pad.rt = false; pad.a = null; }
+      else {
+        let deg = st.aim.on ? st.aim.deg : 0, level = st.aim.on && st.aim.level > 0 ? st.aim.level : 5;
+        /* the left stick points the shot */
+        if (Math.hypot(ax, ay) > 0.5){ const d = padAimDeg(ax, ay); if (d !== null) deg = d; }
+        /* the d-pad turns a degree at a time (and changes the speed), repeating while held; the right stick turns slowly */
+        if (dx || dy){
+          pad.rep -= dt;
+          if (hit(12) || hit(13) || hit(14) || hit(15)){ pad.rep = 0.35; deg -= dx; level += -dy; }
+          else if (pad.rep <= 0){ pad.rep = 0.08; deg -= dx; level += -dy; }
+        }
+        if (rx){ pad.fine -= rx * PAD.FINE * dt; const whole = Math.trunc(pad.fine); deg += whole; pad.fine -= whole; } else pad.fine = 0;
+        level = Math.max(1, Math.min(MAX_LEVEL, level));
+        /* the right trigger: squeeze for speed, let go to shoot */
+        if (rt > 0.08){
+          level = triggerLevel(rt); pad.rt = true;
+          pad.hist.push({ t:now, level }); pad.hist = pad.hist.filter(h => now - h.t <= 1);
+        }
+        /* A: a tap shoots at the speed on show; held, it charges the speed up and down until it is let go */
+        if (hit(0)) pad.a = { t:0, base:st.aim.on ? st.aim.level : 0 };
+        if (pad.a && btn(0)){ pad.a.t += dt; if (pad.a.t >= PAD.TAP) level = chargeLevel(pad.a.t - PAD.TAP, PAD.CHARGE); }
+        if (pad.a && hit(1)){
+          /* B while charging: put the speed back and don't shoot */
+          const base = pad.a.base; pad.a = null;
+          if (base > 0) padAim(deg, base);
+          else { st.aim.on = false; st.pred = null; setStep([1]); if (isDuo()) sendAim(true); }
+        }
+        const moved = Math.hypot(ax, ay) > 0.5 || dx || dy || rx || rt > 0.08 || (pad.a && pad.a.t >= PAD.TAP);
+        if (moved) padAim(deg, level);
+        if (pad.rt && rt <= 0.08){
+          const shot = releaseLevel(pad.hist, now, PAD.MEMO);
+          pad.rt = false; pad.hist = [];
+          if (shot > 0 && st.aim.on){ padAim(st.aim.deg, shot); fire(); }
+        }
+        if (pad.a && !btn(0) && canAim()){
+          const charged = pad.a.t >= PAD.TAP;
+          pad.a = null;
+          if (charged || (st.aim.on && st.aim.level > 0)){ if (!st.aim.on) padAim(deg, level); fire(); }
+          else padAim(deg, level);
+        }
+      }
+    }
+    pad.prev = gp.buttons.map(b => !!(b && b.pressed));
+  }
+  addEventListener("pointerdown", () => document.body.classList.remove("pad-nav"), true);
+  addEventListener("keydown", () => document.body.classList.remove("pad-nav"), true);
+
+  /* ============================================================
      THE LOOP: physics in small steps, the clock, the drawing
      ============================================================ */
   let last = performance.now();
   function frame(now){
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     const t = now / 1000;
+    pollPad(dt);
     if (st.screen === "title"){ drawPreview(t); }
     if (st.screen === "game" && st.world){
       const running = !st.paused && st.phase !== "over" && $("clear").hidden;

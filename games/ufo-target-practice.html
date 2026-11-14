@@ -611,6 +611,12 @@
         .nogl .card p{ margin:0; line-height:1.5; color:var(--text); }
         body.no-gl #ui, body.no-gl #weapons, body.no-gl #reticle, body.no-gl #intro{ display:none !important; }
 
+        /* a game controller moves the focus on the menus without a key press,
+           so the site's focus ring (game-skin.css) is drawn for it here too */
+        body.ccs-pad .overlay :focus, body.ccs-pad #efficiencyModal :focus{
+            outline:3px solid #1E2226 !important; outline-offset:2px !important; box-shadow:0 0 0 6px #F5B921 !important;
+        }
+
         @media (prefers-reduced-motion: reduce){
             #reticle.lock .ring, #timer.hurry .num, #score.bump .num, #reticle.jam .static{ animation:none; }
             .overlay.on, .card{ animation:none; }
@@ -3190,6 +3196,121 @@
     document.getElementById('closeEfficiency').addEventListener('click', closeEfficiency);
 
     /* =====================================================================
+       A GAME CONTROLLER (any pad, standard mapping)
+       In flight the left stick or d-pad steers and aims (the right stick
+       too), A or RT fires the chosen laser, B fires a white bolt (as a
+       right click does) and LB / RB switch lasers. On the title, level and
+       results cards the stick or d-pad moves between the buttons, A
+       presses one and B goes to the Levels screen.
+       ===================================================================== */
+    /* BEGIN gamepad */
+    /* these helpers touch nothing on the page, so test/gamepad-ufo-target-practice.test.js can run them */
+    const PAD_DEAD = .25, PAD_STEP = .55, PAD_REPEAT = .2, PAD_TRIGGER = .3;
+    const PAD_KINDS = ['blue', 'white', 'purple'];
+    /* the first connected controller, or null */
+    function padFirst(list) {
+        for (const g of Array.from(list || [])) if (g && g.connected) return g;
+        return null;
+    }
+    /* both sticks and the d-pad as one steer: x to the right, y down, never longer than 1 */
+    function padSteer(gp) {
+        const b = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
+        const dz = (v) => Math.abs(v) < PAD_DEAD ? 0 : (v - Math.sign(v) * PAD_DEAD) / (1 - PAD_DEAD);
+        let x = dz(gp.axes[0] || 0) + dz(gp.axes[2] || 0) + (b(15) ? 1 : 0) - (b(14) ? 1 : 0);
+        let y = dz(gp.axes[1] || 0) + dz(gp.axes[3] || 0) + (b(13) ? 1 : 0) - (b(12) ? 1 : 0);
+        const l = Math.hypot(x, y);
+        if (l > 1) { x /= l; y /= l; }
+        return { x, y };
+    }
+    /* the laser after `kind` (step 1) or before it (step -1), going round */
+    function padNextKind(kind, step) {
+        const i = Math.max(0, PAD_KINDS.indexOf(kind));
+        return PAD_KINDS[(i + step + PAD_KINDS.length) % PAD_KINDS.length];
+    }
+    /* the box nearest to boxes[from] in the direction (dx, dy), or -1 at the edge;
+       a box in the same row (or column) wins over a closer one off to the side */
+    function padNearest(boxes, from, dx, dy) {
+        const a = boxes[from], ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+        let best = -1, score = Infinity;
+        boxes.forEach((r, i) => {
+            if (i === from) return;
+            const vx = r.left + r.width / 2 - ax, vy = r.top + r.height / 2 - ay;
+            const along = vx * dx + vy * dy;
+            if (along <= 4) return;
+            const inLine = dx ? r.top < a.top + a.height && r.top + r.height > a.top : r.left < a.left + a.width && r.left + r.width > a.left;
+            const s = (inLine ? 0 : 1e6) + along + Math.abs(vx * dy - vy * dx) * 2.4;
+            if (s < score) { score = s; best = i; }
+        });
+        return best;
+    }
+    /* END gamepad */
+
+    const gpad = { prev: [], nav: 0, woke: false };
+    /* the card the controller works: the efficiency note, or the title / level / results card */
+    const padCard = () => isPaused() ? efficiencyModal : (phase === 'intro' || phase === 'card' || phase === 'over') ? $('.overlay.on') : null;
+    const padFocusables = (card) => card ? Array.from(card.querySelectorAll('button:not([disabled])')).filter(el => el.offsetParent !== null) : [];
+    function padWake() {
+        document.body.classList.add('ccs-pad');          /* the focus ring shows for the controller */
+        if (gpad.woke) return;
+        gpad.woke = true;
+        window.dispatchEvent(new Event('pointerdown'));  /* the sound kit waits for a first press */
+    }
+    window.addEventListener('pointerdown', (e) => { if (e.isTrusted) document.body.classList.remove('ccs-pad'); }, true);
+    function padMove(list, dx, dy) {
+        const i = list.indexOf(document.activeElement);
+        if (i < 0) { if (list[0]) list[0].focus({ preventScroll: true }); return; }
+        const j = padNearest(list.map(el => el.getBoundingClientRect()), i, dx, dy);
+        if (j >= 0) list[j].focus({ preventScroll: true });
+    }
+    /* runs every frame, from frame() below */
+    function pollPad(dt) {
+        let gp = null;
+        try { gp = padFirst(navigator.getGamepads ? navigator.getGamepads() : []); } catch (err) { gp = null; }
+        if (!gp) { gpad.prev = []; return; }
+        const b = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
+        const hit = (i) => b(i) && !gpad.prev[i];
+        const rt = gp.buttons[7] ? (gp.buttons[7].value || (gp.buttons[7].pressed ? 1 : 0)) : 0;
+        const v = padSteer(gp), mag = Math.hypot(v.x, v.y);
+        if (mag > .3 || rt > PAD_TRIGGER || gp.buttons.some(x => x && x.pressed)) padWake();
+        const card = padCard();
+        if (card) {
+            const list = padFocusables(card);
+            /* a card that opens takes the controller's focus on its big button */
+            if (document.body.classList.contains('ccs-pad') && list.length && list.indexOf(document.activeElement) < 0) {
+                (list.find(el => el.classList.contains('cta')) || list[0]).focus({ preventScroll: true });
+            }
+            gpad.nav -= dt;
+            if (mag > PAD_STEP) {
+                if (gpad.nav <= 0) {
+                    if (Math.abs(v.x) > Math.abs(v.y)) padMove(list, Math.sign(v.x), 0); else padMove(list, 0, Math.sign(v.y));
+                    gpad.nav = PAD_REPEAT;
+                }
+            } else if (mag < .3) gpad.nav = 0;
+            if (hit(0)) {
+                const el = document.activeElement;
+                if (list.indexOf(el) >= 0) el.click(); else if (list[0]) list[0].focus({ preventScroll: true });
+            }
+            if (card === efficiencyModal) { if (hit(1) || hit(9)) closeEfficiency(); }
+            else if (hit(1) && phase === 'over') menuBtn.click();
+        } else {
+            /* steer the reticle as the arrow keys do, at the same top speed */
+            if ((phase === 'play' || phase === 'count') && mag > 0) {
+                aimLift = 0;
+                const sp = Math.min(W, H) * .9 + 160;
+                aim.x = clamp(aim.x + v.x * sp * dt, 4, W - 4);
+                aim.y = clamp(aim.y + v.y * sp * dt, 4, H - 4);
+            }
+            if (hit(4)) { selectKind(padNextKind(selectedKind, -1)); sfx('click'); }
+            if (hit(5)) { selectKind(padNextKind(selectedKind, 1)); sfx('click'); }
+            if (canShoot()) {
+                if (b(0) || rt > PAD_TRIGGER) tryFire(selectedKind);
+                else if (b(1)) tryFire('white');
+            }
+        }
+        gpad.prev = gp.buttons.map(x => !!(x && x.pressed));
+    }
+
+    /* =====================================================================
        FITTING THE WINDOW
        ===================================================================== */
     function updatePointScale() {
@@ -3238,6 +3359,7 @@
         flightSpeed += (flightTarget - flightSpeed) * damp(goBurstT > 0 || phase === 'warp' ? 6 : 2.2, dt);
 
         steerWithKeys(dt);
+        pollPad(dt);
         updateStars(dt);
         updateBackdrops(dt);
         updateHero(dt);
