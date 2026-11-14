@@ -96,6 +96,21 @@ describe("Sound Space app page", () => {
     expect(html).toMatch(/id="title-in"[^>]*maxlength="60"/);
   });
 
+  it("has the Grid control and the five note symbols, each named with its beats", () => {
+    expect(html.match(/id="ss-grid-res"/g) || []).toHaveLength(1);
+    expect(html.match(/id="ss-note-len"/g) || []).toHaveLength(1);
+    const res = section(/id="ss-grid-res"/, "</div>");
+    expect([...res.matchAll(/data-grid="(\d)"/g)].map((m) => Number(m[1]))).toEqual([2, 4]);
+    expect(res).toMatch(/Eighths/);
+    expect(res).toMatch(/Sixteenths/);
+    const picker = section(/id="ss-note-len"/, "</div>");
+    expect([...picker.matchAll(/data-note="(\w+)"/g)].map((m) => m[1])).toEqual(["whole", "half", "quarter", "eighth", "sixteenth"]);
+    for (const l of ["Whole note, 4 beats", "Half note, 2 beats", "Quarter note, 1 beat", "Eighth note, 1/2 beat", "Sixteenth note, 1/4 beat"]) {
+      expect(picker).toContain(`aria-label="${l}"`);
+    }
+    expect(picker).toMatch(/<svg/);
+  });
+
   it("loads the built modules", () => {
     for (const f of ["model.js", "engine.js", "wav.js", "instruments.js"]) {
       expect(html).toContain(`<script src="sound-space/${f}"></script>`);

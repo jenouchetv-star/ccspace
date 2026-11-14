@@ -4,7 +4,7 @@ import { loadSS } from "./helpers/soundSpace.js";
 describe("Sound Space model", () => {
   it("exposes the song constants from the design", () => {
     const SS = loadSS("model.js");
-    expect(SS.model.CONST).toEqual({ SCHEMA_VERSION: 1, STEPS_PER_COUNT: 2, COUNTS: [4, 8, 16], MAX_TRACKS: 8, TEMPO_MIN: 60, TEMPO_MAX: 160, TEMPO_DEFAULT: 100 });
+    expect(SS.model.CONST).toEqual({ SCHEMA_VERSION: 1, STEPS_PER_COUNT: 2, COUNTS: [4, 8, 16], GRIDS: [2, 4], MAX_TRACKS: 8, TEMPO_MIN: 60, TEMPO_MAX: 160, TEMPO_DEFAULT: 100 });
   });
 
   const M = () => loadSS("model.js").model;
@@ -207,5 +207,86 @@ describe("Sound Space model", () => {
     m.resizeSong(song, 4, st);
     m.resizeSong(song, 4, st);
     expect(Object.values(st)[0].length).toBe(1);
+  });
+
+  describe("sixteenth-note grid (task 7b)", () => {
+    const validIds = new Set(["piano"]);
+    it("a song is on eighths unless it says sixteenths, and older files still open", () => {
+      const m = M();
+      expect(m.newSong().grid).toBe(2);
+      const old = m.newSong(); delete old.grid;
+      const r = m.validateSong(old, validIds);
+      expect(r.ok).toBe(true);
+      expect(r.song.grid || 2).toBe(2);
+      const bad = m.newSong(); bad.grid = 3;
+      expect(m.validateSong(bad, validIds)).toEqual({ ok: false, error: "bad_field" });
+      const good = m.newSong(); good.grid = 4;
+      expect(m.validateSong(good, validIds).ok).toBe(true);
+    });
+
+    it("sixteenths double the squares", () => {
+      const SS = loadSS("model.js", "engine.js");
+      const song = SS.model.newSong(); song.counts = 8; song.grid = 4;
+      expect(SS.model.totalSteps(song)).toBe(32);
+      expect(SS.engine.stepSeconds(100, 4)).toBeCloseTo(0.15, 10);
+      expect(SS.engine.stepSeconds(100)).toBeCloseTo(0.3, 10);
+    });
+
+    it("a note on the last sixteenth square is valid", () => {
+      const m = M();
+      const song = m.newSong(); song.grid = 4;
+      const t = m.addTrack(song, "piano"); m.toggleNote(t, 31, 60);
+      expect(m.validateSong(song, validIds).ok).toBe(true);
+    });
+
+    it("switching to sixteenths loses nothing; back to eighths snaps and merges", () => {
+      const { m, song, t } = mk(8, []);
+      t.notes.push({ step: 1, pitch: 60, len: 2, vel: 0.9 }, { step: 3, pitch: 60, len: 2, vel: 0.9 });
+      const up = m.setGrid(song, 4);
+      expect(up.moved).toBe(false);
+      expect(up.song.grid).toBe(4);
+      expect(up.song).not.toBe(song);
+      expect(up.song.tracks[0].notes.map((n) => [n.step, n.len])).toEqual([[2, 4], [6, 4]]);
+      const down = m.setGrid(up.song, 2);
+      expect(down.moved).toBe(false);
+      expect(down.song.grid).toBe(2);
+      expect(down.song.tracks[0].notes.map((n) => [n.step, n.len])).toEqual([[1, 2], [3, 2]]);
+
+      const s2 = m.newSong(); s2.grid = 4;
+      const t2 = m.addTrack(s2, "piano");
+      t2.notes.push({ step: 4, pitch: 60, len: 2, vel: 0.9 }, { step: 3, pitch: 60, len: 1, vel: 0.9 });
+      const d2 = m.setGrid(s2, 2);
+      expect(d2.moved).toBe(true);
+      expect(d2.song.tracks[0].notes.map((n) => [n.step, n.pitch, n.len])).toEqual([[2, 60, 1]]);
+      expect(m.validateSong(d2.song, validIds).ok).toBe(true);
+    });
+
+    it("note values in squares", () => {
+      const m = M();
+      expect(m.NOTE_VALUES.map((v) => v.id)).toEqual(["whole", "half", "quarter", "eighth", "sixteenth"]);
+      expect(m.noteSquares("whole", 2)).toBe(8);
+      expect(m.noteSquares("quarter", 4)).toBe(4);
+      expect(m.noteSquares("sixteenth", 4)).toBe(1);
+      expect(m.noteSquares("sixteenth", 2)).toBe(null);
+    });
+
+    it("fast playing lands exactly on sixteenths", () => {
+      const m = M();
+      expect(m.quantizeStep(0.14, 0, 100, 32, 4)).toBe(1);
+      expect(m.quantizeStep(0.31, 0, 100, 32, 4)).toBe(2);
+      expect(m.quantizeStep(0.14, 0, 100, 16)).toBe(0);
+      expect(m.quantizeStep(0.31, 0, 100, 16)).toBe(1);
+      expect(m.recordedStep(0.31, 0, 100, 32, 0, 4)).toBe(2);
+    });
+
+    it("an eighth pattern on a sixteenths song keeps its rhythm", () => {
+      const m = M();
+      const t = { notes: [] };
+      m.applyPattern(t, [{ step: 3, pitch: 60, len: 1, vel: 0.9 }], 4, 4, 2, 4);
+      expect(t.notes.map((n) => [n.step, n.len])).toEqual([[6, 2]]);
+      const t2 = { notes: [] };
+      m.applyPattern(t2, [{ step: 3, pitch: 60, len: 1, vel: 0.9 }], 4, 8, 2, 4);
+      expect(t2.notes.map((n) => n.step)).toEqual([6, 22]);
+    });
   });
 });

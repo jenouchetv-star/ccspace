@@ -357,6 +357,25 @@ describe("Sound Space sound making", () => {
       expect(cents, "midi " + midi).toBeLessThan(1);
     }
   });
+  it("sixteenth grid: stepSeconds halves, export length keeps counts and speed, the player steps by sixteenths", () => {
+    expect(SS.engine.stepSeconds(100, 4)).toBeCloseTo(0.15, 10);
+    const a = SS.model.newSong();
+    const b = SS.model.newSong(); b.grid = 4;
+    expect(SS.engine.exportFrames(b, 1)).toBe(SS.engine.exportFrames(a, 1));
+    const ctx = fakeCtx();
+    const times = [];
+    const voices = { play: (ev, when) => { times.push(when); return []; } };
+    const t = SS.model.addTrack(b, "piano");
+    for (let s = 0; s < 4; s++) SS.model.toggleNote(t, s, 60, 1);
+    let tick = null;
+    const player = SS.engine.createPlayer(ctx, voices, { setInterval: (fn) => ((tick = fn), 1), clearInterval: () => {} });
+    player.start(b, { fromStep: 0 });
+    for (let i = 0; i < 40; i++) { ctx.currentTime += 0.025; tick(); }
+    expect(times.length).toBeGreaterThanOrEqual(4);
+    expect(times[1] - times[0]).toBeCloseTo(0.15, 6);
+    expect(times[3] - times[2]).toBeCloseTo(0.15, 6);
+    player.stop();
+  });
 });
 
 function fakeOffline() {

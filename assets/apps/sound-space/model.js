@@ -5,13 +5,14 @@
     SCHEMA_VERSION: 1,
     STEPS_PER_COUNT: 2,
     COUNTS: [4, 8, 16],
+    GRIDS: [2, 4],
     MAX_TRACKS: 8,
     TEMPO_MIN: 60,
     TEMPO_MAX: 160,
     TEMPO_DEFAULT: 100
   };
 
-  const SONG_KEYS = ["schemaVersion", "id", "title", "counts", "tempo", "loop", "countIn", "volume", "tracks", "updatedMs"];
+  const SONG_KEYS = ["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs"];
   const TRACK_KEYS = ["id", "instrumentId", "volume", "mute", "solo", "notes"];
   const NOTE_KEYS = ["step", "pitch", "len", "vel"];
 
@@ -26,7 +27,24 @@
   const isNum = (n) => typeof n === "number" && isFinite(n);
 
   function totalSteps(song) {
-    return song.counts * CONST.STEPS_PER_COUNT;
+    return song.counts * (song.grid || CONST.STEPS_PER_COUNT);
+  }
+
+  const NOTE_VALUES = [
+    { id: "whole", name: "Whole note", beats: 4 },
+    { id: "half", name: "Half note", beats: 2 },
+    { id: "quarter", name: "Quarter note", beats: 1 },
+    { id: "eighth", name: "Eighth note", beats: 0.5 },
+    { id: "sixteenth", name: "Sixteenth note", beats: 0.25 }
+  ];
+
+  // How many squares a note value covers on a grid, or null when it does not
+  // fall on whole squares (a sixteenth on eighths).
+  function noteSquares(valueId, grid) {
+    const v = NOTE_VALUES.find((x) => x.id === valueId);
+    if (!v) return null;
+    const sq = v.beats * (grid || CONST.STEPS_PER_COUNT);
+    return Number.isInteger(sq) && sq >= 1 ? sq : null;
   }
 
   function newSong(opts) {
@@ -35,6 +53,7 @@
       id: makeId(),
       title: (opts && opts.title) || "My song",
       counts: 8,
+      grid: CONST.STEPS_PER_COUNT,
       tempo: CONST.TEMPO_DEFAULT,
       loop: true,
       countIn: false,
@@ -76,7 +95,7 @@
     const st = stash || {};
     const out = clone(song);
     const oldTotal = totalSteps(song);
-    const newTotal = counts * CONST.STEPS_PER_COUNT;
+    const newTotal = counts * (song.grid || CONST.STEPS_PER_COUNT);
     out.counts = counts;
     out.updatedMs = Date.now();
     out.tracks.forEach((t) => {
@@ -111,8 +130,8 @@
     return { song: out, stash: st };
   }
 
-  function quantizeStep(tSec, startSec, tempo, total) {
-    const stepSec = 60 / tempo / CONST.STEPS_PER_COUNT;
+  function quantizeStep(tSec, startSec, tempo, total, grid) {
+    const stepSec = 60 / tempo / (grid || CONST.STEPS_PER_COUNT);
     const k = Math.round((tSec - startSec) / stepSec);
     return ((k % total) + total) % total;
   }
@@ -121,9 +140,9 @@
   // beat, and sound reaches the speakers `latencySec` after the audio clock
   // says it plays (outputLatency + baseLatency), so the press is moved back by
   // that much before snapping to the nearest square.
-  function recordedStep(pressSec, startSec, tempo, total, latencySec) {
+  function recordedStep(pressSec, startSec, tempo, total, latencySec, grid) {
     const lat = isNum(latencySec) && latencySec > 0 ? latencySec : 0;
-    return quantizeStep(pressSec - lat, startSec, tempo, total);
+    return quantizeStep(pressSec - lat, startSec, tempo, total, grid);
   }
 
   function validateSong(obj, catalogIds) {
@@ -135,12 +154,13 @@
     if (!isNum(obj.tempo) || obj.tempo < CONST.TEMPO_MIN || obj.tempo > CONST.TEMPO_MAX) return bad("bad_tempo");
     if (typeof obj.id !== "string" || !obj.id) return bad("bad_field");
     if (typeof obj.title !== "string" || obj.title.length > 60) return bad("bad_field");
+    if (obj.grid !== undefined && CONST.GRIDS.indexOf(obj.grid) < 0) return bad("bad_field");
     if (typeof obj.loop !== "boolean" || typeof obj.countIn !== "boolean") return bad("bad_field");
     if (!isNum(obj.volume) || obj.volume < 0 || obj.volume > 1) return bad("bad_field");
     if (!isNum(obj.updatedMs)) return bad("bad_field");
     if (!Array.isArray(obj.tracks)) return bad("bad_tracks");
     if (obj.tracks.length > CONST.MAX_TRACKS) return bad("too_many_tracks");
-    const total = obj.counts * CONST.STEPS_PER_COUNT;
+    const total = obj.counts * (obj.grid || CONST.STEPS_PER_COUNT);
     const missing = [];
     const seen = new Set();
     for (const t of obj.tracks) {
@@ -166,14 +186,50 @@
     return { ok: true, song: clone(obj), missing };
   }
 
-  function applyPattern(track, patternNotes, patternCounts, songCounts) {
-    const pTotal = patternCounts * CONST.STEPS_PER_COUNT;
-    const sTotal = songCounts * CONST.STEPS_PER_COUNT;
+  // Switch the song between eighths (2) and sixteenths (4). Going finer is
+  // lossless; going coarser snaps each note to the nearest eighth (halves round
+  // up), keeps at least one square of length, and drops duplicates. `moved` is
+  // true when any note changed because of that.
+  function setGrid(song, grid) {
+    const out = clone(song);
+    const from = song.grid || CONST.STEPS_PER_COUNT;
+    let moved = false;
+    if (CONST.GRIDS.indexOf(grid) < 0 || grid === from) return { song: out, moved };
+    out.grid = grid;
+    out.updatedMs = Date.now();
+    const total = out.counts * grid;
+    out.tracks.forEach((t) => {
+      if (grid > from) {
+        const f = grid / from;
+        t.notes.forEach((n) => { n.step *= f; n.len *= f; });
+      } else {
+        const f = from / grid;
+        const kept = [];
+        t.notes.forEach((n) => {
+          const step = Math.min(Math.floor((n.step + f / 2) / f), total - 1);
+          const len = Math.max(1, Math.min(Math.round(n.len / f), total - step));
+          if (step !== n.step / f || len !== n.len / f) moved = true;
+          if (kept.some((k) => k.step === step && k.pitch === n.pitch)) { moved = true; return; }
+          kept.push({ step, pitch: n.pitch, len, vel: n.vel });
+        });
+        t.notes = kept;
+      }
+    });
+    return { song: out, moved };
+  }
+
+  function applyPattern(track, patternNotes, patternCounts, songCounts, patternGrid, songGrid) {
+    const pg = patternGrid || CONST.STEPS_PER_COUNT;
+    const sg = songGrid || CONST.STEPS_PER_COUNT;
+    const pTotal = patternCounts * sg;
+    const sTotal = songCounts * sg;
     for (let off = 0; off < sTotal; off += pTotal) {
       patternNotes.forEach((n) => {
-        const step = n.step + off;
-        if (n.step < pTotal && step < sTotal) {
-          track.notes.push({ step, pitch: n.pitch, len: Math.max(1, Math.min(n.len, sTotal - step)), vel: n.vel });
+        const base = pg === sg ? n.step : Math.floor(n.step * sg / pg);
+        const len = pg === sg ? n.len : Math.max(1, Math.round(n.len * sg / pg));
+        const step = base + off;
+        if (n.step < patternCounts * pg && step < sTotal) {
+          track.notes.push({ step, pitch: n.pitch, len: Math.max(1, Math.min(len, sTotal - step)), vel: n.vel });
         }
       });
     }
@@ -212,6 +268,9 @@
     newSong,
     addTrack,
     totalSteps,
+    NOTE_VALUES,
+    noteSquares,
+    setGrid,
     toggleNote,
     setNoteLength,
     resizeSong,

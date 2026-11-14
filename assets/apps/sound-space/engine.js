@@ -1,8 +1,8 @@
 (function (root) {
   const SS = (root.SoundSpace = root.SoundSpace || {});
 
-  function stepSeconds(tempo) {
-    return 60 / tempo / 2;
+  function stepSeconds(tempo, grid) {
+    return 60 / tempo / (grid || 2);
   }
 
   // Events for notes with fromStep <= step < toStep, honoring mute/solo.
@@ -47,8 +47,8 @@
   function exportFrames(song, times, sampleRate, tailSec) {
     const rate = sampleRate || 44100;
     const tail = tailSec === undefined ? 2 : tailSec;
-    const total = song.counts * SS.model.CONST.STEPS_PER_COUNT;
-    const seconds = total * stepSeconds(song.tempo) * times + tail;
+    const total = SS.model.totalSteps(song);
+    const seconds = total * stepSeconds(song.tempo, song.grid) * times + tail;
     return Math.round(seconds * rate);
   }
 
@@ -665,7 +665,7 @@
     const t = timers || {};
     const setTimer = t.setInterval || ((fn, ms) => root.setInterval(fn, ms));
     const clearTimer = t.clearInterval || ((h) => root.clearInterval(h));
-    const SPC = SS.model.CONST.STEPS_PER_COUNT;
+    const spc = () => song.grid || SS.model.CONST.STEPS_PER_COUNT;
 
     let song = null;
     let master = null;
@@ -680,7 +680,7 @@
     let lastReported = null;
 
     function total() {
-      return song.counts * SPC;
+      return SS.model.totalSteps(song);
     }
 
     function advance() {
@@ -691,7 +691,7 @@
         else ended = true;
       }
       // Tempo changes apply from the next count.
-      if (!ended && step % SPC === 0) stepDur = stepSeconds(song.tempo);
+      if (!ended && step % spc() === 0) stepDur = stepSeconds(song.tempo, song.grid);
     }
 
     function tick() {
@@ -726,7 +726,7 @@
       song = s;
       master = makeMaster(ctx);
       step = ((opts && opts.fromStep) || 0) % total();
-      stepDur = stepSeconds(song.tempo);
+      stepDur = stepSeconds(song.tempo, song.grid);
       nextTime = ctx.currentTime + 0.06;
       ended = false;
       queue = [];
@@ -790,8 +790,8 @@
         });
       }
       const master = makeMaster(ctx);
-      const total = song.counts * SS.model.CONST.STEPS_PER_COUNT;
-      const dur = stepSeconds(song.tempo);
+      const total = SS.model.totalSteps(song);
+      const dur = stepSeconds(song.tempo, song.grid);
       const evs = compileEvents(song, 0, total);
       for (let r = 0; r < times; r++) {
         for (const ev of evs) {
