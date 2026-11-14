@@ -51,6 +51,21 @@ describe("Solar System Sandbox: the physics and numbers", () => {
   });
 });
 
+describe("Solar System Sandbox: the belts", () => {
+  /* each planet's orbit (a) and drawn size (r), and each belt's inner and outer edge, read from the game */
+  const planets = Object.fromEntries([...html.matchAll(/\{ id: "(\w+)",\s+name: "\w+",\s+r: ([\d.]+),\s+a: ([\d.]+),/g)].map(m => [m[1], { r: +m[2], a: +m[3] }]));
+  const belts = [...html.matchAll(/makeBelt\(\d+, ([\d.]+), ([\d.]+),/g)].map(m => [+m[1], +m[2]]);
+  it("puts the asteroid belt between Mars and Jupiter, clear of both planets as they are drawn", () => {
+    const [lo, hi] = belts[0], mars = planets.mars, jup = planets.jupiter;
+    expect(lo).toBeGreaterThan(mars.a + mars.r + 2);
+    expect(hi).toBeLessThan(jup.a - jup.r - 2);
+  });
+  it("puts the Kuiper belt past Neptune", () => {
+    const [lo] = belts[1], nep = planets.neptune;
+    expect(lo).toBeGreaterThan(nep.a + nep.r + 2);
+  });
+});
+
 describe("Solar System Sandbox: the cards", () => {
   const ids = ["sun", "mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune"];
   it("has a card, a weight and inside layers for the Sun and every planet", () => {
