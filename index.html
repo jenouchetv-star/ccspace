@@ -561,7 +561,10 @@ p:last-child{ margin-bottom:0; }
 .guide__aipic img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border:var(--line); border-radius:16px; background:var(--paper-2); }
 .guide__aistages{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px 36px; margin:26px 0 0; padding-top:22px; border-top:1px solid rgba(30,34,38,.14); }
 .guide__aistage{ background:none; border:0; padding:0; }
-.guide__aistage h4{ margin:8px 0 4px; font-size:1.05rem; }
+.guide__aiage{ margin:0; display:flex; align-items:baseline; gap:8px; }
+.guide__aiagenum{ font-size:2.4rem; font-weight:800; line-height:1; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.guide__aiageunit{ font-size:.9rem; font-weight:700; color:var(--ink-mute); }
+.guide__aistage h4{ margin:10px 0 4px; font-size:1.05rem; }
 .guide__aistage p{ margin:0; font-size:.92rem; line-height:1.45; color:var(--ink-mute); }
 .guide__ai .afig{ margin:22px 0 0; background:#FFFBF3; }
 .guide__end{ text-align:center; margin-top:var(--guide-gap); }
@@ -13385,14 +13388,15 @@ function viewGrownUps(sub){
     const ticked = list.filter(a => a.featured);
     const top = (ticked.length ? ticked : list).slice(0, 4);
     const topIds = top.map(a => a.id);
-    const rest = list.filter(a => topIds.indexOf(a.id) < 0);
     const editorsPicks = list.filter(a => a.editorsPick).slice(0, 3);
     const mostRead = articlesMostRead(list);
     const hasSide = !!(mostRead.length || editorsPicks.length);
-    /* Latest is the newest four not already in Top stories (three across when there is no sidebar) */
-    const latest = rest.slice(0, hasSide ? 4 : 3);
-    const pickIds = editorsPicks.map(a => a.id);
-    const more = rest.slice(latest.length).filter(a => pickIds.indexOf(a.id) < 0);
+    /* Latest always starts with the newest article, even when it is also a top story; the rest are the newest not in
+       Top stories, so the banner is not repeated (four in all, three across when there is no sidebar) */
+    const latest = list.slice(0, 1).concat(list.slice(1).filter(a => topIds.indexOf(a.id) < 0)).slice(0, hasSide ? 4 : 3);
+    /* More articles is everything not already shown above or beside it */
+    const shownIds = topIds.concat(latest.map(a => a.id), editorsPicks.map(a => a.id));
+    const more = list.filter(a => shownIds.indexOf(a.id) < 0);
     /* searching or picking a topic swaps Latest and More for the matches, eight to a page */
     const shown = filtering ? found : more;
     const PAGE_SIZE = filtering ? 8 : 9;
@@ -13640,9 +13644,9 @@ function guideAiHTML(){
     + '<div><p style="margin:0">' + slot(G, "aiText") + '</p>'
     + '<p class="guide__asklabel">' + slot(G, "aiAsksLabel") + '</p><ul class="guide__asks">'
     + asks.map(q => '<li>' + ic("message-circle") + '<span>' + E(q) + '</span></li>').join("") + '</ul></div></div>'
-    /* youngest to oldest, so they are in order, each with its ages as a black badge */
+    /* youngest to oldest, each age a big number with "years old" beside it, so it never reads as a grade */
     + '<div class="guide__aistages">' + [1, 2, 3].map(n => '<div class="guide__aistage">'
-        + '<span class="chip chip--ink">' + slot(G, "aiStage" + n + "Badge") + '</span>'
+        + '<p class="guide__aiage"><span class="guide__aiagenum">' + slot(G, "aiStage" + n + "Badge") + '</span> <span class="guide__aiageunit">' + slot(G, "aiAgeUnit") + '</span></p>'
         + '<h4>' + slot(G, "aiStage" + n + "Title") + '</h4>'
         + '<p>' + slot(G, "aiStage" + n + "Text") + '</p></div>').join("") + '</div>'
     + (table ? articleFigureHTML(table) : "")
@@ -23075,13 +23079,14 @@ const PAGE_SLOTS = {
     { key:"aiAsksLabel", section:"Creating with AI", label:"Label over the questions", fb:"Before they press send, ask" },
     { key:"aiAsks", section:"Creating with AI", label:"Questions, one per line", type:"para",
       fb:"Did you try it yourself first?\nAre you asking for a hint, not the answer?\nDid we keep names, addresses and photos out?" },
-    { key:"aiStage1Badge", section:"Creating with AI", label:"Youngest: ages", fb:"Under 6" },
+    { key:"aiAgeUnit", section:"Creating with AI", label:"Words after each age", fb:"years old" },
+    { key:"aiStage1Badge", section:"Creating with AI", label:"Youngest: ages (shown large)", fb:"0–5" },
     { key:"aiStage1Title", section:"Creating with AI", label:"Youngest: title", fb:"Not yet" },
     { key:"aiStage1Text", section:"Creating with AI", label:"Youngest: text", type:"para", fb:"Hands-on play, building and making come first." },
-    { key:"aiStage2Badge", section:"Creating with AI", label:"Middle: ages", fb:"6 to 12" },
+    { key:"aiStage2Badge", section:"Creating with AI", label:"Middle: ages (shown large)", fb:"6–12" },
     { key:"aiStage2Title", section:"Creating with AI", label:"Middle: title", fb:"Together, every time" },
     { key:"aiStage2Text", section:"Creating with AI", label:"Middle: text", type:"para", fb:"Sit side by side, on your account, and talk about what it makes." },
-    { key:"aiStage3Badge", section:"Creating with AI", label:"Oldest: ages", fb:"13 and up" },
+    { key:"aiStage3Badge", section:"Creating with AI", label:"Oldest: ages (shown large)", fb:"13+" },
     { key:"aiStage3Title", section:"Creating with AI", label:"Oldest: title", fb:"Guided independence" },
     { key:"aiStage3Text", section:"Creating with AI", label:"Oldest: text", type:"para", fb:"Set the rules together and keep checking in." },
     { key:"aiArticleId", section:"Creating with AI", label:"Article to link and take the table from (the end of its web address, like art-kids-ai-guide)", fb:"art-kids-ai-guide" },

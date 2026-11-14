@@ -10,7 +10,7 @@ function render(arts, slots){
     aiTitle: "Creating with AI", aiText: "Our guideline.", aiAsksLabel: "Before they press send, ask",
     aiAsks: "Did you try it yourself first?\n\nAre you asking for a hint?", aiArticleId: "art-kids-ai-guide", aiButton: "Read our guide for parents",
     aiStage1Badge: "Under 6", aiStage1Title: "Not yet", aiStage1Text: "Hands-on play first.",
-    aiStage2Badge: "6 to 12", aiStage2Title: "Together, every time", aiStage2Text: "Sit side by side.",
+    aiStage2Badge: "6–12", aiAgeUnit: "years old", aiStage2Title: "Together, every time", aiStage2Text: "Sit side by side.",
     aiStage3Badge: "13 and up", aiStage3Title: "Guided independence", aiStage3Text: "Set the rules together."
   }, slots || {});
   const fn = new Function("slot", "slotText", "slotImg", "db", "ic", "E", "articleFigureHTML",
@@ -86,7 +86,9 @@ describe("the Parent & Teacher Guide's Creating with AI section", () => {
     expect(out).toContain("<li><i:message-circle><span>Did you try it yourself first?</span></li>");
     expect(out.match(/<li>/g).length).toBe(2);   // blank lines are skipped
     for (const k of ["aiStage1Badge", "aiStage2Title", "aiStage3Text"]) expect(out).toContain("<slot:" + k + ">");
-    expect(out).toContain('<span class="chip chip--ink"><slot:aiStage2Badge>6 to 12</span>');   // badges are black
+    /* each age is a big number with "years old" beside it, so it never reads as a grade, and no badge */
+    expect(out).toContain('<p class="guide__aiage"><span class="guide__aiagenum"><slot:aiStage2Badge>6–12</span> <span class="guide__aiageunit"><slot:aiAgeUnit>years old</span></p>');
+    expect(out).not.toContain("chip");
     expect(out).toContain("<figure:table:Nine habits for using AI at home>");   // read from the article, never copied
     expect(out).not.toContain("<figure:stats");
     expect(out).toContain('<a class="btn btn--cyan" href="#/article/art-kids-ai-guide"><i:book-open> <slot:aiButton>');   // the CTA is blue
