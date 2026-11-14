@@ -357,6 +357,36 @@ describe("Sound Space sound making", () => {
       expect(cents, "midi " + midi).toBeLessThan(1);
     }
   });
+  it("a drum hit sounds the same whatever its length", async () => {
+    const stops = (voices, ctx, len, slot, durOf) => {
+      const before = ctx.sources().length;
+      voices.play(Object.assign(evFor("drums", slot), { len, dur: durOf(len) }), 1, ctx.createGain());
+      return ctx.sources().slice(before).map((n) => [n.startedAt, n.stoppedAt]);
+    };
+    for (const slot of [0, 1, 2, 3, 4, 7]) {
+      const c1 = fakeCtx(), c2 = fakeCtx();
+      const v1 = SS.engine.createVoices(c1, stubCatalog(recipeRecords), "samples");
+      const v2 = SS.engine.createVoices(c2, stubCatalog(recipeRecords), "samples");
+      expect(stops(v2, c2, 8, slot, (l) => l * 0.3)).toEqual(stops(v1, c1, 1, slot, (l) => l * 0.3));
+    }
+    const kit = { id: "kit", kind: "kit", source: "recorded", range: [0, 7], samples: { files: ["0.wav", "1.wav"] } };
+    const mk = async () => {
+      const ctx = fakeCtx();
+      ctx.decodeAudioData = async () => ctx.createBuffer(1, 44100, 44100);
+      const v = SS.engine.createVoices(ctx, stubCatalog([kit]), "samples", { fetchArrayBuffer: () => Promise.resolve(new ArrayBuffer(8)) });
+      await v.load("kit");
+      return { ctx, v };
+    };
+    const a = await mk(), b = await mk();
+    const run = ({ ctx, v }, len) => {
+      v.play(Object.assign(evFor("kit", 0), { len, dur: len * 0.3 }), 1, ctx.createGain());
+      return ctx.sources().map((n) => [n.startedAt, n.stoppedAt]);
+    };
+    const one = run(a, 1);
+    expect(one.length).toBeGreaterThan(0);
+    expect(run(b, 8)).toEqual(one);
+  });
+
   it("recording click: one soft tick per count on the audio clock, accent every fourth, none on plain play or export", () => {
     const run = (opts) => {
       const song = SS.model.newSong(); song.counts = 8;

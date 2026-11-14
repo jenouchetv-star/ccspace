@@ -836,7 +836,7 @@ const HELP = [
   ["Recording", "Record what you play", "record count-in click overdub",
     "<p>Press <b>Record</b>, then play the keys or pads. Your notes snap to the nearest square. You hear a soft click on every beat while you record, so you can keep time. With <b>Count-in</b> on, you hear 1, 2, 3, 4 first. With <b>Loop</b> on, recording keeps going and each time round adds more notes. With Loop off, it records once and stops. Recording keeps notes, never sound from a microphone.</p>"],
   ["The grid", "Add and change notes", "grid notes tap square longer length drag",
-    "<p>Tap a square to add a note, and tap a note to take it away. Higher notes are higher up. Drag the right edge of a note to make it longer.</p><p>With the keyboard: the arrow keys move around the grid, " + K("Space") + " or " + K("Enter") + " adds or removes a note, and " + K("Shift") + " with the left and right arrows makes a note shorter or longer.</p>"],
+    "<p>Tap a square to add a note, and tap a note to take it away. Higher notes are higher up. Drag the right edge of a note to make it longer. Pick a note shape above the grid to choose how long the next note will be. On drums, the length shows how long until the next beat, and the drum sounds the same.</p><p>With the keyboard: the arrow keys move around the grid, " + K("Space") + " or " + K("Enter") + " adds or removes a note, and " + K("Shift") + " with the left and right arrows makes a note shorter or longer.</p>"],
   ["The grid", "Counts and speed", "counts length speed tempo beats 4 8 16",
     "<p><b>Counts</b> sets how long the song is: 4, 8 or 16 counts. Each count has 2 squares. Making it shorter hides the rest, and making it longer again brings it back. <b>Speed</b> is how many counts a minute, from 60 to 160.</p>"],
   ["Start", "Show and hide parts", "hide show panel focus tracks library beats overview keys pads fold collapse layout",
@@ -1434,7 +1434,7 @@ function renderOverview(){
 function rowsFor(t){
   const inst = instOf(t), kind = kindOf(t);
   if (kind === "kit") return (inst && inst.slots ? inst.slots : I.KIT_SLOTS).map((name, i) => ({ pitch:i, label:name, drum:true }));
-  if (kind === "fx") return [{ pitch:0, label:inst ? inst.name : "Sound", drum:true }];
+  if (kind === "fx") return [{ pitch:0, label:inst ? inst.name : "Sound", drum:true, fx:true }];
   let lo = inst && inst.range ? inst.range[0] : 36, hi = inst && inst.range ? inst.range[1] : 84;
   t.notes.forEach(n => { lo = Math.min(lo, n.pitch); hi = Math.max(hi, n.pitch); });
   const rows = [];
@@ -1460,7 +1460,7 @@ function renderEditor(scrollGrid){
     + '<button type="button" class="btn" data-act="clear" aria-label="Clear this track" title="Clear this track"><i data-lucide="eraser"></i><span>Clear</span></button>'
     + '<button type="button" class="btn" data-act="remove-track" aria-label="Remove this track" title="Remove this track"><i data-lucide="trash-2"></i><span>Remove</span></button>'
     + '</span>';
-  if (kind === "pitched"){ $("#edhead").insertBefore(nl, $("#edhead .acts")); renderNoteLen(); }
+  if (kind === "pitched" || kind === "kit"){ $("#edhead").insertBefore(nl, $("#edhead .acts")); renderNoteLen(); }
   renderGrid(scrollGrid);
   renderPlayArea();
   icons();
@@ -1479,7 +1479,7 @@ function cellsHtml(t, r, total){
   t.notes.forEach(n => {
     if (n.pitch !== pitch || n.step >= total) return;
     const len = Math.min(n.len, total - n.step);
-    h += '<span class="note" aria-hidden="true" data-step="' + n.step + '" data-count="' + Math.floor(n.step / spc()) + '" style="grid-column:' + (n.step + 1) + ' / span ' + len + '">' + (row.drum ? "" : '<i class="grip"></i>') + '</span>';
+    h += '<span class="note" aria-hidden="true" data-step="' + n.step + '" data-count="' + Math.floor(n.step / spc()) + '" style="grid-column:' + (n.step + 1) + ' / span ' + len + '">' + (row.fx ? "" : '<i class="grip"></i>') + '</span>';
   });
   return h;
 }
@@ -1591,7 +1591,7 @@ function toggleAt(r, c){
   if (n) M.toggleNote(t, n.step, pitch);
   else {
     M.toggleNote(t, c, pitch, 0.9);
-    if (kindOf(t) === "pitched"){
+    if (kindOf(t) !== "fx"){
       const want = M.noteSquares(pickedNote, spc()) || 1;
       const next = t.notes.filter(x => x.pitch === pitch && x.step > c).reduce((m, x) => Math.min(m, x.step), M.totalSteps(song));
       M.setNoteLength(t, c, pitch, Math.min(want, next - c), M.totalSteps(song));
@@ -1603,7 +1603,7 @@ function toggleAt(r, c){
   renderOverview();
 }
 function lengthen(r, c, by){
-  const t = selTrack(); if (!t || !rows[r] || rows[r].drum) return;
+  const t = selTrack(); if (!t || !rows[r] || rows[r].fx) return;
   const n = coverAt(t, c, rows[r].pitch); if (!n) return;
   const before = n.len;
   M.setNoteLength(t, n.step, n.pitch, n.len + by, M.totalSteps(song));

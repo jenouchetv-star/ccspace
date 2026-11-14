@@ -127,6 +127,17 @@ describe("Sound Space app page", () => {
     expect(fn).not.toContain("Math.round");
   });
 
+  it("the note-length picker is for pitched and drum tracks, not effects", () => {
+    expect(html).toContain('if (kind === "pitched" || kind === "kit"){ $("#edhead").insertBefore(nl');
+    const fn = section(/function toggleAt\(/, "function lengthen");
+    expect(fn).toMatch(/kindOf\(t\) !== "fx"/);
+    expect(fn).not.toMatch(/kindOf\(t\) === "pitched"\)\{\s*const want/);
+    const len = section(/function lengthen\(/, "const gridEl");
+    expect(len).not.toContain("drum) return");
+    expect(len).toContain("rows[r].fx");
+    expect(html).not.toMatch(/row\.drum \? "" : '<i class="grip">/);
+  });
+
   it("loads the built modules", () => {
     for (const f of ["model.js", "engine.js", "wav.js", "instruments.js"]) {
       expect(html).toContain(`<script src="sound-space/${f}"></script>`);
