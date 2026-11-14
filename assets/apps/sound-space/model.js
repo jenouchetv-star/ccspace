@@ -47,7 +47,6 @@
   function addTrack(song, instrumentId) {
     if (song.tracks.length >= CONST.MAX_TRACKS) return null;
     const track = { id: makeId(), instrumentId, volume: 0.8, mute: false, solo: false, notes: [] };
-    Object.defineProperty(track, "_song", { value: song, enumerable: false, writable: true });
     song.tracks.push(track);
     return track;
   }
@@ -62,17 +61,16 @@
     return true;
   }
 
-  // Clamps the length so the note never runs past the song end. The end comes
-  // from the optional 5th argument, else from the song the track was added to
-  // (a hidden back-reference that cloning drops), else the longest song.
+  // Clamps the length so the note never runs past the song end. `total` (the
+  // song's total steps) is required; without a valid one nothing changes.
   function setNoteLength(track, step, pitch, len, total) {
+    if (!isInt(total) || total < 1 || !isNum(len)) return;
     const n = track.notes.find((x) => x.step === step && x.pitch === pitch);
     if (!n) return;
-    const end = typeof total === "number" ? total
-      : track._song ? totalSteps(track._song)
-      : Math.max.apply(null, CONST.COUNTS) * CONST.STEPS_PER_COUNT;
-    n.len = Math.max(1, Math.min(Math.floor(len), end - step));
+    n.len = Math.max(1, Math.min(Math.floor(len), total - step));
   }
+
+  const hasNote = (list, n) => list.some((x) => x.step === n.step && x.pitch === n.pitch);
 
   function resizeSong(song, counts, stash) {
     const st = stash || {};
@@ -86,13 +84,17 @@
         const hidden = t.notes.filter((n) => n.step >= newTotal);
         t.notes = t.notes.filter((n) => n.step < newTotal);
         t.notes.forEach((n) => { n.len = Math.max(1, Math.min(n.len, newTotal - n.step)); });
-        if (hidden.length) st[t.id] = (st[t.id] || []).concat(hidden);
+        if (hidden.length) {
+          const list = st[t.id] || [];
+          hidden.forEach((n) => { if (!hasNote(list, n)) list.push(n); });
+          st[t.id] = list;
+        }
       } else if (newTotal > oldTotal) {
         const stashed = st[t.id];
         if (stashed && stashed.length) {
           const back = stashed.filter((n) => n.step < newTotal);
           const rest = stashed.filter((n) => n.step >= newTotal);
-          t.notes = t.notes.concat(back);
+          back.forEach((n) => { if (!hasNote(t.notes, n)) t.notes.push(n); });
           if (rest.length) st[t.id] = rest; else delete st[t.id];
         } else {
           const base = t.notes.slice();
@@ -122,14 +124,25 @@
     if (obj.schemaVersion !== CONST.SCHEMA_VERSION) return bad("bad_schema_version");
     if (CONST.COUNTS.indexOf(obj.counts) < 0) return bad("bad_counts");
     if (!isNum(obj.tempo) || obj.tempo < CONST.TEMPO_MIN || obj.tempo > CONST.TEMPO_MAX) return bad("bad_tempo");
+    if (typeof obj.id !== "string" || !obj.id) return bad("bad_field");
+    if (typeof obj.title !== "string" || obj.title.length > 60) return bad("bad_field");
+    if (typeof obj.loop !== "boolean" || typeof obj.countIn !== "boolean") return bad("bad_field");
+    if (!isNum(obj.volume) || obj.volume < 0 || obj.volume > 1) return bad("bad_field");
+    if (!isNum(obj.updatedMs)) return bad("bad_field");
     if (!Array.isArray(obj.tracks)) return bad("bad_tracks");
     if (obj.tracks.length > CONST.MAX_TRACKS) return bad("too_many_tracks");
     const total = obj.counts * CONST.STEPS_PER_COUNT;
     const missing = [];
+    const seen = new Set();
     for (const t of obj.tracks) {
       if (!t || typeof t !== "object" || Array.isArray(t)) return bad("bad_track");
       if (Object.keys(t).some((k) => TRACK_KEYS.indexOf(k) < 0)) return bad("unknown_field");
-      if (typeof t.instrumentId !== "string") return bad("bad_track");
+      if (typeof t.id !== "string" || !t.id) return bad("bad_field");
+      if (seen.has(t.id)) return bad("duplicate_track_id");
+      seen.add(t.id);
+      if (typeof t.instrumentId !== "string" || !t.instrumentId) return bad("bad_field");
+      if (!isNum(t.volume) || t.volume < 0 || t.volume > 1) return bad("bad_field");
+      if (typeof t.mute !== "boolean" || typeof t.solo !== "boolean") return bad("bad_field");
       if (!Array.isArray(t.notes)) return bad("bad_notes");
       for (const n of t.notes) {
         if (!n || typeof n !== "object" || Array.isArray(n)) return bad("bad_note");

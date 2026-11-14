@@ -55,7 +55,7 @@ describe("Sound Space model", () => {
 
   it("a note never runs past the end", () => {
     const { m, song, t } = mk(8, [14]);
-    m.setNoteLength(t, 14, 60, 5);
+    m.setNoteLength(t, 14, 60, 5, m.totalSteps(song));
     expect(t.notes[0].len).toBe(2);
     expect(m.totalSteps(song)).toBe(16);
   });
@@ -136,5 +136,54 @@ describe("Sound Space model", () => {
     expect(h.undo()).toBeNull();
     expect(h.redo().title).toBe("s1");
     expect(h.canRedo()).toBe(true);
+  });
+
+  it("note length still clamps on a resized (cloned) song", () => {
+    const { m, song } = mk(8, [6]);
+    const { song: short } = m.resizeSong(song, 4);
+    const t = short.tracks[0];
+    m.setNoteLength(t, 6, 60, 5, m.totalSteps(short));
+    expect(t.notes[0].len).toBe(2);
+    m.setNoteLength(t, 6, 60, NaN, m.totalSteps(short));
+    m.setNoteLength(t, 6, 60, 1, undefined);
+    expect(t.notes[0].len).toBe(2);
+  });
+
+  it("opening a file rejects bad or missing basic fields", () => {
+    const m = M();
+    const ids = new Set(["piano"]);
+    const good = () => { const s = m.newSong(); m.addTrack(s, "piano"); return JSON.parse(JSON.stringify(s)); };
+    let o = good(); o.volume = "x";
+    expect(m.validateSong(o, ids).ok).toBe(false);
+    o = good(); delete o.id;
+    expect(m.validateSong(o, ids).ok).toBe(false);
+    o = good(); delete o.tracks[0].id;
+    expect(m.validateSong(o, ids).ok).toBe(false);
+    o = good(); m.addTrack(o, "piano"); o.tracks[1].id = o.tracks[0].id;
+    expect(m.validateSong(JSON.parse(JSON.stringify(o)), ids).ok).toBe(false);
+    o = good(); o.title = "x".repeat(61);
+    expect(m.validateSong(o, ids).ok).toBe(false);
+    o = good(); o.loop = 1;
+    expect(m.validateSong(o, ids).ok).toBe(false);
+    o = good(); o.tracks[0].mute = "no";
+    expect(m.validateSong(o, ids).ok).toBe(false);
+  });
+
+  it("shorten, undo, lengthen leaves no duplicate notes", () => {
+    const { m, song } = mk(8, [1, 13]);
+    const h = m.createHistory();
+    h.push(song);
+    const r1 = m.resizeSong(song, 4);
+    h.push(r1.song);
+    const back = h.undo();
+    const r2 = m.resizeSong(back, 4, r1.stash);
+    const r3 = m.resizeSong(r2.song, 8, r2.stash);
+    const keys = r3.song.tracks[0].notes.map((n) => n.step + ":" + n.pitch);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(stepsOf(r3.song.tracks[0])).toEqual([1, 13]);
+    const st = {};
+    m.resizeSong(song, 4, st);
+    m.resizeSong(song, 4, st);
+    expect(Object.values(st)[0].length).toBe(1);
   });
 });
