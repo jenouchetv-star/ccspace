@@ -11,17 +11,19 @@
 <script src="sound-space/engine.js"></script>
 <script src="sound-space/wav.js"></script>
 <script src="sound-space/instruments.js"></script>
+<script src="sound-space/icons.js"></script>
+<script src="sound-space/library.js"></script>
+<script src="sound-space/lessons.js"></script>
 <!--
   Sound Space (Chike's Creative Space): kids make their own short songs. Add tracks, pick an instrument for each,
   then play the piano keys or drum pads, record what you play (notes, never audio), or tap notes into the grid.
   A song is 4, 8 or 16 counts long and loops while you build it up.
 
-  The music logic lives in sound-space/*.js (model, engine, wav, instruments); this page is the screens.
-  No microphone, camera or speech anywhere. Sound only starts after a tap, click or key press.
+  The music logic lives in sound-space/*.js (model, engine, wav, instruments); the content in icons.js (the drawn
+  instrument pictures), library.js (Beats and patterns, the starter song) and lessons.js (Music lessons); this page
+  is the screens. No microphone, camera or speech anywhere. Sound only starts after a tap, click or key press.
 
   Hooks for later work:
-  - TASK 8: instIcon() swaps to SS.icons.svg(id); openPicker() gets the full picker; renderLibrary() fills
-    #ss-library; openStarter() and openLessons() read SS.library.STARTERS and SS.lessons.LESSONS.
   - TASK 9: saveSong/listSongs/loadSong/deleteSong (the "Saving" section) gain the account copy (soundCloudCall).
   - TASK 10: openExport() and openFile() get the WAV export and the full file checks.
 -->
@@ -243,12 +245,14 @@ body.kbd-collapsed #kbd{ display:none; }
 .left{ border-right:1px solid var(--line); box-shadow:inset -1px 0 0 var(--hi); padding:14px 12px; display:flex; flex-direction:column; gap:10px; }
 .right{ border-left:1px solid var(--line); box-shadow:inset 1px 0 0 var(--hi); padding:14px 12px; }
 .tracklist{ display:flex; flex-direction:column; gap:10px; }
-/* an instrument's picture: a raised tile in its category's color (the drawn icons arrive later) */
-.tile{ width:36px; height:36px; border-radius:var(--r); display:grid; place-items:center; color:#fff; flex:none; font-weight:900; font-size:15px;
-  background:linear-gradient(color-mix(in srgb,var(--tc) 70%,#fff),var(--tc) 55%,color-mix(in srgb,var(--tc) 70%,#000));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 2px 0 color-mix(in srgb,var(--tc) 45%,#000),0 4px 8px rgba(0,0,0,.3); text-shadow:0 1px 1px rgba(0,0,0,.35); }
-.tile svg{ width:72%; height:72%; }
-.tile--sm{ width:20px; height:20px; border-radius:var(--r-sm); font-size:11px; box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 1px 0 color-mix(in srgb,var(--tc) 45%,#000); }
+/* an instrument's picture: its drawn icon (two tones of the category color) on a raised, lightly tinted key cap */
+.tile{ width:36px; height:36px; border-radius:var(--r); display:grid; place-items:center; color:color-mix(in srgb,var(--tc) 50%,#000); flex:none; font-weight:900; font-size:15px;
+  border:1px solid color-mix(in srgb,var(--tc) 40%,#FFFFFF); background:linear-gradient(#FFFFFF,color-mix(in srgb,var(--tc) 20%,#F4F4F8));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 2px 0 color-mix(in srgb,var(--tc) 45%,#000),0 4px 8px rgba(0,0,0,.25); }
+:root[data-theme="dark"] .tile{ border-color:color-mix(in srgb,var(--tc) 55%,#000); background:linear-gradient(color-mix(in srgb,var(--tc) 10%,#ECECF2),color-mix(in srgb,var(--tc) 28%,#C9C9D3)); }
+.tile svg{ width:76%; height:76%; display:block; }
+.tile--sm{ width:20px; height:20px; border-radius:var(--r-sm); font-size:11px; box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 1px 0 color-mix(in srgb,var(--tc) 45%,#000); }
+.tile--sm svg{ width:84%; height:84%; }
 .tile--md{ width:28px; height:28px; border-radius:var(--r-sm); font-size:13px; }
 .tile--art{ width:100%; height:62px; border-radius:var(--r); font-size:24px; }
 .track{ --tc:var(--keys); display:grid; grid-template-columns:1fr auto; gap:8px 6px; padding:9px; border-radius:var(--r-sm); border:1px solid var(--btn-edge);
@@ -361,10 +365,41 @@ body.kbd-collapsed #kbd{ display:none; }
 .pad b{ font-size:12px; line-height:1.2; } .pad small{ font:700 10px ui-monospace,Consolas,monospace; opacity:.85; }
 .pad.down{ transform:translateY(3px); filter:brightness(1.25); box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 0 0 color-mix(in srgb,var(--tc) 40%,#000),0 0 18px var(--tc); }
 
-/* library (beats and patterns): filled in by the next update */
+/* library (beats and patterns): filters, then one raised card per pattern */
 .lib__head{ display:flex; align-items:center; gap:8px; }
 .lib__close{ margin-left:auto; }
-.lib__soon{ margin-top:14px; padding:14px; border-radius:var(--r); background:var(--well); box-shadow:var(--press); color:var(--mute); font-size:12.5px; line-height:1.5; }
+.lib__filters{ display:flex; flex-direction:column; gap:8px; margin:12px 0 10px; }
+.chips{ display:flex; flex-wrap:wrap; gap:6px; }
+.chip{ display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:var(--r-sm); border:1px solid var(--btn-edge); background:linear-gradient(var(--btn-a),var(--btn-b));
+  box-shadow:var(--raise); font-weight:800; font-size:11.5px; color:var(--text); white-space:nowrap; max-width:100%; }
+.chip span{ overflow:hidden; text-overflow:ellipsis; }
+.chip[aria-pressed="true"]{ background:linear-gradient(var(--accent-a),var(--accent-b)); border-color:var(--accent-edge); color:#fff; box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 2px 0 var(--accent-drop); }
+.chip:disabled{ opacity:.4; cursor:default; box-shadow:none; }
+.chip .led{ width:8px; height:8px; }
+.chip[aria-pressed="true"] .led{ background:#5EE6D8; box-shadow:0 0 6px #14B8A6; }
+.lib__row{ display:flex; gap:6px; }
+.lib__sel, .lib__q{ height:30px; min-width:0; border:0; border-radius:var(--r-sm); background:var(--well); box-shadow:var(--press); color:var(--text); font-size:12.5px; padding:0 9px; outline:none; }
+.lib__sel{ flex:0 0 46%; font-weight:700; }
+.lib__q{ flex:1; }
+.lib__sel:focus-visible, .lib__q:focus{ box-shadow:var(--press),0 0 0 2px var(--accent); }
+.lib__count{ margin:0 0 8px; font-size:11.5px; color:var(--mute); }
+.lib__list{ display:flex; flex-direction:column; gap:8px; }
+.pat{ --tc:var(--keys); display:grid; grid-template-columns:minmax(0,1fr) auto auto; grid-template-areas:"nm nm nm" "pv pl use"; gap:7px 8px; align-items:center; padding:9px 9px 9px 12px;
+  border-radius:var(--r-sm); border:1px solid var(--btn-edge); background:linear-gradient(var(--card-a),var(--card-b)); box-shadow:inset 3px 0 0 var(--tc),var(--raise); }
+.pat__nm{ grid-area:nm; min-width:0; }
+.pat__nm b{ display:block; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pat__nm small{ display:block; font-size:11px; color:var(--mute); }
+.pat__pv{ grid-area:pv; height:28px; padding:3px; border-radius:var(--r-pad); background:var(--well); box-shadow:var(--press); min-width:0; }
+.pat__pv svg{ display:block; width:100%; height:100%; }
+.pat .btn{ grid-area:use; height:28px; padding:0 12px; }
+.pl{ grid-area:pl; width:28px; height:28px; border-radius:50%; display:grid; place-items:center; padding:0; border:0; flex:none;
+  background:radial-gradient(circle at 50% 30%,#5EE6D8,#14B8A6 60%,#0B8378); color:#05312D; box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 2px 0 #075E57; }
+.pl svg{ width:12px; height:12px; stroke-width:2.6; fill:#05312D; }
+.pl:active{ transform:translateY(1px); box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 1px 0 #075E57; }
+.pl[aria-pressed="true"] .lucide-play, .pl:not([aria-pressed="true"]) .lucide-square{ display:none; }
+.pl[aria-pressed="true"]{ box-shadow:inset 0 2px 4px rgba(0,0,0,.3),0 0 0 3px rgba(94,230,216,.4); }
+.lib__more{ width:100%; margin-top:10px; }
+.lib__none{ margin:6px 0; padding:14px; border-radius:var(--r); background:var(--well); box-shadow:var(--press); color:var(--mute); font-size:12.5px; line-height:1.5; }
 .only-narrow{ display:none !important; }
 
 /* dialogs: picker, ask, help */
@@ -389,6 +424,37 @@ body.kbd-collapsed #kbd{ display:none; }
 .ins__pl{ position:absolute; right:16px; top:16px; width:28px; height:28px; border-radius:50%; display:grid; place-items:center; padding:0; border:0;
   background:radial-gradient(circle at 50% 30%,#5EE6D8,#14B8A6 60%,#0B8378); color:#05312D; box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 2px 0 #075E57; }
 .ins__pl svg{ width:12px; height:12px; stroke-width:2.6; fill:#05312D; }
+.cat .tile{ width:24px; height:24px; border-radius:var(--r-sm); box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 1px 0 color-mix(in srgb,var(--tc) 45%,#000); }
+.cat .tile svg{ width:82%; height:82%; }
+/* Music lessons: the list, then a tip card beside the control each step is about */
+.lessons{ width:min(820px,100%); }
+.lessons__list{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:16px 16px 18px; overflow:auto; }
+.lesson{ display:flex; flex-direction:column; align-items:flex-start; gap:6px; padding:14px; text-align:left; color:var(--text); border:1px solid var(--btn-edge); border-radius:var(--r);
+  background:linear-gradient(var(--card-a),var(--card-b)); box-shadow:var(--raise); transition:transform .12s ease, box-shadow .12s ease; }
+.lesson:hover, .lesson:focus-visible{ transform:translateY(-2px); box-shadow:var(--pop); }
+.lesson__n{ width:30px; height:30px; border-radius:var(--r-sm); display:grid; place-items:center; font-weight:900; font-size:14px; color:#fff;
+  background:linear-gradient(var(--accent-a),var(--accent-b)); box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 2px 0 var(--accent-drop); }
+.lesson b{ font-size:14px; }
+.lesson small{ font-size:12px; color:var(--mute); line-height:1.45; }
+.lesson .word{ font-size:11.5px; font-weight:800; color:var(--accent-text); letter-spacing:.02em; }
+.tip{ position:fixed; z-index:40; left:16px; top:16px; width:min(290px,calc(100vw - 24px)); padding:12px 14px 14px; border-radius:var(--r); color:var(--text);
+  background:linear-gradient(var(--panel-a),var(--panel-b)); border:1px solid var(--accent-edge); box-shadow:var(--pop),0 0 0 3px var(--accent-weak);
+  transition:left .3s cubic-bezier(.2,.7,.3,1), top .3s cubic-bezier(.2,.7,.3,1); }
+.tip__head{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.tip__head .btn{ margin-left:auto; width:28px; height:28px; }
+.tip__step{ font-size:11px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--mute); }
+.tip b.tip__title{ display:block; font-size:14px; margin-bottom:4px; }
+.tip p{ margin:0 0 10px; font-size:13px; line-height:1.5; }
+.tip__word{ padding:8px 10px; border-radius:var(--r-sm); background:var(--accent-weak); font-size:12.5px; line-height:1.5; margin:0 0 10px; }
+.tip__word b{ color:var(--accent-text); }
+.tip__foot{ display:flex; align-items:center; gap:8px; }
+.tip__dots{ display:flex; gap:5px; margin-right:auto; }
+.tip__dots i{ width:9px; height:9px; border-radius:50%; background:var(--well); box-shadow:var(--press); }
+.tip__dots i.done{ background:var(--accent); box-shadow:none; }
+.tip__dots i.now{ background:var(--accent-text); box-shadow:0 0 0 2px var(--accent-weak); }
+.tip__ok{ font-size:12px; font-weight:800; color:var(--accent-text); display:inline-flex; align-items:center; gap:4px; }
+.tip__ok svg{ width:15px; height:15px; stroke-width:2.6; }
+.lesson-on{ outline:3px solid var(--accent) !important; outline-offset:3px; }
 .ask__box{ width:min(380px,100%); background:linear-gradient(var(--panel-a),var(--panel-b)); color:var(--text); border:1px solid var(--btn-edge); border-radius:var(--r); box-shadow:var(--pop); padding:20px; }
 .ask__box h2{ margin:0 0 6px; font-size:16px; }
 .ask__box p{ margin:0 0 18px; font-size:13.5px; line-height:1.5; color:var(--mute); }
@@ -515,6 +581,7 @@ body.kbd-collapsed #kbd{ display:none; }
   .label-wide{ display:none; }
   .appmark--editor .appmark__name, .appmark--editor .appmark__beta{ display:none; }
   .inst{ grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .lessons__list{ grid-template-columns:repeat(2,minmax(0,1fr)); }
   /* the library opens as a sheet from the bottom */
   .lib-open .right{ position:fixed; left:0; right:0; bottom:0; height:min(70vh,560px); z-index:45; border:1px solid var(--btn-edge); border-radius:var(--r) var(--r) 0 0; box-shadow:var(--pop); }
   .lib-open .lib__scrim{ display:block; }
@@ -567,11 +634,13 @@ body.kbd-collapsed #kbd{ display:none; }
   .pad{ height:72px; }
   .starts{ grid-template-columns:repeat(2,minmax(0,1fr)); }
   .inst{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .lessons__list{ grid-template-columns:minmax(0,1fr); }
   .home__scroll{ padding:20px 14px 40px; }
 }
 @media (prefers-reduced-motion:reduce){
   .launch, .splash, .signin, .splash__bar i, #toast{ animation:none; transition:none; }
   .note.hot, .strip i.hot, .rec.on{ animation:none; }
+  .tip, .lesson{ transition:none; } .lesson:hover, .lesson:focus-visible{ transform:none; }
   .note.hot, .strip i.hot{ filter:brightness(1.25); }
   .btn:active, .round:active, .addtrack:active, .start:active{ transform:none; }
 }
@@ -680,7 +749,19 @@ body.kbd-collapsed #kbd{ display:none; }
     <div class="lib__scrim" data-act="lib-close"></div>
     <aside class="panel right" id="ss-library" aria-label="Beats and patterns">
       <div class="lib__head"><h3>Beats and patterns</h3><button type="button" class="btn icon btn--ghost lib__close" data-act="toggle-lib" aria-label="Hide beats and patterns" title="Hide beats and patterns  ]"><i data-lucide="panel-right-close"></i></button></div>
-      <div id="lib-body"><p class="lib__soon">Premade beats, bass lines, melodies and chords for the selected track are on their way. Soon you can press play to hear one, then Use to put it on your track.</p></div>
+      <div id="lib-body">
+        <div class="lib__filters">
+          <div class="chips"><button type="button" class="chip" id="lib-for" aria-pressed="true" title="Show only patterns that suit the selected track"><span class="led" aria-hidden="true"></span><span id="lib-for-label">For this track</span></button></div>
+          <div class="chips" id="lib-types" role="group" aria-label="Kind of pattern"></div>
+          <div class="lib__row">
+            <label class="sr-only" for="lib-style">Style</label><select class="lib__sel" id="lib-style"></select>
+            <label class="sr-only" for="lib-q">Search patterns</label><input class="lib__q" id="lib-q" type="search" placeholder="Search" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <p class="lib__count" id="lib-count" role="status" aria-live="polite"></p>
+        <div class="lib__list" id="lib-list" role="list"></div>
+        <button type="button" class="btn lib__more" id="lib-more" hidden>Show more</button>
+      </div>
     </aside>
   </div>
 </section>
@@ -748,6 +829,18 @@ body.kbd-collapsed #kbd{ display:none; }
     <div class="inst" id="picker-list" role="tabpanel"></div>
   </div>
 </div>
+<div id="lessons" class="modal" hidden>
+  <div class="picker lessons" role="dialog" aria-modal="true" aria-labelledby="lessons-title">
+    <div class="picker__head"><h2 id="lessons-title">Music lessons</h2><span class="hint">A few minutes each. Every lesson teaches one music word.</span>
+      <button type="button" class="btn icon" data-act="lessons-close" aria-label="Close" title="Close"><i data-lucide="x"></i></button></div>
+    <div class="lessons__list" id="lessons-list"></div>
+  </div>
+</div>
+<aside id="tip" class="tip" aria-labelledby="tip-title" aria-live="polite" hidden>
+  <div class="tip__head"><span class="tip__step" id="tip-step"></span><button type="button" class="btn icon btn--ghost" data-act="lesson-quit" aria-label="Leave the lesson" title="Leave the lesson"><i data-lucide="x"></i></button></div>
+  <b class="tip__title" id="tip-title"></b>
+  <div id="tip-body"></div>
+</aside>
 <div id="ask" class="modal" hidden>
   <div class="ask__box" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-text">
     <h2 id="ask-title"></h2><p id="ask-text"></p>
@@ -771,7 +864,7 @@ body.kbd-collapsed #kbd{ display:none; }
 <script>
 (function(){
 "use strict";
-const SS = window.SoundSpace, M = SS.model, E = SS.engine, I = SS.instruments;
+const SS = window.SoundSpace, M = SS.model, E = SS.engine, I = SS.instruments, L = SS.library, LS = SS.lessons;
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
@@ -839,6 +932,10 @@ const HELP = [
     "<p>Tap a square to add a note, and tap a note to take it away. Higher notes are higher up. Drag the right edge of a note to make it longer. Pick a note shape above the grid to choose how long the next note will be. On drums, a longer hit just draws a longer bar. The drum sounds the same.</p><p>With the keyboard: the arrow keys move around the grid, " + K("Space") + " or " + K("Enter") + " adds or removes a note, and " + K("Shift") + " with the left and right arrows makes a note shorter or longer.</p>"],
   ["The grid", "Counts and speed", "counts length speed tempo beats 4 8 16",
     "<p><b>Counts</b> sets how long the song is: 4, 8 or 16 counts. Each count has 2 squares. Making it shorter hides the rest, and making it longer again brings it back. <b>Speed</b> is how many counts a minute, from 60 to 160.</p>"],
+  ["Start", "Beats and patterns", "beats patterns library premade use drum bass melody chords style",
+    "<p>The <b>Beats and patterns</b> panel has more than 300 ready-made drum beats, bass lines, melodies, chords and effect patterns. <b>For this track</b> shows the ones that suit the track you picked. Press the play button to hear one, then <b>Use</b> to put it on your track. You can change its notes after, and undo takes it back.</p>"],
+  ["Start", "Music lessons", "lessons learn lesson word beat melody bass loop tempo harmony",
+    "<p>Pick <b>Music lessons</b> on the first screen. Each lesson opens a song and shows a tip next to the button it is about. Do what the tip says and <b>Next step</b> lights up. You learn one music word in each lesson, and the song you made stays in Recent.</p>"],
   ["Start", "Show and hide parts", "hide show panel focus tracks library beats overview keys pads fold collapse layout",
     "<p>The buttons at the top show or hide the <b>Tracks</b> panel (" + K("[") + ") and the <b>Beats and patterns</b> panel (" + K("]") + "). <b>Focus</b> (" + K("\\") + ") hides both and folds the overview away; press it again to bring them back. The arrows on the <b>Overview</b> and <b>Piano keys</b> bars fold those parts away to give the grid more room. Sound Space remembers your layout on this device.</p>"],
   ["Saving", "Saving and undo", "save undo redo mistake",
@@ -1016,6 +1113,7 @@ function noteOn(key, track, pitch, evTs){
   try { srcs = voices.play(ev, c.currentTime, g) || []; } catch(e){}
   held.set(key, { g, srcs, oneShot, rec: recordDown(track, pitch, oneShot, evTs) });
   lightKey(key, track, pitch, true);
+  lessonEvent(oneShot ? "pads" : "keys");
 }
 function noteOff(key, evTs){
   const h = held.get(key); if (!h) return;
@@ -1145,6 +1243,7 @@ function undo(){ if (!hist || busy()) return; const s = hist.undo(); if (s){ rep
 function redo(){ if (!hist || busy()) return; const s = hist.redo(); if (s){ replaceSong(s); renderUndo(); } }
 
 function openSong(s, opts){
+  endLesson();
   stopAll();
   song = s; stash = {}; playedOnce = false;
   clearTimeout(saveTimer); saveTimer = 0;
@@ -1162,6 +1261,7 @@ function openSong(s, opts){
   if (opts && opts.missing && opts.missing.length) toast("Some instruments in this song aren’t in Sound Space: " + opts.missing.join(", ") + ". Those tracks stay silent.");
 }
 async function showHome(){
+  endLesson();
   stopAll();
   if (song) await saveNow();
   $("#editor").hidden = true; $("#home").hidden = false;
@@ -1195,11 +1295,14 @@ function play(){
   if (!song.tracks.length){ toast("Add a track first, then press Play."); return; }
   if (!audio()) return;
   if (player.playing || countingIn) return;
+  stopPatternPreview();
   player.start(song, { fromStep:0 });
   if (!playedOnce){ playedOnce = true; count("song_played"); }
+  lessonEvent("play");
   renderTransport();
 }
 function stopAll(){
+  stopPatternPreview();
   cancelCountIn();
   if (recording) stopRecording();
   if (player && player.playing) player.stop();
@@ -1247,6 +1350,7 @@ function beginRecording(){
   /* Loop off: record one pass, then stop recording (the song plays to its end) */
   if (!song.loop) recTimers.push(setTimeout(() => { if (recording){ stopRecording(); renderTransport(); } }, (recTotal * recStepSec + 0.06) * 1000));
   $("#rec-live").textContent = "Recording";
+  lessonEvent("record");
   renderTransport();
 }
 function stopRecording(){
@@ -1353,6 +1457,7 @@ function renderAll(scrollGrid){
   renderOverview();
   renderEditor(scrollGrid);
   renderUndo();
+  renderLibrary();
   setPlayhead(curStep);
   icons();
 }
@@ -1596,6 +1701,7 @@ function toggleAt(r, c){
     }
     blip(t.instrumentId, pitch, kindOf(t) === "pitched" ? E.stepSeconds(song.tempo, song.grid) : 0.5);
   }
+  lessonEvent("grid");
   commit();
   paintRow(pitch);
   renderOverview();
@@ -1734,9 +1840,10 @@ applyLayout();
    Keyboard: computer keys play, Ctrl+Z / Ctrl+Y undo and redo, Space plays and stops
    ============================================================ */
 const typing = el => el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !/^(range|button|checkbox|radio)$/.test(el.type)));
-const dialogOpen = () => !$("#picker").hidden || !$("#ask").hidden || !$("#help").hidden || !$("#launch").hidden;
+const dialogOpen = () => !$("#picker").hidden || !$("#ask").hidden || !$("#help").hidden || !$("#launch").hidden || !$("#lessons").hidden;
 document.addEventListener("keydown", e => {
   if (!$("#help").hidden && e.key === "Escape"){ e.preventDefault(); closeHelp(); return; }
+  if (!$("#lessons").hidden && e.key === "Escape"){ e.preventDefault(); closeLessons(); return; }
   if (!$("#picker").hidden && e.key === "Escape"){ e.preventDefault(); closePicker(); return; }
   if (e.key === "Escape" && document.body.classList.contains("lib-open")){ document.body.classList.remove("lib-open"); applyLayout(); return; }
   if (!song || $("#editor").hidden || dialogOpen() || typing(e.target)) return;
@@ -1865,7 +1972,7 @@ $("#title-in").addEventListener("change", e => { if (!song) return; song.title =
 $("#title-in").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); e.target.blur(); } });
 
 /* ============================================================
-   Add a track / Change instrument. TASK 8 replaces this simple picker with the full one (icons, a play button on every card).
+   Add a track / Change instrument: six tabs, a card per instrument with its picture, a play button and its source.
    ============================================================ */
 let pickerMode = "add", pickerCat = "drums", pickerBack = null;
 function openPicker(mode){
@@ -1881,7 +1988,7 @@ function openPicker(mode){
   const first = $('#picker-cats [aria-selected="true"]'); if (first) first.focus();
 }
 function paintPicker(){
-  $("#picker-cats").innerHTML = I.CATEGORIES.map(c => '<button type="button" class="cat" role="tab" id="pc-' + c.id + '" aria-selected="' + (c.id === pickerCat) + '" aria-controls="picker-list" tabindex="' + (c.id === pickerCat ? 0 : -1) + '" data-cat="' + c.id + '" style="--tc:var(--' + c.id + ')"><span class="d" aria-hidden="true"></span>' + esc(c.name) + ' <small>' + I.LIST.filter(x => x.category === c.id).length + '</small></button>').join("");
+  $("#picker-cats").innerHTML = I.CATEGORIES.map(c => '<button type="button" class="cat" role="tab" id="pc-' + c.id + '" aria-selected="' + (c.id === pickerCat) + '" aria-controls="picker-list" tabindex="' + (c.id === pickerCat ? 0 : -1) + '" data-cat="' + c.id + '" style="--tc:var(--' + c.id + ')"><span class="tile" aria-hidden="true">' + SS.icons.svg(c.id) + '</span>' + esc(c.name) + ' <small>' + I.LIST.filter(x => x.category === c.id).length + '</small></button>').join("");
   $("#picker-list").setAttribute("aria-labelledby", "pc-" + pickerCat);
   const t = selTrack(), curId = pickerMode === "change" && t ? t.instrumentId : "";
   $("#picker-list").innerHTML = I.LIST.filter(x => x.category === pickerCat).map(x =>
@@ -1920,20 +2027,249 @@ $("#picker-cats").addEventListener("keydown", e => {
 });
 
 /* ============================================================
-   Library, starters, lessons and export: hooks for the next updates
+   Beats and patterns: SS.library.PATTERNS, filtered by "For this track", type, style and search
    ============================================================ */
-/* TASK 8: fill #ss-library (#lib-body) with SS.library.PATTERNS for the selected track */
-function renderLibrary(){}
-/* TASK 8: starter songs come from SS.library.STARTERS */
+const TYPE_CHIPS = [["all", "All"], ["drums", "Drum beats"], ["bass", "Bass lines"], ["melody", "Melodies"], ["chords", "Chords"], ["fx", "Effects"]];
+const TYPE_TC = { drums:"drums", bass:"bass", melody:"keys", chords:"strings", fx:"fx" };
+/* what plays a preview when no track is picked yet: sounds made in code, so nothing has to load */
+const PREVIEW_WITH = { drums:"drum-machine", bass:"synth-bass", melody:"electric-piano", chords:"electric-piano", fx:"pop" };
+const LIB_PAGE = 40;
+const lib = { forTrack:true, type:"all", style:"all", q:"", shown:LIB_PAGE, key:"" };
+$("#lib-style").innerHTML = '<option value="all">All styles</option>' + L.STYLES.map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join("");
+function libFits(){ const inst = instOf(selTrack()); return lib.forTrack && inst ? L.typesFor(inst) : null; }
+function libMatches(){
+  const fit = libFits(), words = lib.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return L.PATTERNS.filter(p => (!fit || fit.indexOf(p.type) >= 0) && (lib.type === "all" || p.type === lib.type) && (lib.style === "all" || p.style === lib.style)
+    && words.every(w => (p.name + " " + p.style + " " + L.TYPE_NAMES[p.type]).toLowerCase().indexOf(w) >= 0));
+}
+/* a small picture of a pattern's notes: drums by sound, tunes by pitch */
+function patPicture(p){
+  const total = p.counts * p.grid, col = CAT[TYPE_TC[p.type]].color;
+  const ps = p.notes.map(n => n.pitch), lo = Math.min.apply(null, ps), hi = Math.max.apply(null, ps);
+  const hits = p.type === "drums" || p.type === "fx", rowsN = hits ? 8 : Math.max(1, hi - lo + 1), rh = 22 / rowsN;
+  let h = '<svg viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true">';
+  p.notes.forEach(n => {
+    const row = hits ? (p.type === "fx" ? 3.5 : n.pitch) : hi - n.pitch;
+    h += '<rect x="' + (n.step / total * 100).toFixed(2) + '" y="' + (row * rh).toFixed(2) + '" width="' + Math.max(0.8, n.len / total * 100 - 0.4).toFixed(2) + '" height="' + Math.max(1.6, rh - 0.4).toFixed(2) + '" rx=".6" fill="' + col + '"/>';
+  });
+  return h + '</svg>';
+}
+function renderLibrary(force){
+  if (!song) return;
+  const t = selTrack(), inst = instOf(t), fit = libFits();
+  const key = [t ? t.id + ":" + t.instrumentId : "", lib.forTrack, lib.type, lib.style, lib.q, lib.shown].join("|");
+  if (!force && key === lib.key) return;
+  /* a new track or new filters start the list from the top; Show more keeps the place */
+  if (key.slice(0, key.lastIndexOf("|")) !== lib.key.slice(0, lib.key.lastIndexOf("|"))) $("#ss-library").scrollTop = 0;
+  lib.key = key;
+  const forBtn = $("#lib-for");
+  forBtn.disabled = !inst;
+  forBtn.setAttribute("aria-pressed", String(lib.forTrack && !!inst));
+  $("#lib-for-label").textContent = t && inst ? "For " + trackLabel(t) + " (" + inst.name + ")" : "For this track";
+  $("#lib-types").innerHTML = TYPE_CHIPS.map(c => '<button type="button" class="chip" data-lib-type="' + c[0] + '" aria-pressed="' + (lib.type === c[0]) + '"'
+    + (fit && c[0] !== "all" && fit.indexOf(c[0]) < 0 ? " disabled" : "") + '>' + esc(c[1]) + '</button>').join("");
+  $("#lib-style").value = lib.style;
+  const list = libMatches(), shown = list.slice(0, lib.shown);
+  $("#lib-count").textContent = list.length === 1 ? "1 pattern" : list.length + " patterns";
+  $("#lib-list").innerHTML = shown.length ? shown.map(p => {
+    const meta = p.style + " · " + L.TYPE_NAMES[p.type] + " · " + p.counts + " counts" + (p.grid === 4 ? " · quick notes" : "");
+    return '<div class="pat" role="listitem" style="--tc:var(--' + TYPE_TC[p.type] + ')">'
+      + '<div class="pat__nm"><b>' + esc(p.name) + '</b><small>' + esc(meta) + '</small></div>'
+      + '<div class="pat__pv">' + patPicture(p) + '</div>'
+      + '<button type="button" class="pl" data-lib-play="' + esc(p.id) + '" aria-pressed="' + !!(pv && pv.id === p.id) + '" aria-label="Hear ' + esc(p.name) + '" title="Hear it"><i data-lucide="play"></i><i data-lucide="square"></i></button>'
+      + '<button type="button" class="btn" data-lib-use="' + esc(p.id) + '" aria-label="Use ' + esc(p.name) + '" title="Put it on the selected track">Use</button></div>';
+  }).join("") : '<p class="lib__none">No patterns match. Try another style or word' + (fit ? ', or turn off “For this track”' : "") + '.</p>';
+  $("#lib-more").hidden = list.length <= lib.shown;
+  icons();
+}
+/* the play button on a pattern: hear it once on the selected track's instrument, at the song's speed */
+let pv = null;   // the pattern playing: { id, g, srcs, timer }
+function markPreview(){ $$("#lib-list [data-lib-play]").forEach(b => b.setAttribute("aria-pressed", String(!!(pv && pv.id === b.dataset.libPlay)))); }
+function stopPatternPreview(){
+  if (!pv) return;
+  const p = pv; pv = null;
+  clearTimeout(p.timer);
+  if (ctx){
+    const now = ctx.currentTime;
+    try { p.g.gain.setTargetAtTime(0, now, 0.02); } catch(e){}
+    p.srcs.forEach(s => { try { s.stop(now + 0.12); } catch(e){} });
+    setTimeout(() => { try { p.g.disconnect(); } catch(e){} }, 300);
+  }
+  markPreview();
+}
+function previewPattern(id){
+  const p = L.byId(id); if (!p) return;
+  if (pv && pv.id === id){ stopPatternPreview(); return; }
+  const c = audio(); if (!c || busy()) return;
+  stopPatternPreview();
+  if (player && player.playing){ player.stop(); setPlayhead(-1); renderTransport(); }
+  const t = selTrack(), useId = t && I.byId(t.instrumentId) ? t.instrumentId : PREVIEW_WITH[p.type], inst = I.byId(useId);
+  const go = () => {
+    if (pv) return;
+    const g = c.createGain(); g.connect(liveBus);
+    const sp = E.stepSeconds(song ? song.tempo : 100, p.grid), t0 = c.currentTime + 0.05, vol = t ? t.volume : 0.8, srcs = [];
+    L.fitPattern(p, inst).forEach(n => {
+      try { (voices.play({ instrumentId:useId, pitch:n.pitch, len:n.len, vel:n.vel, gain:vol * n.vel, dur: inst.kind === "pitched" ? n.len * sp : 0.6 }, t0 + n.step * sp, g) || []).forEach(s => srcs.push(s)); } catch(e){}
+    });
+    pv = { id, g, srcs, timer: setTimeout(stopPatternPreview, (p.counts * p.grid * sp + 0.6) * 1000) };
+    markPreview();
+  };
+  if (inst.source === "recorded" && loadState.get(useId) !== "ok"){
+    voices.load(useId).then(r => { loadState.set(useId, r && r.ok ? "ok" : "failed"); if (r && r.ok) go(); else toast("That sound didn’t load. Check your connection and try again."); });
+  } else go();
+}
+/* Use: the pattern replaces the selected track's notes, repeated to fill the song or cut at its end. One undo. */
+async function usePattern(id){
+  const p = L.byId(id); if (!p || !song || busy()) return;
+  if (!selTrack()){ toast("Add a track first, then press Use."); return; }
+  if (p.grid > spc()){
+    if (!(await ask("Switch to Sixteenths?", "This pattern has quick sixteenth notes, so the song needs the Sixteenths grid. Your notes stay just where they are. Undo changes it back.", "Switch"))) return;
+    if (busy() || !song) return;
+    const from = spc();
+    song = M.setGrid(song, 4).song;
+    convertStash(from, 4);
+  }
+  const t = selTrack(); if (!t) return;
+  stopPatternPreview();
+  t.notes = [];
+  delete stash[t.id];
+  M.applyPattern(t, L.fitPattern(p, instOf(t)), p.counts, song.counts, p.grid, spc());
+  commit(); renderAll();
+  lessonEvent("use");
+  toast("“" + p.name + "” is on " + trackLabel(t) + ". Undo takes it back.");
+}
+$("#lib-body").addEventListener("click", e => {
+  const ty = e.target.closest("[data-lib-type]"); if (ty){ lib.type = ty.dataset.libType; lib.shown = LIB_PAGE; renderLibrary(); return; }
+  const pl = e.target.closest("[data-lib-play]"); if (pl) return previewPattern(pl.dataset.libPlay);
+  const use = e.target.closest("[data-lib-use]"); if (use) return usePattern(use.dataset.libUse);
+  if (e.target.closest("#lib-for")){ lib.forTrack = !lib.forTrack; lib.shown = LIB_PAGE; renderLibrary(); return; }
+  if (e.target.closest("#lib-more")){ lib.shown += LIB_PAGE; renderLibrary(); }
+});
+$("#lib-style").addEventListener("change", e => { lib.style = e.target.value; lib.shown = LIB_PAGE; renderLibrary(); });
+$("#lib-q").addEventListener("input", e => { lib.q = e.target.value; lib.shown = LIB_PAGE; renderLibrary(); });
+
+/* ============================================================
+   Starter song and Music lessons
+   ============================================================ */
 function openStarter(id){
-  const list = SS.library && SS.library.STARTERS;
-  const st = list && list.find(s => s.id === id);
-  if (!st){ toast("This starter song is coming in a moment."); return; }
+  const st = L.STARTERS.find(s => s.id === id);
+  if (!st){ toast("That starter song couldn’t be opened."); return; }
   const s = clone(st.song); s.id = M.newSong().id; s.updatedMs = Date.now();
   openSong(s, { save:true });
 }
-/* TASK 8: Music lessons come from SS.lessons.LESSONS */
-function openLessons(){ toast("Music lessons are coming in a moment."); }
+let lessonsBack = null;
+function openLessons(){
+  lessonsBack = document.activeElement;
+  $("#lessons-list").innerHTML = LS.LESSONS.map((l, i) => '<button type="button" class="lesson" data-lesson="' + i + '">'
+    + '<span class="lesson__n" aria-hidden="true">' + (i + 1) + '</span><b>' + esc(l.title) + '</b>'
+    + '<span class="word">Music word: ' + esc(l.word) + '</span><small>' + l.steps.length + ' small steps, about ' + (l.steps.length + 1) + ' minutes</small></button>').join("");
+  $("#lessons").hidden = false;
+  icons();
+  const first = $("#lessons-list .lesson"); if (first) first.focus();
+}
+function closeLessons(){ $("#lessons").hidden = true; if (lessonsBack && lessonsBack.focus) try { lessonsBack.focus(); } catch(e){} }
+$("#lessons").addEventListener("click", e => {
+  if (e.target.id === "lessons" || e.target.closest('[data-act="lessons-close"]')) return closeLessons();
+  const b = e.target.closest("[data-lesson]"); if (b){ $("#lessons").hidden = true; startLesson(+b.dataset.lesson); }
+});
+/* A lesson: its song opens (and saves, so it stays in Recent), then a tip card sits beside the control each step is
+   about. The step's check runs a few times a second; once it passes, Next step lights up. */
+let lesson = null, lessonTimer = 0, lessonHl = null;
+function lessonEvent(name){ if (lesson && !lesson.finished) lesson.events[name] = (lesson.events[name] || 0) + 1; }
+function startLesson(i){
+  const l = LS.LESSONS[i]; if (!l) return;
+  const s = clone(l.startSong); s.id = M.newSong().id; s.updatedMs = Date.now();
+  openSong(s, { save:true });
+  lesson = { l, n:i, step:0, events:{}, ok:false, finished:false };
+  $("#tip").hidden = false;
+  paintTip();
+  clearInterval(lessonTimer); lessonTimer = setInterval(lessonTick, 250);
+  lessonTick();
+}
+function endLesson(){
+  if (!lesson) return;
+  lesson = null;
+  clearInterval(lessonTimer); lessonTimer = 0;
+  $("#tip").hidden = true;
+  if (lessonHl){ lessonHl.classList.remove("lesson-on"); lessonHl = null; }
+}
+function lessonUi(){ return { selectedTrackId:sel, playing:!!(player && player.playing), recording, events:lesson.events }; }
+function lessonTick(){
+  if (!lesson) return;
+  if (!song || $("#editor").hidden){ endLesson(); return; }
+  if (!lesson.finished){
+    let ok = false;
+    try { ok = !!lesson.l.steps[lesson.step].check(song, lessonUi()); } catch(e){}
+    if (ok !== lesson.ok){ lesson.ok = ok; paintTip(); }
+  }
+  placeTip();
+}
+function paintTip(){
+  if (!lesson) return;
+  const l = lesson.l, n = l.steps.length;
+  $("#tip-title").textContent = "Lesson " + (lesson.n + 1) + ": " + l.title;
+  if (lesson.finished){
+    $("#tip-step").textContent = "Lesson done";
+    $("#tip-body").innerHTML = '<div class="tip__word">Your music word: <b>' + esc(l.word) + '</b>. ' + esc(l.meaning) + '</div>'
+      + '<p>Your song is saved in Recent, so you can keep working on it.</p>'
+      + '<div class="tip__foot"><button type="button" class="btn" data-act="lesson-more">More lessons</button><button type="button" class="btn btn--primary" data-act="lesson-quit">Keep playing</button></div>';
+  } else {
+    const last = lesson.step === n - 1;
+    $("#tip-step").textContent = "Step " + (lesson.step + 1) + " of " + n;
+    let dots = "";
+    for (let k = 0; k < n; k++) dots += '<i class="' + (k < lesson.step || (k === lesson.step && lesson.ok) ? "done" : k === lesson.step ? "now" : "") + '"></i>';
+    $("#tip-body").innerHTML = '<p>' + esc(l.steps[lesson.step].text) + '</p>'
+      + '<div class="tip__foot"><span class="tip__dots" aria-hidden="true">' + dots + '</span>'
+      + (lesson.ok ? '<span class="tip__ok"><i data-lucide="check"></i>Done</span>' : "")
+      + '<button type="button" class="btn btn--primary" data-act="lesson-next"' + (lesson.ok ? "" : " disabled") + '>' + (last ? "Finish" : "Next step") + '</button></div>';
+  }
+  icons();
+  placeTip();
+}
+function nextLessonStep(){
+  if (!lesson || !lesson.ok) return;
+  if (lesson.step < lesson.l.steps.length - 1){ lesson.step++; lesson.events = {}; lesson.ok = false; }
+  else { lesson.finished = true; saveNow(); }
+  paintTip();
+}
+/* the tip sits beside its control (right, then left, then below or above); a control that is hidden gets the tip
+   in the corner instead */
+function placeTip(){
+  const tip = $("#tip"); if (!lesson || tip.hidden) return;
+  const st = lesson.finished ? null : lesson.l.steps[lesson.step];
+  let el = st ? $(st.target) : null;
+  if (el && el.id === "ss-grid") el = $("#gscroll");
+  const rect = el && !el.closest("[hidden]") ? el.getBoundingClientRect() : null;
+  const on = rect && rect.width > 0 && rect.height > 0 ? el : null;
+  if (on !== lessonHl){ if (lessonHl) lessonHl.classList.remove("lesson-on"); lessonHl = on; if (on) on.classList.add("lesson-on"); }
+  const W = window.innerWidth, H = window.innerHeight, w = tip.offsetWidth, h = tip.offsetHeight, gap = 14;
+  /* a small control (a button, the keys, the pads) gets the tip below or above it, so the controls in the same row
+     stay free; a big area (the grid, a panel) gets it at its side, or in its top corner when neither side fits */
+  const small = on && rect.height < 160 && rect.width < 520;
+  const spots = !on ? [] : [
+    ["below", rect.bottom + gap + h <= H - 8, rect.left, rect.bottom + gap],
+    ["above", rect.top - gap - h >= 8, rect.left, rect.top - gap - h],
+    ["right", rect.right + gap + w <= W - 8, rect.right + gap, rect.top],
+    ["left", rect.left - gap - w >= 8, rect.left - gap - w, rect.top]
+  ];
+  const order = small ? ["below", "above", "right", "left"] : ["right", "left", "below", "above"];
+  const spot = order.map(k => spots.find(s => s[0] === k)).find(s => s && s[1]);
+  let x, y;
+  if (!on){ x = W - w - 16; y = H - h - 16; }
+  else if (spot){ x = spot[2]; y = spot[3]; }
+  else { x = rect.right - w - 12; y = rect.top + 12; }
+  x = Math.round(clamp(x, 8, Math.max(8, W - w - 8))); y = Math.round(clamp(y, 8, Math.max(8, H - h - 8)));
+  if (tip.style.left !== x + "px") tip.style.left = x + "px";
+  if (tip.style.top !== y + "px") tip.style.top = y + "px";
+}
+window.addEventListener("resize", placeTip);
+$("#tip").addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b || b.disabled) return;
+  e.stopPropagation();
+  if (b.dataset.act === "lesson-next") nextLessonStep();
+  else if (b.dataset.act === "lesson-quit") endLesson();
+  else if (b.dataset.act === "lesson-more"){ showHome().then(openLessons); }
+});
 /* TASK 10: the WAV export dialog */
 function openExport(){ toast("Export is coming in a moment."); }
 
