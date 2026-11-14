@@ -70,7 +70,8 @@
     const o = opts || {};
     const g = ctx.createGain();
     const d = Math.max(dur, 0.02);
-    const att = Math.max(o.attack || ATTACK, ATTACK);
+    // Attack never outlasts the note, so every voice ends at 0 before it stops.
+    const att = Math.min(Math.max(o.attack || ATTACK, ATTACK), d * 0.8);
     const p = Math.max(peak, 0.0002);
     g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(p, when + att);
@@ -181,6 +182,8 @@
       }
       const src = ctx.createBufferSource();
       src.buffer = buf;
+      // Averaging makes the loop P - 0.5 samples long; retune so pitch is exact.
+      src.playbackRate.value = (freq * (period - 0.5)) / sr;
       const e = envelope(ctx, dest, when, Math.max(dur, 0.1), vel * 0.6, { ring: 0.4 });
       src.start(when);
       src.stop(e.end);
@@ -569,14 +572,25 @@
     return api;
   }
 
-  // voicesFactory(ctx) => voices (or a promise of them), already loaded.
+  // voicesFactory(ctx) => voices (or a promise). Recorded instruments are
+  // loaded here; resolves to { buffer, failed: [instrumentIds that did not
+  // load, which render silent] } so the caller can warn.
   function renderOffline(song, times, voicesFactory, opts) {
     const Ctor =
       (opts && opts.OfflineAudioContext) ||
       root.OfflineAudioContext ||
       root.webkitOfflineAudioContext;
     const ctx = new Ctor(2, exportFrames(song, times), 44100);
-    return Promise.resolve(voicesFactory(ctx)).then((voices) => {
+    return Promise.resolve(voicesFactory(ctx)).then(async (voices) => {
+      const ids = [];
+      for (const t of song.tracks) if (ids.indexOf(t.instrumentId) < 0) ids.push(t.instrumentId);
+      const failed = [];
+      if (voices.load) {
+        const results = await Promise.all(ids.map((id) => voices.load(id)));
+        results.forEach((r, i) => {
+          if (!r || !r.ok) failed.push(ids[i]);
+        });
+      }
       const master = makeMaster(ctx);
       const total = song.counts * SS.model.CONST.STEPS_PER_COUNT;
       const dur = stepSeconds(song.tempo);
@@ -590,7 +604,8 @@
           );
         }
       }
-      return ctx.startRendering();
+      const buffer = await ctx.startRendering();
+      return { buffer, failed };
     });
   }
 

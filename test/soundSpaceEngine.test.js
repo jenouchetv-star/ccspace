@@ -58,11 +58,14 @@ describe("Sound Space engine", () => {
 // ---- Task 4: sound making -------------------------------------------------
 
 function makeParam(v = 0) {
+  const events = [];
+  const rec = (k) => (val, t) => events.push({ k, v: val, t });
   return {
     value: v,
-    setValueAtTime() {},
-    linearRampToValueAtTime() {},
-    exponentialRampToValueAtTime() {},
+    events,
+    setValueAtTime: rec("set"),
+    linearRampToValueAtTime: rec("lin"),
+    exponentialRampToValueAtTime: rec("exp"),
     setTargetAtTime() {},
     cancelScheduledValues() {},
   };
@@ -93,6 +96,7 @@ function fakeCtx(sampleRate = 44100) {
     currentTime: 0,
     sampleRate,
     nodes: [],
+    decodeAudioData: async () => ctx.createBuffer(1, 100, 44100),
     destination: { kind: "destination" },
   };
   const source = (kind, extra) => () =>
@@ -213,12 +217,19 @@ describe("Sound Space sound making", () => {
       tick();
     }
     expect(ctx.sources().length).toBeGreaterThan(0);
+    // Scheduled notes still sound after "now" until stop() is called.
+    expect(ctx.sources().some((s) => s.stoppedAt > ctx.currentTime)).toBe(true);
+    const stopMoment = ctx.currentTime;
     player.stop();
     expect(player.playing).toBe(false);
     expect(tick).toBe(null);
+    // Only stop() can pull every source's end back to the stop moment.
     for (const s of ctx.sources()) {
-      expect(s.stoppedAt !== null || s.disconnected).toBe(true);
+      expect(s.stoppedAt).toBeLessThanOrEqual(stopMoment);
+      expect(s.disconnected).toBe(true);
     }
+    const comp = ctx.nodes.find((n) => n.kind === "comp");
+    expect(comp.disconnected).toBe(true);
   });
 
   it("a recorded instrument that fails to load says so and is never swapped for a code sound", async () => {
@@ -278,25 +289,87 @@ describe("Sound Space sound making", () => {
     const t = SS.model.addTrack(song, "ep");
     SS.model.toggleNote(t, 0, 60, 1);
     SS.model.toggleNote(t, 4, 64, 1);
-    let made = null;
-    class FakeOffline {
-      constructor(ch, len, rate) {
-        Object.assign(this, fakeCtx(rate));
-        this.args = [ch, len, rate];
-        made = this;
-      }
-      startRendering() {
-        return Promise.resolve({ fake: true });
-      }
-    }
-    const buf = await SS.engine.renderOffline(
+    const { Offline, last } = fakeOffline();
+    const res = await SS.engine.renderOffline(
       song,
       1,
       (ctx) => SS.engine.createVoices(ctx, stubCatalog(recipeRecords), "samples"),
-      { OfflineAudioContext: FakeOffline }
+      { OfflineAudioContext: Offline }
     );
-    expect(buf.fake).toBe(true);
-    expect(made.args).toEqual([2, SS.engine.exportFrames(song, 1), 44100]);
-    expect(made.sources().length).toBeGreaterThanOrEqual(2);
+    expect(res.buffer.fake).toBe(true);
+    expect(res.failed).toEqual([]);
+    expect(last().args).toEqual([2, SS.engine.exportFrames(song, 1), 44100]);
+    expect(last().sources().length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renderOffline loads recorded instruments itself and reports ones that fail", async () => {
+    const recs = [
+      { id: "grand", kind: "pitched", source: "recorded", range: [36, 96], samples: { notes: [60] } },
+      { id: "harp", kind: "pitched", source: "recorded", range: [36, 96], samples: { notes: [60] } },
+    ];
+    const song = SS.model.newSong();
+    for (const id of ["grand", "harp"]) {
+      const tr = SS.model.addTrack(song, id);
+      SS.model.toggleNote(tr, 0, 60, 1);
+    }
+    const { Offline, last } = fakeOffline();
+    const res = await SS.engine.renderOffline(
+      song,
+      1,
+      (ctx) =>
+        SS.engine.createVoices(ctx, stubCatalog(recs), "samples", {
+          fetchArrayBuffer: (u) =>
+            u.includes("/harp/") ? Promise.reject(new Error("404")) : Promise.resolve(new ArrayBuffer(8)),
+        }),
+      { OfflineAudioContext: Offline }
+    );
+    expect(res.failed).toEqual(["harp"]);
+    // grand sounded, harp stayed silent
+    expect(last().sources().length).toBe(1);
+  });
+
+  it("a long attack is clamped so the voice ends silent before it stops", () => {
+    const ctx = fakeCtx();
+    const recs = [{ id: "pad", kind: "pitched", source: "code", range: [36, 96], recipe: { type: "subtractive", attack: 0.3 } }];
+    const voices = SS.engine.createVoices(ctx, stubCatalog(recs), "samples");
+    voices.play({ ...evFor("pad", 60), dur: 0.25 }, 0, ctx.createGain());
+    const env = ctx.nodes.find((n) => n.kind === "gain" && n.gain.events.length > 2);
+    const stopAt = Math.max(...ctx.sources().map((s) => s.stoppedAt));
+    const evs = env.gain.events.slice().sort((a, b) => a.t - b.t);
+    expect(evs.every((e) => e.t <= stopAt)).toBe(true);
+    expect(evs[evs.length - 1].v).toBe(0);
+    // peak is reached before the hold/release begins: values never drop and rise again
+    const peakIdx = evs.findIndex((e) => e.v === Math.max(...evs.map((x) => x.v)));
+    expect(evs.slice(peakIdx).every((e, i, a) => i === 0 || e.v <= a[i - 1].v)).toBe(true);
+  });
+
+  it("plucks are in tune across the range", () => {
+    const recs = [{ id: "gtr", kind: "pitched", source: "code", range: [36, 96], recipe: { type: "pluck" } }];
+    for (const midi of [60, 72, 84, 96]) {
+      const ctx = fakeCtx();
+      const voices = SS.engine.createVoices(ctx, stubCatalog(recs), "samples");
+      voices.play(evFor("gtr", midi), 0, ctx.createGain());
+      const src = ctx.sources()[0];
+      const target = 440 * Math.pow(2, (midi - 69) / 12);
+      const P = Math.max(2, Math.round(44100 / target));
+      const eff = (44100 * src.playbackRate.value) / (P - 0.5);
+      const cents = Math.abs(1200 * Math.log2(eff / target));
+      expect(cents, "midi " + midi).toBeLessThan(1);
+    }
   });
 });
+
+function fakeOffline() {
+  let made = null;
+  class Offline {
+    constructor(ch, len, rate) {
+      Object.assign(this, fakeCtx(rate));
+      this.args = [ch, len, rate];
+      made = this;
+    }
+    startRendering() {
+      return Promise.resolve({ fake: true });
+    }
+  }
+  return { Offline, last: () => made };
+}
