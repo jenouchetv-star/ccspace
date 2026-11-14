@@ -77,6 +77,16 @@ describe("Sound Space app page", () => {
     expect(html).not.toMatch(/data-pv="lullaby"|lullaby:/);
   });
 
+  it("pictures Music lessons as a lesson in progress: the tip card over a tune, drawn from the real lesson 2", () => {
+    expect(html).toContain("lessons: lessonPreview()");
+    const fn = html.split("function lessonPreview(")[1].split("\nfunction ")[0];
+    expect(fn).toContain("SS.lessons.LESSONS[1]");                 // the title, word and step count come from the lesson itself
+    expect(fn).toContain('"STEP 2 OF " + ');
+    expect(fn).toContain("CAT.strings.color");                    // the lessons' purple
+    expect(fn).not.toMatch(/orange|green/i);
+    expect(html).not.toContain('<path d="M54 22L94 14"');          // the old beamed-notes picture is gone
+  });
+
   it("has every control the design names", () => {
     const ids = [
       "ss-add-track", "ss-play", "ss-record", "ss-stop", "ss-loop", "ss-counts", "ss-tempo", "ss-countin",
