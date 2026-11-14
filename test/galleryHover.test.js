@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 
-/* Owner: the Recent cards on Home get a hover state, the same lift the starter tiles have, in both apps. */
+/* Owner: the Recent cards on Home get a hover state, the same lift the starter tiles have.
+   Art Space's own copy of this check is test/artSpaceHover.test.js (it shipped first). */
 const apps = {
-  "Art Space": ["../assets/apps/art-studio.html", "img"],
   "Sound Space": ["../assets/apps/sound-space.html", "svg"]
 };
 
