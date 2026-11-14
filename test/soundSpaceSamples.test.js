@@ -92,6 +92,28 @@ describe("Sound Space recorded samples", () => {
     }
   });
 
+  it("manifest rows match the current catalog names and slots, with nothing left over", () => {
+    const byId = new Map(recorded.map((i) => [i.id, i]));
+    let expectedRows = 0;
+    for (const inst of recorded) expectedRows += expectedFiles(inst).length;
+    expect(manifest.length).toBe(expectedRows);
+    for (const row of manifest) {
+      const [id, stem] = row.soundId.split("/");
+      const inst = byId.get(id);
+      expect(inst, `catalog instrument for ${row.soundId}`).toBeTruthy();
+      expect(row.localUrl).toBe(`${id}/${stem}.wav`);
+      expect(expectedFiles(inst)).toContain(`${stem}.wav`);
+      expect(row.category).toBe(inst.category);
+      let name = inst.name;
+      if (inst.kind === "kit") name += ` - ${inst.slots[Number(stem)]}`;
+      else if (inst.kind === "pitched") name += ` - MIDI ${stem}`;
+      expect(row.displayName, row.soundId).toBe(name);
+    }
+    const dirs = readdirSync(root).filter((n) => statSync(new URL(n, root)).isDirectory());
+    for (const d of dirs) expect(byId.has(d), `sample folder ${d} has no catalog instrument`).toBe(true);
+    expect(dirs.length).toBe(recorded.length);
+  });
+
   it("the prepared sounds stay small", () => {
     const { total, big } = walk(root);
     expect(total).toBeLessThan(25 * 1024 * 1024);

@@ -90,12 +90,12 @@ def fetch_head_of_wav(url, need_seconds):
     return head + more
 
 
-def ensure_license(repo):
-    """Verify the repo LICENSE is CC0, save evidence to the raw dir, return text."""
+def ensure_license(repo, commit):
+    """Verify the repo LICENSE (at the pinned commit) is CC0, save evidence, return text."""
     os.makedirs(RAW, exist_ok=True)
-    p = os.path.join(RAW, "LICENSE-%s.txt" % repo)
+    p = os.path.join(RAW, "LICENSE-%s-%s.txt" % (repo, commit[:8]))
     if not os.path.exists(p):
-        data = http_get("https://raw.githubusercontent.com/sgossner/%s/HEAD/LICENSE" % repo)
+        data = http_get("https://raw.githubusercontent.com/sgossner/%s/%s/LICENSE" % (repo, commit))
         with open(p, "wb") as f:
             f.write(data)
     text = open(p, "rb").read().decode("utf-8", "replace")
@@ -255,7 +255,14 @@ def main():
     spec = json.load(open(SOURCES, encoding="utf-8"))
     repos = spec["repos"]
     for repo in repos:
-        ensure_license(repo)
+        ensure_license(repo, repos[repo]["commit"])
+    # remove sample folders of instruments that are no longer in the mapping
+    import shutil
+    if os.path.isdir(OUT):
+        for name in os.listdir(OUT):
+            full = os.path.join(OUT, name)
+            if os.path.isdir(full) and name not in spec["instruments"]:
+                shutil.rmtree(full)
     manifest = []
     total_bytes = 0
     downloaded = 0

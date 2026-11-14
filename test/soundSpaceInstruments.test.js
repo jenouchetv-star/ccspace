@@ -49,7 +49,7 @@ describe("Sound Space instrument catalog", () => {
 
   it("the instruments that need accuracy are recordings", () => {
     for (const n of [
-      "Grand piano", "Upright piano", "Violin", "Cello", "Trumpet", "Trombone", "Tuba",
+      "Grand piano", "Upright piano", "Violin", "Trumpet", "Trombone", "Tuba",
       "Flute", "Clarinet", "Tenor saxophone", "Classic kit", "Hand drums",
     ]) {
       const x = I.LIST.find((i) => i.name === n);
@@ -71,7 +71,7 @@ describe("Sound Space instrument catalog", () => {
 
   it("rulings: kinds of the special instruments and of every effect", () => {
     expect(I.byId("timpani").kind).toBe("pitched");
-    expect(I.byId("triangles-and-bells").kind).toBe("pitched");
+    expect(I.byId("hand-chimes").kind).toBe("pitched");
     expect(I.byId("gongs-and-cymbals").kind).toBe("kit");
     for (const x of I.LIST.filter((i) => i.category === "fx")) expect(x.kind).toBe("fx");
   });

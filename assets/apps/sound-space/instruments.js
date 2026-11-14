@@ -59,17 +59,17 @@
 
   // ---- Drums and percussion ------------------------------------------------
   recKit("drums", "Classic kit");
-  recKit("drums", "Rock kit");
-  recKit("drums", "Marching drums", ["Bass drum", "Snare", "Rim click", "Roll", "Clap", "Low tenor", "High tenor", "Crash"]);
-  recKit("drums", "Hand drums", ["Bass conga", "Open conga", "Closed bongo", "Open bongo", "Slap", "Low darbuka", "High darbuka", "Darbuka roll"]);
-  recKit("drums", "Cajón", ["Bass hit", "Slap", "Tap", "Ghost", "Knock", "Low tone", "High tone", "Snare buzz"]);
+  recKit("drums", "Orchestra kit", ["Bass drum", "Snare rimshot", "Closed hi-hat", "Loose hi-hat", "Solo clap", "Low tom", "High tom", "Crash cymbal"]);
+  recKit("drums", "Marching drums", ["Bass drum", "Snare", "Cross stick", "Roll", "Clap", "Low tenor", "High tenor", "Crash"]);
+  recKit("drums", "Hand drums", ["Tumba", "Conga", "Muted bongo", "High bongo", "Quinto", "Low darbuka", "High darbuka", "Bongo roll"]);
+  recKit("drums", "Cajón", ["Bass hit", "Slap", "Light slap", "Soft hit", "Knock", "Low tone", "Mid tone", "Loud slap"]);
   recKit("drums", "Latin percussion", ["Cowbell", "Guiro scrape", "Claves", "Guiro short", "Agogo low", "Agogo high", "Maracas", "Cabasa"]);
-  recKit("drums", "Tambourines and shakers", ["Tambourine hit", "Tambourine shake", "Egg shaker", "Long shake", "Tambourine tap", "Low shaker", "High shaker", "Sleigh bells"]);
-  recKit("drums", "Woodblocks and claps", ["Low woodblock", "High woodblock", "Temple block", "Slapstick", "Hand clap", "Low clave", "High clave", "Clap roll"]);
+  recKit("drums", "Tambourines and shakers", ["Tambourine hit", "Tambourine shake", "Shaker", "Large shaker", "Tambourine 2 hit", "Low shaker", "High shaker", "Sleigh bells"]);
+  recKit("drums", "Woodblocks and claps", ["Low woodblock", "High woodblock", "Slit drum", "Slapstick", "Hand clap", "Low clave", "High clave", "Group clap"]);
   recPitched("drums", "Timpani", 40, 64);
-  recKit("drums", "Gongs and cymbals", ["Low gong", "Mid gong", "High gong", "Gong swell", "Crash", "Ride", "Splash", "Cymbal roll"]);
-  recPitched("drums", "Triangles and bells", 72, 108);
-  recKit("drums", "Frame drum", ["Bass hit", "Edge", "Closed hit", "Open hit", "Slap", "Low tone", "High tone", "Finger roll"]);
+  recKit("drums", "Gongs and cymbals", ["Low gong", "Mid gong", "High gong", "Gong roll", "Crash", "Suspended cymbal", "Short crash", "Cymbal roll"]);
+  recPitched("drums", "Hand chimes", 72, 108);
+  recKit("drums", "Frame drum", ["Large hit", "Large hit loud", "Large muted hit", "Large hand", "Small hit", "Small hit loud", "Small muted hit", "Small muted loud"]);
   codeKit("Drum machine", "808");
   codeKit("Electronic kit", "electro");
   codeKit("Hip hop kit", "hiphop");
@@ -103,8 +103,8 @@
 
   // ---- Strings -------------------------------------------------------------
   recPitched("strings", "Violin", 55, 100);
-  recPitched("strings", "Viola", 48, 88);
-  recPitched("strings", "Cello", 36, 76);
+  recPitched("strings", "Viola section", 48, 88);
+  recPitched("strings", "Bowed psaltery", 70, 90);
   recPitched("strings", "Violin section", 55, 96);
   recPitched("strings", "Cello section", 36, 72);
   recPitched("strings", "Concert harp", 24, 103);

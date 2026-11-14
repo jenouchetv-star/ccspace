@@ -126,11 +126,11 @@ PITCHED = {
     "vibraphone": (C, r"Vibraphone/Hard Mallets", None, 12),
     "glockenspiel": (C, r"Struck Idiophones/Glockenspiel$", None, 12),
     "kalimba": (C, r"Kalimba, Tanzania", None, 12),
-    "triangles-and-bells": (C, r"Struck Idiophones/Hand Chimes", None, 12),
+    "hand-chimes": (C, r"Struck Idiophones/Hand Chimes", None, 12),
     "tubular-bells": (C, r"Tubular Bells 2", None, 0),
     "violin": (V, r"Solo Violin/Arco Vib", None, 0),
-    "viola": (V, r"Viola Section/susvib", None, 12),
-    "cello": (V, r"Cello Section/spic", None, 12),
+    "viola-section": (V, r"Viola Section/susvib", None, 12),
+    "bowed-psaltery": (C, r"Psaltery, Bowed and Plucked/LongBow", None, 12),
     "violin-section": (V, r"Violin Section/susVib", None, 12),
     "cello-section": (V, r"Cello Section/susvib", None, 12),
     "concert-harp": (C, r"Concert Harp", None, 0),
@@ -201,15 +201,15 @@ SM = "Struck Membranophones/"
 SI = "Struck Idiophones/"
 KITS = {
     "classic-kit": [
-        (C, SM + r"Bass Drum 3 - Legacy/bdrum_f_rr1"), (C, SM + r"Snare Drum, Modern 1/Snare2_HitNS"),
+        (C, SM + r"Bass Drum 3 - Legacy/bdrum_muted_mf_rr1"), (C, SM + r"Snare Drum, Modern 1/Snare2_HitNS"),
         (C, SI + r"Hi-Hat Cymbal/HiHat_HitC"), (C, SI + r"Hi-Hat Cymbal/HiHat_HitO_"),
-        (C, SI + r"Claps/Clap_rr1"), (C, SM + r"Tom 2/Mallet/TomL_HitM"),
-        (C, SM + r"Tom 1/Mallet/TomH_HitM"), (C, SI + r"Suspended Cymbal 2/susCymb2_hit_mf1")],
-    "rock-kit": [
+        (C, SI + r"Claps/Clap_rr1"), (C, SM + r"Tom 2/Stick/TomL_HitS"),
+        (C, SM + r"Tom 1/Stick/TomH_HitS"), (C, SI + r"Suspended Cymbal 2/susCymb2_hit_mf1")],
+    "orchestra-kit": [
         (C, SM + r"Bass Drum 2/bassdrum_hit_ff"), (C, SM + r"Snare Drum, Modern 3/Snare4_rimshot"),
         (C, SI + r"Hi-Hat Cymbal/HiHat_Close"), (C, SI + r"Hi-Hat Cymbal/HiHat_HitLoose"),
-        (C, SI + r"Claps/SoloClap_vl3"), (C, SM + r"Tom 2/Stick/TomL_HitS"),
-        (C, SM + r"Tom 1/Stick/TomH_HitS"), (C, SI + r"Clash Cymbals 1/cymbal_crash1_ff2")],
+        (C, SI + r"Claps/SoloClap_vl3"), (C, SM + r"Tom 2/Mallet/TomL_HitM"),
+        (C, SM + r"Tom 1/Mallet/TomH_HitM"), (C, SI + r"Clash Cymbals 1/cymbal_crash1_ff2")],
     "marching-drums": [
         (C, SM + r"Bass Drum 1/BDrumNew_hit"), (C, SM + r"Legacy Snares/drum3_marching/snare3_f_rr1"),
         (C, SM + r"Snare Drum, Modern 3/Snare4_Xstick"), (C, SM + r"Snare Drum, Modern 2/Snare3M_rollSN"),
@@ -247,10 +247,10 @@ KITS = {
         (C, SI + r"Clash Cymbals 2/cymbal_crash2_f1"), (C, SI + r"Suspended Cymbal 2/susCymb2_hit_stick_mf1"),
         (C, SI + r"Clash Cymbals 1/cymbal_crash1_short1"), (C, SI + r"Suspended Cymbal 1/susCymb1_roll_f1_nloop")],
     "frame-drum": [
-        (C, SM + r"Frame Drum/HDrumL_Hit_v2_rr1"), (C, SM + r"Frame Drum/HDrumS_HitMuted_v3_rr1"),
-        (C, SM + r"Frame Drum/HDrumL_HitMuted_v2_rr1"), (C, SM + r"Frame Drum/HDrumS_Hit_v2_rr1"),
-        (C, SM + r"Frame Drum/HDrumS_Hit_v3_rr1"), (C, SM + r"Frame Drum/HDrumL_HitMuted_v3_rr1"),
-        (C, SM + r"Frame Drum/HDrumS_HitMuted_v2_rr1"), (C, SM + r"Frame Drum/HDrumL_Hand")],
+        (C, SM + r"Frame Drum/HDrumL_Hit_v2_rr1"), (C, SM + r"Frame Drum/HDrumL_Hit_v3_rr1"),
+        (C, SM + r"Frame Drum/HDrumL_HitMuted_v2_rr1"), (C, SM + r"Frame Drum/HDrumL_Hand"),
+        (C, SM + r"Frame Drum/HDrumS_Hit_v2_rr1"), (C, SM + r"Frame Drum/HDrumS_Hit_v3_rr1"),
+        (C, SM + r"Frame Drum/HDrumS_HitMuted_v2_rr1"), (C, SM + r"Frame Drum/HDrumS_HitMuted_v3_rr1")],
 }
 FX = {
     "siren": (C, r"Free Aerophones/Siren/Main_SirenWhistle-002"),
