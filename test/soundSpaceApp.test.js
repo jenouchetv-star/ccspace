@@ -2324,11 +2324,36 @@ describe("Sound Space final fix wave", () => {
     const pl = rule(".ins__pl");
     expect(pl).toBeTruthy();
     expect(pl).not.toMatch(/#14B8A6|#5EE6D8|#0B8378|var\(--go\)|var\(--tc\)|radial-gradient/);
-    expect(pl).toMatch(/background:transparent/);
-    expect(pl).toMatch(/border:1\.5px solid/);
+    // a neutral dark outline and icon on a faint white wash, so it shows on every (light) instrument picture
+    expect(pl).toMatch(/border:1\.5px solid rgba\(20,20,26,\.72\)/);
+    expect(pl).toMatch(/color:rgba\(20,20,26,\.82\)/);
+    expect(pl).toMatch(/background:rgba\(255,255,255,\.35\)/);
     expect(pl).toMatch(/border-radius:4px/);
     expect(pl).toMatch(/width:28px; height:28px/);
     expect(rule(".ins__pl svg")).not.toMatch(/#05312D/);
-    expect(css).toMatch(/\.ins__pl:hover\{[^}]*background:rgba\(255,255,255,\.12\)/);
+    expect(css).toMatch(/\.ins__pl:hover[^{]*\{ background:rgba\(255,255,255,\.6\); border-color:rgba\(20,20,26,\.9\); \}/);
+    expect(css).not.toMatch(/\.ins__pl\{ --pl-line:rgba\(255,255,255/);   // never a white outline
+  });
+});
+
+describe("Sound Space side panels", () => {
+  const css = cssText();
+  it("Tracks and Beats and patterns share a darker side background than the cards inside them", () => {
+    const i = css.indexOf("\n.panel{");
+    expect(css.slice(i, css.indexOf("}", i))).toContain("background:linear-gradient(var(--side-a),var(--side-b))");
+    expect(html).toMatch(/<aside class="panel left" id="ss-tracks"/);
+    expect(html).toMatch(/<aside class="panel right" id="ss-library"/);
+    const light = css.slice(css.indexOf(":root{"), css.indexOf("}", css.indexOf(":root{")));
+    const dark = css.slice(css.indexOf(':root[data-theme="dark"]{'), css.indexOf("}", css.indexOf(':root[data-theme="dark"]{')));
+    const tok = (block, name) => (block.match(new RegExp("--" + name + ":(#[0-9A-Fa-f]{6})")) || [])[1];
+    expect([tok(light, "side-a"), tok(light, "side-b")]).toEqual(["#E6E6EC", "#DEDEE6"]);
+    expect([tok(dark, "side-a"), tok(dark, "side-b")]).toEqual(["#1B1B1F", "#161619"]);
+    for (const block of [light, dark]) {
+      for (const card of ["tc-a", "tc-b", "card-a", "card-b"]) {
+        expect(tok(block, card)).toBeTruthy();
+        expect(tok(block, "side-a")).not.toBe(tok(block, card));
+        expect(tok(block, "side-b")).not.toBe(tok(block, card));
+      }
+    }
   });
 });
