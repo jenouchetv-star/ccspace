@@ -70,16 +70,21 @@ describe("Sound Space on the Studio page", () => {
     for (const f of ["model.js", "instruments.js", "library.js", "lessons.js"]) new Function("window", load(f))(stub);
     const S = stub.SoundSpace;
     const fb = (key) => (index.match(new RegExp('\\{ key:"' + key + '"[^\\n]*?fb:"([^"]*)"')) || [])[1] || "";
-    const text = fb("soundText"), features = fb("soundFeatures");
+    const text = fb("soundText");
     expect(text).toContain(S.instruments.LIST.length + " instruments");
-    expect(features).toContain(S.instruments.LIST.length + " instruments");
-    expect(features).toContain(S.library.PATTERNS.length + " beats and patterns");
-    expect(features).toContain(S.lessons.LESSONS.length + " song lessons");
+    // Inside Sound Space's feature titles and lines
+    expect(fb("soundInsideInstrumentsTitle")).toBe(S.instruments.LIST.length + " instruments");
+    expect(fb("soundInsideBeatsTitle")).toBe(S.library.PATTERNS.length + " beats and patterns");
+    expect(fb("soundInsideBeatsText")).toContain(S.library.STYLES.length + " styles");
+    expect(fb("soundInsideLessonsTitle")).toBe(S.lessons.LESSONS.length + " song lessons");
+    expect(index).not.toMatch(/key:"soundFeatures"/);   // the old one-line list is gone, so the admin has no dead slot
+    const features = ["Text", "Instruments", "Beats", "Mixer", "Lessons", "Play", "Export"]
+      .map((k) => k === "Text" ? fb("soundInsideText") : fb("soundInside" + k + "Title") + " " + fb("soundInside" + k + "Text")).join(" ");
     for (const t of [text, features]) {
       expect(t).not.toMatch(/voice|microphone|\bmic\b|hundreds/i);
       expect(t).not.toMatch(/\p{Extended_Pictographic}/u);
     }
-    expect(features.split(" · ").length).toBeGreaterThanOrEqual(3);
+    expect(features).not.toMatch(/undefined|  /);   // every slot has words
   });
 });
 
@@ -212,8 +217,16 @@ describe("the Sound Space row on the Studio page", () => {
     expect(sound).toMatch(/class="btn btn--sm btn--cyan" data-act="open-studio-app" data-id="sound" aria-label="Launch Sound Space"/);
     expect(sound).toContain("Subscribers only");
     expect(sound).not.toContain('data-act="art-install"');
-    for (const f of SLOT_FB.soundFeatures.split(" · ")) expect(sound).toContain(E(f));
     expect(sound).toContain("Inside Sound Space");
+    // Inside Sound Space is built like Inside Art Space: a description, then six features with a title and a line each
+    const box = sound.split('aria-labelledby="studio-sound-title"')[1] || "";
+    expect(box).toContain('<p class="studiobox__sub">' + E(SLOT_FB.soundInsideText) + "</p>");
+    expect(box).not.toContain("studioinside__feats");
+    const feats = [...box.matchAll(/<div><i data-lucide="([\w-]+)"><\/i><dt>([^<]*)<\/dt><dd>([^<]*)<\/dd><\/div>/g)];
+    expect(feats.map((m) => m[1])).toEqual(["piano", "drum", "sliders-vertical", "graduation-cap", "keyboard-music", "printer"]);
+    expect(feats.map((m) => m[2])).toEqual(["120 instruments", "420 beats and patterns", "Tracks and a mixer", "8 song lessons", "Play and record", "Sheet music and export"]);
+    for (const m of feats) expect(m[3].length).toBeGreaterThan(20);
+    expect(box).toContain('<dl class="studioinside__list">');
     // Art Space's card is as it was: its own lead and text, and Beta
     expect(r[0]).toContain("This is your space to make something original!");
     expect(r[0]).toMatch(/<span class="chip chip--ink"[^>]*>Beta<\/span>/);
