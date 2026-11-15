@@ -13,7 +13,10 @@
   };
 
   const SONG_KEYS = ["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs"];
-  const TRACK_KEYS = ["id", "instrumentId", "volume", "mute", "solo", "notes"];
+  // reverb: 0 Off, 1 Room, 2 Hall, 3 Big hall. sustain: notes ring on after they end (pitched instruments only).
+  // Songs saved before these two have neither; they open as reverb 0 and sustain false.
+  const TRACK_KEYS = ["id", "instrumentId", "volume", "mute", "solo", "notes", "reverb", "sustain"];
+  const REVERB_MAX = 3;
   const NOTE_KEYS = ["step", "pitch", "len", "vel"];
 
   function makeId() {
@@ -65,9 +68,18 @@
 
   function addTrack(song, instrumentId) {
     if (song.tracks.length >= CONST.MAX_TRACKS) return null;
-    const track = { id: makeId(), instrumentId, volume: 0.8, mute: false, solo: false, notes: [] };
+    const track = { id: makeId(), instrumentId, volume: 0.8, mute: false, solo: false, notes: [], reverb: 0, sustain: false };
     song.tracks.push(track);
     return track;
+  }
+
+  // Gives every track that lacks them reverb 0 and sustain false (songs saved before those existed).
+  function fillTrackDefaults(song) {
+    (song.tracks || []).forEach((t) => {
+      if (t.reverb === undefined) t.reverb = 0;
+      if (t.sustain === undefined) t.sustain = false;
+    });
+    return song;
   }
 
   function toggleNote(track, step, pitch, vel) {
@@ -178,6 +190,8 @@
       if (typeof t.instrumentId !== "string" || !t.instrumentId) return bad("bad_field");
       if (!isNum(t.volume) || t.volume < 0 || t.volume > 1) return bad("bad_field");
       if (typeof t.mute !== "boolean" || typeof t.solo !== "boolean") return bad("bad_field");
+      if (t.reverb !== undefined && (!isInt(t.reverb) || t.reverb < 0 || t.reverb > REVERB_MAX)) return bad("bad_field");
+      if (t.sustain !== undefined && typeof t.sustain !== "boolean") return bad("bad_field");
       if (!Array.isArray(t.notes)) return bad("bad_notes");
       for (const n of t.notes) {
         if (!n || typeof n !== "object" || Array.isArray(n)) return bad("bad_note");
@@ -189,7 +203,7 @@
       }
       if (!catalogIds.has(t.instrumentId) && missing.indexOf(t.instrumentId) < 0) missing.push(t.instrumentId);
     }
-    return { ok: true, song: clone(obj), missing };
+    return { ok: true, song: fillTrackDefaults(clone(obj)), missing };
   }
 
   // Switch the song between eighths (2) and sixteenths (4). Going finer is
@@ -271,8 +285,10 @@
 
   SS.model = {
     CONST,
+    TRACK_KEYS,
     newSong,
     addTrack,
+    fillTrackDefaults,
     totalSteps,
     NOTE_VALUES,
     noteSquares,

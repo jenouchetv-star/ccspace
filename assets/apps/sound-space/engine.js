@@ -40,6 +40,8 @@
           len: n.len,
           vel: n.vel,
           gain: t.volume * song.volume * n.vel,
+          reverb: t.reverb || 0,
+          sustain: !!t.sustain,
         });
       }
     }
@@ -62,9 +64,27 @@
     return { steps, skipped };
   }
 
+  // How long a song keeps sounding after its last note: 2 s, or longer when a
+  // track with notes rings on (sustain, pitched instruments) into a reverb.
+  function songTail(song) {
+    const byId = SS.instruments && SS.instruments.byId;
+    let rev = 0;
+    let sus = 0;
+    for (const t of song.tracks || []) {
+      if (!t.notes || !t.notes.length) continue;
+      const lv = REVERB_LEVELS[t.reverb];
+      if (lv && lv.sec > rev) rev = lv.sec;
+      if (t.sustain) {
+        const rec = byId ? byId(t.instrumentId) : null;
+        if (!rec || rec.kind === "pitched") sus = SUSTAIN_TAIL;
+      }
+    }
+    return Math.max(2, sus + rev + 0.5);
+  }
+
   function exportFrames(song, times, sampleRate, tailSec) {
     const rate = sampleRate || 44100;
-    const tail = tailSec === undefined ? 2 : tailSec;
+    const tail = tailSec === undefined ? songTail(song) : tailSec;
     const total = SS.model.totalSteps(song);
     const seconds = total * stepSeconds(song.tempo, song.grid) * times + tail;
     return Math.round(seconds * rate);
@@ -78,12 +98,29 @@
   const LOOKAHEAD = 0.12;
   const TIMER_MS = 25;
 
+  // Sustain: a pitched note rings on after it ends and fades out over this long.
+  const SUSTAIN_TAIL = 1.5;
+  // Reverb levels (index = track.reverb): impulse length and wet send level.
+  // The convolver normalizes its impulse, and a shorter impulse comes out
+  // quieter: measured with noise in Chrome, wet gains of 0.22/0.30/0.38 left
+  // the wet sound 26/19/15 dB under the dry one, so Room was barely there.
+  // These put it about 18/14/11 dB under.
+  const REVERB_LEVELS = [
+    null,
+    { name: "Room", sec: 0.8, wet: 0.5 },
+    { name: "Hall", sec: 1.8, wet: 0.55 },
+    { name: "Big hall", sec: 3.2, wet: 0.6 },
+  ];
+
   function midiToFreq(m) {
     return 440 * Math.pow(2, (m - 69) / 12);
   }
 
   // Sustained voice envelope: 5 ms attack, hold, 5 ms release.
   // Ringing voices (ring) fall exponentially across the note, then fade out.
+  // With `sustain` (seconds) the note rings on past its end instead: a held
+  // voice fades out over the tail, and a ringing voice keeps falling as if the
+  // key were still down, reaching silence at the end of the tail.
   function envelope(ctx, dest, when, dur, peak, opts) {
     const o = opts || {};
     const g = ctx.createGain();
@@ -94,7 +131,12 @@
     g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(p, when + att);
     let end;
-    if (o.ring) {
+    if (o.sustain > 0) {
+      if (!o.ring) g.gain.setValueAtTime(p, when + d);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + d + o.sustain);
+      g.gain.linearRampToValueAtTime(0, when + d + o.sustain + RELEASE);
+      end = when + d + o.sustain + RELEASE;
+    } else if (o.ring) {
       g.gain.exponentialRampToValueAtTime(p * 0.02, when + d);
       g.gain.exponentialRampToValueAtTime(0.0001, when + d + o.ring);
       g.gain.linearRampToValueAtTime(0, when + d + o.ring + RELEASE);
@@ -167,7 +209,7 @@
   // Recipes: (ctx, dest, freq, when, dur, vel, params) => sources[]
   const RECIPES = {
     fm(ctx, dest, freq, when, dur, vel, p) {
-      const e = envelope(ctx, dest, when, dur, vel * 0.5, { ring: p.ring || 0.5 });
+      const e = envelope(ctx, dest, when, dur, vel * 0.5, { ring: p.ring || 0.5, sustain: p.sustain });
       const car = osc(ctx, "sine", freq, when, e.end);
       const mod = osc(ctx, "sine", freq * (p.ratio || 2), when, e.end);
       const mg = ctx.createGain();
@@ -188,7 +230,7 @@
     pluck(ctx, dest, freq, when, dur, vel, p) {
       const sr = ctx.sampleRate;
       const tail = p.tail === undefined ? 0.5 : p.tail;
-      const ring = Math.min(Math.max(dur, 0.1) + tail, 2.5);
+      const ring = Math.min(Math.max(dur, 0.1) + tail + (p.sustain || 0), 2.5 + (p.sustain || 0));
       const len = Math.max(Math.round(sr * ring), 64);
       const period = Math.max(2, Math.round(sr / freq));
       const buf = ctx.createBuffer(1, len, sr);
@@ -211,7 +253,7 @@
       for (let i = period; i < len; i++) d[i] = damp * 0.5 * (d[i - period] + d[i - period + 1]);
       // Averaging makes the loop P - 0.5 samples long; retune so pitch is exact.
       const rate = (freq * (period - 0.5)) / sr;
-      const e = envelope(ctx, dest, when, Math.max(dur, 0.1), vel * 0.6, { ring: p.ring || 0.4 });
+      const e = envelope(ctx, dest, when, Math.max(dur, 0.1), vel * 0.6, { ring: p.ring || 0.4, sustain: p.sustain });
       const voice = (r, g) => {
         const src = ctx.createBufferSource();
         src.buffer = buf;
@@ -240,7 +282,7 @@
     additive(ctx, dest, freq, when, dur, vel, p) {
       const partials = p.partials || [1, 0.5, 0.33, 0.25];
       const sum = partials.reduce((a, b) => a + b, 0) || 1;
-      const e = envelope(ctx, dest, when, dur, vel * 0.5, { release: 0.03 });
+      const e = envelope(ctx, dest, when, dur, vel * 0.5, { release: 0.03, sustain: p.sustain });
       const out = [];
       partials.forEach((amp, i) => {
         if (freq * (i + 1) > 12000) return;
@@ -258,6 +300,7 @@
       const e = envelope(ctx, dest, when, dur, vel * 0.4, {
         attack: p.attack,
         release: p.release || 0.04,
+        sustain: p.sustain,
       });
       const cutoff = p.cutoff || 1800;
       const f = filterNode(ctx, p.filter || "lowpass", cutoff, p.q || 1);
@@ -285,7 +328,7 @@
     },
 
     chip(ctx, dest, freq, when, dur, vel, p) {
-      const e = envelope(ctx, dest, when, dur, vel * 0.3, { release: 0.01 });
+      const e = envelope(ctx, dest, when, dur, vel * 0.3, { release: 0.01, sustain: p.sustain });
       const o = osc(ctx, "square", freq, when, e.end);
       const duty = p.duty === undefined ? 0.5 : p.duty;
       if (duty !== 0.5 && ctx.createPeriodicWave) {
@@ -615,7 +658,7 @@
       return p;
     }
 
-    function playSample(rec, ev, when, dur, dest) {
+    function playSample(rec, ev, when, dur, dest, sustain) {
       const data = loaded.get(rec.id);
       if (!data) return [];
       let buf;
@@ -641,9 +684,10 @@
       const length = buf.duration / rate;
       const e = oneShot
         ? envelope(ctx, dest, when, Math.max(length - RELEASE, 0.02), peak, {})
-        : envelope(ctx, dest, when, Math.min(Math.max(dur, 0.05), length), peak, { release: 0.25 });
+        : envelope(ctx, dest, when, Math.min(Math.max(dur, 0.05), length), peak, { release: 0.25, sustain });
       src.connect(e.gain);
       src.start(when);
+      // A recorded note never rings past the end of its own recording.
       src.stop(Math.min(e.end, when + length + 0.05));
       return [src];
     }
@@ -652,11 +696,13 @@
       const rec = catalog.byId(ev.instrumentId);
       if (!rec) return [];
       const dur = ev.dur !== undefined ? ev.dur : ev.len * 0.25;
-      if (rec.source === "recorded") return playSample(rec, ev, when, dur, dest);
+      // Sustain is for instruments that play notes; drums and effects ignore it.
+      const sustain = ev.sustain && rec.kind === "pitched" ? SUSTAIN_TAIL : 0;
+      if (rec.source === "recorded") return playSample(rec, ev, when, dur, dest, sustain);
       const recipe = rec.recipe;
       const fn = recipe && RECIPES[recipe.type];
       if (!fn) return [];
-      const params = Object.assign({}, recipe, { slot: ev.pitch });
+      const params = Object.assign({}, recipe, { slot: ev.pitch, sustain });
       const freq = rec.kind === "pitched" ? midiToFreq(ev.pitch) : 0;
       return fn(ctx, dest, freq, when, dur, ev.gain, params);
     }
@@ -697,6 +743,89 @@
     return bus;
   }
 
+  // ---- Reverb ---------------------------------------------------------------
+  // A level's impulse: stereo noise falling away exponentially (60 dB over its
+  // length), from a seeded generator so it is the same every time. The samples
+  // are worked out once per sample rate and level, then copied into each
+  // context's buffer.
+  const impulseCache = new Map();
+  function impulseData(rate, level) {
+    const key = rate + ":" + level;
+    let data = impulseCache.get(key);
+    if (!data) {
+      const len = Math.round(REVERB_LEVELS[level].sec * rate);
+      data = [0, 1].map((ch) => {
+        const d = new Float32Array(len);
+        let seed = 90001 + ch * 7919 + level * 104729;
+        for (let i = 0; i < len; i++) {
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          const x = i / len;
+          // the last 2% eases to exactly 0, so the tail never ends on a step
+          d[i] = ((seed / 4294967296) * 2 - 1) * Math.exp(-6.9 * x) * Math.min(1, (1 - x) * 50);
+        }
+        return d;
+      });
+      impulseCache.set(key, data);
+    }
+    return data;
+  }
+
+  function reverbImpulse(ctx, level) {
+    const data = impulseData(ctx.sampleRate, level);
+    const buf = ctx.createBuffer(2, data[0].length, ctx.sampleRate);
+    buf.getChannelData(0).set(data[0]);
+    buf.getChannelData(1).set(data[1]);
+    return buf;
+  }
+
+  // Reverb sends into `dest`. Nothing is built until a level is first used,
+  // and each level is built once (one convolver per level, per dest).
+  //  - wet(level): the convolver for that level (convolver -> wet gain -> dest),
+  //    or null for 0. Connect a voice to it beside its own dry connection.
+  //  - input(level): a node to play voices into. For 0 it is `dest` itself;
+  //    otherwise a gain that feeds `dest` at full level (dry) and the convolver.
+  //  - disconnect(): takes every node it built out of the graph.
+  function createReverb(ctx, dest) {
+    const wets = [];
+    const inputs = [];
+    const made = [];
+    const valid = (level) => Number.isInteger(level) && level > 0 && level < REVERB_LEVELS.length;
+    function wet(level) {
+      if (!valid(level)) return null;
+      if (!wets[level]) {
+        const conv = ctx.createConvolver();
+        conv.buffer = reverbImpulse(ctx, level);
+        const g = ctx.createGain();
+        g.gain.value = REVERB_LEVELS[level].wet;
+        conv.connect(g);
+        g.connect(dest);
+        made.push(conv, g);
+        wets[level] = conv;
+      }
+      return wets[level];
+    }
+    function input(level) {
+      if (!valid(level)) return dest;
+      if (!inputs[level]) {
+        const g = ctx.createGain();
+        g.connect(dest);
+        g.connect(wet(level));
+        made.push(g);
+        inputs[level] = g;
+      }
+      return inputs[level];
+    }
+    function disconnect() {
+      for (const n of made) {
+        try { n.disconnect(); } catch (e) { /* already gone */ }
+      }
+      made.length = 0;
+      wets.length = 0;
+      inputs.length = 0;
+    }
+    return { wet, input, disconnect };
+  }
+
   function makeMaster(ctx) {
     const bus = ctx.createGain();
     const comp = ctx.createDynamicsCompressor();
@@ -719,6 +848,7 @@
 
     let song = null;
     let master = null;
+    let fx = null;
     let handle = null;
     let step = 0;
     let nextTime = 0;
@@ -759,7 +889,7 @@
           }
           const evs = compileEvents(song, step, step + 1);
           for (const ev of evs) {
-            const made = voices.play(Object.assign({}, ev, { dur: ev.len * stepDur }), nextTime, master.bus);
+            const made = voices.play(Object.assign({}, ev, { dur: ev.len * stepDur }), nextTime, fx.input(ev.reverb));
             for (const s of made || []) live.push({ src: s, when: nextTime });
           }
           queue.push({ time: nextTime, step });
@@ -781,6 +911,7 @@
       song = s;
       click = !!(opts && opts.click);
       master = makeMaster(ctx);
+      fx = createReverb(ctx, master.bus);
       step = ((opts && opts.fromStep) || 0) % total();
       stepDur = stepSeconds(song.tempo, song.grid);
       nextTime = ctx.currentTime + 0.06;
@@ -808,6 +939,7 @@
       try { master.bus.gain.setValueAtTime(0, now); } catch (e) { /* ignore */ }
       try { master.bus.disconnect(); } catch (e) { /* ignore */ }
       try { master.comp.disconnect(); } catch (e) { /* ignore */ }
+      fx.disconnect();
       lastReported = null;
       if (cb) cb(-1);
     }
@@ -846,6 +978,7 @@
         });
       }
       const master = makeMaster(ctx);
+      const fx = createReverb(ctx, master.bus);
       const total = SS.model.totalSteps(song);
       const dur = stepSeconds(song.tempo, song.grid);
       const evs = compileEvents(song, 0, total);
@@ -854,7 +987,7 @@
           voices.play(
             Object.assign({}, ev, { dur: ev.len * dur }),
             (r * total + ev.step) * dur,
-            master.bus
+            fx.input(ev.reverb)
           );
         }
       }
@@ -868,6 +1001,9 @@
     makeClick,
     softClipCurve,
     createLiveBus,
+    createReverb,
+    REVERB_LEVELS,
+    SUSTAIN_TAIL,
     compileEvents,
     stepsToSchedule,
     exportFrames,

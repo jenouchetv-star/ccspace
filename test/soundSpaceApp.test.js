@@ -421,6 +421,99 @@ describe("Sound Space app page", () => {
     expect(html).toContain('"Show and hide parts"');
   });
 
+  describe("reverb and sustain on each track's card", () => {
+    const block = html.split("/* ---- helpers the tests run on their own")[1].split("/* ---- end of helpers")[0];
+    let got = {};
+    try { got = new Function(block.slice(block.indexOf("*/") + 2) + "; return { REVERB_NAMES, trackFxRows, setTrackReverb, toggleTrackSustain };")(); } catch (e) { /* each test below fails on its own */ }
+    const { REVERB_NAMES, trackFxRows, setTrackReverb, toggleTrackSustain } = got;
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
+    const piano = () => ({ id: "t1", instrumentId: "grand-piano", volume: 0.8, mute: false, solo: false, notes: [], reverb: 0, sustain: false });
+    const tag = (h, re) => (h.match(re) || [""])[0];
+
+    it("a pitched track's card has the Reverb range and the Sustain button, as in the draft", () => {
+      expect(REVERB_NAMES).toEqual(["Off", "Room", "Hall", "Big hall"]);
+      const h = trackFxRows(piano(), "Keys", true, esc);
+      const range = tag(h, /<input[^>]*type="range"[^>]*>/);
+      for (const a of ['min="0"', 'max="3"', 'step="1"', 'value="0"', 'aria-label="Keys reverb"', 'aria-valuetext="Off"', 'data-id="t1"']) expect(range).toContain(a);
+      expect(h).toContain(">Reverb<");
+      expect(h).toMatch(/class="track__fxval"[^>]*>Off</);
+      expect(h).toMatch(/<svg[^>]*>[\s\S]*?<path d="M2 6c3 0 3 2 6 2s3-2 6-2 3 2 6 2/);   // the draft's wave icon
+      const btn = tag(h, /<button[^>]*data-act="sustain"[^>]*>[\s\S]*?<\/button>/);
+      expect(btn).toContain('type="button"');
+      expect(btn).toContain('aria-pressed="false"');
+      expect(btn).toContain('class="track__led"');
+      expect(btn).toMatch(/>Off<\/button>$/);
+      expect(h).toContain(">Sustain<");
+      expect(h).toContain("notes ring on");
+    });
+
+    it("a drum or effects track shows Reverb only", () => {
+      const t = Object.assign(piano(), { instrumentId: "hip-hop-kit", sustain: true });
+      const h = trackFxRows(t, "Drums", false, esc);
+      expect(h).toContain('aria-label="Drums reverb"');
+      expect(h).not.toContain("Sustain");
+      expect(h).not.toContain('data-act="sustain"');
+    });
+
+    it("moving the range to 2 makes the track a Hall and says so", () => {
+      const t = piano();
+      expect(setTrackReverb(t, "2")).toBe("Hall");
+      expect(t.reverb).toBe(2);
+      const h = trackFxRows(t, "Keys", true, esc);
+      expect(tag(h, /<input[^>]*type="range"[^>]*>/)).toContain('aria-valuetext="Hall"');
+      expect(h).toMatch(/class="track__fxval"[^>]*>Hall</);
+      expect(setTrackReverb(t, 9)).toBe("Big hall");
+      expect(t.reverb).toBe(3);
+      expect(setTrackReverb(t, -2)).toBe("Off");
+      expect(t.reverb).toBe(0);
+    });
+
+    it("pressing Sustain turns it on and lights the button", () => {
+      const t = piano();
+      expect(toggleTrackSustain(t)).toBe(true);
+      expect(t.sustain).toBe(true);
+      const btn = tag(trackFxRows(t, "Keys", true, esc), /<button[^>]*data-act="sustain"[^>]*>[\s\S]*?<\/button>/);
+      expect(btn).toContain('aria-pressed="true"');
+      expect(btn).toMatch(/>On<\/button>$/);
+      expect(toggleTrackSustain(t)).toBe(false);
+    });
+
+    it("the card uses them, and a change goes the way a volume change goes", () => {
+      const rt = section(/function renderTracks\(/, "\nfunction ");
+      expect(rt).toMatch(/trackFxRows\(t, label, kindOf\(t\) === "pitched", esc\)/);
+      expect(rt.indexOf("trackFxRows(")).toBeGreaterThan(rt.indexOf("track__vol"));
+      // input: the song and label change in place; change: one commit, like the volume slider
+      expect(html).toMatch(/const r = e\.target\.closest\("\.trev"\);[^\n]*setTrackReverb\(/);
+      expect(html).toContain('$("#track-list").addEventListener("change", e => { if (e.target.closest(".tvol, .trev")) commit(); });');
+      expect(html).toMatch(/if \(act === "sustain"\)\{ const t = trackById\(id\); if \(!t\) return; toggleTrackSustain\(t\); commit\(\); renderTracks\(\); return; \}/);
+    });
+
+    it("phones hide the Reverb row with the volume, and keep Sustain", () => {
+      const phone = html.slice(html.indexOf("@media (max-width:640px)"), html.indexOf("@media (prefers-reduced-motion:reduce)", html.indexOf("@media (max-width:640px)")));
+      expect(phone).toContain(".track__vol{ display:none; }");
+      expect(phone).toContain(".track__fx--reverb{ display:none; }");
+      expect(phone).not.toMatch(/\.track__fx--sus\{[^}]*display:none/);
+      expect(cssText()).toMatch(/\.track__led\{[^}]*\}/);
+      expect(cssText()).toMatch(/\[aria-pressed="true"\] \.track__led\{[^}]*#14B8A6/);
+    });
+
+    it("live notes use the track's reverb and sustain without slowing the dry sound", () => {
+      const audio = section(/function audio\(/, "/* touch screens");
+      expect(audio).toContain("liveFx = E.createReverb(ctx, liveBus)");
+      const on = section(/function noteOn\(/, "function noteOff");
+      expect(on).toContain("g.connect(liveBus)");
+      expect(on).toContain("const wet = liveFx.wet(track.reverb || 0); if (wet) g.connect(wet);");
+      expect(on).toContain("sustain:!!track.sustain");
+      const off = section(/function noteOff\(/, "function releaseAll");
+      expect(off).toContain("E.SUSTAIN_TAIL");
+    });
+
+    it("Help names both controls in plain words", () => {
+      expect(html).toContain("Reverb makes a track sound like it's played in a bigger room.");
+      expect(html).toContain("Sustain lets notes ring on after they end, like a piano pedal.");
+    });
+  });
+
   it("closes through the site and never uses the microphone", () => {
     expect(html).toMatch(/postMessage\(\{\s*ccsStudio:\s*"close"\s*\}/);
     for (const api of ["getUserMedia", "getDisplayMedia", "MediaRecorder", "createMediaStreamSource", "SpeechRecognition"]) {

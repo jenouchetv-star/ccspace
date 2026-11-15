@@ -299,4 +299,61 @@ describe("Sound Space model", () => {
       expect(m.recordedLength(steps * 0.15, 0.15), `${steps} steps grid 4`).toBe(want);
     }
   });
+
+  describe("reverb and sustain on each track", () => {
+    const ids = new Set(["piano", "grand-piano", "classic-kit", "hip-hop-kit", "synth-bass", "electric-piano", "lo-fi-kit", "marimba"]);
+    const good = () => { const m = M(); const s = m.newSong(); m.addTrack(s, "piano"); return JSON.parse(JSON.stringify(s)); };
+
+    it("new tracks start dry with sustain off, and both keys are track keys", () => {
+      const m = M();
+      const s = m.newSong();
+      const t = m.addTrack(s, "piano");
+      expect(t.reverb).toBe(0);
+      expect(t.sustain).toBe(false);
+      expect(m.TRACK_KEYS).toContain("reverb");
+      expect(m.TRACK_KEYS).toContain("sustain");
+    });
+
+    it("starters and lesson songs start dry with sustain off", () => {
+      const SS = loadSS("model.js", "instruments.js", "icons.js", "library.js", "lessons.js");
+      const songs = SS.library.STARTERS.map((st) => st.song).concat(SS.lessons.LESSONS.map((l) => l.startSong));
+      expect(songs.length).toBeGreaterThan(0);
+      for (const s of songs) for (const t of s.tracks) {
+        expect(t.reverb, s.title).toBe(0);
+        expect(t.sustain, s.title).toBe(false);
+      }
+    });
+
+    it("a song saved before reverb and sustain opens with them off", () => {
+      const m = M();
+      const old = good();
+      delete old.tracks[0].reverb; delete old.tracks[0].sustain;
+      const r = m.validateSong(old, ids);
+      expect(r.ok).toBe(true);
+      expect(r.song.tracks[0].reverb).toBe(0);
+      expect(r.song.tracks[0].sustain).toBe(false);
+      expect(old.tracks[0]).not.toHaveProperty("reverb");   // the input is left as it was
+      const filled = m.fillTrackDefaults({ tracks: [{ id: "a" }, { id: "b", reverb: 2, sustain: true }] });
+      expect(filled.tracks.map((t) => [t.reverb, t.sustain])).toEqual([[0, false], [2, true]]);
+    });
+
+    it("keeps good values and rejects bad ones", () => {
+      const m = M();
+      for (const lv of [0, 1, 2, 3]) {
+        const o = good(); o.tracks[0].reverb = lv; o.tracks[0].sustain = lv % 2 === 1;
+        const r = m.validateSong(o, ids);
+        expect(r.ok, "reverb " + lv).toBe(true);
+        expect(r.song.tracks[0].reverb).toBe(lv);
+        expect(r.song.tracks[0].sustain).toBe(lv % 2 === 1);
+      }
+      for (const bad of [-1, 4, 1.5, "1", null, true]) {
+        const o = good(); o.tracks[0].reverb = bad;
+        expect(m.validateSong(o, ids), "reverb " + JSON.stringify(bad)).toEqual({ ok: false, error: "bad_field" });
+      }
+      for (const bad of ["yes", 1, 0, null, "true"]) {
+        const o = good(); o.tracks[0].sustain = bad;
+        expect(m.validateSong(o, ids), "sustain " + JSON.stringify(bad)).toEqual({ ok: false, error: "bad_field" });
+      }
+    });
+  });
 });

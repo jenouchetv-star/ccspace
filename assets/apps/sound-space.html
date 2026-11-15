@@ -273,6 +273,18 @@ body.kbd-collapsed #kbd{ display:none; }
 .msb--s[aria-pressed="true"]{ background:linear-gradient(#FFE08A,#F2C14E); color:#3B2C05; }
 .track__vol{ grid-column:1 / 3; display:flex; align-items:center; gap:8px; color:var(--faint); }
 .track__vol svg{ width:14px; height:14px; }
+/* Reverb and Sustain, under the volume (the approved draft) */
+.track__fx{ grid-column:1 / 3; display:flex; align-items:center; gap:8px; min-width:0; font-size:11.5px; font-weight:700; color:var(--mute); }
+.track__fx svg{ width:14px; height:14px; flex:none; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; color:var(--faint); }
+.track__fxlab{ width:52px; flex:none; }
+.track__fx .slider--sm{ flex:1; min-width:0; }
+.track__fxval{ width:52px; flex:none; text-align:right; font-weight:600; white-space:nowrap; }
+.track__sus{ display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 10px 0 8px; border-radius:var(--r-sm); border:1px solid var(--btn-edge);
+  background:linear-gradient(var(--btn-a),var(--btn-b)); box-shadow:var(--raise); color:var(--text); font-size:11.5px; font-weight:700; line-height:1; flex:none; }
+.track__sus:active{ box-shadow:var(--press); transform:translateY(1px); }
+.track__led{ width:7px; height:7px; border-radius:50%; flex:none; background:var(--well); box-shadow:inset 0 1px 1px rgba(0,0,0,.5); }
+.track__sus[aria-pressed="true"] .track__led{ background:#14B8A6; box-shadow:0 0 6px #14B8A6; }
+.track__fxhint{ font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 .track__note{ grid-column:1 / 3; display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--mute); }
 .track__note--bad{ color:var(--danger); font-weight:700; }
 .track__note .btn{ height:26px; padding:0 9px; font-size:11.5px; margin-left:auto; }
@@ -610,6 +622,12 @@ body.kbd-collapsed #kbd{ display:none; }
   .track{ display:flex; align-items:center; padding:5px 6px; gap:6px; flex:none; }
   .track__main{ gap:6px; }
   .track__main small, .track__vol{ display:none; }
+  /* the Reverb row folds away with the volume; Sustain stays as a small switch */
+  .track__fx--reverb{ display:none; }
+  .track__fx--sus{ gap:5px; font-size:10.5px; }
+  .track__fx--sus svg, .track__fxhint{ display:none; }
+  .track__fx--sus .track__fxlab{ width:auto; }
+  .track__sus{ height:22px; padding:0 7px 0 6px; font-size:10.5px; gap:5px; }
   .track .tile{ width:26px; height:26px; border-radius:var(--r-sm); font-size:12px; }
   .msb{ width:22px; height:22px; font-size:10px; }
   .track__note{ font-size:10.5px; }
@@ -921,8 +939,8 @@ const K = k => "<kbd>" + k + "</kbd>";
 const HELP = [
   ["Start", "Make a song", "start new empty song track add",
     "<p>Press <b>Add a track</b> and pick an instrument. Then play the piano keys or drum pads, press <b>Record</b> to keep what you play, or tap squares in the grid to add notes.</p>"],
-  ["Start", "Tracks", "track tracks mute solo volume remove",
-    "<p>A song can have up to 8 tracks, each with its own instrument. Pick a track on the left to change it. <b>M</b> mutes a track and <b>S</b> plays only that track. The slider sets how loud it is.</p>"],
+  ["Start", "Tracks", "track tracks mute solo volume remove reverb sustain room hall pedal ring echo",
+    "<p>A song can have up to 8 tracks, each with its own instrument. Pick a track on the left to change it. <b>M</b> mutes a track and <b>S</b> plays only that track. The slider sets how loud it is.</p><p>Reverb makes a track sound like it's played in a bigger room.</p><p>Sustain lets notes ring on after they end, like a piano pedal.</p>"],
   ["Playing", "Play, stop and loop", "play stop loop again repeat space",
     "<p><b>Play</b> starts the song and <b>Stop</b> stops it. With <b>Loop</b> on, the song plays again and again. " + K("Space") + " plays and stops too.</p>"],
   ["Playing", "Piano keys", "piano keys keyboard computer higher lower octave",
@@ -1046,7 +1064,7 @@ async function saveNow(){
 /* ============================================================
    Sound: one AudioContext, made on the first tap, click or key (never before)
    ============================================================ */
-let ctx = null, voices = null, player = null, liveBus = null;
+let ctx = null, voices = null, player = null, liveBus = null, liveFx = null;
 const loadState = new Map();   // instrumentId -> "loading" | "ok" | "failed" | "missing"
 function audio(){
   if (!ctx){
@@ -1057,6 +1075,7 @@ function audio(){
     player = E.createPlayer(ctx, voices);
     player.onStep(onStep);
     liveBus = E.createLiveBus(ctx);   /* gain into a soft clipper: no compressor look-ahead delay on live notes */
+    liveFx = E.createReverb(ctx, liveBus);   /* the selected track's reverb: a wet copy beside the dry sound, never in its way */
     if (song) song.tracks.forEach(t => ensureLoaded(t.instrumentId));
   }
   if (ctx.state === "suspended") ctx.resume().catch(() => {});
@@ -1107,10 +1126,11 @@ function noteOn(key, track, pitch, evTs){
   const inst = I.byId(track.instrumentId); if (!inst) return;
   const oneShot = inst.kind !== "pitched";
   const g = c.createGain(); g.connect(liveBus);
-  const ev = { instrumentId:track.instrumentId, pitch, len:1, vel:0.9, gain:track.volume * 0.9, dur: oneShot ? 0.6 : 4 };
+  const wet = liveFx.wet(track.reverb || 0); if (wet) g.connect(wet);
+  const ev = { instrumentId:track.instrumentId, pitch, len:1, vel:0.9, gain:track.volume * 0.9, dur: oneShot ? 0.6 : 4, sustain:!!track.sustain };
   let srcs = [];
   try { srcs = voices.play(ev, c.currentTime, g) || []; } catch(e){}
-  held.set(key, { g, srcs, oneShot, rec: recordDown(track, pitch, oneShot, evTs) });
+  held.set(key, { g, srcs, oneShot, sus: !oneShot && !!track.sustain, rec: recordDown(track, pitch, oneShot, evTs) });
   lightKey(key, track, pitch, true);
   lessonEvent(oneShot ? "pads" : "keys");
 }
@@ -1118,9 +1138,10 @@ function noteOff(key, evTs){
   const h = held.get(key); if (!h) return;
   held.delete(key);
   if (!h.oneShot && ctx){
-    const t = ctx.currentTime;
-    try { h.g.gain.setTargetAtTime(0, t, 0.04); } catch(e){}
-    h.srcs.forEach(s => { try { s.stop(t + 0.3); } catch(e){} });
+    /* with Sustain on, the note rings on after the key comes up and fades out over E.SUSTAIN_TAIL */
+    const t = ctx.currentTime, tail = h.sus ? E.SUSTAIN_TAIL : 0.3;
+    try { h.g.gain.setTargetAtTime(0, t, h.sus ? E.SUSTAIN_TAIL / 5 : 0.04); } catch(e){}
+    h.srcs.forEach(s => { try { s.stop(t + tail); } catch(e){} });
   }
   if (h.rec) recordUp(h.rec, evTs);
   lightKey(key, null, null, false);
@@ -1210,6 +1231,30 @@ function lessonPanel(target){
   if (target === "#ss-keys" || target === "#ss-pads") return "keys";
   return null;
 }
+/* Reverb and Sustain on a track's card, under its volume (the approved draft). Reverb is on every track; Sustain only on
+   instruments that play notes (drum hits and effects already ring on their own). Phones fold the Reverb row away. */
+const REVERB_NAMES = ["Off", "Room", "Hall", "Big hall"];
+function trackFxRows(t, label, pitched, esc){
+  const lv = REVERB_NAMES[t.reverb] ? t.reverb : 0, name = REVERB_NAMES[lv], on = !!t.sustain;
+  let h = '<label class="track__fx track__fx--reverb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6c3 0 3 2 6 2s3-2 6-2 3 2 6 2M2 12c3 0 3 2 6 2s3-2 6-2 3 2 6 2M2 18c3 0 3 2 6 2s3-2 6-2 3 2 6 2"/></svg>'
+    + '<span class="track__fxlab">Reverb</span>'
+    + '<input type="range" class="slider slider--sm trev" data-id="' + esc(t.id) + '" min="0" max="3" step="1" value="' + lv + '" aria-label="' + esc(label) + ' reverb" aria-valuetext="' + name + '">'
+    + '<span class="track__fxval" aria-hidden="true">' + name + '</span></label>';
+  if (pitched){
+    h += '<div class="track__fx track__fx--sus"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M7 20V10l5-4 5 4v10"/></svg>'
+      + '<span class="track__fxlab">Sustain</span>'
+      + '<button type="button" class="track__sus" data-act="sustain" data-id="' + esc(t.id) + '" aria-pressed="' + on + '" aria-label="' + esc(label) + ' sustain"><span class="track__led"></span>' + (on ? "On" : "Off") + '</button>'
+      + '<span class="track__fxhint">notes ring on</span></div>';
+  }
+  return h;
+}
+/* A reverb slider's value (0 to 3) onto its track; returns the level's name for the slider's label. */
+function setTrackReverb(t, v){
+  const n = Math.max(0, Math.min(REVERB_NAMES.length - 1, Math.round(+v) || 0));
+  t.reverb = n;
+  return REVERB_NAMES[n];
+}
+function toggleTrackSustain(t){ t.sustain = !t.sustain; return t.sustain; }
 /* ---- end of helpers ---- */
 
 /* ============================================================
@@ -1252,6 +1297,7 @@ function openSong(s, opts){
   endLesson();
   stopAll();
   flushPush();
+  M.fillTrackDefaults(s);   /* songs saved before Reverb and Sustain open with them off */
   song = s; stash = {}; playedOnce = false;
   songOwner = (opts && opts.owner) || "";
   clearTimeout(saveTimer); saveTimer = 0;
@@ -1453,6 +1499,7 @@ function keepFocus(fn){
   if (a && a !== document.body){
     if (a.dataset && a.dataset.act && a.dataset.id) key = '[data-act="' + a.dataset.act + '"][data-id="' + a.dataset.id + '"]';
     else if (a.classList && a.classList.contains("tvol")) key = '.tvol[data-id="' + a.dataset.id + '"]';
+    else if (a.classList && a.classList.contains("trev")) key = '.trev[data-id="' + a.dataset.id + '"]';
   }
   fn();
   if (key){ const b = $(key); if (b && b !== a) try { b.focus(); } catch(e){} }
@@ -1510,6 +1557,7 @@ function renderTracks(){
         + '<span class="ms"><button type="button" class="msb msb--m" data-act="mute" data-id="' + esc(t.id) + '" aria-pressed="' + !!t.mute + '" aria-label="Mute ' + esc(label) + '" title="Mute">M</button>'
         + '<button type="button" class="msb msb--s" data-act="solo" data-id="' + esc(t.id) + '" aria-pressed="' + !!t.solo + '" aria-label="Play only ' + esc(label) + '" title="Play only this track">S</button></span>'
         + '<label class="track__vol"><i data-lucide="volume-1"></i><span class="sr-only">' + esc(label) + ' volume</span><input type="range" class="slider slider--sm tvol" data-id="' + esc(t.id) + '" min="0" max="100" value="' + Math.round(t.volume * 100) + '"></label>'
+        + trackFxRows(t, label, kindOf(t) === "pitched", esc)
         + note + '</div>';
     }).join("");
     const full = song.tracks.length >= M.CONST.MAX_TRACKS;
@@ -1971,10 +2019,11 @@ $("#ss-tempo").addEventListener("keydown", e => { if (e.key === "Enter"){ e.prev
 $("#ss-volume").addEventListener("input", e => { if (!song) return; song.volume = clamp(+e.target.value / 100, 0, 1); if (liveBus) liveBus.gain.value = song.volume; });
 $("#ss-volume").addEventListener("change", () => { if (song) commit(); });
 $("#track-list").addEventListener("input", e => {
+  const r = e.target.closest(".trev"); if (r){ const t = trackById(r.dataset.id); if (t){ const nm = setTrackReverb(t, r.value); r.setAttribute("aria-valuetext", nm); if (r.nextElementSibling) r.nextElementSibling.textContent = nm; } return; }
   const s = e.target.closest(".tvol"); if (!s) return;
   const t = trackById(s.dataset.id); if (t) t.volume = clamp(+s.value / 100, 0, 1);
 });
-$("#track-list").addEventListener("change", e => { if (e.target.closest(".tvol")) commit(); });
+$("#track-list").addEventListener("change", e => { if (e.target.closest(".tvol, .trev")) commit(); });
 $("#title-in").addEventListener("input", e => { if (!song) return; song.title = e.target.value.slice(0, 60); queueSave(); });
 $("#title-in").addEventListener("change", e => { if (!song) return; song.title = e.target.value.trim().slice(0, 60) || "My song"; e.target.value = song.title; commit(); });
 $("#title-in").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); e.target.blur(); } });
@@ -2486,6 +2535,7 @@ document.addEventListener("click", async e => {
   if (act === "select-track"){ if (id !== sel){ releaseAll(); sel = id; gridFocus = { r:0, c:0 }; renderAll(true); } return; }
   if (act === "retry") return retryLoad(trackById(id) ? trackById(id).instrumentId : id);
   if (act === "mute" || act === "solo"){ const t = trackById(id); if (!t) return; t[act] = !t[act]; commit(); renderTracks(); renderOverview(); return; }
+  if (act === "sustain"){ const t = trackById(id); if (!t) return; toggleTrackSustain(t); commit(); renderTracks(); return; }
 });
 window.addEventListener("pagehide", () => { if (song) saveNow().then(flushPush); });
 /* leaving the tab: save and send what's waiting. Coming back to Home: bring in what changed in another browser. */

@@ -142,6 +142,22 @@ describe("Sound Space saving (cloud.js)", () => {
       expect((await store.get("song-one")).owner).toBe("grownup@example.test");
     });
 
+    it("songs from the account come in with or without Reverb and Sustain, and older ones have them off", async () => {
+      const { M, store, acct, sync } = await setup();
+      const old = song(M, "before-fx", 1000, "Older song");
+      M.addTrack(old, "piano");
+      delete old.tracks[0].reverb; delete old.tracks[0].sustain;
+      const fx = song(M, "with-fx", 1000, "Newer song");
+      Object.assign(M.addTrack(fx, "piano"), { reverb: 2, sustain: true });
+      await acct.call("put", { project: old });
+      await acct.call("put", { project: fx });
+      const r = await sync();
+      expect(r.ok).toBe(true);
+      expect((await store.get("before-fx")).tracks[0]).toMatchObject({ reverb: 0, sustain: false });
+      expect((await store.get("with-fx")).tracks[0]).toMatchObject({ reverb: 2, sustain: true });
+      expect(page).toMatch(/accept: p => \{ const v = M\.validateSong\(p, CATALOG_IDS\); return v\.ok \? v\.song : null; \}/);
+    });
+
     it("a newer copy in the account replaces the one here", async () => {
       const { M, store, acct, sync } = await setup();
       await store.put(song(M, "song-two", 1000, "Old title"));
