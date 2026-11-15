@@ -212,7 +212,12 @@ describe("the Sound Space row on the Studio page", () => {
     expect(sound).toContain('src="assets/studio/sound-space-preview.jpg"');
     expect(sound).toContain('src="assets/studio/sound-space-preview-light.jpg"');
     expect(sound).toContain('data-act="studio-theme"');
-    expect(sound).toContain('<p class="studio-card__lead"><b>LEAD:soundText</b></p>');
+    // like Art Space: a bold first line, then a fuller paragraph
+    expect(sound).toContain('<p class="studio-card__lead">' + E(SLOT_FB.soundLead) + '</p><p class="studio-card__text">' + E(SLOT_FB.soundText) + "</p>");
+    expect(SLOT_FB.soundLead).toBe("This is your space to make your own music!");
+    expect(SLOT_FB.soundText).toMatch(/^Build a song one track at a time/);
+    expect(SLOT_FB.artText).toMatch(/^Draw, paint and design the way real artists and designers do\./);
+    for (const k of ["artText", "soundText"]) expect(SLOT_FB[k].length).toBeGreaterThan(300);
     expect(sound).toMatch(/<span class="chip chip--ink"[^>]*>Beta<\/span>/);
     expect(sound).toMatch(/class="btn btn--sm btn--cyan" data-act="open-studio-app" data-id="sound" aria-label="Launch Sound Space"/);
     expect(sound).toContain("Subscribers only");
