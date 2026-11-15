@@ -494,3 +494,70 @@ describe("Sound Space small fixes folded into the phone change", () => {
     expect(css).toMatch(/\.pl\[aria-pressed="true"\]\{ box-shadow:inset 0 2px 4px rgba\(0,0,0,\.3\),0 0 0 3px rgba\(94,230,216,\.4\); \}/);
   });
 });
+
+describe("Sound Space on phones: no sideways scroll, and steadier menus", () => {
+  it("the editor head wraps on phones, so its icon, name, note picker and buttons stay inside the screen", () => {
+    const head = (phone.match(/\.edhead\{[^}]*\}/) || [""])[0];
+    expect(head).toMatch(/flex-wrap:wrap/);
+    expect(phone).toMatch(/\.edhead b\{[^}]*min-width:0;[^}]*text-overflow:ellipsis/);
+    expect(phone).toMatch(/\.edhead \.acts\{[^}]*margin-left:auto/);
+    expect(phone).toMatch(/\.edhead \.acts\{[^}]*flex-wrap:wrap/);
+    // above 640px the head is a single row, as it was
+    expect(notPhone).toMatch(/\.edhead\{ display:flex; align-items:center; gap:10px; margin-bottom:10px; flex:none; min-width:0; \}/);
+    expect(notPhone).not.toMatch(/\.edhead\{[^}]*flex-wrap/);
+  });
+
+  it("the editor head's Beats button is the phone route to the library, and nothing hides it up to 640px", () => {
+    expect(html).toMatch(/<button type="button" class="btn only-narrow" data-act="lib-open"/);
+    const m900 = block(css, "@media (max-width:900px){");
+    expect(m900).toMatch(/\.only-narrow\{ display:inline-flex !important; \}/);
+    expect(phone).not.toMatch(/\.only-narrow/);
+    expect(phone).not.toMatch(/\[data-act="lib-open"\]/);
+    expect(hiddenBy(css.replace(block(css, ".only-narrow{"), ""))).not.toContain(".only-narrow");
+  });
+
+  it("the More menu closes when the width changes, not when only the height does (a phone's URL bar)", () => {
+    expect(html).toContain('window.addEventListener("resize", onResizeMore);');
+    expect(html).not.toContain('window.addEventListener("resize", () => closeMore(false));');
+    const make = (w) => {
+      const win = { innerWidth: w }, closed = [];
+      const api = new Function("window", "closeMore", "let moreWidth = " + w + ";\n" + pageFn("onResizeMore") + "\nreturn onResizeMore;")(win, (b) => closed.push(b));
+      return { win, closed, fire: api };
+    };
+    const t = make(375);
+    t.win.innerHeight = 600; t.fire();   // the URL bar collapsed: same width
+    expect(t.closed).toEqual([]);
+    t.win.innerWidth = 640; t.fire();
+    expect(t.closed).toEqual([false]);
+    t.fire();   // same width again
+    expect(t.closed).toEqual([false]);
+  });
+
+  it("when the Song sheet closes because the width crossed 640px, the focus goes to Play, not the hidden Song button", () => {
+    expect(pageFn("placeSongFields")).toContain('closeSongSheet(false, "#ss-play")');
+    const doc = { activeElement: null, body: {} };
+    const els = {};
+    const mk = (n, o) => { const a = {}; const e = Object.assign({ n, hidden: false, setAttribute(k, v) { a[k] = v; }, focus() { doc.activeElement = e; }, contains: () => false }, o); return e; };
+    const sheet = mk("sheet", { hidden: false });
+    const inner = mk("inner"); sheet.contains = (x) => x === inner;
+    els["#songsheet"] = sheet;
+    doc.activeElement = inner;
+    const $ = (s) => els[s] || (els[s] = mk(s));
+    const body = "let sheetShutByHand = false, lesson = null;\n" + pageFn("closeSongSheet") + "\nreturn closeSongSheet;";
+    const close = new Function("$", "document", "placeTip", body)($, doc, () => {});
+    close(false, "#ss-play");
+    expect(sheet.hidden).toBe(true);
+    expect(doc.activeElement).toBe($("#ss-play"));
+    // closed by hand, the focus still returns to Song
+    sheet.hidden = false; doc.activeElement = inner;
+    close(true);
+    expect(doc.activeElement).toBe($("#ss-song"));
+  });
+
+  it("at 380px and under the one-row transport tightens its gaps and switches, so Song keeps a margin at 360px", () => {
+    const small = block(css, "@media only screen and (max-width:380px){");
+    expect(small).toMatch(/\.transport\{[^}]*gap:4px/);
+    expect(small).toMatch(/\.transport \.toggle\{[^}]*width:36px/);
+    expect(css.indexOf("@media only screen and (max-width:380px){")).toBeGreaterThan(css.indexOf(PHONE));
+  });
+});

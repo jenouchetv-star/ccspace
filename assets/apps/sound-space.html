@@ -1132,6 +1132,15 @@ body.kbd-collapsed #kbd{ display:none; }
   .transport .toggle{ position:relative; width:38px; height:34px; padding:0; justify-content:center; gap:0; font-size:0; flex:none; -webkit-touch-callout:none; }
   .transport .toggle .led{ position:absolute; top:4px; right:4px; width:6px; height:6px; }
   .songbtn{ display:inline-flex; margin-left:auto; height:34px; padding:0 10px; flex:none; }
+  /* the editor's head wraps, so the note picker and the buttons drop to their own line instead of pushing the page sideways */
+  .edhead{ flex-wrap:wrap; row-gap:6px; }
+  .edhead b{ min-width:0; flex:1 1 0; overflow:hidden; text-overflow:ellipsis; }
+  .edhead .acts{ margin-left:auto; flex-wrap:wrap; }
+}
+/* the narrowest phones: a little tighter, so Song keeps its margin */
+@media only screen and (max-width:380px){
+  .transport{ gap:4px; padding:8px 6px; }
+  .transport .toggle{ width:36px; }
 }
 </style>
 </head>
@@ -2892,7 +2901,10 @@ function moreOutside(e){
 $("#more-btn").addEventListener("click", () => { if ($("#more-menu").hidden) openMore(); else closeMore(true); });
 $("#more-menu").addEventListener("click", moreClick);
 document.addEventListener("pointerdown", moreOutside, true);
-window.addEventListener("resize", () => closeMore(false));
+/* only a real change of width closes it: a phone's URL bar sliding away changes the height and nothing else */
+let moreWidth = window.innerWidth;
+function onResizeMore(){ const w = window.innerWidth; if (w === moreWidth) return; moreWidth = w; closeMore(false); }
+window.addEventListener("resize", onResizeMore);
 
 /* the Song sheet: on a phone, Speed, Counts, Grid and Main move into it (a marker keeps each one's place in the play
    controls), and go back when the window is wider */
@@ -2903,7 +2915,7 @@ function placeSongFields(){
     const rows = $("#songsheet-rows");
     songFieldsHome = songFields().map(f => { const mark = document.createComment("song field"); f.before(mark); rows.appendChild(f); return [mark, f]; });
   } else if (!narrowMq.matches && songFieldsHome){
-    closeSongSheet(false);
+    closeSongSheet(false, "#ss-play");   /* Song is about to be hidden, so the focus goes to Play */
     songFieldsHome.forEach(([mark, f]) => mark.replaceWith(f));
     songFieldsHome = null;
   }
@@ -2920,14 +2932,14 @@ function openSongSheet(){
 }
 /* byHand: the close button, a tap outside, Escape or Song. During a lesson the sheet then stays shut until the next
    step. The focus goes back to Song unless it is somewhere else already (the tip's Next step) */
-function closeSongSheet(byHand){
+function closeSongSheet(byHand, focusTo){
   const sh = $("#songsheet"); if (sh.hidden) return;
   const at = document.activeElement, was = !at || at === document.body || sh.contains(at);
   sh.hidden = true;
   $("#songsheet-scrim").hidden = true;
   $("#ss-song").setAttribute("aria-expanded", "false");
   if (byHand && lesson) sheetShutByHand = true;
-  if (was) $("#ss-song").focus();
+  if (was) $(focusTo || "#ss-song").focus();
   if (lesson) placeTip();
 }
 /* while it is open it has the keys: Escape closes it, Tab stays inside (and reaches a lesson's tip) */
