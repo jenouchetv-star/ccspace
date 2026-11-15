@@ -574,7 +574,7 @@ describe("Sound Space app page", () => {
       const song = M.newSong();
       const track = M.addTrack(song, instrumentId);
       const played = [], timers = [], events = {}, keyEls = new Map(), padEls = new Map();
-      const env = { renders: 0, commits: 0, narrow: { matches: !!opts.narrow }, document: { hidden: false } };
+      const env = { renders: 0, commits: 0, narrow: { matches: !!opts.narrow }, document: { hidden: false }, litPlayed: [] };
       /* an audio clock good enough for the real engine's code voices: every automation call and stop is kept */
       const param = (v = 0) => ({ value: v, calls: [], auto: [],
         setValueAtTime(...a) { this.auto.push(["set", ...a]); }, linearRampToValueAtTime(...a) { this.auto.push(["lin", ...a]); },
@@ -609,6 +609,7 @@ describe("Sound Space app page", () => {
         const renderPlayArea = () => { env.renders++; };
         const commit = () => { env.commits++; }, paintRow = () => {}, renderOverview = () => {};
         const lessonEvent = n => { env.events[n] = (env.events[n] || 0) + 1; };
+        const litKeyPlayed = p => { env.litPlayed.push(p); };
         const setTimeout = (fn, ms) => { env.timers.push(fn); return env.timers.length; }, clearTimeout = () => {};
         const $ = s => {
           if (s === "#editor") return { hidden: false };
@@ -822,9 +823,20 @@ describe("Sound Space app page", () => {
       expect(fx.played.map((p) => p.ev.pitch)).toEqual([0]);   // an effect has one pad
     });
 
-    it("every live key goes through one liveKeyPressed hook, for lessons now and lit keys later", () => {
+    it("every live key goes through one liveKeyPressed hook, for lessons and their lit keys", () => {
       expect(section(/function noteOn\(/, "function noteOff")).toContain("liveKeyPressed(pitch, oneShot)");
       expect(fnSrc("liveKeyPressed")).toContain('lessonEvent(oneShot ? "pads" : "keys")');
+      // a real key, an on-screen key and a computer key all reach the lit key with their pitch; a pad never does
+      const { h, track, env } = live();
+      h.midiEvent({ type: "on", pitch: 64, vel: 90, ts: 0 });
+      h.noteOn("p1", track, 65, 0);
+      h.noteOn("kKeyA", track, 67, 0);
+      h.midiEvent({ type: "on", pitch: 12, vel: 90, ts: 0 });   // outside the piano: ignored
+      expect(env.litPlayed).toEqual([64, 65, 67]);
+      const kit = live("classic-kit");
+      kit.h.midiEvent({ type: "on", pitch: 36, vel: 90, ts: 0 });
+      kit.h.noteOn("p1", kit.track, 2, 0);
+      expect(kit.env.litPlayed).toEqual([]);
     });
 
     describe("the keyboard controls in the keys' bar", () => {
@@ -898,5 +910,208 @@ describe("Sound Space app page", () => {
     for (const api of ["getUserMedia", "getDisplayMedia", "MediaRecorder", "createMediaStreamSource", "SpeechRecognition"]) {
       expect(html).not.toContain(api);
     }
+  });
+});
+
+describe("Sound Space song lessons in the page", () => {
+  /** The full source of one top-level function in the page, found by its name (string- and comment-aware). */
+  function fnSource(name) {
+    const m = new RegExp("\\n(?:async )?function " + name + "\\(").exec(html);
+    if (!m) throw new Error("no function " + name);
+    const open = html.indexOf("{", html.indexOf(")", m.index));
+    let depth = 0;
+    for (let j = open; j < html.length; j++) {
+      const c = html[j];
+      if (c === '"' || c === "'" || c === "`") { for (j++; j < html.length && html[j] !== c; j++) if (html[j] === "\\") j++; continue; }
+      if (c === "/" && html[j + 1] === "*") { j = html.indexOf("*/", j) + 1; continue; }
+      if (c === "/" && html[j + 1] === "/") { j = html.indexOf("\n", j); continue; }
+      if (c === "{") depth++;
+      else if (c === "}" && --depth === 0) return html.slice(m.index + 1, j + 1);
+    }
+    throw new Error("unclosed function " + name);
+  }
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const load = () => loadSS("model.js", "engine.js", "instruments.js", "icons.js", "library.js", "lessons.js");
+  const copy = (o) => JSON.parse(JSON.stringify(o));
+
+  it("the lessons list shows what each lesson builds, a Pop recipe badge on lessons 1 and 8, and about 5 minutes", () => {
+    const SS = load();
+    const els = {};
+    const $ = (s) => (els[s] = els[s] || { innerHTML: "", hidden: true, focus() {} });
+    new Function("$", "LS", "esc", "icons", "document", "lessonsBack", fnSource("openLessons") + "; openLessons();")($, SS.lessons, esc, () => {}, { activeElement: null }, null);
+    const cards = els["#lessons-list"].innerHTML.split('<button type="button" class="lesson"').slice(1);
+    expect(cards.length).toBe(8);
+    cards.forEach((c, i) => {
+      const l = SS.lessons.LESSONS[i];
+      expect(c).toContain("You build: " + esc(l.song));
+      expect(c).toContain("about 5 minutes");
+      expect(c.includes('<span class="lesson__tag">Pop recipe</span>'), l.id).toBe(i === 0 || i === 7);
+    });
+    // the badge is black, with white letters, in either theme
+    const css = cssText();
+    const tag = (/\.lesson__tag\{([^}]*)\}/.exec(css) || [])[1] || "";
+    const bg = /background:(#[0-9A-Fa-f]{3,6})/.exec(tag);
+    expect(bg).toBeTruthy();
+    expect(hsl(hexToRgb(bg[1])).l).toBeLessThan(0.1);
+    expect(tag).toMatch(/color:#fff/i);
+  });
+
+  it("the Home tile's picture still comes from lesson 2, Your first melody", () => {
+    const SS = load();
+    const CAT = {}; SS.instruments.CATEGORIES.forEach((c) => { CAT[c.id] = c; });
+    const svg = new Function("SS", "CAT", "esc", fnSource("lessonPreview") + "; return lessonPreview();")(SS, CAT, esc);
+    expect(svg).toContain("Your first melody");
+    expect(svg).toContain("STEP 2 OF 3");
+    expect(svg).toContain(">melody<");
+  });
+
+  /* the grid's cells for one row, with the lesson state given */
+  function gridRow(lesson, pitch, opts = {}) {
+    const SS = load();
+    const song = copy(opts.song || SS.lessons.LESSONS[1].startSong);
+    if (opts.grid) Object.assign(song, SS.model.setGrid(song, opts.grid).song);
+    const t = song.tracks[opts.track || 0];
+    const rows = [{ pitch, label: "x" }];
+    const body = fnSource("guideFor") + "\n" + fnSource("cellsHtml") + "; return cellsHtml(t, 0, M.totalSteps(song));";
+    return new Function("song", "t", "lesson", "rows", "gridFocus", "spc", "esc", "noteSpoken", "M", "LS", "instOf", body)(
+      song, t, lesson, rows, { r: -1, c: -1 }, () => song.grid || 2, esc, () => "C", SS.model, SS.lessons, (x) => SS.instruments.byId(x.instrumentId));
+  }
+  const outlines = (h) => [...h.matchAll(/<span class="guide"[^>]*style="grid-column:(\d+) \/ span (\d+)"/g)].map((m) => [+m[1] - 1, +m[2]]);
+
+  it("outlines the guide notes of the step now on, on the selected track, scaled to the grid", () => {
+    const SS = load();
+    const l = SS.lessons.LESSONS[1];   // Twinkle Twinkle Little Star
+    const now = { l, step: 0, finished: false };
+    // C C on sixteenths: squares 0 and 4, each 4 long; the long G: square 24, 8 long
+    expect(outlines(gridRow(now, 60))).toEqual([[0, 4], [4, 4]]);
+    expect(outlines(gridRow(now, 67))).toEqual([[8, 4], [12, 4], [24, 8]]);
+    expect(outlines(gridRow(now, 61))).toEqual([]);
+    // on eighths they line up with the eighth squares
+    expect(outlines(gridRow(now, 67, { grid: 2 }))).toEqual([[4, 2], [6, 2], [12, 4]]);
+    // line 2 shows only line 2
+    expect(outlines(gridRow({ l, step: 1, finished: false }, 60))).toEqual([[56, 8]]);
+    // the drum track does not show the piano's outlines
+    expect(outlines(gridRow(now, 60, { track: 1 }))).toEqual([]);
+    // gone once the step has no guide, the lesson is done, or there is no lesson
+    expect(outlines(gridRow({ l, step: 2, finished: false }, 60))).toEqual([]);
+    expect(outlines(gridRow({ l, step: 0, finished: true }, 60))).toEqual([]);
+    expect(outlines(gridRow(null, 60))).toEqual([]);
+  });
+
+  it("a filled note sits over its outline, and the outline never takes the tap", () => {
+    const SS = load();
+    const l = SS.lessons.LESSONS[1];
+    const song = copy(l.startSong);
+    song.tracks[0].notes.push({ step: 0, pitch: 60, len: 4, vel: 0.9 });
+    const h = gridRow({ l, step: 0, finished: false }, 60, { song });
+    expect(h.indexOf('class="guide"')).toBeGreaterThan(-1);
+    expect(h.indexOf('class="guide"')).toBeLessThan(h.indexOf('class="note"'));
+    const css = cssText();
+    const g = (/\.guide\{([^}]*)\}/.exec(css) || [])[1] || "";
+    expect(g).toContain("pointer-events:none");
+    expect(g).toMatch(/box-shadow:inset 0 0 0 1\.5px #C4B5FD/i);
+    expect(g).toMatch(/opacity:\.75/);
+    expect(css).toMatch(/\.note\{[^}]*z-index:1/);
+    expect(g).toMatch(/z-index:1/);
+  });
+
+  it("the outlines come and go with the step: a new step or the lesson's end redraws the grid", () => {
+    expect(fnSource("nextLessonStep")).toContain("lessonStepBegins()");
+    expect(fnSource("startLesson")).toContain("lessonStepBegins()");
+    expect(fnSource("lessonStepBegins")).toContain("renderAll(");
+    expect(fnSource("endLesson")).toMatch(/renderGrid\(\)/);
+    expect(fnSource("endLesson")).toContain("paintLitKey()");
+    // the grid scrolls to the outlines whenever it scrolls itself (a new step, a new track, a grid change)
+    expect(fnSource("renderGrid")).toContain("scrollToGuide()");
+    // a guide's pitches get rows even on an instrument whose keys don't reach them
+    expect(fnSource("rowsFor")).toContain("guideFor(t)");
+  });
+
+  it("a guide step selects the first track that can play it", () => {
+    const SS = load();
+    const l = SS.lessons.LESSONS[4];   // Canon in D: the chords, then the bass
+    const song = copy(l.startSong);
+    const out = { sel: song.tracks[0].id, renders: [], layout: { keys: true } };
+    const run = (step) => new Function("env", "LS", "instOf", "selTrack", "releaseAll", "renderAll", "setLayout", "paintLitKey",
+      "let sel = env.sel, gridFocus = null; const song = env.song, lesson = env.lesson, layout = env.layout;\n" + fnSource("lessonStepBegins") + "; lessonStepBegins(); env.sel = sel;")(
+      Object.assign(out, { song, lesson: { l, step, lit: 3 } }), SS.lessons, (t) => (t ? SS.instruments.byId(t.instrumentId) : null),
+      () => song.tracks.find((t) => t.id === out.sel), () => {}, (s) => out.renders.push(s), () => {}, () => {});
+    run(1);
+    expect(out.sel).toBe(song.tracks[1].id);   // the bass
+    expect(out.renders).toEqual([true]);
+    out.sel = song.tracks[0].id;
+    run(0);                                    // Play: no guide, the track stays, and the grid redraws where it is
+    expect(out.sel).toBe(song.tracks[0].id);
+    expect(out.renders).toEqual([true, false]);
+  });
+
+  it("a tap inside an outline fills that outline; in the rhythm lesson the kid still picks the length", () => {
+    const SS = load(), M = SS.model;
+    function tap(l, step, pitch, c, picked) {
+      const song = copy((l || SS.lessons.LESSONS[1]).startSong), t = song.tracks[0];
+      const rows = [{ pitch }];
+      new Function("song", "lesson", "rows", "M", "E", "LS", "pickedNote", "spc", "selTrack", "instOf", "kindOf", "blip", "lessonEvent", "commit", "paintRow", "renderOverview", "scrollToGuide",
+        fnSource("guideFor") + "\n" + fnSource("guideAt") + "\n" + fnSource("coverAt") + "\n" + fnSource("toggleAt") + "; toggleAt(0, " + c + ");")(
+        song, l && { l, step, finished: false }, rows, M, { stepSeconds: () => 0.1 }, SS.lessons, picked || "sixteenth", () => song.grid, () => t,
+        (x) => SS.instruments.byId(x.instrumentId), () => "pitched", () => {}, () => {}, () => {}, () => {}, () => {}, () => {});
+      return t.notes.map((n) => [n.step, n.pitch, n.len]);
+    }
+    const twinkle = SS.lessons.LESSONS[1], jingle = SS.lessons.LESSONS[2];
+    expect(tap(twinkle, 0, 67, 29)).toEqual([[24, 67, 8]]);     // the long G, tapped near its end
+    expect(tap(twinkle, 0, 60, 2)).toEqual([[0, 60, 4]]);
+    expect(tap(twinkle, 0, 61, 2)).toEqual([[2, 61, 1]]);       // no outline there: an ordinary tap
+    expect(tap(twinkle, 2, 60, 2)).toEqual([[2, 60, 1]]);       // the Play step has no outlines
+    expect(tap(null, 0, 60, 2)).toEqual([[2, 60, 1]]);
+    expect(tap(jingle, 0, 64, 6, "quarter")).toEqual([[4, 64, 4]]);   // the start snaps, the length is the kid's pick
+    expect(tap(jingle, 0, 64, 6)).toEqual([[4, 64, 1]]);
+  });
+
+  it("lights the next key of the record lesson, and moves on only when the kid plays it", () => {
+    const SS = load();
+    let painted = 0;
+    const lesson = { l: { steps: [{ litKeys: [64, 64, 65] }] }, step: 0, lit: 0, finished: false };
+    const play = new Function("lesson", "LS", "paintLitKey", fnSource("litKeyPlayed") + "; return litKeyPlayed;")(lesson, SS.lessons, () => painted++);
+    play(60);
+    expect([lesson.lit, painted]).toEqual([0, 0]);
+    play(64);
+    expect([lesson.lit, painted]).toEqual([1, 1]);
+    play(62);
+    expect(lesson.lit).toBe(1);
+    play(64); play(65);
+    expect([lesson.lit, painted]).toEqual([0, 3]);   // round again after the last
+    lesson.finished = true;
+    play(64);
+    expect(lesson.lit).toBe(0);
+    // every live key (on screen, computer keys, a real keyboard) reaches it through liveKeyPressed; pads don't
+    expect(fnSource("liveKeyPressed")).toMatch(/if \(!oneShot\) litKeyPlayed\(pitch\)/);
+  });
+
+  it("paints the lit key in the lessons' purple, and only on a tune track's keys", () => {
+    const SS = load();
+    const keys = new Map(), on = (p) => keys.has(p) && keys.get(p).has("lit");
+    const el = (p) => { if (!keys.has(p)) keys.set(p, new Set()); const c = keys.get(p); return { classList: { add: (k) => c.add(k), remove: (k) => c.delete(k) } }; };
+    const l = SS.lessons.LESSONS[5];
+    const song = copy(l.startSong);
+    let sel = song.tracks[0].id;
+    const shown = [];
+    const paint = (lesson) => new Function("lesson", "selTrack", "kindOf", "showPitch", "$", "$$", fnSource("paintLitKey") + "; paintLitKey();")(
+      lesson, () => song.tracks.find((t) => t.id === sel), (t) => SS.instruments.byId(t.instrumentId).kind, (t, p) => shown.push(p),
+      (s) => { const m = /data-key="(\d+)"/.exec(s); return m ? el(+m[1]) : null; },
+      () => [...keys.keys()].filter(on).map(el));
+    const step = l.steps.findIndex((s) => s.litKeys);
+    paint({ l, step, lit: 0, finished: false });
+    expect(on(64)).toBe(true);
+    expect(shown).toEqual([64]);
+    paint({ l, step, lit: 2, finished: false });
+    expect(on(64)).toBe(false);
+    expect(on(65)).toBe(true);
+    paint({ l, step: 0, lit: 2, finished: false });
+    expect([...keys.keys()].some(on)).toBe(false);
+    sel = song.tracks[1].id;   // the drums: no lit key
+    paint({ l, step, lit: 0, finished: false });
+    expect([...keys.keys()].some(on)).toBe(false);
+    const css = cssText();
+    expect(css).toMatch(/\.wk\.lit\{[^}]*#C4B5FD[^}]*\}/i);
+    expect(css).toMatch(/\.wk\.lit\{[^}]*box-shadow:[^}]*rgba\(139,92,246/i);
   });
 });
