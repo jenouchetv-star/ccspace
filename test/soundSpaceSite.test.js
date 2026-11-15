@@ -247,6 +247,7 @@ describe("the Sound Space row on the Studio page", () => {
     const share = (url, title) => new RegExp('<button type="button" class="btn (btn--sm )?btn--paper no-print" data-act="share" data-url="' + url.replace(/[.]/g, "\.") + '" data-title="' + title + '"><i data-lucide="share-2"></i> Share</button>');
     const hero = (h.split('class="studiohero__ctas"')[1] || "").split("</div>")[0];
     expect(hero).toMatch(share("https://site.test/create/studio", "Creative Space Studio"));
+    expect(hero).toContain('data-act="studio-meet">See the apps <i data-lucide="arrow-down"></i></button>');   // both apps are below, not just Art Space
     // the intro's three buttons are the small size, so they sit on one row
     expect([...hero.matchAll(/<button type="button" class="btn ([\w -]+)"/g)].map((m) => m[1].split(" ")[0])).toEqual(["btn--sm", "btn--sm", "btn--sm"]);
     const r = rows(h);
