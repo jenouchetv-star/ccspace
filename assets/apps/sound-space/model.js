@@ -9,7 +9,9 @@
     MAX_TRACKS: 8,
     TEMPO_MIN: 60,
     TEMPO_MAX: 160,
-    TEMPO_DEFAULT: 100
+    TEMPO_DEFAULT: 120,
+    // New songs start on sixteenths. STEPS_PER_COUNT (2) stays the fallback for songs saved before `grid` existed: they play as eighths.
+    GRID_DEFAULT: 4
   };
 
   const SONG_KEYS = ["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs"];
@@ -56,10 +58,10 @@
       id: makeId(),
       title: (opts && opts.title) || "My song",
       counts: 8,
-      grid: CONST.STEPS_PER_COUNT,
+      grid: CONST.GRID_DEFAULT,
       tempo: CONST.TEMPO_DEFAULT,
       loop: true,
-      countIn: false,
+      countIn: true,
       volume: 0.8,
       tracks: [],
       updatedMs: Date.now()

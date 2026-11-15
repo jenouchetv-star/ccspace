@@ -103,7 +103,7 @@ describe("Sound Space app page", () => {
     const tempo = section(/id="ss-tempo"/, ">");
     expect(tempo).toMatch(/min="60"/);
     expect(tempo).toMatch(/max="160"/);
-    expect(tempo).toMatch(/value="100"/);
+    expect(tempo).toMatch(/value="120"/);
     expect(html).toMatch(/id="title-in"[^>]*maxlength="60"/);
   });
 
@@ -129,7 +129,37 @@ describe("Sound Space app page", () => {
 
   it("going back to eighths drops a sixteenth pick", () => {
     const fn = section(/function setGridTo\(/, "}\nfunction");
-    expect(fn).toMatch(/noteSquares\(pickedNote, g\) === null\) pickedNote = "eighth"/);
+    expect(fn).toMatch(/noteSquares\(pickedNote, g\) === null\) pickedNote = finestNote\(g\)/);
+  });
+
+  it("the note-length pick starts at the finest note the song's grid allows: sixteenth on sixteenths, eighth on eighths", () => {
+    expect(html).toMatch(/function finestNote\(g\)\{ return M\.noteSquares\("sixteenth", g\) !== null \? "sixteenth" : "eighth"; \}/);
+    const open = section(/function openSong\(/, "async function showHome");
+    expect(open).toMatch(/pickedNote = finestNote\(spc\(\)\)/);
+  });
+
+  it("the note-length pick logic gives sixteenth for a new song and eighth for a grid-2 song", () => {
+    const M = loadSS("model.js").model;
+    const fn = html.match(/function finestNote\(g\)\{[^\n]*\}/);
+    expect(fn).not.toBeNull();
+    const finestNote = new Function("M", fn[0] + "; return finestNote;")(M);
+    expect(finestNote(M.newSong().grid)).toBe("sixteenth");
+    const old = M.newSong(); delete old.grid;
+    expect(finestNote(old.grid || M.CONST.STEPS_PER_COUNT)).toBe("eighth");
+    expect(finestNote(2)).toBe("eighth");
+  });
+
+  it("a new song shows Count-in on and Speed 120", () => {
+    const m = loadSS("model.js").model.newSong();
+    expect(m.countIn).toBe(true);
+    expect(m.tempo).toBe(120);
+    expect(html).toMatch(/aria-pressed", String\(!!song\.countIn\)\)/);
+    expect(html).toMatch(/\$\("#ss-tempo"\)\.value = song\.tempo/);
+  });
+
+  it("Help says a count has 4 squares on the starting grid", () => {
+    expect(html).not.toMatch(/Each count has 2 squares\./);
+    expect(html).toMatch(/Each count has 4 squares/);
   });
 
   it("recording lengths use recordedLength, not rounding", () => {
@@ -338,7 +368,7 @@ describe("Sound Space app page", () => {
       const { loadSS } = await import("./helpers/soundSpace.js");
       const SS = loadSS("model.js", "engine.js", "instruments.js");
       const M = SS.model, byId = SS.instruments.byId;
-      let song = M.newSong();
+      let song = M.newSong(); song.grid = 2;
       const t = M.addTrack(song, "grand-piano");
       [0, 9, 12, 15].forEach((step) => M.toggleNote(t, step, 60 + step));
       let r = M.resizeSong(song, 4, {});
@@ -352,7 +382,7 @@ describe("Sound Space app page", () => {
       expect(r.song.tracks[0].notes).toEqual([]);
 
       // with no visible notes left, the hidden ones are still forgotten
-      let s2 = M.newSong();
+      let s2 = M.newSong(); s2.grid = 2;
       const t2 = M.addTrack(s2, "drum-machine");
       M.toggleNote(t2, 12, 0);
       r = M.resizeSong(s2, 4, {});
@@ -362,7 +392,7 @@ describe("Sound Space app page", () => {
       expect(r.stash[s2.tracks[0].id]).toBeUndefined();
 
       // the same kind of instrument keeps its notes and what Counts is keeping
-      let s3 = M.newSong();
+      let s3 = M.newSong(); s3.grid = 2;
       const t3 = M.addTrack(s3, "grand-piano");
       M.toggleNote(t3, 0, 60); M.toggleNote(t3, 12, 64);
       r = M.resizeSong(s3, 4, {});
@@ -506,6 +536,7 @@ describe("Sound Space app page", () => {
       expect(on).toContain("sustain:!!track.sustain");
       const off = section(/function noteOff\(/, "function releaseAll");
       expect(off).toContain("E.SUSTAIN_TAIL");
+      expect(off).toContain("E.SUSTAIN_TAIL / 7");
     });
 
     it("Help names both controls in plain words", () => {

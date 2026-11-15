@@ -96,7 +96,7 @@
       title: "Record what you play",
       word: "tempo",
       meaning: "Tempo is how fast or slow the beat goes. Musicians count it in beats a minute.",
-      startSong: L.makeSong("Lesson 5: Record what you play", { counts: 8, tempo: 116 }, [
+      startSong: L.makeSong("Lesson 5: Record what you play", { counts: 8, tempo: 116, countIn: false }, [
         { instrumentId: "electric-piano", volume: 0.8 },
         { instrumentId: "lo-fi-kit", pattern: "Sleepy beat", volume: 0.7 },
       ]),

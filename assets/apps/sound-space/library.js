@@ -364,8 +364,9 @@
     const M = SS.model, I = SS.instruments;
     const s = M.newSong({ title });
     s.counts = opts.counts || 8;
-    s.tempo = opts.tempo || 100;
-    s.grid = opts.grid || 2;
+    s.tempo = opts.tempo || M.CONST.TEMPO_DEFAULT;
+    s.grid = opts.grid || M.CONST.GRID_DEFAULT;
+    if (opts.countIn === false) s.countIn = false;
     if (opts.loop === false) s.loop = false;
     (parts || []).forEach((pt) => {
       const t = M.addTrack(s, pt.instrumentId);

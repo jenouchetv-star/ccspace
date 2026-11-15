@@ -416,7 +416,7 @@ describe("Sound Space sound making", () => {
 
   it("recording click: one soft tick per count on the audio clock, accent every fourth, none on plain play or export", () => {
     const run = (opts) => {
-      const song = SS.model.newSong(); song.counts = 8;
+      const song = SS.model.newSong(); song.counts = 8; song.grid = 2; song.tempo = 100;
       const ctx = fakeCtx();
       const voices = { play: () => [] };
       const hzOf = new Map();
@@ -451,8 +451,8 @@ describe("Sound Space sound making", () => {
 
   it("sixteenth grid: stepSeconds halves, export length keeps counts and speed, the player steps by sixteenths", () => {
     expect(SS.engine.stepSeconds(100, 4)).toBeCloseTo(0.15, 10);
-    const a = SS.model.newSong();
-    const b = SS.model.newSong(); b.grid = 4;
+    const a = SS.model.newSong(); a.grid = 2; a.tempo = 100;
+    const b = SS.model.newSong(); b.grid = 4; b.tempo = 100;
     expect(SS.engine.exportFrames(b, 1)).toBe(SS.engine.exportFrames(a, 1));
     const ctx = fakeCtx();
     const times = [];
@@ -476,6 +476,7 @@ describe("Sound Space reverb and sustain", () => {
   const E = SS.engine;
   const songWith = (tracks) => {
     const song = SS.model.newSong();
+    song.grid = 2; song.tempo = 100;   // these tests count seconds on the eighth grid at 100
     for (const [id, reverb, sustain] of tracks) {
       const t = SS.model.addTrack(song, id);
       t.reverb = reverb;
@@ -640,6 +641,32 @@ describe("Sound Space reverb and sustain", () => {
     const both = songWith([["ep", 3, true]]);
     expect(frames(both) / 44100).toBeGreaterThanOrEqual(3.2 + 1.5);
     expect(E.exportFrames(big, 1, 44100, 2)).toBe(E.exportFrames(dry, 1));   // an explicit tail still wins
+  });
+
+  it("with Loop off, the automatic stop waits for a Big hall tail and still waits 1.2 s for a dry song", () => {
+    const run = (reverb) => {
+      const song = SS.model.newSong();
+      song.counts = 4; song.loop = false;
+      const t = SS.model.addTrack(song, "ep");
+      t.reverb = reverb;
+      SS.model.toggleNote(t, 0, 60, 1);
+      const ctx = fakeCtx();
+      const voices = E.createVoices(ctx, stubCatalog(recipeRecords), "samples");
+      let tick = null;
+      const player = E.createPlayer(ctx, voices, { setInterval: (fn) => ((tick = fn), 1), clearInterval: () => {} });
+      player.start(song, { fromStep: 0 });
+      const songEnd = 0.06 + SS.model.totalSteps(song) * E.stepSeconds(song.tempo, song.grid);
+      const stopsAt = () => {
+        for (let i = 0; i < 2000; i++) { ctx.currentTime += 0.025; if (tick) tick(); if (!player.playing) return ctx.currentTime - songEnd; }
+        return Infinity;
+      };
+      return { after: stopsAt(), tail: E.songTail(song) };
+    };
+    const big = run(3), dry = run(0);
+    expect(big.tail).toBeGreaterThan(3);
+    expect(big.after).toBeGreaterThanOrEqual(big.tail - 0.05);
+    expect(dry.after).toBeGreaterThanOrEqual(1.2 - 0.05);
+    expect(dry.after).toBeLessThan(big.after);
   });
 
   it("renderOffline builds the same sends, so the WAV has the reverb", async () => {

@@ -4,7 +4,7 @@ import { loadSS } from "./helpers/soundSpace.js";
 describe("Sound Space model", () => {
   it("exposes the song constants from the design", () => {
     const SS = loadSS("model.js");
-    expect(SS.model.CONST).toEqual({ SCHEMA_VERSION: 1, STEPS_PER_COUNT: 2, COUNTS: [4, 8, 16], GRIDS: [2, 4], MAX_TRACKS: 8, TEMPO_MIN: 60, TEMPO_MAX: 160, TEMPO_DEFAULT: 100 });
+    expect(SS.model.CONST).toEqual({ SCHEMA_VERSION: 1, STEPS_PER_COUNT: 2, COUNTS: [4, 8, 16], GRIDS: [2, 4], MAX_TRACKS: 8, TEMPO_MIN: 60, TEMPO_MAX: 160, TEMPO_DEFAULT: 120, GRID_DEFAULT: 4 });
   });
 
   const M = () => loadSS("model.js").model;
@@ -13,25 +13,27 @@ describe("Sound Space model", () => {
     const m = M();
     const song = m.newSong();
     song.counts = counts;
+    song.grid = 2;   // these tests are about the eighth grid
     const t = m.addTrack(song, "piano");
     steps.forEach((s) => m.toggleNote(t, s, 60));
     return { m, song, t };
   };
 
-  it("a new song is 8 counts at 100, looping, with no tracks", () => {
+  it("a new song is 8 counts at 120, looping, with no tracks", () => {
     const s = M().newSong();
     expect(s.schemaVersion).toBe(1);
     expect(s.title).toBe("My song");
     expect(s.counts).toBe(8);
-    expect(s.tempo).toBe(100);
+    expect(s.tempo).toBe(120);
+    expect(s.grid).toBe(4);
     expect(s.loop).toBe(true);
-    expect(s.countIn).toBe(false);
+    expect(s.countIn).toBe(true);
     expect(s.volume).toBe(0.8);
     expect(s.tracks).toEqual([]);
     expect(typeof s.id).toBe("string");
     expect(typeof s.updatedMs).toBe("number");
     expect(M().newSong({ title: "Hi" }).title).toBe("Hi");
-    expect(M().totalSteps(s)).toBe(16);
+    expect(M().totalSteps(s)).toBe(32);
   });
 
   it("allows 8 tracks and refuses a ninth", () => {
@@ -211,10 +213,13 @@ describe("Sound Space model", () => {
 
   describe("sixteenth-note grid (task 7b)", () => {
     const validIds = new Set(["piano"]);
-    it("a song is on eighths unless it says sixteenths, and older files still open", () => {
+    it("a new song is on sixteenths, a song saved without a grid is still eighths, and older files still open", () => {
       const m = M();
-      expect(m.newSong().grid).toBe(2);
-      const old = m.newSong(); delete old.grid;
+      expect(m.newSong().grid).toBe(4);
+      expect(m.CONST.GRID_DEFAULT).toBe(4);
+      expect(m.CONST.STEPS_PER_COUNT).toBe(2);
+      const old = m.newSong(); delete old.grid; old.counts = 8;
+      expect(m.totalSteps(old)).toBe(16);
       const r = m.validateSong(old, validIds);
       expect(r.ok).toBe(true);
       expect(r.song.grid || 2).toBe(2);

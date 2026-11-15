@@ -903,7 +903,7 @@
         if (cb) cb(heard.step);
       }
       live = live.filter((l) => l.when > now - 6);
-      if (ended && !queue.length && now >= nextTime + 1.2) api.stop();
+      if (ended && !queue.length && now >= nextTime + Math.max(1.2, songTail(song))) api.stop();
     }
 
     function start(s, opts) {
@@ -1007,6 +1007,7 @@
     compileEvents,
     stepsToSchedule,
     exportFrames,
+    songTail,
     createVoices,
     createPlayer,
     DRUM_STYLES,

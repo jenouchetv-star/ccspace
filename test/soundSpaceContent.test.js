@@ -157,6 +157,26 @@ describe("Sound Space pattern library", () => {
     expect(st.tracks.every((t) => t.notes.length > 0)).toBe(true);
   });
 
+  it("the starter is on sixteenths with Count-in on and speed 92, and sounds exactly as it did on eighths", () => {
+    const st = L.STARTERS[0].song;
+    expect(st.grid).toBe(4);
+    expect(st.countIn).toBe(true);
+    expect(st.tempo).toBe(92);
+    // the same song built on the old eighth grid
+    const old = L.makeSong("old", { counts: 8, tempo: 92, grid: 2 }, [
+      { instrumentId: "hip-hop-kit", pattern: "Boom bap beat", volume: 0.85 },
+      { instrumentId: "synth-bass", pattern: "Pop bass line", volume: 0.75 },
+      { instrumentId: "grand-piano", pattern: "Pop chords, short hits", volume: 0.6 },
+    ]);
+    expect(old.grid).toBe(2);
+    const secs = (song) => song.tracks.map((t) => t.notes.map((n) => {
+      const sec = 60 / song.tempo / song.grid;
+      return [+(n.step * sec).toFixed(6), +(n.len * sec).toFixed(6), n.pitch, n.vel];
+    }).sort((a, b) => a[0] - b[0] || a[2] - b[2]));
+    expect(secs(st)).toEqual(secs(old));
+    expect(secs(st).every((t) => t.length > 0)).toBe(true);
+  });
+
   it("nothing is called a guitar, and no emojis", () => {
     for (const f of ["icons.js", "library.js", "lessons.js"]) {
       expect(src(f), f).not.toMatch(/guitar/i);
@@ -213,19 +233,19 @@ describe("Sound Space music lessons", () => {
   const DO = {
     "keep-the-beat": [
       playing,
-      (s) => { const k = first(s, (i) => i.kind === "kit"); for (let c = 1; c < 4; c++) M.toggleNote(k, c * 2, 0); },
-      (s) => { const k = first(s, (i) => i.kind === "kit"); M.toggleNote(k, 2, 4); M.toggleNote(k, 6, 4); },
+      (s) => { const k = first(s, (i) => i.kind === "kit"); for (let c = 1; c < 4; c++) M.toggleNote(k, c * s.grid, 0); },
+      (s) => { const k = first(s, (i) => i.kind === "kit"); M.toggleNote(k, s.grid, 4); M.toggleNote(k, 3 * s.grid, 4); },
       (s, ui) => { ui.events.pads = 4; },
     ],
     "first-melody": [
       (s, ui) => { ui.events.keys = 3; },
-      (s) => { const p = first(s, (i) => i.kind === "pitched"); [60, 64, 67, 72].forEach((m, i) => M.toggleNote(p, i * 2, m)); },
+      (s) => { const p = first(s, (i) => i.kind === "pitched"); [60, 64, 67, 72].forEach((m, i) => M.toggleNote(p, i * s.grid, m)); },
       (s) => { const p = first(s, (i) => i.kind === "pitched"); M.setNoteLength(p, 0, 60, 2, M.totalSteps(s)); },
       playing,
     ],
     "bass-line": [
       (s) => { addWith(s, "synth-bass"); },
-      (s) => { const b = first(s, (i) => i.category === "bass"); [0, 4, 8, 12].forEach((st) => M.toggleNote(b, st, 36)); },
+      (s) => { const b = first(s, (i) => i.category === "bass"); [0, 1, 2, 3].forEach((c) => M.toggleNote(b, c * s.grid, 36)); },
       playing,
       (s) => { first(s, (i) => i.category === "bass").solo = true; },
     ],
@@ -238,7 +258,7 @@ describe("Sound Space music lessons", () => {
     "record-what-you-play": [
       (s) => { s.tempo = 85; },
       (s) => { s.countIn = true; },
-      (s, ui) => { const p = first(s, (i) => i.kind === "pitched"); [60, 62, 64].forEach((m, i) => M.toggleNote(p, i * 2, m)); ui.recording = false; },
+      (s, ui) => { const p = first(s, (i) => i.kind === "pitched"); [60, 62, 64].forEach((m, i) => M.toggleNote(p, i * s.grid, m)); ui.recording = false; },
       (s, ui) => { ui.events.grid = 1; },
     ],
     "whole-song": [
@@ -262,6 +282,39 @@ describe("Sound Space music lessons", () => {
         expect(step.check(song, ui), `${l.title} step ${i + 1}: ${step.text}`).toBe(true);
       });
     }
+  });
+
+  it("every lesson starts on the sixteenth grid and its checks are given the intended notes at grid 4", () => {
+    for (const l of LS.LESSONS) expect(l.startSong.grid, l.id).toBe(4);
+    // lesson 1: kick on counts 1-4 is steps 0, 4, 8, 12
+    const song = JSON.parse(JSON.stringify(LS.LESSONS[0].startSong));
+    const kit = song.tracks[0];
+    [4, 8, 12].forEach((st) => M.toggleNote(kit, st, 0));
+    expect(LS.LESSONS[0].steps[1].check(song, ui0())).toBe(true);
+    // an eighth-grid kick (steps 2, 4, 6) is not on the counts of a grid-4 song
+    const wrong = JSON.parse(JSON.stringify(LS.LESSONS[0].startSong));
+    [2, 4, 6].forEach((st) => M.toggleNote(wrong.tracks[0], st, 0));
+    expect(LS.LESSONS[0].steps[1].check(wrong, ui0())).toBe(false);
+    // lesson 3's bass on the counts
+    const l3 = JSON.parse(JSON.stringify(LS.LESSONS[2].startSong));
+    const bass = M.addTrack(l3, "synth-bass");
+    [0, 4, 8, 12].forEach((st) => M.toggleNote(bass, st, 36));
+    expect(LS.LESSONS[2].steps[1].check(l3, ui0())).toBe(true);
+  });
+
+  it("the Count-in lesson starts with Count-in off, so its step still teaches it", () => {
+    const l = LS.LESSONS.find((x) => x.id === "record-what-you-play");
+    expect(l.startSong.countIn).toBe(false);
+    const step = l.steps.find((s) => s.target === "#ss-countin");
+    expect(step.check(l.startSong, ui0())).toBe(false);
+    const on = JSON.parse(JSON.stringify(l.startSong)); on.countIn = true;
+    expect(step.check(on, ui0())).toBe(true);
+  });
+
+  it("lessons keep the speed they set; a song made with no speed is 120", () => {
+    expect(LS.LESSONS.map((l) => l.startSong.tempo)).toEqual([90, 96, 96, 100, 116, 100]);
+    expect(L.makeSong("x", { counts: 4 }, []).tempo).toBe(120);
+    expect(L.makeSong("x", { counts: 4, grid: 2 }, []).grid).toBe(2);
   });
 
   it("every Play step passes while the song is already playing", () => {
