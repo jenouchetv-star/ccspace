@@ -2112,6 +2112,15 @@ describe("Sound Space: Main volume beside the play controls", () => {
     expect(css.indexOf("@media")).toBe(css.indexOf("@media (max-width:1279px){ #ss-sheet"));
   });
 
+  it("Counts, Grid and Speed keep plain tooltips for when their words are hidden; Main's group has no duplicate name", () => {
+    expect(transport).toContain('id="ss-counts" role="radiogroup" aria-labelledby="counts-lbl" title="Counts: how long the song is"');
+    expect(transport).toContain('id="ss-grid-res" role="radiogroup" aria-labelledby="gridres-lbl" title="Grid: eighths or sixteenths"');
+    expect(transport).toContain('<span class="num" title="Speed: how fast the beat goes">');
+    expect(transport).toMatch(/<div class="field vol" role="group" title=/);
+    expect(transport).not.toMatch(/class="field vol"[^>]*aria-label/);
+    expect((css.match(/\.vol\{ margin-left:0; \}/g) || []).length).toBe(1);
+  });
+
   it("Help says what Main does", () => {
     expect(html).toContain("Main sets how loud the whole song plays. Each track's Volume is in its card.");
   });
