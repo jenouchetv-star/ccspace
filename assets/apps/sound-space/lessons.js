@@ -12,6 +12,8 @@
   //   guide: { track: a test on the instrument (isKit, isBass, isTune), notes: [{ step, pitch, len }] on eighths,
   //            exactLen: true when each note's length must match too } - the page outlines these notes on the grid,
   //            and the step is done once every one is on a track that passes the test (guideDone);
+  //   after(song): for a guide step, runs once when its check first passes and returns true if it changed the song
+  //            (lesson 8 copies the kid's first drum bar across the song);
   //   litKeys: [pitch, ...] - the page lights the next key to play, and moves on when the kid plays it (nextLit).
 
   const L = SS.library;
@@ -76,11 +78,37 @@
     return guide.notes.map((n) => ({ step: n.step * f, pitch: n.pitch, len: n.len * f }));
   }
   // every outlined note is on a track that passes the guide's test: same square and pitch (and length, when exactLen);
-  // extra notes never matter
+  // extra notes never matter. Outlines at or past the song's end (Counts set lower) are ignored while at least one is
+  // still in range; a guide wholly past the end is never done.
+  function guideInRange(song, guide) {
+    const total = song.counts ? song.counts * sq(song) : Infinity;
+    return guideNotes(guide, sq(song)).filter((g) => g.step < total);
+  }
+  function guideOffEnd(song, guide) {
+    return guide.notes.length > 0 && guideInRange(song, guide).length === 0;
+  }
   function guideDone(song, guide) {
     const ts = tracks(song, guide.track);
-    return guideNotes(guide, sq(song)).every((g) => ts.some((t) => t.notes.some((n) =>
+    const gs = guideInRange(song, guide);
+    return gs.length > 0 && gs.every((g) => ts.some((t) => t.notes.some((n) =>
       n.step === g.step && n.pitch === g.pitch && (!guide.exactLen || n.len === g.len))));
+  }
+  // Copies the first bar (counts 1-4) of every track that passes `test` across the rest of the song, so a one-bar beat
+  // plays all the way through. true when anything was added; a note already there is never doubled.
+  function spreadFirstBar(song, test) {
+    const bar = 4 * sq(song), total = song.counts * sq(song);
+    let added = false;
+    tracks(song, test).forEach((t) => {
+      const first = t.notes.filter((n) => n.step < bar);
+      for (let off = bar; off < total; off += bar) {
+        first.forEach((n) => {
+          if (n.step + off >= total || t.notes.some((x) => x.step === n.step + off && x.pitch === n.pitch)) return;
+          t.notes.push({ ...n, step: n.step + off });
+          added = true;
+        });
+      }
+    });
+    return added;
   }
   // the next lit key: on only when the kid plays the one that is lit, and round to the first again after the last
   function nextLit(keys, i, pitch) {
@@ -91,7 +119,9 @@
   // a step that outlines notes on the grid and is done once they are all filled in
   function fill(text, track, notes, opts) {
     const guide = { track, notes, exactLen: !!(opts && opts.exactLen) };
-    return { text, target: (opts && opts.target) || "#ss-grid", guide, check: (s) => guideDone(s, guide) };
+    const step = { text, target: (opts && opts.target) || "#ss-grid", guide, check: (s) => guideDone(s, guide) };
+    if (opts && opts.after) step.after = opts.after;   // runs once when the step's check first passes; true when it changed the song
+    return step;
   }
   // a lesson's song: makeSong, then each part's notes (written on eighths) put on the song's grid
   function start(title, opts, parts) {
@@ -206,7 +236,8 @@
         { text: "Make the Speed 80 or slower. Speed is also called tempo: how fast the beat goes.", target: "#ss-tempo", check: (s) => s.tempo <= 80 },
         { text: "Turn on Count-in. You will hear 1, 2, 3, 4 before recording starts.", target: "#ss-countin", check: (s) => !!s.countIn },
         { text: "Press Record. Then play the key that glows, again and again, to play Ode to Joy. Press Record again to stop.", target: "#ss-record",
-          litKeys: SONGS.odeToJoy.map((x) => x[0]),
+          // the first line only (15 notes): the song loops at 16 counts, so a second line would record over it
+          litKeys: part(SONGS.odeToJoy, 0, 32).map((n) => n.pitch),
           check: (s, ui) => !(ui && ui.recording) && any(s, isTune, (t) => t.notes.length >= 8) },
         { text: "Make the Speed 100 or faster, then press Play. It's your same song, at a faster tempo!", target: "#ss-tempo",
           check: (s, ui) => s.tempo >= 100 && played(ui) },
@@ -237,7 +268,7 @@
       startSong: L.makeSong("Lesson 8: The four-chord song", { counts: 16, tempo: 104 }, []),
       steps: [
         fill("Add a drum track. Tap the outlined squares for the pop beat, or use Sunny pop beat from Beats and patterns.", isKit,
-          [].concat(hits(SONGS.popBeat.kick, KICK), hits(SONGS.popBeat.clap, CLAP), hits(SONGS.popBeat.hat, HAT)), { target: "#ss-add-track" }),
+          [].concat(hits(SONGS.popBeat.kick, KICK), hits(SONGS.popBeat.clap, CLAP), hits(SONGS.popBeat.hat, HAT)), { target: "#ss-add-track", after: (song) => spreadFirstBar(song, isKit) }),
         fill("Add a bass track. Fill in the four long outlined notes. They are the four chords' bass notes.", isBass,
           notesOf(SONGS.fourChordBass), { target: "#ss-add-track" }),
         fill("Add a piano and fill in the outlined chords. Notes played together make a chord.", isTune,
@@ -252,5 +283,5 @@
     },
   ];
 
-  SS.lessons = { LESSONS, SONGS, notesOf, guideNotes, guideDone, nextLit, isKit, isBass, isTune };
+  SS.lessons = { LESSONS, SONGS, notesOf, guideNotes, guideDone, guideOffEnd, spreadFirstBar, nextLit, isKit, isBass, isTune };
 })(typeof window !== "undefined" ? window : globalThis);

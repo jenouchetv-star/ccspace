@@ -851,7 +851,7 @@ describe("Sound Space app page", () => {
 
       it("sit in the keys' bar, hidden until the page knows the browser can read a keyboard", () => {
         expect(bar).toMatch(/<div class="midi" id="midi"[^>]*hidden/);
-        expect(bar).toMatch(/<button type="button" class="btn" id="midi-use" data-act="midi-connect"[^>]*><svg[^>]*>[\s\S]*?<\/svg>Use a real keyboard<\/button>/);
+        expect(bar).toMatch(/<button type="button" class="btn" id="midi-use" data-act="midi-connect"[^>]*><svg[^>]*>[\s\S]*?<\/svg>Use a music keyboard<\/button>/);
         expect(bar).toMatch(/id="midi-retry" data-act="midi-connect"[^>]*>Try again</);
         expect(html).toMatch(/let midiState = SS\.midi\.supported\(navigator\) \? "idle" : "unsupported"/);
         expect(ui("unsupported")("#midi").hidden).toBe(true);   // Safari, iPad, iPhone: nothing at all
@@ -870,7 +870,7 @@ describe("Sound Space app page", () => {
         let $ = ui("connected");
         expect($("#midi-use").hidden).toBe(true);
         expect($("#midi-chip").hidden).toBe(false);
-        expect($("#midi-chip-text").textContent).toBe("Keyboard connected");
+        expect($("#midi-chip-text").textContent).toBe("Music keyboard connected");
         expect($("#midi-led").classList.contains("off")).toBe(false);
         expect($("#midi-pedal").hidden).toBe(true);
         $ = ui("connected", true);
@@ -881,13 +881,13 @@ describe("Sound Space app page", () => {
 
       it("says what went wrong, with Try again and how to plug in", () => {
         let $ = ui("none");
-        expect($("#midi-chip-text").textContent).toBe("No keyboard found");
+        expect($("#midi-chip-text").textContent).toBe("No music keyboard found");
         expect($("#midi-led").classList.contains("off")).toBe(true);
         expect($("#midi-retry").hidden).toBe(false);
         expect($("#midi-msg").hidden).toBe(false);
-        expect($("#midi-msg").textContent).toBe("Plug the keyboard in with its USB cable and turn it on, then press Try again.");
+        expect($("#midi-msg").textContent).toBe("Plug the music keyboard in with its USB cable and turn it on, then press Try again.");
         $ = ui("denied");
-        expect($("#midi-chip-text").textContent).toBe("Keyboard not allowed");
+        expect($("#midi-chip-text").textContent).toBe("Music keyboard not allowed");
         expect($("#midi-retry").hidden).toBe(false);
         expect($("#midi-pedal").hidden).toBe(true);
       });
@@ -900,7 +900,7 @@ describe("Sound Space app page", () => {
       });
 
       it("Help tells grown-ups how", () => {
-        expect(html).toContain("Have a music keyboard? Plug it into the computer with USB and press <b>Use a real keyboard</b>.");
+        expect(html).toContain("Have a music keyboard? Plug it into the computer with USB and press <b>Use a music keyboard</b>.");
       });
     });
   });
@@ -1064,6 +1064,19 @@ describe("Sound Space song lessons in the page", () => {
     expect(tap(null, 0, 60, 2)).toEqual([[2, 60, 1]]);
     expect(tap(jingle, 0, 64, 6, "quarter")).toEqual([[4, 64, 4]]);   // the start snaps, the length is the kid's pick
     expect(tap(jingle, 0, 64, 6)).toEqual([[4, 64, 1]]);
+    expect(tap(jingle, 0, 64, 6, "half")).toEqual([[4, 64, 4]]);      // longer than the outline: the outline's length
+    expect(tap(jingle, 1, 60, 41)).toEqual([[40, 60, 6]]);            // the dotted quarter has no button: its start fills all 6 squares
+    expect(tap(jingle, 1, 60, 41, "quarter")).toEqual([[40, 60, 6]]);
+    expect(tap(jingle, 1, 60, 41, "half")).toEqual([[40, 60, 6]]);
+  });
+
+  it("the tip says so when Counts hides a whole guide line, and a drum step spreads its beat once it passes", () => {
+    expect(fnSource("paintTip")).toContain("Set Counts back to 16 to see this line.");
+    expect(fnSource("paintTip")).toContain("Your beat now plays all the way through the song.");
+    const tick = fnSource("lessonTick");
+    expect(tick).toContain(".after(");
+    expect(tick).toContain("commit()");
+    expect(tick).toContain("guideOffEnd(");
   });
 
   it("lights the next key of the record lesson, and moves on only when the kid plays it", () => {

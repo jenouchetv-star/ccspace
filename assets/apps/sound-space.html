@@ -779,9 +779,9 @@ body.kbd-collapsed #kbd{ display:none; }
         <div class="edempty" id="edempty" hidden><div><b>Add a track to start</b>Press <b>Add a track</b> and pick an instrument. Then play it, record it, or tap notes into the grid.</div></div>
       </div>
       <div class="secbar secbar--keys" id="kbd-bar"><button type="button" class="secbtn" id="kbd-toggle" data-act="toggle-keys" aria-expanded="true" aria-controls="kbd" title="Fold or unfold the keys"><i data-lucide="chevron-down"></i><span id="kbd-bar-label">Piano keys</span></button>
-        <div class="midi" id="midi" role="group" aria-label="Real keyboard" hidden>
-          <button type="button" class="btn" id="midi-use" data-act="midi-connect" title="Play Sound Space from a music keyboard plugged in with USB"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M7 6v7M12 6v7M17 6v7"/></svg>Use a real keyboard</button>
-          <span class="midi__chip" id="midi-chip" role="status" hidden><span class="midi__led" id="midi-led"></span><span id="midi-chip-text">Keyboard connected</span></span>
+        <div class="midi" id="midi" role="group" aria-label="Music keyboard" hidden>
+          <button type="button" class="btn" id="midi-use" data-act="midi-connect" title="Play Sound Space from a music keyboard plugged in with USB"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M7 6v7M12 6v7M17 6v7"/></svg>Use a music keyboard</button>
+          <span class="midi__chip" id="midi-chip" role="status" hidden><span class="midi__led" id="midi-led"></span><span id="midi-chip-text">Music keyboard connected</span></span>
           <span class="midi__chip" id="midi-pedal" hidden>Pedal down</span>
           <button type="button" class="btn" id="midi-retry" data-act="midi-connect" hidden>Try again</button>
         </div></div>
@@ -972,7 +972,7 @@ const HELP = [
     "<p><b>Play</b> starts the song and <b>Stop</b> stops it. With <b>Loop</b> on, the song plays again and again. " + K("Space") + " plays and stops too.</p>"],
   ["Playing", "Piano keys", "piano keys keyboard computer higher lower octave music real usb midi electric pedal",
     "<p>Tap the keys, or use your computer keys: " + K("A") + " " + K("S") + " " + K("D") + " " + K("F") + " " + K("G") + " " + K("H") + " " + K("J") + " " + K("K") + " " + K("L") + " " + K(";") + " " + K("'") + " for the white keys and " + K("W") + " " + K("E") + " " + K("T") + " " + K("Y") + " " + K("U") + " " + K("O") + " " + K("P") + " for the black keys. <b>Higher</b> and <b>Lower</b> move the keys up or down.</p>"
-    + "<p>Have a music keyboard? Plug it into the computer with USB and press <b>Use a real keyboard</b>.</p>"],
+    + "<p>Have a music keyboard? Plug it into the computer with USB and press <b>Use a music keyboard</b>.</p>"],
   ["Playing", "Drum pads", "drum pads kit beat",
     "<p>Drum tracks get 8 pads. Tap them, or use " + K("A") + " to " + K("K") + " on your computer.</p>"],
   ["Recording", "Record what you play", "record count-in click overdub",
@@ -1805,7 +1805,11 @@ function toggleAt(r, c){
     if (snap) c = g.step;
     M.toggleNote(t, c, pitch, 0.9);
     if (kindOf(t) !== "fx"){
-      const want = snap && !g.exact ? g.len : (M.noteSquares(pickedNote, spc()) || 1);
+      const picked = M.noteSquares(pickedNote, spc()) || 1;
+      /* in the rhythm lesson the kid's pick still counts when it is shorter than the outline; a longer pick, or an
+         outline no note button makes (the dotted quarter), fills the whole outline */
+      const buttons = M.NOTE_VALUES.some(v => M.noteSquares(v.id, spc()) === (g && g.len));
+      const want = !snap ? picked : !g.exact ? g.len : !buttons ? g.len : Math.min(picked, g.len);
       const next = t.notes.filter(x => x.pitch === pitch && x.step > c).reduce((m, x) => Math.min(m, x.step), M.totalSteps(song));
       M.setNoteLength(t, c, pitch, Math.min(want, next - c), M.totalSteps(song));
     }
@@ -2001,14 +2005,14 @@ function renderMidi(){
   $("#midi-use").disabled = midiBusy;
   $("#midi-chip").hidden = !(on || bad);
   $("#midi-led").classList.toggle("off", !on);
-  $("#midi-chip-text").textContent = on ? "Keyboard connected" : midiState === "denied" ? "Keyboard not allowed" : "No keyboard found";
+  $("#midi-chip-text").textContent = on ? "Music keyboard connected" : midiState === "denied" ? "Music keyboard not allowed" : "No music keyboard found";
   $("#midi-pedal").hidden = !(on && pedalDown);
   $("#midi-retry").hidden = !bad;
   $("#midi-retry").disabled = midiBusy;
   $("#midi-msg").hidden = !bad;
   $("#midi-msg").textContent = midiState === "denied"
     ? "Press Try again and choose Allow. If the browser doesn't ask, a grown-up can allow it in the site settings next to the web address."
-    : "Plug the keyboard in with its USB cable and turn it on, then press Try again.";
+    : "Plug the music keyboard in with its USB cable and turn it on, then press Try again.";
 }
 /* auto: on opening, only when the browser already allows MIDI here, so it never asks; nothing plugged in then just
    leaves the button (a keyboard plugged in later still connects by itself) */
@@ -2502,7 +2506,18 @@ function lessonTick(){
   if (!lesson.finished){
     let ok = false;
     try { ok = !!lesson.l.steps[lesson.step].check(song, lessonUi()); } catch(e){}
-    if (ok !== lesson.ok){ lesson.ok = ok; paintTip(); }
+    const st = lesson.l.steps[lesson.step];
+    /* a step with an after hook runs it once when its check first passes (lesson 8's drum beat is copied across the
+       whole song, in one undo step) */
+    if (ok && st.after && !lesson.after){
+      lesson.after = true;
+      let changed = false;
+      try { changed = !!st.after(song); } catch(e){}
+      if (changed){ lesson.spread = true; commit(); renderAll(); }
+    }
+    /* Counts set lower than the step's whole guide line: the tip says to set it back */
+    const off = !!(st.guide && LS.guideOffEnd(song, st.guide));
+    if (ok !== lesson.ok || off !== !!lesson.off || (lesson.spread && !lesson.spreadShown)){ lesson.ok = ok; lesson.off = off; lesson.spreadShown = !!lesson.spread; paintTip(); }
   }
   placeTip();
 }
@@ -2520,7 +2535,9 @@ function paintTip(){
     $("#tip-step").textContent = "Step " + (lesson.step + 1) + " of " + n;
     let dots = "";
     for (let k = 0; k < n; k++) dots += '<i class="' + (k < lesson.step || (k === lesson.step && lesson.ok) ? "done" : k === lesson.step ? "now" : "") + '"></i>';
-    $("#tip-body").innerHTML = '<p>' + esc(l.steps[lesson.step].text) + '</p>'
+    const stp = l.steps[lesson.step];
+    $("#tip-body").innerHTML = '<p>' + esc(lesson.off ? "Set Counts back to 16 to see this line." : stp.text) + '</p>'
+      + (lesson.spread && stp.after ? '<p>' + esc("Your beat now plays all the way through the song.") + '</p>' : "")
       + '<div class="tip__foot"><span class="tip__dots" aria-hidden="true">' + dots + '</span>'
       + (lesson.ok ? '<span class="tip__ok"><i data-lucide="check"></i>Done</span>' : "")
       + '<button type="button" class="btn btn--primary" data-act="lesson-next"' + (lesson.ok ? "" : " disabled") + '>' + (last ? "Finish" : "Next step") + '</button></div>';
@@ -2530,7 +2547,7 @@ function paintTip(){
 }
 function nextLessonStep(){
   if (!lesson || !lesson.ok) return;
-  if (lesson.step < lesson.l.steps.length - 1){ lesson.step++; lesson.events = {}; lesson.ok = false; revealLessonTarget(lesson.l.steps[lesson.step].target); lessonStepBegins(); }
+  if (lesson.step < lesson.l.steps.length - 1){ lesson.step++; lesson.events = {}; lesson.ok = false; lesson.after = false; lesson.spread = false; lesson.spreadShown = false; lesson.off = false; revealLessonTarget(lesson.l.steps[lesson.step].target); lessonStepBegins(); }
   else { lesson.finished = true; saveNow(); renderGrid(); paintLitKey(); }
   paintTip();
 }

@@ -287,7 +287,10 @@ describe("Sound Space music lessons", () => {
     const rec = byId("record-what-you-play");
     const lit = rec.steps.filter((s) => s.litKeys);
     expect(lit.length).toBe(1);
-    expect(lit[0].litKeys).toEqual(SONG_DATA.odeToJoy.map((x) => x[0]));
+    // only the first line (the first 32 eighths, 15 notes): the song loops at 16 counts, so a second line would record over it
+    expect(lit[0].litKeys).toEqual(N(SONG_DATA.odeToJoy).filter((n) => n.step < 32).map((n) => n.pitch));
+    expect(lit[0].litKeys.length).toBe(15);
+    expect(lit[0].litKeys[14]).toBe(62);
     // Canon in D starts with its chords, each triad held for 4 eighths, scaled to the song's grid
     const canon = byId("loops-and-counts").startSong, f = canon.grid / 2;
     const chordTrack = canon.tracks.find((t) => inst(t).kind === "pitched" && inst(t).category !== "bass");
@@ -376,6 +379,45 @@ describe("Sound Space music lessons", () => {
     expect(LS.nextLit(keys, 1, 64)).toBe(2);
     expect(LS.nextLit(keys, 2, 76)).toBe(2);
     expect(LS.nextLit(keys, 2, 65)).toBe(0);
+  });
+
+  it("lesson 8's drum step copies the kid's first bar across the whole song, in one go", () => {
+    const l = byId("whole-song"), step = l.steps[0];
+    expect(typeof step.after).toBe("function");
+    const song = copy(l.startSong);
+    expect(step.after(song)).toBe(false);                       // nothing to copy until the drums are there
+    const drums = M.addTrack(song, "classic-kit");
+    expect(step.after(song)).toBe(false);
+    fill(song, step.guide);
+    expect(step.check(song, ui0())).toBe(true);
+    expect(step.after(song)).toBe(true);
+    const bar = 4 * song.grid;
+    const first = drums.notes.filter((n) => n.step < bar).map((n) => [n.step, n.pitch, n.len]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    expect(first.length).toBeGreaterThan(0);
+    for (let b = 1; b < 4; b++) {
+      const got = drums.notes.filter((n) => n.step >= b * bar && n.step < (b + 1) * bar).map((n) => [n.step - b * bar, n.pitch, n.len]).sort((a, b2) => a[0] - b2[0] || a[1] - b2[1]);
+      expect(got, "bar " + (b + 1)).toEqual(first);
+    }
+    expect(drums.notes.length).toBe(first.length * 4);
+    expect(step.after(song)).toBe(false);                       // already spread: nothing more to add, no doubled notes
+    expect(drums.notes.length).toBe(first.length * 4);
+  });
+
+  it("a guide note at or past the song's end is ignored while one is still in range; a line wholly past it is not done", () => {
+    const l = byId("first-melody"), step = l.steps[1];          // the second line: eighths 16 to 32
+    const song = copy(l.startSong);
+    song.counts = 12;                                           // 48 squares: the line's last notes are past the end
+    const t = song.tracks.find((x) => inst(x).kind === "pitched");
+    const total = M.totalSteps(song);
+    LS.guideNotes(step.guide, song.grid).filter((g) => g.step < total).forEach((g) => t.notes.push({ step: g.step, pitch: g.pitch, len: g.len, vel: 0.9 }));
+    expect(LS.guideNotes(step.guide, song.grid).some((g) => g.step >= total)).toBe(true);
+    expect(LS.guideOffEnd(song, step.guide)).toBe(false);
+    expect(step.check(song, ui0())).toBe(true);
+    const short = copy(l.startSong);
+    short.counts = 8;                                           // 32 squares: the whole second line is past the end
+    expect(LS.guideOffEnd(short, step.guide)).toBe(true);
+    expect(step.check(short, ui0())).toBe(false);
+    expect(LS.guideOffEnd(copy(l.startSong), step.guide)).toBe(false);
   });
 
   it("the record lesson is done once Record stops with 8 or more notes on a tune track", () => {
