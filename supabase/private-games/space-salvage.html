@@ -1,0 +1,2282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chike's Space Salvage</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{ --ink:#e8eefc; --soft:#c9d4ee; --muted:#9fb0d4; --panel:rgba(16,23,42,.94); --line:rgba(255,255,255,.14); --blue:#2f7de1; --blue2:#3b8af0; --cyan:#4fc3f7; --star:#ffd23f; }
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  canvas{display:block;touch-action:none}
+  button{font:inherit;color:inherit}
+  [hidden]{display:none !important}
+  :focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  .bar,.obj,.modes,.acts,.stick,.radio,.note,.flash{z-index:10} .tags{z-index:5} .ov{z-index:30}
+
+  /* top bar */
+  .bar{position:fixed;left:0;right:0;top:0;height:56px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 14px;background:linear-gradient(rgba(3,5,12,.86),rgba(3,5,12,0))}
+  .title{font-weight:700;font-size:17px;display:flex;align-items:center;gap:10px;white-space:nowrap;min-width:0}
+  .title svg{width:24px;height:24px;flex:none}
+  .btns{display:flex;gap:8px;align-items:center}
+  .ib{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:7px 12px;font-size:13px;background:rgba(14,20,38,.6);color:var(--ink);white-space:nowrap}
+  .ib:hover{border-color:rgba(255,255,255,.4)}
+  .ib svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+  .ib .count{font-variant-numeric:tabular-nums;color:var(--soft)}
+  .ib.live{border-color:var(--cyan)}
+  .ib.live .dot{display:inline-block}
+  .dot{display:none;width:8px;height:8px;border-radius:50%;background:var(--cyan)}
+  .sound-slot .ccs-sound-btn{border:1px solid rgba(255,255,255,.18);border-radius:10px;box-shadow:none;color:var(--ink);padding:6px 9px;min-height:0;min-width:0}
+  .sound-slot .ccs-sound-btn svg{width:16px;height:16px}
+
+  /* objective */
+  .obj{position:fixed;left:14px;top:64px;width:330px;max-width:calc(100% - 28px);box-sizing:border-box;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px 14px}
+  .obj .step{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+  .obj .time{font-variant-numeric:tabular-nums;text-transform:none;letter-spacing:0}
+  .obj .what{font-size:16px;font-weight:650;line-height:1.35;margin-top:4px;text-wrap:balance}
+  .obj .hint{font-size:13px;line-height:1.45;color:var(--soft);margin-top:6px}
+  .prog{display:flex;gap:4px;margin-top:10px}
+  .prog i{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.14)}
+  .prog i.done{background:var(--cyan)} .prog i.now{background:rgba(79,195,247,.5)}
+  .cta{all:unset;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;padding:11px 16px;font-size:15px;font-weight:650;box-sizing:border-box;text-align:center}
+  .cta.blue{background:var(--blue);color:#fff}
+  .cta.blue:hover{background:var(--blue2)}
+  .cta.line{border:1px solid rgba(255,255,255,.24)}
+  .cta.line:hover{border-color:rgba(255,255,255,.5)}
+  .cta svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  .obj .cta{margin-top:10px;width:100%}
+
+  /* tool modes */
+  .modes{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:4px;background:rgba(12,18,34,.86);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:6px}
+  .modes button{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:86px;height:62px;border-radius:13px;font-size:13px;font-weight:600;color:var(--soft);position:relative}
+  .modes button svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .modes button:hover{background:rgba(255,255,255,.07);color:#fff}
+  .modes button.on{background:var(--blue);color:#fff}
+  .modes kbd{position:absolute;top:5px;right:7px;font:600 10px system-ui;color:rgba(255,255,255,.5)}
+  .modes button.on kbd{color:rgba(255,255,255,.75)}
+  .parked{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);background:#000;color:#fff;font-size:12px;font-weight:600;border-radius:999px;padding:4px 10px;white-space:nowrap;display:none}
+  .parked.on{display:block}
+
+  /* action buttons */
+  .acts{position:fixed;right:16px;bottom:16px;display:grid;grid-template-columns:repeat(2,auto);gap:8px;justify-items:stretch}
+  .ab{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:74px;height:62px;padding:0 8px;box-sizing:border-box;border-radius:14px;background:rgba(12,18,34,.86);border:1px solid rgba(255,255,255,.16);font-size:12px;font-weight:600;color:var(--ink);touch-action:none}
+  .ab svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .ab:hover{border-color:rgba(255,255,255,.4)}
+  .ab.big{grid-column:span 2;background:var(--blue);border-color:var(--blue);color:#fff;height:64px;font-size:14px}
+  .ab.big.held{background:#1f62b8}
+  .ab.press{transform:translateY(1px);border-color:var(--cyan)}
+
+  /* touch stick */
+  .stick{position:fixed;left:22px;bottom:22px;width:132px;height:132px;border-radius:50%;background:rgba(12,18,34,.55);border:1px solid rgba(255,255,255,.16);touch-action:none;display:none}
+  .stick.show{display:block}
+  .stick i{position:absolute;left:50%;top:50%;width:58px;height:58px;margin:-29px 0 0 -29px;border-radius:50%;background:rgba(232,238,252,.85);box-shadow:0 2px 10px rgba(0,0,0,.4)}
+
+  /* radio + flash */
+  .radio{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);max-width:min(560px,calc(100% - 32px));box-sizing:border-box;background:rgba(10,15,30,.92);border:1px solid var(--line);border-radius:14px;padding:10px 14px;font-size:14px;line-height:1.45;display:none;gap:10px;align-items:flex-start}
+  .radio.on{display:flex}
+  .radio b{color:var(--cyan);flex:none}
+  .flash{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);font-size:30px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;text-shadow:0 2px 16px rgba(0,0,0,.7);opacity:0;pointer-events:none;transition:opacity .5s cubic-bezier(.2,.7,.2,1)}
+  .flash.on{opacity:1;transition:none}
+
+  /* field note card */
+  .note{position:fixed;right:16px;top:64px;width:320px;max-width:calc(100% - 32px);box-sizing:border-box;background:var(--panel);border:1px solid rgba(79,195,247,.35);border-radius:16px;padding:14px 16px;display:none}
+  .note.on{display:block}
+  .note .kick{font-size:12px;color:var(--cyan);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+  .note h3{margin:4px 0 8px;font-size:18px}
+  .note p{margin:0 0 10px;font-size:14px;line-height:1.5;color:#d6def2}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:#000;color:#fff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600}
+  .chip i{width:8px;height:8px;border-radius:50%;background:#8a94a8}
+  .chip.yes i{background:var(--cyan)} .chip.no i{background:#8a94a8} .chip.warn i{background:var(--star)}
+  .note .cta{width:100%;padding:9px}
+
+  /* 3D tags */
+  .tags{position:fixed;inset:0;pointer-events:none}
+  .tag{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:4px;white-space:nowrap;transition:opacity .3s}
+  .tag .nm{font-size:13px;font-weight:700;color:#fff;text-shadow:0 1px 4px #000}
+  .tag .chips{margin:0;justify-content:center}
+
+  /* overlays */
+  .ov{position:fixed;inset:0;background:rgba(3,6,14,.66);display:none;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+  .ov.open{display:flex}
+  .card{width:min(520px,100%);max-height:100%;overflow:auto;background:#111a30;border:1px solid var(--line);border-radius:20px;padding:24px;box-sizing:border-box}
+  .card h2{margin:0 0 6px;font-size:23px;text-wrap:balance}
+  .card p{margin:0 0 12px;font-size:15px;line-height:1.55;color:var(--soft)}
+  .card .row2{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  .card .row2 .cta{flex:1 1 180px}
+  .story{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center;margin-bottom:6px}
+  .story svg{width:84px;height:84px}
+  .kicker{font-size:12px;color:var(--cyan);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px}
+  .help-step{display:flex;gap:12px;align-items:flex-start;padding:8px 0}
+  .help-step .ic{flex:none;width:36px;height:36px;border-radius:10px;background:rgba(79,195,247,.14);color:var(--cyan);display:flex;align-items:center;justify-content:center}
+  .help-step .ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .help-step b{display:block;font-size:15px;margin-bottom:2px}
+  .help-step span{color:var(--soft);font-size:14px;line-height:1.45}
+  .keys{margin-top:10px;font-size:13px;color:var(--muted);line-height:1.6}
+  .notes-list{display:grid;gap:8px;margin-top:8px}
+  .nl{border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.05)}
+  .nl b{display:block;font-size:15px}
+  .nl span{display:block;font-size:13px;line-height:1.45;color:var(--soft);margin-top:2px}
+  .nl.locked b{color:var(--muted)}
+  .x{all:unset;cursor:pointer;float:right;width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:24px;margin:-6px -8px 0 0}
+  .x:hover{background:rgba(255,255,255,.08);color:#fff}
+  .qr{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:10px 0}
+  .qr .box{width:176px;height:176px;background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none}
+  .qr .box svg,.qr .box img{width:160px;height:160px}
+  .code{font:800 34px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;color:#fff}
+  .small{font-size:13px;color:var(--muted);line-height:1.5}
+  .url{font-size:13px;color:var(--soft);word-break:break-all}
+  .stars{display:flex;gap:10px;justify-content:center;margin:12px 0 6px}
+  .stars svg{width:52px;height:52px}
+  .starrow{display:grid;gap:6px;margin:6px 0 14px}
+  .starrow div{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--soft)}
+  .starrow svg{width:18px;height:18px;flex:none}
+  .quiz{margin-top:6px}
+  .quiz .q{font-size:16px;font-weight:650;margin:6px 0 10px}
+  .quiz .opts{display:grid;gap:8px}
+  .quiz .opts button{all:unset;cursor:pointer;border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:11px 14px;font-size:15px}
+  .quiz .opts button:hover{border-color:rgba(255,255,255,.5)}
+  .quiz .opts button.right{border-color:var(--cyan);background:rgba(79,195,247,.14)}
+  .quiz .opts button.wrong{border-color:rgba(255,255,255,.12);color:var(--muted)}
+  .quiz .why{font-size:14px;color:var(--soft);line-height:1.5;margin-top:10px;min-height:1.5em}
+
+  @media (max-width: 760px){
+    .lbl{display:none}
+    .ib{padding:7px 9px}
+    .title{font-size:15px}
+  }
+  @media (max-width: 640px){
+    .title .name{display:none}
+    .obj{left:8px;right:8px;width:auto;max-width:none;top:58px;padding:10px 12px}
+    .obj .what{font-size:15px}
+    .obj .hint{display:none}
+    .obj.open .hint{display:block}
+    .note{left:8px;right:8px;width:auto;max-width:none;top:auto;bottom:170px}
+    .modes{bottom:10px}
+    .modes button{width:64px;height:54px;font-size:12px}
+    .modes kbd{display:none}
+    .acts{right:8px;bottom:76px;gap:6px}
+    .ab{min-width:62px;height:54px}
+    .ab.big{height:56px}
+    .stick{left:12px;bottom:76px;width:118px;height:118px}
+    .radio{bottom:auto;top:150px;left:12px;right:12px;transform:none;max-width:none;font-size:13px}
+  }
+  @media (prefers-reduced-motion: reduce){ .flash{transition:none} }
+</style>
+</head>
+<body>
+<div class="bar">
+  <span class="title"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="9" width="14" height="6" rx="2" fill="#e8eefc"/><rect x="6" y="6" width="6" height="3" rx="1" fill="#2f7de1"/><path d="M15 9l3-5h2" stroke="#4fc3f7" stroke-width="1.8" fill="none" stroke-linecap="round"/><circle cx="7" cy="17" r="2.2" fill="#9fb0d4"/><circle cx="15" cy="17" r="2.2" fill="#9fb0d4"/></svg><span class="name">Chike's Space Salvage</span></span>
+  <span class="btns">
+    <button class="ib" id="bNotes"><svg viewBox="0 0 24 24"><path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M8 8h6M8 12h6"/></svg><span class="lbl">Field notes</span><span class="count" id="notesCount">0/8</span></button>
+    <button class="ib" id="bPhone"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg><span class="lbl">Phone</span><span class="dot"></span></button>
+    <button class="ib" id="bPause"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg><span class="lbl">Pause</span></button>
+    <button class="ib" id="bReset"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span class="lbl">Start over</span></button>
+    <span class="sound-slot" id="soundSlot"></span>
+    <button class="ib" id="bHelp" aria-label="How to play"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
+  </span>
+</div>
+
+<section class="obj" id="obj" aria-live="polite">
+  <div class="step"><span id="stepNo">Step 1 of 9</span><span class="time" id="clock">0:00</span></div>
+  <div class="what" id="stepWhat"></div>
+  <div class="hint" id="stepHint"></div>
+  <div class="prog" id="prog"></div>
+  <button class="cta blue" id="bTest" hidden><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Test the power</button>
+</section>
+
+<div class="tags" id="tags"></div>
+
+<div class="modes" id="modes" role="toolbar" aria-label="Rover tools">
+  <span class="parked" id="parked">Parked</span>
+  <button data-mode="drive" class="on" aria-pressed="true"><kbd>1</kbd><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 14.5V21M9.6 11.2 3.4 9M14.4 11.2l6.2-2.2"/></svg>Drive</button>
+  <button data-mode="arm" aria-pressed="false"><kbd>2</kbd><svg viewBox="0 0 24 24"><path d="M4 20h7"/><path d="M7 20v-5l5-6 5 3"/><path d="M17 12l2 3M17 12l-1 3.5"/><circle cx="12" cy="9" r="1.4"/></svg>Arm</button>
+  <button data-mode="magnet" aria-pressed="false"><kbd>3</kbd><svg viewBox="0 0 24 24"><path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 8h4M14 8h4"/><path d="M10 4v8a2 2 0 0 0 4 0V4"/></svg>Magnet</button>
+</div>
+
+<div class="acts" id="acts"></div>
+<div class="stick" id="stick" aria-hidden="true"><i id="knob"></i></div>
+
+<div class="radio" id="radio" role="status"><b>Chike</b><span id="radioTxt"></span></div>
+<div class="flash" id="flash"></div>
+
+<aside class="note" id="note" aria-live="polite">
+  <div class="kick" id="noteKick">New field note</div>
+  <h3 id="noteTitle"></h3>
+  <div class="chips" id="noteChips"></div>
+  <p id="noteText"></p>
+  <button class="cta line" id="noteOk">Got it</button>
+</aside>
+
+<!-- start -->
+<div class="ov open" id="ovStart">
+  <div class="card">
+    <div class="story">
+      <svg viewBox="0 0 84 84" aria-hidden="true"><circle cx="42" cy="42" r="40" fill="#0b1226" stroke="rgba(255,255,255,.15)"/><circle cx="62" cy="22" r="8" fill="#2f7de1" opacity=".9"/><path d="M8 60c10-6 22-8 34-6s22 0 34-4v22H8z" fill="#5c5955"/><rect x="24" y="44" width="28" height="9" rx="3" fill="#e8eefc"/><rect x="28" y="39" width="10" height="5" rx="1.5" fill="#2f7de1"/><path d="M46 44l7-10h5" stroke="#4fc3f7" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="29" cy="56" r="4" fill="#9fb0d4"/><circle cx="47" cy="56" r="4" fill="#9fb0d4"/></svg>
+      <div><div class="kicker">Mission briefing</div><h2>Chike's Space Salvage</h2></div>
+    </div>
+    <p>A meteor shower broke our Moon outpost. The greenhouse has no power, and the bridge to the spare power cell is folded up.</p>
+    <p>Drive the repair rover, use its Arm and Magnet, and figure out which tool works on which part. Scan things to collect Field Notes about real space science.</p>
+    <div class="row2">
+      <button class="cta blue" id="bStart"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg>Start the mission</button>
+      <button class="cta line" id="bStartPhone"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>Use a phone to drive</button>
+    </div>
+    <p class="small" style="margin:14px 0 0">Keyboard, mouse, touch and game controllers work too.</p>
+  </div>
+</div>
+
+<!-- help -->
+<div class="ov" id="ovHelp" role="dialog" aria-label="How to play">
+  <div class="card">
+    <button class="x" data-close="ovHelp" aria-label="Close">&times;</button>
+    <h2>How to play</h2>
+    <div class="help-step"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg></span><div><b>Drive</b><span>Steer the rover to the blue beam. You cannot drive while the arm holds something, so put cargo in the cargo bed on the back.</span></div></div>
+    <div class="help-step"><span class="ic"><svg viewBox="0 0 24 24"><path d="M7 20v-5l5-6 5 3"/></svg></span><div><b>Arm</b><span>The rover parks. Turn the arm, raise or lower it, reach in or out, then Grab. The ring on the ground shows where the claw is.</span></div></div>
+    <div class="help-step"><span class="ic"><svg viewBox="0 0 24 24"><path d="M6 4v8a6 6 0 0 0 12 0V4"/></svg></span><div><b>Magnet</b><span>Hold the Magnet button to pull metal parts up. Let go to drop them. Not every metal sticks.</span></div></div>
+    <div class="help-step"><span class="ic"><svg viewBox="0 0 24 24"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3"/><path d="M7 12h10"/></svg></span><div><b>Scan</b><span>Scan a part to see what it is made of and which tool can lift it. New facts go in your Field Notes.</span></div></div>
+    <div class="keys" id="helpKeys">Keys: 1 Drive, 2 Arm, 3 Magnet. W A S D or arrows to drive and aim. Q and E reach in and out. Space grabs, or holds the magnet. R turns a part. F scans. T tests. P pauses.</div>
+    <div class="row2"><button class="cta blue" data-close="ovHelp">Back to the mission</button></div>
+  </div>
+</div>
+
+<!-- notes -->
+<div class="ov" id="ovNotes" role="dialog" aria-label="Field notes">
+  <div class="card">
+    <button class="x" data-close="ovNotes" aria-label="Close">&times;</button>
+    <h2>Field notes</h2>
+    <p id="notesSum"></p>
+    <div class="notes-list" id="notesList"></div>
+    <div class="row2"><button class="cta blue" data-close="ovNotes">Back to the mission</button></div>
+  </div>
+</div>
+
+<!-- phone -->
+<div class="ov" id="ovPhone" role="dialog" aria-label="Use a phone as the controller">
+  <div class="card">
+    <button class="x" data-close="ovPhone" aria-label="Close">&times;</button>
+    <h2>Drive with your phone</h2>
+    <p>Scan this code with the phone's camera, or open the link and type the code. Tilt the phone like a steering wheel to drive.</p>
+    <div class="qr"><div class="box" id="qrBox"><span class="small" style="color:#334">Making a code</span></div>
+      <div><div class="small">Room code</div><div class="code" id="roomCode">------</div><div class="small" id="phoneStatus" style="margin-top:10px">Getting a room ready</div></div></div>
+    <div class="url" id="remoteUrl"></div>
+    <div class="row2"><button class="cta blue" data-close="ovPhone" id="bPhoneDone">Done</button><button class="cta line" id="bPhoneOff" hidden>Disconnect the phone</button></div>
+  </div>
+</div>
+
+<!-- pause -->
+<div class="ov" id="ovPause" role="dialog" aria-label="Paused">
+  <div class="card" style="text-align:center">
+    <h2>Paused</h2>
+    <p>The rover waits right where you left it.</p>
+    <div class="row2"><button class="cta blue" id="bResume">Keep going</button><button class="cta line" id="bRestart2">Start over</button></div>
+  </div>
+</div>
+
+<!-- end -->
+<div class="ov" id="ovEnd" role="dialog" aria-label="Mission complete">
+  <div class="card" id="endCard"></div>
+</div>
+
+<script src="/games/game-sound.js"></script>
+<script>
+"use strict";
+/* BEGIN pure */
+/* ---------- the science and the rules (no browser needed; tested in test/spaceSalvage.test.js) ---------- */
+const MOON_G = 1.62, EARTH_G = 9.81;          /* m/s², real values */
+const LIFT_KG = 60;                            /* the most the rover's arm or magnet can hold, here on the Moon */
+const SCRAP_TOTAL = 5;
+const ARM = { mountY: 1.2, mountZ: -0.3, hang: 0.5, reachMin: 1.3, reachMax: 4.0, pitchMin: -1.0, pitchMax: 0.85, grabR: 0.85, magR: 1.6, magDepth: 3.6 };
+const ROVER = { r: 1.35, maxF: 4.2, maxB: 1.8, acc: 3.0, brake: 7.5, turn: 1.15, bed: { x: 0, y: 1.02, z: 0.95 } };
+const TRENCH = { z: -10, half: 3, depth: -3.6, wall: 0.45 };
+const BRIDGE = { half: 1.45, deck: 0.12 };
+const WORLD = { x: 33, z: 31 };
+const ROT_STEP = Math.PI / 6;                  /* Rotate turns a held part 30 degrees */
+const SNAP = { r: 1.0, up: 2.8, yawTol: 18 * Math.PI / 180 };
+
+const MATERIALS = {
+  steel:    { name: "Steel", magnetic: true },
+  aluminum: { name: "Aluminum", magnetic: false },
+  glass:    { name: "Glass", magnetic: false, brittle: true },
+  plastic:  { name: "Plastic case", magnetic: false }
+};
+const PART_TYPES = {
+  scrap: { name: "Steel scrap", mat: "steel", kg: 3, note: "steel" },
+  panel: { name: "Steel panel", mat: "steel", kg: 45, wide: true, note: "steel" },
+  block: { name: "Square block", mat: "aluminum", kg: 8, note: "aluminum", shape: "square" },
+  tube:  { name: "Round tube", mat: "aluminum", kg: 6, note: "aluminum", shape: "circle" },
+  wedge: { name: "Triangle brace", mat: "aluminum", kg: 7, note: "triangle", shape: "triangle" },
+  cell:  { name: "Power cell", mat: "plastic", kg: 20, note: "cell" },
+  glass: { name: "Glass sensor", mat: "glass", kg: 4, note: "glass" },
+  drill: { name: "Old drill rig", mat: "steel", kg: 4000, note: "weight" },
+  lever: { name: "Bridge lever", mat: "plastic", kg: 0 },
+  tower: { name: "Radio tower", mat: "aluminum", kg: 900, note: "radio" }
+};
+/* where a part can be set down so it fits, snaps and counts */
+const TARGET_ACCEPTS = {
+  bay:    ["panel", "scrap"],
+  slot:   ["wedge"],
+  bed:    ["cell", "glass", "scrap", "wedge", "block", "tube"],
+  socket: ["cell"],
+  shelf:  ["glass"]
+};
+const NOTES = [
+  { id: "gravity", title: "Moon gravity", text: "Things fall slowly here. The Moon pulls with about one-sixth of Earth's gravity (1.62 m/s² instead of 9.8). A part dropped from 1 meter takes about 1.1 seconds to land on the Moon, and under half a second on Earth.", hint: "Drop something and watch it fall." },
+  { id: "steel", title: "Steel is magnetic", text: "Steel is mostly iron, and magnets pull on iron. That is why the rover's magnet can lift steel scrap and steel panels.", hint: "Scan a steel part, or lift one with the magnet." },
+  { id: "aluminum", title: "Not every metal is magnetic", text: "Aluminum is a metal, but magnets hardly pull on it at all. To move an aluminum part, use the claw.", hint: "Scan one of the silver parts on the shelf by the bridge." },
+  { id: "triangle", title: "Triangles are strong", text: "Push on the corner of a square frame and it leans into a flat diamond. A triangle cannot change shape unless a side breaks, so bridges, cranes and towers are full of triangles.", hint: "Scan the triangle brace." },
+  { id: "cell", title: "Stored energy", text: "A power cell stores energy in chemicals and gives it back as electricity. This one has a plastic case, so the magnet cannot lift it.", hint: "Scan the power cell across the bridge." },
+  { id: "glass", title: "Glass is brittle", text: "Glass does not bend; it cracks. It is not magnetic either. The claw's soft pads can hold it, but set it down gently.", hint: "Scan the glass sensor across the bridge." },
+  { id: "weight", title: "Mass and weight", text: "Mass is how much stuff is in something. Weight is how hard gravity pulls on it. On the Moon this 4,000 kg drill rig weighs only one-sixth as much, and that is still far too much for the rover's arm.", hint: "Scan the old drill rig west of the base." },
+  { id: "radio", title: "Space is silent", text: "Sound needs air to travel, and the Moon has almost none, so astronauts talk by radio. Radio waves can cross empty space. The sounds in this game are pretend, so you can hear what the rover does.", hint: "Scan the radio tower east of the base." }
+];
+const STEPS = [
+  { id: "approach", text: "Drive to the broken bridge.", hint: "Follow the blue beam." },
+  { id: "panel", text: "A fallen panel blocks the road. Move it into the salvage bin.", hint: "Not sure which tool to use? Scan the panel." },
+  { id: "lever", text: "Pull the bridge lever.", hint: "Arm mode: grab the lever's handle, then reach in to pull it toward you." },
+  { id: "support", text: "The bridge needs a support. Find the piece that fits the glowing outline.", hint: "Turn a held piece with Rotate until it matches the outline, then let go." },
+  { id: "cross", text: "Drive across the bridge.", hint: "Stay in the middle of the bridge." },
+  { id: "load", text: "Load the power cell into the rover's cargo bed.", hint: "Grab it, swing the arm over the back of the rover, then let go." },
+  { id: "return", text: "Bring the power cell back to the greenhouse.", hint: "The cargo bed keeps it safe while you drive." },
+  { id: "install", text: "Put the power cell into the greenhouse socket.", hint: "Lift it out of the cargo bed with the claw." },
+  { id: "test", text: "Switch the power on.", hint: "Press Test the power." }
+];
+const QUIZ = [
+  { q: "Which one could the rover's magnet lift?", opts: ["A steel bolt", "An aluminum can", "A glass jar"], a: 0, why: "Steel is mostly iron, and magnets pull on iron. Aluminum and glass do not stick." },
+  { q: "On the Moon, a dropped wrench falls...", opts: ["faster than on Earth", "slower than on Earth", "at the same speed as on Earth"], a: 1, why: "The Moon's gravity is about one-sixth of Earth's, so things fall more slowly." },
+  { q: "Which shape keeps a bridge from folding?", opts: ["A square", "A circle", "A triangle"], a: 2, why: "A triangle cannot change shape unless a side breaks. A square can lean into a flat diamond." }
+];
+
+function clamp(v, a, b){ return v < a ? a : v > b ? b : v; }
+function angDiff(a, b){ let d = (a - b) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; return d; }
+/* the smallest turn that lines a shape up again, for a shape that looks the same every `sym` radians */
+function angDiffMod(d, sym){ const m = ((d % sym) + sym) % sym; return m > sym / 2 ? m - sym : m; }
+function earthFeelKg(kg){ return Math.round(kg * MOON_G / EARTH_G * 10) / 10; }
+function fallTime(h, g){ return Math.sqrt(2 * h / g); }
+function formatTime(sec){ sec = Math.max(0, Math.floor(sec)); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); }
+
+/* can the magnet lift it? can the claw hold it? the reason is shown to the player */
+function magnetCheck(type){
+  const t = PART_TYPES[type];
+  if (!t) return { ok: false, why: "none" };
+  if (!MATERIALS[t.mat].magnetic) return { ok: false, why: "nomag" };
+  if (t.kg > LIFT_KG) return { ok: false, why: "heavy" };
+  return { ok: true };
+}
+function clawCheck(type){
+  const t = PART_TYPES[type];
+  if (!t) return { ok: false, why: "none" };
+  if (t.kg > LIFT_KG) return { ok: false, why: "heavy" };
+  if (t.wide) return { ok: false, why: "wide" };
+  return { ok: true };
+}
+const WHY_TEXT = {
+  nomag: "The magnet does not pull on it.",
+  heavy: "Too heavy for the rover.",
+  wide: "Too wide for the claw.",
+  none: ""
+};
+function scanChips(type){
+  const t = PART_TYPES[type], m = MATERIALS[t.mat], out = [];
+  out.push({ text: m.name, tone: "no" });
+  out.push(m.magnetic ? { text: "Magnetic", tone: "yes" } : { text: "Not magnetic", tone: "no" });
+  if (t.kg > LIFT_KG) out.push({ text: "Too heavy", tone: "warn" });
+  else if (t.wide) out.push({ text: "Too wide for the claw", tone: "warn" });
+  if (m.brittle) out.push({ text: "Brittle", tone: "warn" });
+  return out;
+}
+/* the best tool for a part, from the two checks: what a scan suggests */
+function bestTool(type){
+  const mag = magnetCheck(type).ok, claw = clawCheck(type).ok;
+  if (mag && claw) return "either";
+  if (mag) return "magnet";
+  if (claw) return "claw";
+  return "none";
+}
+
+/* the ground: gentle bumps, hills at the edge, and the trench the bridge crosses */
+function groundHeight(x, z){
+  let h = 0.10 * Math.sin(0.23 * x + 0.5) * Math.cos(0.19 * z - 0.3) + 0.06 * Math.sin(0.51 * x - 0.37 * z);
+  const r = Math.max(Math.abs(x) / 36, Math.abs(z) / 34);
+  if (r > 0.92) h += Math.min(6, Math.pow((r - 0.92) * 10, 2) * 0.7);
+  const d = Math.abs(z - TRENCH.z);
+  if (d < TRENCH.half + TRENCH.wall){
+    const t = clamp((TRENCH.half + TRENCH.wall - d) / TRENCH.wall, 0, 1);
+    const s = t * t * (3 - 2 * t);
+    h = h * (1 - s) + TRENCH.depth * s;
+  }
+  return h;
+}
+function overTrench(x, z){ return Math.abs(z - TRENCH.z) < TRENCH.half + TRENCH.wall; }
+function onBridgeDeck(x, z, bridge){ return bridge === "level" && Math.abs(x) < 1.6 && overTrench(x, z); }
+/* where the rover's middle may go: inside the world, and over the trench only on a finished bridge */
+function canDriveTo(x, z, bridge){
+  if (Math.abs(x) > WORLD.x || Math.abs(z) > WORLD.z) return false;
+  if (Math.abs(z - TRENCH.z) < TRENCH.half + ROVER.r + 0.25) return bridge === "level" && Math.abs(x) < BRIDGE.half;
+  return true;
+}
+/* one step of driving: speed eases up and down, the six wheels let the rover turn on the spot */
+function driveStep(s, thr, steer, dt){
+  const target = thr >= 0 ? thr * ROVER.maxF : thr * ROVER.maxB;
+  const braking = thr === 0 || (s.v > 0.05 && target < s.v) || (s.v < -0.05 && target > s.v);
+  const rate = braking ? ROVER.brake : ROVER.acc;
+  const v = s.v + clamp(target - s.v, -rate * dt, rate * dt);
+  const turnRate = ROVER.turn * (0.75 + 0.35 * Math.min(1, Math.abs(v) / ROVER.maxF));
+  const yaw = s.yaw - steer * turnRate * dt;
+  return { x: s.x - Math.sin(yaw) * v * dt, z: s.z - Math.cos(yaw) * v * dt, yaw: yaw, v: v };
+}
+/* the tip of the arm, in the rover's own space (forward is -z) */
+function armLocal(a){
+  const hz = a.reach * Math.cos(a.pitch);
+  return { x: -Math.sin(a.yaw) * hz, y: ARM.mountY + a.reach * Math.sin(a.pitch), z: ARM.mountZ - Math.cos(a.yaw) * hz };
+}
+function toWorld(rv, p){
+  const c = Math.cos(rv.yaw), s = Math.sin(rv.yaw);
+  return { x: rv.x + p.x * c + p.z * s, y: (rv.y || 0) + p.y, z: rv.z - p.x * s + p.z * c };
+}
+/* the lowest the arm may tilt so the claw stays above the floor under it */
+function minPitchFor(reach, mountWorldY, floorY){
+  const s = (floorY + 0.05 + ARM.hang - mountWorldY) / reach;
+  return s <= -1 ? ARM.pitchMin : Math.max(ARM.pitchMin, Math.asin(clamp(s, -1, 1)));
+}
+/* does this part fit this spot? "ok", "shape" (wrong part) or "turn" (right part, turned wrong) */
+function fitCheck(target, type, yawDiff, sym){
+  const list = TARGET_ACCEPTS[target];
+  if (!list || list.indexOf(type) < 0) return "shape";
+  if (sym && Math.abs(angDiffMod(yawDiff, sym)) > SNAP.yawTol) return "turn";
+  return "ok";
+}
+/* the mission's step comes from what is true in the world, so doing things early never gets stuck */
+function currentStep(f){
+  if (f.tested) return 9;
+  if (f.installed) return 8;
+  if (!f.approach) return 0;
+  if (!f.panel) return 1;
+  if (!f.lever) return 2;
+  if (!f.support) return 3;
+  if (!f.crossed) return 4;
+  if (!f.cellLoaded) return 5;
+  if (!f.atGreenhouse) return 6;
+  return 7;
+}
+function starsFor(r){ return (r.done ? 1 : 0) + (r.notes >= NOTES.length ? 1 : 0) + (r.scrap >= SCRAP_TOTAL ? 1 : 0); }
+/* six digits, never a leading 0 (the same as the site's two-player rooms) */
+function makeCode(n){ return String(100000 + (Math.abs(Math.floor(n)) % 900000)); }
+function readCode(s){ const d = String(s || "").replace(/\D/g, ""); return /^[1-9]\d{5}$/.test(d) ? d : null; }
+/* END pure */
+
+/* ---------- small helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const ease = (k, dt) => 1 - Math.exp(-k * dt);
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function sfx(name, opts){ if (window.CCSSound) CCSSound.play(name, opts); }
+if (window.CCSSound) $("soundSlot").appendChild(CCSSound.button({ compact: true, background: "rgba(14,20,38,.6)" }));
+
+/* ---------- renderer and scene ---------- */
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+let pixelCap = Math.min(window.devicePixelRatio || 1, 1.75);
+renderer.setPixelRatio(pixelCap);
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.82;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+const canvas = renderer.domElement;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 2600);
+const loader = new THREE.TextureLoader();
+function tex(url){ const t = loader.load(url); t.encoding = THREE.sRGBEncoding; return t; }
+
+/* the Sun sits low, so shadows are long and sharp: there is no air on the Moon to soften them */
+const SUN_DIR = new THREE.Vector3(0.78, 0.42, 0.46).normalize();
+const sunLight = new THREE.DirectionalLight(0xfff3e2, 2.1);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+Object.assign(sunLight.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, near: 1, far: 120 });
+sunLight.shadow.bias = -0.0006;
+sunLight.shadow.normalBias = 0.02;
+scene.add(sunLight, sunLight.target);
+scene.add(new THREE.HemisphereLight(0x9db8ff, 0x2a2622, 0.22));
+scene.add(new THREE.AmbientLight(0xffffff, 0.04));
+
+/* sky: stars, the Sun, and Earth hanging in the black sky */
+(function sky(){
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(1800, 48, 24), new THREE.MeshBasicMaterial({ map: tex("/assets/games/solar-system/milky-way.jpg"), side: THREE.BackSide, color: 0x6a6a72 }));
+  scene.add(sphere);
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d"), grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grd.addColorStop(0, "rgba(255,255,255,1)"); grd.addColorStop(0.18, "rgba(255,248,232,.95)"); grd.addColorStop(0.4, "rgba(255,240,215,.25)"); grd.addColorStop(1, "rgba(255,240,215,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+  const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthWrite: false, fog: false }));
+  sun.position.copy(SUN_DIR).multiplyScalar(1500); sun.scale.set(170, 170, 1);
+  scene.add(sun);
+  const earth = new THREE.Mesh(new THREE.SphereGeometry(38, 48, 32), new THREE.MeshStandardMaterial({ map: tex("/assets/games/solar-system/earth.jpg"), roughness: 0.8 }));
+  earth.position.set(-0.35, 0.36, -1).normalize().multiplyScalar(900);
+  earth.rotation.set(0.3, 2.2, 0.2);
+  scene.add(earth);
+})();
+
+/* regolith: grey dust with pebbles and tiny craters */
+function regolith(){
+  const c = document.createElement("canvas"); c.width = c.height = 512;
+  const g = c.getContext("2d");
+  g.fillStyle = "#74716d"; g.fillRect(0, 0, 512, 512);
+  const img = g.getImageData(0, 0, 512, 512), d = img.data;
+  for (let i = 0; i < d.length; i += 4){ const n = (Math.random() - 0.5) * 34; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+  g.putImageData(img, 0, 0);
+  for (let k = 0; k < 34; k++){
+    const x = 30 + Math.random() * 452, y = 30 + Math.random() * 452, r = 4 + Math.random() * 14;
+    g.lineWidth = 1.5 + r * 0.12;
+    g.strokeStyle = "rgba(225,222,215,.35)"; g.beginPath(); g.arc(x, y, r, Math.PI * 0.9, Math.PI * 1.9); g.stroke();
+    g.strokeStyle = "rgba(40,38,36,.35)"; g.beginPath(); g.arc(x, y, r, Math.PI * 1.9, Math.PI * 2.9); g.stroke();
+  }
+  for (let k = 0; k < 300; k++){
+    const x = Math.random() * 512, y = Math.random() * 512, r = 0.8 + Math.random() * 3;
+    g.fillStyle = "rgba(38,36,34," + (0.22 + Math.random() * 0.3) + ")"; g.beginPath(); g.arc(x + r * 0.3, y + r * 0.3, r, 0, 7); g.fill();
+    g.fillStyle = "rgba(232,230,224," + (0.15 + Math.random() * 0.25) + ")"; g.beginPath(); g.arc(x, y, r * 0.75, 0, 7); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(34, 34);
+  t.encoding = THREE.sRGBEncoding; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return t;
+}
+const groundMat = new THREE.MeshStandardMaterial({ map: regolith(), roughness: 1, metalness: 0, vertexColors: true });
+(function ground(){
+  const geo = new THREE.PlaneGeometry(150, 150, 300, 300);
+  geo.rotateX(-Math.PI / 2);
+  const p = geo.attributes.position, cols = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++){
+    const x = p.getX(i), z = p.getZ(i), h = groundHeight(x, z);
+    p.setY(i, h);
+    let f = 0.86 + 0.08 * Math.sin(x * 0.07 + z * 0.05) * Math.cos(z * 0.09 - 0.4) + 0.05 * Math.sin(x * 0.17 - z * 0.13);
+    if (h < -0.4) f *= 0.62 + 0.2 * (1 + h / 3.6);
+    cols[i * 3] = f; cols[i * 3 + 1] = f * 0.985; cols[i * 3 + 2] = f * 0.96;
+  }
+  geo.setAttribute("color", new THREE.BufferAttribute(cols, 3));
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, groundMat);
+  m.receiveShadow = true;
+  scene.add(m);
+})();
+
+/* ---------- building blocks ---------- */
+const MAT = {
+  white: new THREE.MeshStandardMaterial({ color: 0xe9edf3, roughness: 0.5, metalness: 0.15 }),
+  panel: new THREE.MeshStandardMaterial({ color: 0xc8ced8, roughness: 0.55, metalness: 0.3 }),
+  dark: new THREE.MeshStandardMaterial({ color: 0x2b313d, roughness: 0.7, metalness: 0.35 }),
+  black: new THREE.MeshStandardMaterial({ color: 0x0d1018, roughness: 0.25, metalness: 0.5 }),
+  blue: new THREE.MeshStandardMaterial({ color: 0x2f7de1, roughness: 0.45, metalness: 0.2 }),
+  tire: new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.9, metalness: 0.1 }),
+  steel: new THREE.MeshStandardMaterial({ color: 0x7c8592, roughness: 0.42, metalness: 0.85 }),
+  rust: new THREE.MeshStandardMaterial({ color: 0x6b6660, roughness: 0.7, metalness: 0.6 }),
+  alu: new THREE.MeshStandardMaterial({ color: 0xd5dbe3, roughness: 0.28, metalness: 0.9 }),
+  rock: new THREE.MeshStandardMaterial({ color: 0x5c5955, roughness: 0.95, metalness: 0, flatShading: true }),
+  solar: new THREE.MeshStandardMaterial({ color: 0x1b2f63, roughness: 0.25, metalness: 0.6, emissive: 0x050b1d }),
+  glass: new THREE.MeshStandardMaterial({ color: 0xbfe4ff, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.32, depthWrite: false }),
+  glow: new THREE.MeshBasicMaterial({ color: 0x4fc3f7 }),
+  warm: new THREE.MeshStandardMaterial({ color: 0xfff1c9, emissive: 0xffd98a, emissiveIntensity: 0.9 })
+};
+function mesh(geo, mat, x, y, z, parent){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x || 0, y || 0, z || 0);
+  m.castShadow = true; m.receiveShadow = true;
+  (parent || scene).add(m);
+  return m;
+}
+const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+const cyl = (r1, r2, h, s) => new THREE.CylinderGeometry(r1, r2, h, s || 24);
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+function rock(x, z, s, parent){
+  const g = new THREE.IcosahedronGeometry(1, 1), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++){ const k = 0.75 + rnd() * 0.45; p.setXYZ(i, p.getX(i) * k, p.getY(i) * k * 0.7, p.getZ(i) * k); }
+  g.computeVertexNormals();
+  const m = mesh(g, MAT.rock, x, groundHeight(x, z) + s * 0.25, z, parent);
+  m.scale.setScalar(s); m.rotation.y = rnd() * 6;
+  return m;
+}
+const CRATER_RIM = new THREE.MeshStandardMaterial({ color: 0x5f5c58, roughness: 1 });
+const CRATER_FLOOR = new THREE.MeshStandardMaterial({ color: 0x45423f, roughness: 1 });
+function crater(x, z, r){
+  const ring = mesh(new THREE.TorusGeometry(r, r * 0.16, 8, 40), CRATER_RIM, x, groundHeight(x, z) - 0.04, z);
+  ring.rotation.x = Math.PI / 2; ring.scale.z = 0.3; ring.castShadow = false;
+  const floor = mesh(new THREE.CircleGeometry(r * 0.95, 32), CRATER_FLOOR, x, groundHeight(x, z) + 0.015, z);
+  floor.rotation.x = -Math.PI / 2; floor.castShadow = false;
+}
+
+/* static things the rover bumps into: circles and turned boxes */
+const COLLIDERS = [];
+function colCircle(x, z, r){ const c = { kind: "circle", x, z, r }; COLLIDERS.push(c); return c; }
+function colBox(x, z, hw, hd, yaw){ const c = { kind: "box", x, z, hw, hd, yaw: yaw || 0 }; COLLIDERS.push(c); return c; }
+/* raised surfaces parts can rest on */
+const SURFACES = [];
+function surface(x, z, hw, hd, top){ const s = { x, z, hw, hd, top, on: true }; SURFACES.push(s); return s; }
+
+/* ---------- the outpost ---------- */
+const PLACES = {
+  start: { x: 0, z: 12 },
+  approach: { x: 0, z: -1.6 },
+  bay: { x: 4.4, z: -0.2 },
+  lever: { x: 2.65, z: -6.0 },
+  slot: { x: -2.3, z: -6.1 },
+  far: { x: 0, z: -17 },
+  pad: { x: 0, z: -19.5 },
+  greenhouse: { x: -7, z: 23 },
+  socket: { x: -7, z: 17.6 },
+  hub: { x: 6, z: 24 },
+  shelf: { x: 1.6, z: 19.4 },
+  tower: { x: 13, z: 20 },
+  drill: { x: -16, z: 5 }
+};
+
+/* base hub */
+const hubLights = [];
+(function hub(){
+  const p = PLACES.hub, y = groundHeight(p.x, p.z);
+  const g = new THREE.Group(); g.position.set(p.x, y, p.z); scene.add(g);
+  mesh(cyl(3.6, 3.8, 2.4, 40), MAT.white, 0, 1.2, 0, g);
+  const dome = mesh(new THREE.SphereGeometry(3.6, 40, 16, 0, Math.PI * 2, 0, Math.PI / 2), MAT.panel, 0, 2.4, 0, g); dome.scale.y = 0.55;
+  mesh(cyl(3.62, 3.62, 0.25, 40), MAT.blue, 0, 1.75, 0, g);
+  for (let i = 0; i < 6; i++){
+    const a = i / 6 * Math.PI * 2 + 0.3;
+    const w = mesh(box(0.9, 0.5, 0.12), MAT.warm, Math.sin(a) * 3.74, 1.15, Math.cos(a) * 3.74, g);
+    w.rotation.y = a; hubLights.push(w);
+  }
+  const door = mesh(box(1.6, 1.9, 1.6), MAT.white, -2.9, 0.95, -2.2, g); door.rotation.y = -0.65;
+  mesh(box(1.0, 1.4, 0.05), MAT.black, -3.55, 0.85, -2.75, g).rotation.y = -0.65;
+  colCircle(p.x, p.z, 4.2);
+  /* solar wings: some knocked over by the meteors */
+  for (let i = 0; i < 4; i++){
+    const sx = p.x + 6 + i * 2.6, sz = p.z - 1 + (i % 2) * 0.6;
+    const post = mesh(cyl(0.08, 0.08, 1.2, 8), MAT.dark, sx, groundHeight(sx, sz) + 0.6, sz);
+    const pan = mesh(box(2.2, 0.06, 1.4), MAT.solar, sx, groundHeight(sx, sz) + 1.25, sz);
+    pan.rotation.x = i === 1 ? 1.1 : -0.35; pan.rotation.z = i === 1 ? 0.5 : 0;
+    if (i === 2){ pan.position.y = groundHeight(sx, sz) + 0.2; pan.rotation.set(0.15, 0.6, 0.12); post.rotation.z = 1.3; post.position.y -= 0.4; }
+    colCircle(sx, sz, 1.1);
+  }
+})();
+
+/* the greenhouse: a glass dome, planters, a seedling, grow lights and a water pipe */
+const GH = { light: null, strips: [], sprout: null, leaves: [], water: null, socketRing: null, glass: null, plants: [] };
+(function greenhouse(){
+  const p = PLACES.greenhouse, y = groundHeight(p.x, p.z);
+  const g = new THREE.Group(); g.position.set(p.x, y, p.z); scene.add(g);
+  mesh(cyl(4.4, 4.5, 0.4, 48), MAT.white, 0, 0.2, 0, g);
+  const glass = new THREE.Mesh(new THREE.SphereGeometry(4.3, 48, 20, 0, Math.PI * 2, 0, Math.PI / 2), MAT.glass.clone());
+  glass.position.y = 0.4; glass.renderOrder = 2; g.add(glass); GH.glass = glass;
+  for (let i = 0; i < 8; i++){
+    const rib = new THREE.Mesh(new THREE.TorusGeometry(4.3, 0.05, 6, 40, Math.PI), MAT.panel);
+    rib.position.y = 0.4; rib.rotation.y = i / 8 * Math.PI; g.add(rib);
+  }
+  const ring = mesh(new THREE.TorusGeometry(4.3, 0.06, 6, 48), MAT.panel, 0, 1.9, 0, g); ring.rotation.x = Math.PI / 2; ring.scale.set(0.82, 0.82, 1);
+  /* planters with soil */
+  const soil = new THREE.MeshStandardMaterial({ color: 0x3b2c22, roughness: 1 });
+  [[-1.6, 0.6], [1.6, 0.6], [0, -1.6]].forEach(([px, pz], i) => {
+    mesh(box(2.2, 0.5, 1.0), MAT.panel, px, 0.65, pz, g);
+    mesh(box(2.0, 0.08, 0.85), soil, px, 0.92, pz, g);
+    for (let k = 0; k < 4; k++){
+      const pl = new THREE.Group(); pl.position.set(px - 0.75 + k * 0.5, 0.96, pz); g.add(pl);
+      const stem = mesh(cyl(0.02, 0.025, 0.3, 6), new THREE.MeshStandardMaterial({ color: 0x5f8f4e, roughness: 0.8 }), 0, 0.15, 0, pl);
+      const leaf = mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshStandardMaterial({ color: 0x5e7a52, roughness: 0.8 }), 0, 0.32, 0, pl);
+      leaf.scale.set(1.2, 0.5, 0.8);
+      pl.scale.setScalar(0.5); pl.userData.leaf = leaf; GH.plants.push(pl);
+    }
+  });
+  /* the seedling that opens when the power comes on */
+  const sp = new THREE.Group(); sp.position.set(0, 0.4, 1.9); g.add(sp);
+  mesh(cyl(0.35, 0.3, 0.4, 20), MAT.white, 0, 0.2, 0, sp);
+  mesh(cyl(0.3, 0.3, 0.05, 20), soil, 0, 0.42, 0, sp);
+  const sprout = new THREE.Group(); sprout.position.y = 0.44; sp.add(sprout); GH.sprout = sprout;
+  mesh(cyl(0.025, 0.03, 0.5, 6), new THREE.MeshStandardMaterial({ color: 0x6aa553, roughness: 0.7 }), 0, 0.25, 0, sprout);
+  for (let k = 0; k < 2; k++){
+    const lf = new THREE.Group(); lf.position.y = 0.48; lf.rotation.y = k * Math.PI; sprout.add(lf);
+    const leaf = mesh(new THREE.SphereGeometry(0.14, 12, 8), new THREE.MeshStandardMaterial({ color: 0x74b85a, roughness: 0.6 }), 0.13, 0, 0, lf);
+    leaf.scale.set(1.3, 0.25, 0.7);
+    lf.rotation.z = 1.2; GH.leaves.push(lf);
+  }
+  sprout.scale.setScalar(0.35);
+  /* grow lights */
+  for (let k = 0; k < 3; k++){
+    const s = mesh(box(2.4, 0.06, 0.14), new THREE.MeshStandardMaterial({ color: 0x2b313d, emissive: 0xfff2d0, emissiveIntensity: 0 }), 0, 3.0, -1.2 + k * 1.2, g);
+    s.castShadow = false; GH.strips.push(s);
+  }
+  GH.light = new THREE.PointLight(0xffe6b8, 0, 14, 2); GH.light.position.set(0, 2.8, 0); g.add(GH.light);
+  /* water: drops fall from the pipe into the planters */
+  mesh(cyl(0.06, 0.06, 3.6, 8), MAT.panel, 0, 2.3, -0.2, g).rotation.z = Math.PI / 2;
+  const wg = new THREE.BufferGeometry(), N = 90, wp = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++){ wp[i * 3] = -1.6 + (i % 3) * 1.6; wp[i * 3 + 1] = 2.2 - rnd() * 1.2; wp[i * 3 + 2] = -0.2 + (rnd() - 0.5) * 0.3; }
+  wg.setAttribute("position", new THREE.BufferAttribute(wp, 3));
+  GH.water = new THREE.Points(wg, new THREE.PointsMaterial({ color: 0x8fd3ff, size: 0.07, transparent: true, opacity: 0.85 }));
+  GH.water.visible = false; g.add(GH.water);
+  colCircle(p.x, p.z, 4.8);
+
+  /* the socket post in front of the dome */
+  const s = PLACES.socket, sy = groundHeight(s.x, s.z);
+  mesh(box(0.7, 0.9, 0.7), MAT.white, s.x, sy + 0.45, s.z);
+  mesh(box(0.74, 0.12, 0.74), MAT.blue, s.x, sy + 0.62, s.z);
+  const cup = mesh(cyl(0.36, 0.36, 0.14, 24), MAT.dark, s.x, sy + 0.97, s.z);
+  GH.socketRing = mesh(new THREE.TorusGeometry(0.4, 0.04, 8, 32), MAT.glow.clone(), s.x, sy + 1.05, s.z);
+  GH.socketRing.rotation.x = Math.PI / 2; GH.socketRing.castShadow = false;
+  const cable = mesh(box(0.08, 0.06, 1.2), MAT.dark, s.x, sy + 0.03, s.z + 0.9);
+  colCircle(s.x, s.z, 0.55);
+})();
+
+/* lab shelf for the glass sensor, the radio tower, the old drill rig */
+(function moreBase(){
+  const s = PLACES.shelf, y = groundHeight(s.x, s.z);
+  mesh(box(1.8, 0.08, 1.0), MAT.panel, s.x, y + 0.8, s.z);
+  [[-0.8, -0.4], [0.8, -0.4], [-0.8, 0.4], [0.8, 0.4]].forEach(([a, b]) => mesh(box(0.08, 0.8, 0.08), MAT.dark, s.x + a, y + 0.4, s.z + b));
+  surface(s.x, s.z, 0.9, 0.5, y + 0.84);
+  colBox(s.x, s.z, 0.95, 0.55);
+
+  /* the radio tower is made of triangles */
+  const t = PLACES.tower, ty = groundHeight(t.x, t.z);
+  const tg = new THREE.Group(); tg.position.set(t.x, ty, t.z); scene.add(tg);
+  const H = 9, legs = [0, 1, 2].map(i => i / 3 * Math.PI * 2);
+  legs.forEach(a => { const l = mesh(cyl(0.06, 0.06, H, 6), MAT.panel, Math.sin(a) * 0.7, H / 2, Math.cos(a) * 0.7, tg); });
+  for (let k = 0; k < 6; k++){
+    for (let i = 0; i < 3; i++){
+      const a1 = legs[i], a2 = legs[(i + 1) % 3];
+      const p1 = new THREE.Vector3(Math.sin(a1) * 0.7, k * 1.5, Math.cos(a1) * 0.7), p2 = new THREE.Vector3(Math.sin(a2) * 0.7, (k + 1) * 1.5, Math.cos(a2) * 0.7);
+      const len = p1.distanceTo(p2), mid = p1.clone().add(p2).multiplyScalar(0.5);
+      const b = mesh(cyl(0.035, 0.035, len, 5), MAT.panel, mid.x, mid.y, mid.z, tg);
+      b.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p2.clone().sub(p1).normalize());
+    }
+  }
+  const dish = mesh(new THREE.SphereGeometry(1.1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 3), MAT.white, 0, H - 0.6, 0.2, tg);
+  dish.rotation.x = -1.1;
+  const beacon = mesh(new THREE.SphereGeometry(0.16, 12, 8), new THREE.MeshBasicMaterial({ color: 0x2a3550 }), 0, H + 0.2, 0, tg);
+  tg.userData.beacon = beacon; PLACES.tower.group = tg;
+  colCircle(t.x, t.z, 1.4);
+
+  /* a mining drill rig much too heavy for the rover */
+  const d = PLACES.drill, dy = groundHeight(d.x, d.z);
+  const dg = new THREE.Group(); dg.position.set(d.x, dy, d.z); dg.rotation.y = 0.5; scene.add(dg);
+  mesh(box(4.2, 1.2, 2.6), MAT.rust, 0, 0.7, 0, dg);
+  mesh(box(1.2, 5.5, 1.2), MAT.steel, 1.2, 3.4, 0, dg).rotation.z = -0.25;
+  mesh(cyl(0.35, 0.05, 2.2, 12), MAT.dark, 2.4, 0.9, 0, dg).rotation.z = 0.3;
+  for (let i = 0; i < 2; i++) mesh(box(4.6, 0.6, 0.6), MAT.dark, 0, 0.3, i ? 1.3 : -1.3, dg);
+  PLACES.drill.group = dg;
+  colCircle(d.x, d.z, 3.0);
+
+  /* rocks and craters, kept off the roads */
+  const clear = (x, z) => Math.abs(x) < 6 && z > -26 && z < 16 || Math.hypot(x - PLACES.hub.x, z - PLACES.hub.z) < 9 || Math.hypot(x - PLACES.greenhouse.x, z - PLACES.greenhouse.z) < 9 || Math.hypot(x - PLACES.drill.x, z - PLACES.drill.z) < 5 || Math.hypot(x - PLACES.tower.x, z - PLACES.tower.z) < 4 || overTrench(x, z) || Math.abs(z - TRENCH.z) < 5;
+  for (let i = 0; i < 70; i++){
+    const x = (rnd() - 0.5) * 66, z = (rnd() - 0.5) * 62;
+    if (clear(x, z)) continue;
+    const s = 0.3 + rnd() * rnd() * 1.6;
+    rock(x, z, s);
+    if (s > 0.8) colCircle(x, z, s * 0.9);
+  }
+  for (let i = 0; i < 16; i++){
+    const x = (rnd() - 0.5) * 62, z = (rnd() - 0.5) * 58;
+    if (clear(x, z)) continue;
+    crater(x, z, 1.2 + rnd() * 2.6);
+  }
+  /* a ring of boulders along the trench, outside the road */
+  for (let x = -32; x <= 32; x += 2.3){
+    if (Math.abs(x) < 5) continue;
+    rock(x + rnd() * 0.6, TRENCH.z + TRENCH.half + 1.2 + rnd() * 0.6, 0.4 + rnd() * 0.5);
+    rock(x + rnd() * 0.6, TRENCH.z - TRENCH.half - 1.2 - rnd() * 0.6, 0.4 + rnd() * 0.5);
+  }
+})();
+
+/* the road to the bridge: a rack of spare parts on the left, wreckage on the right */
+(function corridor(){
+  /* west: a metal rack; its top is a shelf the spare parts sit on */
+  const wx = -3.85, wz = -4.35, wy = groundHeight(wx, wz);
+  mesh(box(1.1, 0.08, 4.0), MAT.panel, wx, wy + 0.62, wz);
+  for (let k = 0; k < 3; k++) mesh(box(1.1, 0.06, 0.06), MAT.dark, wx, wy + 0.3, wz - 1.9 + k * 1.9);
+  [[-0.5, -1.95], [0.5, -1.95], [-0.5, 1.95], [0.5, 1.95], [-0.5, 0], [0.5, 0]].forEach(([a, b]) => mesh(box(0.08, 0.62, 0.08), MAT.dark, wx + a, wy + 0.31, wz + b));
+  surface(wx, wz, 0.55, 2.0, wy + 0.66);
+  colBox(wx, wz, 0.6, 2.05);
+  /* east: wreckage of a solar array */
+  const ex = 4.0, ez = -4.4;
+  for (let k = 0; k < 3; k++){
+    const p = mesh(box(1.2, 0.06, 1.6), MAT.solar, ex + (k % 2) * 0.3, groundHeight(ex, ez) + 0.5 + k * 0.1, ez - 1.4 + k * 1.4);
+    p.rotation.set(0.4 - k * 0.3, k * 0.4, 0.9 + k * 0.2);
+  }
+  rock(4.3, -2.6, 0.7); rock(4.6, -6.2, 0.6);
+  colBox(3.8, ez, 0.55, 2.1);
+  /* the trench lip next to the road */
+  for (const sx of [-1, 1]){
+    mesh(box(0.3, 0.5, 0.3), MAT.blue, sx * 2.0, 0.25, TRENCH.z + TRENCH.half + 0.6);
+    mesh(box(0.3, 0.5, 0.3), MAT.blue, sx * 2.0, 0.25, TRENCH.z - TRENCH.half - 0.6);
+  }
+})();
+
+/* ---------- the bridge ---------- */
+const bridge = { state: "folded", near: null, far: null, nearA: Math.PI / 2, farA: -Math.PI / 2, strut: null, deck: null };
+(function makeBridge(){
+  function half(hingeZ, dir){
+    const pivot = new THREE.Group(); pivot.position.set(0, BRIDGE.deck, hingeZ); scene.add(pivot);
+    const L = TRENCH.half + TRENCH.wall - 0.02;
+    const deck = mesh(box(3.2, 0.18, L), MAT.panel, 0, -0.09, dir * L / 2, pivot);
+    for (let k = 0; k < 4; k++) mesh(box(3.0, 0.03, 0.1), MAT.dark, 0, 0.01, dir * (0.4 + k * 0.85), pivot);
+    for (const s of [-1, 1]){
+      mesh(box(0.08, 0.5, L), MAT.blue, s * 1.6, 0.25, dir * L / 2, pivot);
+      for (let k = 0; k < 4; k++){ const post = mesh(box(0.06, 0.5, 0.06), MAT.dark, s * 1.6, 0.25, dir * (0.2 + k * 0.95), pivot); }
+    }
+    return pivot;
+  }
+  bridge.near = half(TRENCH.z + TRENCH.half + TRENCH.wall, -1);
+  bridge.far = half(TRENCH.z - TRENCH.half - TRENCH.wall, 1);
+  /* support struts swing up from the trench wall to hold the near half level */
+  const st = new THREE.Group(); st.position.set(0, -1.7, TRENCH.z + TRENCH.half + 0.15); scene.add(st);
+  for (const s of [-1, 1]) mesh(box(0.2, 0.2, 2.8), MAT.alu, s * 1.35, 0, -1.4, st);
+  mesh(box(2.9, 0.16, 0.16), MAT.alu, 0, 0, -2.7, st);
+  st.rotation.x = -0.7; st.visible = false; bridge.strut = st;
+})();
+function bridgeAngles(state){
+  if (state === "folded") return [Math.PI / 2, -Math.PI / 2];
+  if (state === "sag") return [-0.2, 0.2];
+  return [0, 0];
+}
+
+/* lever post */
+const lever = { pivot: null, handle: null, knob: null, a: -0.65, pulled: false, grabbed: false };
+(function makeLever(){
+  const p = PLACES.lever, y = groundHeight(p.x, p.z);
+  mesh(box(0.5, 0.9, 0.5), MAT.white, p.x, y + 0.45, p.z);
+  mesh(box(0.54, 0.1, 0.54), MAT.blue, p.x, y + 0.75, p.z);
+  const piv = new THREE.Group(); piv.position.set(p.x, y + 0.92, p.z); scene.add(piv);
+  mesh(cyl(0.05, 0.05, 1.0, 10), MAT.dark, 0, 0.5, 0, piv);
+  lever.knob = mesh(new THREE.SphereGeometry(0.13, 16, 10), new THREE.MeshStandardMaterial({ color: 0x2f7de1, roughness: 0.4, emissive: 0x000000 }), 0, 1.02, 0, piv);
+  piv.rotation.x = lever.a;
+  lever.pivot = piv;
+  colCircle(p.x, p.z, 0.45);
+})();
+function leverKnobWorld(){ const v = new THREE.Vector3(); lever.knob.getWorldPosition(v); return v; }
+
+/* slot pad: the glowing outline of the triangle brace */
+const slotPad = { outline: null, mat: null, yaw: 0.35 };
+(function makeSlot(){
+  const p = PLACES.slot, y = groundHeight(p.x, p.z);
+  mesh(cyl(0.95, 1.0, 0.12, 6), MAT.dark, p.x, y + 0.06, p.z);
+  const pts = [];
+  for (let i = 0; i <= 3; i++){ const a = slotPad.yaw + i / 3 * Math.PI * 2; pts.push(new THREE.Vector3(Math.sin(a) * 0.5, 0, Math.cos(a) * 0.5)); }
+  slotPad.mat = new THREE.LineBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.9 });
+  const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), slotPad.mat);
+  ln.position.set(p.x, y + 0.14, p.z); scene.add(ln); slotPad.outline = ln;
+  /* a soft fill so the shape reads from far away */
+  const sh = new THREE.Shape(); pts.slice(0, 3).forEach((v, i) => i ? sh.lineTo(v.x, -v.z) : sh.moveTo(v.x, -v.z));
+  const fill = new THREE.Mesh(new THREE.ShapeGeometry(sh), new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.18, depthWrite: false }));
+  fill.rotation.x = -Math.PI / 2; fill.position.set(p.x, y + 0.13, p.z); scene.add(fill); slotPad.fill = fill;
+  surface(p.x, p.z, 0.9, 0.9, y + 0.12);
+})();
+
+/* salvage bin */
+(function makeBay(){
+  const p = PLACES.bay, y = groundHeight(p.x, p.z);
+  const W = 2.8, D = 2.0, H = 0.7;
+  mesh(box(W, 0.1, D), MAT.dark, p.x, y + 0.05, p.z);
+  mesh(box(W, H, 0.1), MAT.panel, p.x, y + H / 2, p.z - D / 2);
+  mesh(box(W, H, 0.1), MAT.panel, p.x, y + H / 2, p.z + D / 2);
+  mesh(box(0.1, H, D), MAT.panel, p.x - W / 2, y + H / 2, p.z);
+  mesh(box(0.1, H, D), MAT.panel, p.x + W / 2, y + H / 2, p.z);
+  mesh(box(W + 0.02, 0.08, 0.12), MAT.blue, p.x, y + H, p.z + D / 2);
+  colBox(p.x, p.z, W / 2 + 0.05, D / 2 + 0.05);
+})();
+
+/* far-side pad where the spare power cell waits */
+(function makePad(){
+  const p = PLACES.pad, y = groundHeight(p.x, p.z);
+  mesh(cyl(1.2, 1.3, 0.16, 6), MAT.panel, p.x, y + 0.08, p.z);
+  const r = mesh(new THREE.TorusGeometry(1.0, 0.03, 6, 6), MAT.glow, p.x, y + 0.17, p.z); r.rotation.x = Math.PI / 2; r.castShadow = false;
+  surface(p.x, p.z, 1.1, 1.1, y + 0.16);
+  /* a broken supply crate nearby */
+  const c = mesh(box(1.4, 0.9, 1.0), MAT.white, 3.2, groundHeight(3.2, -18) + 0.45, -18); c.rotation.y = 0.4;
+  colBox(3.2, -18, 0.75, 0.6, 0.4);
+  rock(-3.5, -21, 0.9); colCircle(-3.5, -21, 0.8);
+})();
+
+/* ---------- the rover ---------- */
+const rover = { x: PLACES.start.x, z: PLACES.start.z, y: 0, yaw: 0, v: 0, pitch: 0, roll: 0, wheelSpin: 0 };
+const arm = { yaw: 0, pitch: 0.15, reach: 2.0 };
+const R = { group: null, body: null, wheels: [], turret: null, shoulder: null, inner: null, tool: null, fingers: [], magnet: null, magGlow: null, bedLight: null, brake: [], head: null, cable: null };
+(function makeRover(){
+  const g = new THREE.Group(); scene.add(g); R.group = g;
+  const body = new THREE.Group(); body.position.y = 0; g.add(body); R.body = body;
+  /* chassis */
+  mesh(box(1.7, 0.42, 2.6), MAT.white, 0, 0.78, 0, body);
+  mesh(box(1.74, 0.12, 2.64), MAT.dark, 0, 0.56, 0, body);
+  for (const s of [-1, 1]) mesh(box(0.04, 0.12, 2.0), MAT.blue, s * 0.87, 0.82, 0, body);
+  /* cab with a dark visor and headlights */
+  mesh(box(1.3, 0.38, 0.7), MAT.white, 0, 1.17, -0.85, body);
+  mesh(box(1.18, 0.22, 0.04), MAT.black, 0, 1.2, -1.21, body);
+  for (const s of [-1, 1]){
+    const hl = mesh(cyl(0.09, 0.09, 0.06, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xe8f2ff, emissiveIntensity: 1.4 }), s * 0.6, 0.86, -1.31, body);
+    hl.rotation.x = Math.PI / 2;
+    const br = mesh(box(0.22, 0.08, 0.04), new THREE.MeshStandardMaterial({ color: 0x501010, emissive: 0xff3030, emissiveIntensity: 0.2 }), s * 0.62, 0.86, 1.31, body);
+    R.brake.push(br);
+  }
+  const lamp = new THREE.SpotLight(0xe8f2ff, 1.6, 22, 0.55, 0.6, 1.2);
+  lamp.position.set(0, 0.9, -1.3); body.add(lamp);
+  const lt = new THREE.Object3D(); lt.position.set(0, 0, -8); body.add(lt); lamp.target = lt;
+  /* mast camera and antenna */
+  mesh(cyl(0.04, 0.04, 0.9, 8), MAT.dark, 0.55, 1.45, 0.2, body);
+  mesh(box(0.3, 0.16, 0.18), MAT.white, 0.55, 1.95, 0.2, body);
+  mesh(box(0.2, 0.08, 0.02), MAT.black, 0.55, 1.96, 0.1, body);
+  mesh(cyl(0.015, 0.015, 1.0, 6), MAT.dark, -0.62, 1.5, 1.1, body);
+  mesh(new THREE.SphereGeometry(0.05, 8, 6), MAT.blue, -0.62, 2.0, 1.1, body);
+  /* cargo bed */
+  for (const s of [-1, 1]) mesh(box(0.06, 0.22, 0.9), MAT.dark, s * 0.6, 1.1, ROVER.bed.z, body);
+  mesh(box(1.26, 0.22, 0.06), MAT.dark, 0, 1.1, ROVER.bed.z + 0.45, body);
+  const bl = mesh(box(1.1, 0.03, 0.8), new THREE.MeshStandardMaterial({ color: 0x1a2440, emissive: 0x4fc3f7, emissiveIntensity: 0.15 }), 0, 1.0, ROVER.bed.z, body);
+  R.bedLight = bl;
+  /* six wheels on rocker arms */
+  for (const s of [-1, 1]){
+    mesh(box(0.08, 0.1, 2.1), MAT.dark, s * 0.98, 0.5, 0, body);
+    for (const wz of [-0.95, 0, 0.95]){
+      const w = new THREE.Group(); w.position.set(s * 1.0, 0.38, wz); g.add(w);
+      const tire = mesh(cyl(0.38, 0.38, 0.3, 20), MAT.tire, 0, 0, 0, w); tire.rotation.z = Math.PI / 2;
+      for (let k = 0; k < 8; k++){
+        const tread = mesh(box(0.31, 0.05, 0.1), MAT.dark, 0, 0, 0, w);
+        const a = k / 8 * Math.PI * 2; tread.position.set(0, Math.sin(a) * 0.37, Math.cos(a) * 0.37); tread.rotation.x = -a;
+        tread.parent.remove(tread); const holder = w.userData.spin || (w.userData.spin = (() => { const h = new THREE.Group(); w.add(h); return h; })()); holder.add(tread);
+      }
+      const hubc = mesh(cyl(0.16, 0.16, 0.32, 14), MAT.panel, 0, 0, 0, w.userData.spin); hubc.rotation.z = Math.PI / 2;
+      R.wheels.push(w);
+    }
+  }
+  /* the arm: turret, shoulder, boom that slides in and out */
+  const tur = new THREE.Group(); tur.position.set(0, ARM.mountY - 0.12, ARM.mountZ); body.add(tur); R.turret = tur;
+  mesh(cyl(0.3, 0.34, 0.24, 20), MAT.panel, 0, 0, 0, tur);
+  mesh(cyl(0.31, 0.31, 0.05, 20), MAT.blue, 0, 0.1, 0, tur);
+  const sh = new THREE.Group(); sh.position.y = 0.12; tur.add(sh); R.shoulder = sh;
+  mesh(new THREE.SphereGeometry(0.17, 16, 12), MAT.dark, 0, 0, 0, sh);
+  mesh(box(0.24, 0.24, 1.1), MAT.white, 0, 0, -0.6, sh);
+  mesh(box(0.25, 0.05, 0.8), MAT.blue, 0, 0.13, -0.6, sh);
+  const inner = mesh(box(0.15, 0.15, 1), MAT.alu, 0, 0, -1.5, sh); R.inner = inner;
+  /* the tool hangs straight down from the tip */
+  const tool = new THREE.Group(); scene.add(tool); R.tool = tool;
+  mesh(box(0.3, 0.26, 0.3), MAT.dark, 0, -0.13, 0, tool);
+  mesh(cyl(0.035, 0.035, 0.3, 8), MAT.dark, 0, 0.12, 0, tool);
+  for (const s of [-1, 1]){
+    const f = new THREE.Group(); f.position.set(s * 0.12, -0.24, 0); tool.add(f);
+    mesh(box(0.06, 0.32, 0.22), MAT.panel, 0, -0.16, 0, f);
+    mesh(box(0.05, 0.12, 0.2), MAT.blue, -s * 0.04, -0.28, 0, f);
+    R.fingers.push(f);
+  }
+  const mg = new THREE.Group(); tool.add(mg); R.magnet = mg;
+  mesh(cyl(0.36, 0.38, 0.14, 28), MAT.black, 0, -0.33, 0, mg);
+  const glow = mesh(new THREE.TorusGeometry(0.36, 0.035, 8, 32), new THREE.MeshBasicMaterial({ color: 0x223048 }), 0, -0.4, 0, mg);
+  glow.rotation.x = Math.PI / 2; glow.castShadow = false; R.magGlow = glow;
+  mg.visible = false;
+})();
+
+/* ground ring under the claw, and the magnet's reach */
+const marker = new THREE.Group(); scene.add(marker);
+const ringMat = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
+const ring = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.36, 40), ringMat); ring.rotation.x = -Math.PI / 2; marker.add(ring);
+const magArea = new THREE.Mesh(new THREE.RingGeometry(ARM.magR - 0.06, ARM.magR, 56), new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
+magArea.rotation.x = -Math.PI / 2; marker.add(magArea);
+const dropLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]), new THREE.LineDashedMaterial({ color: 0x4fc3f7, dashSize: 0.12, gapSize: 0.1, transparent: true, opacity: 0.7 }));
+scene.add(dropLine);
+/* the field: rings that slide down from the magnet while it is on */
+const field = [];
+for (let i = 0; i < 3; i++){
+  const f = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.36, 40), new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+  f.rotation.x = -Math.PI / 2; scene.add(f); field.push(f);
+}
+
+/* the blue beam that shows where to go */
+const beam = new THREE.Group(); scene.add(beam);
+(function makeBeam(){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 24, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x2f7de1, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  m.position.y = 12; beam.add(m);
+  const chev = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.6, 4), new THREE.MeshBasicMaterial({ color: 0x4fc3f7 }));
+  chev.rotation.x = Math.PI; chev.position.y = 3; beam.add(chev); beam.userData.chev = chev;
+})();
+
+/* moon dust kicked up by the wheels: no air, so it flies in clean arcs and falls slowly */
+const DUST_N = 220;
+const dust = { geo: new THREE.BufferGeometry(), p: new Float32Array(DUST_N * 3), v: new Float32Array(DUST_N * 3), life: new Float32Array(DUST_N), next: 0 };
+dust.geo.setAttribute("position", new THREE.BufferAttribute(dust.p, 3));
+for (let i = 0; i < DUST_N; i++) dust.p[i * 3 + 1] = -50;
+scene.add(new THREE.Points(dust.geo, new THREE.PointsMaterial({ color: 0xb8b2aa, size: 0.07, transparent: true, opacity: 0.8 })));
+function kickDust(x, y, z, vx, vy, vz){
+  const i = dust.next; dust.next = (dust.next + 1) % DUST_N;
+  dust.p[i * 3] = x; dust.p[i * 3 + 1] = y; dust.p[i * 3 + 2] = z;
+  dust.v[i * 3] = vx; dust.v[i * 3 + 1] = vy; dust.v[i * 3 + 2] = vz; dust.life[i] = 3;
+}
+
+/* ---------- parts ---------- */
+const parts = [];
+function partMesh(type){
+  const g = new THREE.Group();
+  if (type === "scrap"){
+    const a = mesh(box(0.55, 0.05, 0.34), MAT.steel, 0, 0.05, 0, g); a.rotation.set(0.2, 0, 0.25);
+    const b = mesh(box(0.3, 0.05, 0.28), MAT.rust, 0.15, 0.12, 0.05, g); b.rotation.set(-0.5, 0.4, 0.6);
+    mesh(cyl(0.04, 0.04, 0.2, 6), MAT.steel, -0.15, 0.1, -0.08, g).rotation.z = 1.2;
+    return { g, half: 0.12, r: 0.35, sym: 0 };
+  }
+  if (type === "panel"){
+    mesh(box(2.4, 0.08, 1.5), MAT.steel, 0, 0.04, 0, g);
+    for (let k = 0; k < 4; k++) mesh(box(2.3, 0.05, 0.08), MAT.rust, 0, 0.1, -0.6 + k * 0.4, g);
+    return { g, half: 0.06, r: 1.3, sym: 0 };
+  }
+  if (type === "block"){ mesh(box(0.55, 0.36, 0.55), MAT.alu, 0, 0, 0, g); return { g, half: 0.18, r: 0.4, sym: 0 }; }
+  if (type === "tube"){ mesh(cyl(0.29, 0.29, 0.36, 28), MAT.alu, 0, 0, 0, g); return { g, half: 0.18, r: 0.35, sym: 0 }; }
+  if (type === "wedge"){
+    const sh = new THREE.Shape();
+    for (let i = 0; i < 3; i++){ const a = i / 3 * Math.PI * 2; const x = Math.sin(a) * 0.5, z = Math.cos(a) * 0.5; i ? sh.lineTo(x, -z) : sh.moveTo(x, -z); }
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.3, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 1 });
+    geo.rotateX(-Math.PI / 2); geo.translate(0, -0.15, 0);
+    mesh(geo, MAT.alu, 0, 0, 0, g);
+    /* the triangle braces inside it */
+    return { g, half: 0.16, r: 0.42, sym: Math.PI * 2 / 3 };
+  }
+  if (type === "cell"){
+    mesh(cyl(0.3, 0.3, 0.7, 28), MAT.white, 0, 0, 0, g);
+    const band = mesh(cyl(0.305, 0.305, 0.14, 28), new THREE.MeshStandardMaterial({ color: 0x2f7de1, emissive: 0x4fc3f7, emissiveIntensity: 0.25 }), 0, 0.12, 0, g);
+    g.userData.band = band;
+    mesh(cyl(0.12, 0.12, 0.08, 14), MAT.dark, 0, 0.39, 0, g);
+    return { g, half: 0.35, r: 0.35, sym: 0 };
+  }
+  if (type === "glass"){
+    mesh(box(0.5, 0.18, 0.5), MAT.dark, 0, -0.16, 0, g);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), MAT.glass); dome.position.y = -0.07; g.add(dome);
+    mesh(new THREE.SphereGeometry(0.07, 12, 8), MAT.blue, 0, 0.02, 0, g);
+    return { g, half: 0.25, r: 0.35, sym: 0 };
+  }
+  return { g, half: 0.2, r: 0.3, sym: 0 };
+}
+function addPart(type, x, z, yaw, onSurface){
+  const pm = partMesh(type);
+  scene.add(pm.g);
+  const y = floorAt(x, z) + pm.half;
+  const p = { type, g: pm.g, half: pm.half, r: pm.r, sym: pm.sym, x, y, z, yaw: yaw || 0, vx: 0, vy: 0, vz: 0, state: "free", home: { x, z, yaw: yaw || 0 }, fallFrom: y, snapAnim: null, id: parts.length };
+  parts.push(p);
+  return p;
+}
+function floorAt(x, z){
+  let f = onBridgeDeck(x, z, bridge.state) ? BRIDGE.deck : groundHeight(x, z);
+  for (const s of SURFACES) if (s.on && Math.abs(x - s.x) <= s.hw && Math.abs(z - s.z) <= s.hd) f = Math.max(f, s.top);
+  return f;
+}
+
+/* ---------- game state ---------- */
+const G = {
+  started: false, paused: false, mode: "drive", t: 0, clockOn: false,
+  held: [],                 /* parts the arm or magnet is holding */
+  magOn: false, grabBtn: false,
+  scrap: 0, notes: new Set(), flags: {}, step: 0, done: false,
+  bedItem: null, lastDevice: "keys", hintCool: 0, tags: [], radioT: 0, testT: -1,
+  candidate: null, preview: null, magTried: new Set()
+};
+let PANEL, WEDGE, CELL, GLASS;
+function setupParts(){
+  for (const p of parts) scene.remove(p.g);
+  parts.length = 0;
+  PANEL = addPart("panel", 0.1, -4.35, 0.08);
+  addPart("block", -3.75, -2.9, 0.2);
+  addPart("tube", -3.75, -4.3, 0);
+  WEDGE = addPart("wedge", -3.75, -5.75, 1.2);
+  CELL = addPart("cell", PLACES.pad.x, PLACES.pad.z, 0);
+  GLASS = addPart("glass", 4.6, -21.5, 0.3);
+  [[-8, 6], [9.5, 8], [-11, -2], [10, -22], [-9, -24]].forEach(([x, z], i) => addPart("scrap", x, z, i * 1.3));
+}
+
+/* where a part can be dropped to fit */
+function targets(){
+  const out = [];
+  const b = PLACES.bay; out.push({ id: "bay", x: b.x, z: b.z, y: groundHeight(b.x, b.z) + 0.12, r: 1.35 });
+  if (bridge.state === "sag") { const s = PLACES.slot; out.push({ id: "slot", x: s.x, z: s.z, y: groundHeight(s.x, s.z) + 0.12, r: SNAP.r, yaw: slotPad.yaw }); }
+  if (!G.bedItem){ const w = toWorld(rover, { x: ROVER.bed.x, y: ROVER.bed.y, z: ROVER.bed.z }); out.push({ id: "bed", x: w.x, z: w.z, y: w.y, r: 0.95 }); }
+  else { const w = toWorld(rover, { x: ROVER.bed.x, y: ROVER.bed.y, z: ROVER.bed.z }); out.push({ id: "bedScrap", x: w.x, z: w.z, y: w.y, r: 0.95 }); }
+  const so = PLACES.socket; if (!G.flags.installed) out.push({ id: "socket", x: so.x, z: so.z, y: groundHeight(so.x, so.z) + 0.98, r: SNAP.r });
+  const sh = PLACES.shelf; out.push({ id: "shelf", x: sh.x, z: sh.z, y: groundHeight(sh.x, sh.z) + 0.84, r: 0.95 });
+  return out;
+}
+
+/* ---------- UI: messages ---------- */
+function radio(text, ms){
+  $("radioTxt").textContent = text;
+  $("radio").classList.add("on");
+  G.radioT = (ms || 4800) / 1000;
+}
+let flashT = 0;
+function flash(text){ const f = $("flash"); f.textContent = text; f.classList.add("on"); flashT = 0.7; }
+function chipHTML(c){ return '<span class="chip ' + c.tone + '"><i></i>' + c.text + "</span>"; }
+
+/* tags that float over things in the world */
+function tagAt(anchor, name, chips, secs){
+  G.tags = G.tags.filter(t => { if (t.anchor === anchor){ t.el.remove(); return false; } return true; });
+  const el = document.createElement("div"); el.className = "tag";
+  el.innerHTML = '<span class="nm"></span><span class="chips">' + chips.map(chipHTML).join("") + "</span>";
+  el.querySelector(".nm").textContent = name;
+  $("tags").appendChild(el);
+  G.tags.push({ anchor, el, t: secs || 6 });
+}
+function anchorPos(a){
+  if (a.g) return new THREE.Vector3(a.g.position.x, a.g.position.y + a.half + 0.5, a.g.position.z);
+  return a.pos;
+}
+
+/* field notes */
+function noteById(id){ return NOTES.find(n => n.id === id); }
+function learn(id, chips){
+  const n = noteById(id);
+  if (!n) return;
+  const isNew = !G.notes.has(id);
+  G.notes.add(id);
+  $("noteKick").textContent = isNew ? "New field note " + G.notes.size + " of " + NOTES.length : "Field note";
+  $("noteTitle").textContent = n.title;
+  $("noteText").textContent = n.text;
+  $("noteChips").innerHTML = (chips || []).map(chipHTML).join("");
+  $("note").classList.add("on");
+  noteT = isNew ? 16 : 9;
+  $("notesCount").textContent = G.notes.size + "/" + NOTES.length;
+  if (isNew) sfx("coin");
+}
+let noteT = 0;
+$("noteOk").onclick = () => $("note").classList.remove("on");
+function renderNotes(){
+  $("notesSum").textContent = G.notes.size === NOTES.length ? "You found every field note." : "You found " + G.notes.size + " of " + NOTES.length + ". Scan things around the outpost to find the rest.";
+  $("notesList").innerHTML = "";
+  NOTES.forEach(n => {
+    const d = document.createElement("div"), got = G.notes.has(n.id);
+    d.className = "nl" + (got ? "" : " locked");
+    d.innerHTML = "<b></b><span></span>";
+    d.querySelector("b").textContent = got ? n.title : "Not found yet";
+    d.querySelector("span").textContent = got ? n.text : n.hint;
+    $("notesList").appendChild(d);
+  });
+}
+
+/* ---------- the objective card ---------- */
+const HINTS = {
+  keys: { drive: "W A S D or the arrow keys drive.", arm: "A and D turn the arm, W and S raise and lower it, Q and E reach. Space grabs.", magnet: "Aim with W A S D, reach with Q and E, hold Space for the magnet." },
+  touch: { drive: "Push the stick to drive.", arm: "The stick turns and raises the arm. Use Reach and Grab.", magnet: "Aim with the stick, then hold the Magnet button." },
+  pad: { drive: "Left stick drives.", arm: "Left stick aims, right stick reaches, A grabs.", magnet: "Left stick aims, right stick reaches, hold A for the magnet." },
+  phone: { drive: "Tilt the phone to steer and hold Go.", arm: "Tilt to aim, slide to reach, tap Grab.", magnet: "Tilt to aim, slide to reach, hold Magnet." }
+};
+function renderObjective(){
+  const s = G.step;
+  const prog = $("prog");
+  if (prog.children.length !== STEPS.length){ prog.innerHTML = ""; STEPS.forEach(() => prog.appendChild(document.createElement("i"))); }
+  [...prog.children].forEach((el, i) => el.className = i < s ? "done" : i === s ? "now" : "");
+  if (s >= STEPS.length){
+    $("stepNo").textContent = "Mission complete";
+    $("stepWhat").textContent = "The greenhouse is running again.";
+    $("stepHint").textContent = "Keep exploring, or find the field notes you missed.";
+    $("bTest").hidden = true;
+    return;
+  }
+  $("stepNo").textContent = "Step " + (s + 1) + " of " + STEPS.length;
+  $("stepWhat").textContent = STEPS[s].text;
+  let hint = STEPS[s].hint;
+  if (s === 0) hint = "Follow the blue beam. " + HINTS[G.lastDevice].drive;
+  $("stepHint").textContent = hint;
+  $("bTest").hidden = s !== 8;
+}
+function updateStep(){
+  const f = G.flags;
+  const r = rover;
+  if (!f.approach && (Math.hypot(r.x - PLACES.approach.x, r.z - PLACES.approach.z) < 3.2 || PANEL.state !== "free" || PANEL.home.z !== PANEL.z)) f.approach = true;
+  f.panel = PANEL.state === "snap";
+  f.lever = lever.pulled;
+  f.support = bridge.state === "level";
+  if (!f.crossed && f.support && r.z < -15) f.crossed = true;
+  const nearGH = (p) => Math.hypot(p.x - PLACES.socket.x, p.z - PLACES.socket.z) < 7.5;
+  f.cellLoaded = CELL.state === "bed" || (CELL.state === "held" && (G.bedItem === null) && nearGH(CELL)) || CELL.state === "snap" || (CELL.state === "free" && nearGH(CELL));
+  f.atGreenhouse = nearGH(r) && f.cellLoaded;
+  f.installed = CELL.state === "snap" && CELL.target === "socket";
+  const ns = currentStep(f);
+  if (ns !== G.step){
+    const was = G.step;
+    G.step = ns;
+    renderObjective();
+    if (ns > was && ns < 9) { sfx("good"); if (STEP_TALK[ns]) radio(STEP_TALK[ns]); }
+    sendPhoneState();
+  }
+}
+const STEP_TALK = {
+  1: "There's the bridge, and a steel panel fell right across the road. Can you move it into the salvage bin?",
+  2: "Road's clear. Now the bridge lever, just past the panel on the right.",
+  3: "The bridge came down, but it sags. One support is missing. Which spare piece matches the outline?",
+  4: "It's solid now. Drive across, nice and straight.",
+  5: "There's the spare power cell on the pad. Load it into your cargo bed.",
+  6: "Got it. Drive it back to the greenhouse. The cargo bed holds it tight.",
+  7: "Home again. Lift the cell into the socket in front of the greenhouse.",
+  8: "It's in. Press Test the power."
+};
+
+/* ---------- action buttons for the current tool ---------- */
+const ICONS = {
+  scan: '<svg viewBox="0 0 24 24"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3"/><path d="M7 12h10"/></svg>',
+  grab: '<svg viewBox="0 0 24 24"><path d="M8 4v7l-3 4M16 4v7l3 4"/><path d="M8 11h8"/></svg>',
+  rot: '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>',
+  rin: '<svg viewBox="0 0 24 24"><path d="M19 12H7M11 8l-4 4 4 4"/></svg>',
+  rout: '<svg viewBox="0 0 24 24"><path d="M5 12h12M13 8l4 4-4 4"/></svg>',
+  mag: '<svg viewBox="0 0 24 24"><path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 8h4M14 8h4"/></svg>'
+};
+const holdBtn = { rin: false, rout: false, mag: false };
+function renderActs(){
+  const a = $("acts");
+  let h = "";
+  if (G.mode === "arm"){
+    const holding = G.held.length > 0;
+    h += btn("grab", holding ? "Let go" : "Grab", "big");
+    h += btn("rin", "Reach in") + btn("rout", "Reach out");
+    h += btn("rot", "Rotate") + btn("scan", "Scan");
+  } else if (G.mode === "magnet"){
+    h += btn("mag", G.magOn ? "Magnet on" : "Hold magnet", "big" + (G.magOn ? " held" : ""));
+    h += btn("rin", "Reach in") + btn("rout", "Reach out");
+    h += btn("scan", "Scan");
+  } else {
+    h += btn("scan", "Scan");
+  }
+  a.innerHTML = h;
+  a.style.gridTemplateColumns = G.mode === "drive" ? "auto" : "repeat(2,auto)";
+  function btn(id, label, cls){ return '<button class="ab ' + (cls || "") + '" data-act="' + id + '">' + (ICONS[id] || ICONS.grab) + "<span>" + label + "</span></button>"; }
+}
+$("acts").addEventListener("pointerdown", (e) => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  e.preventDefault();
+  noteDevice(e.pointerType === "touch" ? "touch" : G.lastDevice === "touch" ? "touch" : "keys");
+  const id = b.dataset.act;
+  b.classList.add("press");
+  if (id === "rin" || id === "rout"){ holdBtn[id] = true; }
+  else if (id === "mag"){ holdBtn.mag = true; }
+  else if (id === "grab") act("grab");
+  else if (id === "rot") act("rot");
+  else if (id === "scan") act("scan");
+  try { b.setPointerCapture(e.pointerId); } catch (_e) {}
+});
+function releaseActs(e){
+  const b = e.target.closest && e.target.closest("[data-act]");
+  if (b) b.classList.remove("press");
+  holdBtn.rin = holdBtn.rout = holdBtn.mag = false;
+}
+$("acts").addEventListener("pointerup", releaseActs);
+$("acts").addEventListener("pointercancel", releaseActs);
+$("acts").addEventListener("lostpointercapture", releaseActs);
+
+/* ---------- modes ---------- */
+function setMode(m, quiet){
+  if (m === G.mode) return;
+  if (!quiet && (!G.started || G.paused)) return;
+  /* control ownership: never drop or swap what the arm is holding */
+  if (G.held.length){
+    if (m === "drive"){ radio("Set it down, or put it in the cargo bed on the back, before you drive."); sfx("bad"); return; }
+    if (G.mode === "magnet" && m === "arm"){ radio("Drop what the magnet is holding first."); sfx("bad"); return; }
+    if (G.mode === "arm" && m === "magnet"){ radio("Let go of the part first, then switch to the magnet."); sfx("bad"); return; }
+  }
+  G.mode = m;
+  G.magOn = false;
+  document.querySelectorAll("#modes button").forEach(b => { const on = b.dataset.mode === m; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
+  $("parked").classList.toggle("on", m !== "drive");
+  R.magnet.visible = m === "magnet";
+  R.fingers.forEach(f => f.visible = m !== "magnet");
+  renderActs();
+  if (!quiet){
+    flash(m === "drive" ? "Drive" : m === "arm" ? "Arm" : "Magnet");
+    sfx("flip");
+    if (!G.seenMode) G.seenMode = {};
+    if (!G.seenMode[m] && m !== "drive"){ G.seenMode[m] = true; radio((m === "arm" ? "Arm mode parks the rover. " : "Magnet mode parks the rover. ") + HINTS[G.lastDevice][m], 6500); }
+  }
+  sendPhoneState();
+}
+document.querySelectorAll("#modes button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+/* ---------- actions ---------- */
+function act(what){
+  if (!G.started || G.paused) return;
+  if (what === "scan") return doScan();
+  if (what === "test") return doTest();
+  if (what === "grab"){ if (G.mode === "arm") return G.held.length ? releaseAll() : tryGrab(); return; }
+  if (what === "rot"){
+    if (G.held.length){ for (const p of G.held) p.rot = (p.rot || 0) + ROT_STEP; sfx("click"); }
+    else radio("Pick up a part first, then Rotate turns it.");
+  }
+}
+function clawPoint(){
+  const t = toWorld(rover, armLocal(arm));
+  return new THREE.Vector3(t.x, t.y - ARM.hang, t.z);
+}
+function grabCandidates(cp){
+  let best = null, bd = 1e9;
+  for (const p of parts){
+    if (p.state === "gone" || p.state === "held" || p.snapAnim) continue;
+    if (p.state === "snap" && !(p === CELL && false)) continue;
+    const top = new THREE.Vector3(p.x, p.y + p.half, p.z);
+    const dh = Math.hypot(top.x - cp.x, top.z - cp.z), dv = cp.y - top.y;
+    const reach = Math.max(ARM.grabR, p.r * 0.9);
+    if (dh < reach && dv > -0.35 && dv < 0.7){
+      const d = dh + Math.abs(dv) * 0.5;
+      if (d < bd){ bd = d; best = p; }
+    }
+  }
+  /* the lever handle */
+  if (!lever.pulled && bridge.state === "folded"){
+    const k = leverKnobWorld();
+    const d = k.distanceTo(cp);
+    if (d < 0.7 && d < bd) best = "lever";
+  }
+  return best;
+}
+function tryGrab(){
+  const cp = clawPoint(), c = grabCandidates(cp);
+  if (!c){ sfx("click", { pitch: 0.7 }); radio("Nothing is under the claw. Line up the blue ring on the ground with a part, lower the arm, then Grab."); return; }
+  if (c === "lever"){ lever.grabbed = true; G.held = ["lever"]; sfx("place"); renderActs(); sendPhoneState(); return; }
+  const chk = clawCheck(c.type);
+  if (!chk.ok){
+    sfx("bad");
+    tagAt(c, PART_TYPES[c.type].name, scanChips(c.type), 5);
+    radio(WHY_TEXT[chk.why] + (chk.why === "wide" ? " This one is steel, though. What else could lift it?" : ""));
+    return;
+  }
+  hold(c);
+  sfx("place");
+}
+function hold(p){
+  if (G.bedItem === p) { G.bedItem = null; R.bedLight.material.emissiveIntensity = 0.15; }
+  p.state = "held"; p.vx = p.vy = p.vz = 0; p.rot = p.rot || 0;
+  p.rot = p.yaw - (rover.yaw + arm.yaw);
+  G.held.push(p);
+  renderActs(); sendPhoneState();
+}
+function releaseAll(){
+  if (G.held[0] === "lever"){ lever.grabbed = false; G.held = []; sfx("click"); renderActs(); sendPhoneState(); return; }
+  const list = G.held.slice(); G.held = [];
+  for (const p of list) dropPart(p);
+  renderActs(); sendPhoneState();
+}
+/* letting go: snap into a spot it fits, or fall (slowly: Moon gravity) */
+function dropPart(p){
+  const fit = fitFor(p);
+  if (fit && fit.res === "ok") return snapTo(p, fit.t);
+  if (fit && fit.res === "shape" && fit.t.id === "slot") radio("That piece doesn't match the outline. Look at the shape glowing on the pad.");
+  if (fit && fit.res === "turn") radio("Right piece! Turn it with Rotate until it lines up with the outline.");
+  if (fit && fit.res === "shape" && fit.t.id === "socket") radio("Only the power cell fits that socket.");
+  p.state = "free"; p.vx = p.vy = p.vz = 0; p.fallFrom = p.y;
+  sfx("whoosh", { volume: 0.4 });
+}
+function fitFor(p){
+  let best = null;
+  for (const t of targets()){
+    const dh = Math.hypot(p.x - t.x, p.z - t.z), dy = p.y - t.y;
+    if (dh > t.r || dy < -0.5 || dy > SNAP.up) continue;
+    let res;
+    if (t.id === "bedScrap") res = p.type === "scrap" ? "ok" : "full";
+    else res = fitCheck(t.id, p.type, p.yaw - (t.yaw || 0), t.id === "slot" ? p.sym : 0);
+    if (t.id === "bed" && res === "shape") continue;
+    if (t.id === "bay" && res === "shape") continue;
+    if (t.id === "shelf" && res === "shape") continue;
+    if (res === "full") continue;
+    if (!best || res === "ok" && best.res !== "ok") best = { t, res };
+  }
+  return best;
+}
+function snapTo(p, t){
+  p.state = "snap"; p.target = t.id === "bedScrap" ? "bed" : t.id;
+  p.snapAnim = { fx: p.x, fy: p.y, fz: p.z, fyaw: p.yaw, k: 0, t };
+  sfx("place", { pitch: 1.2 });
+  if (p.type === "scrap"){ p.state = "snap"; return; }
+  if (t.id === "bed"){ G.bedItem = p; p.state = "bed"; }
+}
+function finishSnap(p){
+  const t = p.snapAnim.t; p.snapAnim = null;
+  if (p.type === "scrap"){
+    p.state = "gone"; p.g.visible = false; G.scrap++;
+    flash("Scrap " + G.scrap + " of " + SCRAP_TOTAL); sfx("coin");
+    if (G.scrap === SCRAP_TOTAL) radio("That's all five pieces of scrap. We can melt the steel down and build something new.");
+    return;
+  }
+  if (t.id === "bed"){ R.bedLight.material.emissiveIntensity = 1.1; sfx("good"); if (p === CELL) radio("The cargo bed has it. Switch to Drive."); }
+  if (t.id === "bay" && p === PANEL){ /* the road is clear */ }
+  if (t.id === "slot"){
+    p.state = "fixed";
+    bridge.state = "level"; bridge.strut.visible = true; bridgeT = 0;
+    slotPad.mat.opacity = 0; slotPad.fill.visible = false;
+    sfx("level"); flash("Bridge fixed");
+    if (!G.notes.has("triangle")) setTimeout(() => learn("triangle", scanChips("wedge")), 900);
+  }
+  if (t.id === "socket"){ p.state = "snap"; GH.socketRing.material.color.set(0xffffff); sfx("good"); }
+  if (t.id === "shelf" && p === GLASS){ radio("The glass sensor is safe on the lab shelf. Thanks. That was delicate work."); sfx("win"); G.flags.glassSaved = true; }
+}
+
+function doScan(){
+  const from = G.mode === "drive" ? (() => { const f = toWorld(rover, { x: 0, y: 0.6, z: -2.2 }); return new THREE.Vector3(f.x, f.y, f.z); })() : clawPoint();
+  let best = null, bd = G.mode === "drive" ? 7 : 4.5;
+  for (const p of parts){
+    if (p.state === "gone" || p.state === "fixed") continue;
+    const d = Math.hypot(p.x - from.x, p.z - from.z);
+    if (d < bd){ bd = d; best = { part: p }; }
+  }
+  const statics = [
+    { type: "drill", pos: new THREE.Vector3(PLACES.drill.x, 3.5, PLACES.drill.z), r: 3 },
+    { type: "tower", pos: new THREE.Vector3(PLACES.tower.x, 3.5, PLACES.tower.z), r: 1.5 }
+  ];
+  for (const s of statics){
+    const d = Math.hypot(s.pos.x - from.x, s.pos.z - from.z) - s.r;
+    if (d < bd){ bd = d; best = { stat: s }; }
+  }
+  sfx("laser");
+  scanFx(from, best);
+  if (!best){ radio("The scanner found nothing close by. Drive or aim nearer to a part."); return; }
+  const type = best.part ? best.part.type : best.stat.type;
+  const t = PART_TYPES[type], chips = scanChips(type);
+  if (best.part) tagAt(best.part, t.name, chips, 7);
+  else tagAt({ pos: best.stat.pos }, t.name, chips, 7);
+  const tool = bestTool(type);
+  const toolLine = { either: "Magnet or claw both work.", magnet: "Use the magnet.", claw: "Use the claw.", none: "The rover can't lift this." }[tool];
+  const feel = t.kg && t.kg <= 500 ? " Mass " + t.kg + " kg. On the Moon it feels as heavy as " + earthFeelKg(t.kg) + " kg on Earth." : "";
+  if (t.note) learn(t.note, chips);
+  if (G.notes.has(t.note)) radio(t.name + ": " + toolLine + feel, 6000);
+}
+let scanLine = null;
+function scanFx(from, best){
+  if (!scanLine){
+    scanLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0x4fc3f7, transparent: true }));
+    scene.add(scanLine);
+  }
+  const m = toWorld(rover, { x: 0.55, y: 1.95, z: 0.2 });
+  const to = best ? (best.part ? new THREE.Vector3(best.part.x, best.part.y, best.part.z) : best.stat.pos) : from;
+  scanLine.geometry.setFromPoints([new THREE.Vector3(m.x, m.y, m.z), to]);
+  scanLine.material.opacity = 1; scanLine.visible = true;
+}
+
+function doTest(){
+  if (G.step !== 8 || G.testT >= 0) return;
+  G.testT = 0;
+  $("bTest").hidden = true;
+  sfx("start");
+  radio("Power is flowing...", 3000);
+}
+
+/* ---------- input ---------- */
+const keys = new Set();
+function noteDevice(d){
+  if (d === G.lastDevice) return;
+  G.lastDevice = d;
+  $("stick").classList.toggle("show", d === "touch");
+  renderObjective();
+}
+addEventListener("keydown", (e) => {
+  if (e.target.closest && e.target.closest("input,textarea")) return;
+  const k = e.code;
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab"].includes(k)) e.preventDefault();
+  if (e.repeat){ keys.add(k); return; }
+  keys.add(k);
+  noteDevice("keys");
+  if (k === "Escape"){ if (closeTopOverlay()) return; togglePause(); return; }
+  if (!G.started) { if (k === "Enter" || k === "Space") startGame(); return; }
+  if (k === "KeyP") return togglePause();
+  if (G.paused) return;
+  if (k === "Digit1") setMode("drive");
+  else if (k === "Digit2") setMode("arm");
+  else if (k === "Digit3") setMode("magnet");
+  else if (k === "Tab") setMode(G.mode === "drive" ? "arm" : G.mode === "arm" ? "magnet" : "drive");
+  else if (k === "Space" && G.mode === "arm") act("grab");
+  else if (k === "KeyR") act("rot");
+  else if (k === "KeyF") act("scan");
+  else if (k === "KeyT") act("test");
+  else if (k === "KeyH") openOv("ovHelp");
+  else if (k === "KeyN") { renderNotes(); openOv("ovNotes"); }
+});
+addEventListener("keyup", (e) => keys.delete(e.code));
+addEventListener("blur", () => { keys.clear(); holdBtn.rin = holdBtn.rout = holdBtn.mag = false; stickV.x = stickV.y = 0; });
+const kd = (...c) => c.some(k => keys.has(k)) ? 1 : 0;
+
+/* touch stick */
+const stickV = { x: 0, y: 0, id: null };
+(function stick(){
+  const el = $("stick"), knob = $("knob");
+  function move(e){
+    const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, max = r.width / 2 - 14;
+    let dx = e.clientX - cx, dy = e.clientY - cy; const d = Math.hypot(dx, dy);
+    if (d > max){ dx *= max / d; dy *= max / d; }
+    knob.style.transform = "translate(" + dx + "px," + dy + "px)";
+    stickV.x = dx / max; stickV.y = -dy / max;
+  }
+  el.addEventListener("pointerdown", (e) => { e.preventDefault(); stickV.id = e.pointerId; el.setPointerCapture(e.pointerId); noteDevice("touch"); move(e); });
+  el.addEventListener("pointermove", (e) => { if (e.pointerId === stickV.id) move(e); });
+  const end = (e) => { if (e.pointerId !== stickV.id) return; stickV.id = null; stickV.x = stickV.y = 0; knob.style.transform = ""; };
+  el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
+})();
+addEventListener("pointerdown", (e) => { if (e.pointerType === "touch") noteDevice("touch"); }, true);
+
+/* game controller */
+const pad = { prev: [], axes: [0, 0, 0, 0], held: [] };
+function pollPad(){
+  let gp = null;
+  try { const list = navigator.getGamepads ? navigator.getGamepads() : []; for (const g of list) if (g && g.connected){ gp = g; break; } } catch (_e) {}
+  if (!gp){ pad.axes = [0, 0, 0, 0]; pad.held = []; return; }
+  const dz = (v) => Math.abs(v) < 0.18 ? 0 : (v - Math.sign(v) * 0.18) / 0.82;
+  pad.axes = [dz(gp.axes[0] || 0), dz(gp.axes[1] || 0), dz(gp.axes[2] || 0), dz(gp.axes[3] || 0)];
+  const now = gp.buttons.map(b => b.pressed);
+  const edge = (i) => now[i] && !pad.prev[i];
+  if (now.some(Boolean) || pad.axes.some(Boolean)) noteDevice("pad");
+  if (edge(9)) togglePause();
+  if (G.started && !G.paused){
+    if (edge(4)) setMode(G.mode === "drive" ? "magnet" : G.mode === "arm" ? "drive" : "arm");
+    if (edge(5)) setMode(G.mode === "drive" ? "arm" : G.mode === "arm" ? "magnet" : "drive");
+    if (edge(0) && G.mode === "arm") act("grab");
+    if (edge(2)) act("rot");
+    if (edge(3)) act("scan");
+    if (edge(1) && G.step === 8) act("test");
+  } else if (!G.started && edge(0)) startGame();
+  pad.held = now;
+  pad.prev = now;
+}
+
+/* the phone, when one is connected */
+const phone = { lr: 0, fb: 0, go: 0, bk: 0, mag: 0, r: -1, at: 0 };
+
+function readInput(){
+  const fresh = performance.now() - phone.at < 900;
+  const ph = fresh ? phone : { lr: 0, fb: 0, go: 0, bk: 0, mag: 0, r: -1 };
+  const x = clamp(kd("KeyD", "ArrowRight") - kd("KeyA", "ArrowLeft") + stickV.x + pad.axes[0] + ph.lr, -1, 1);
+  let y = clamp(kd("KeyW", "ArrowUp") - kd("KeyS", "ArrowDown") + stickV.y - pad.axes[1], -1, 1);
+  const reach = clamp(kd("KeyE") - kd("KeyQ") + (holdBtn.rout ? 1 : 0) - (holdBtn.rin ? 1 : 0) - pad.axes[3], -1, 1);
+  const thr = clamp(y + ph.go - ph.bk * 0.7, -1, 1);
+  const pitch = clamp(y - ph.fb, -1, 1);
+  const mag = keys.has("Space") || holdBtn.mag || !!pad.held[0] || !!ph.mag;
+  return { x, thr, pitch, reach, reachAbs: fresh && ph.r >= 0 ? ph.r : null, mag };
+}
+
+/* camera: drag to look around, wheel or pinch to zoom */
+const camCtl = { yaw: 0, zoom: 1, drag: null, pinch: null, pts: new Map() };
+canvas.addEventListener("pointerdown", (e) => { camCtl.pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener("pointermove", (e) => {
+  const prev = camCtl.pts.get(e.pointerId); if (!prev) return;
+  if (camCtl.pts.size === 1){ camCtl.yaw -= (e.clientX - prev.x) * 0.006; }
+  else if (camCtl.pts.size === 2){
+    const pts = [...camCtl.pts.values()];
+    const d0 = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    camCtl.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const p2 = [...camCtl.pts.values()];
+    const d1 = Math.hypot(p2[0].x - p2[1].x, p2[0].y - p2[1].y);
+    if (d0 > 0) camCtl.zoom = clamp(camCtl.zoom * d0 / d1, 0.55, 1.8);
+    return;
+  }
+  camCtl.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+});
+const ptrEnd = (e) => camCtl.pts.delete(e.pointerId);
+canvas.addEventListener("pointerup", ptrEnd); canvas.addEventListener("pointercancel", ptrEnd);
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); camCtl.zoom = clamp(camCtl.zoom * Math.exp(e.deltaY * 0.001), 0.55, 1.8); }, { passive: false });
+
+/* ---------- overlays ---------- */
+function openOv(id){ $(id).classList.add("open"); }
+function closeOv(id){ $(id).classList.remove("open"); }
+function closeTopOverlay(){
+  for (const id of ["ovHelp", "ovNotes", "ovPhone"]) if ($(id).classList.contains("open")){ closeOv(id); return true; }
+  return false;
+}
+document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => closeOv(b.dataset.close)));
+$("bHelp").onclick = () => openOv("ovHelp");
+$("bNotes").onclick = () => { renderNotes(); openOv("ovNotes"); };
+$("bPhone").onclick = () => openPhone();
+$("bStartPhone").onclick = () => { startGame(); openPhone(); };
+$("bStart").onclick = () => startGame();
+$("bPause").onclick = () => togglePause();
+$("bResume").onclick = () => togglePause(false);
+$("bReset").onclick = () => resetGame();
+$("bRestart2").onclick = () => { togglePause(false); resetGame(); };
+$("bTest").onclick = () => act("test");
+$("obj").addEventListener("click", () => $("obj").classList.toggle("open"));
+
+function togglePause(force){
+  if (!G.started || G.done) return;
+  G.paused = typeof force === "boolean" ? force : !G.paused;
+  $("ovPause").classList.toggle("open", G.paused);
+  keys.clear();
+  sendPhoneState();
+}
+
+/* ---------- start, reset ---------- */
+function resetWorld(){
+  Object.assign(rover, { x: PLACES.start.x, z: PLACES.start.z, yaw: 0, v: 0 });
+  Object.assign(arm, { yaw: 0, pitch: 0.15, reach: 2.0 });
+  bridge.state = "folded"; bridge.strut.visible = false; bridgeT = 0;
+  lever.a = -0.65; lever.pulled = false; lever.grabbed = false;
+  slotPad.mat.opacity = 0.9; slotPad.fill.visible = true;
+  G.held = []; G.magOn = false; G.scrap = 0; G.notes = new Set(); G.flags = {}; G.step = 0; G.done = false;
+  G.bedItem = null; G.t = 0; G.testT = -1; G.seenMode = {}; G.dropNoted = false;
+  R.bedLight.material.emissiveIntensity = 0.15;
+  GH.light.intensity = 0; GH.strips.forEach(s => s.material.emissiveIntensity = 0); GH.water.visible = false; GH.sprout.scale.setScalar(0.35); GH.leaves.forEach(l => l.rotation.z = 1.2);
+  GH.socketRing.material.color.set(0x4fc3f7); GH.glass.material.emissive = new THREE.Color(0x000000);
+  GH.plants.forEach(pl => { pl.scale.setScalar(0.5); pl.userData.leaf.material.color.setHex(0x5e7a52); });
+  hubLights.forEach(w => w.material.emissiveIntensity = 0.9);
+  G.tags.forEach(t => t.el.remove()); G.tags = [];
+  $("note").classList.remove("on"); $("notesCount").textContent = "0/" + NOTES.length;
+  setupParts();
+  fixColors(scene);
+  G.mode = "arm"; setMode("drive", true);
+  renderObjective();
+}
+function startGame(){
+  if (G.started) return;
+  G.started = true; G.clockOn = true;
+  closeOv("ovStart");
+  sfx("start");
+  setTimeout(() => radio("Rover, this is Chike. The greenhouse lost power. Drive to the broken bridge. Follow the blue beam.", 6500), 500);
+  sendPhoneState();
+}
+function resetGame(){
+  closeOv("ovEnd");
+  resetWorld();
+  G.started = true; G.paused = false; G.clockOn = true;
+  $("ovPause").classList.remove("open");
+  radio("Fresh start. Drive to the broken bridge.");
+  sfx("start");
+  sendPhoneState();
+}
+
+/* ---------- the end: stars, what you learned, a quick check ---------- */
+const STAR = (on) => '<svg viewBox="0 0 24 24"><path d="M12 2.6l2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.3l-5.8 3.1 1.2-6.5L2.6 9.4l6.5-.8z" fill="' + (on ? "#ffd23f" : "none") + '" stroke="' + (on ? "#ffd23f" : "rgba(255,255,255,.35)") + '" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+function showEnd(){
+  G.done = true; G.clockOn = false;
+  const res = { done: true, notes: G.notes.size, scrap: G.scrap };
+  const n = starsFor(res);
+  const c = $("endCard");
+  c.innerHTML = '<div class="kicker">Mission complete</div><h2>The greenhouse is alive again</h2>'
+    + '<p>You fixed the bridge, brought back the power cell and switched on the lights. Time: <b>' + formatTime(G.t) + "</b></p>"
+    + '<div class="stars">' + STAR(n >= 1) + STAR(n >= 2) + STAR(n >= 3) + "</div>"
+    + '<div class="starrow">'
+    + "<div>" + STAR(true) + "Greenhouse restored</div>"
+    + "<div>" + STAR(res.notes >= NOTES.length) + "Field notes: " + res.notes + " of " + NOTES.length + "</div>"
+    + "<div>" + STAR(res.scrap >= SCRAP_TOTAL) + "Steel scrap saved: " + res.scrap + " of " + SCRAP_TOTAL + "</div></div>"
+    + '<div class="quiz" id="quiz"></div>'
+    + '<div class="row2"><button class="cta blue" id="bAgain">Play again</button><button class="cta line" id="bExplore">Keep exploring</button></div>';
+  $("bAgain").onclick = () => resetGame();
+  $("bExplore").onclick = () => { closeOv("ovEnd"); G.paused = false; };
+  quizAt(0, 0);
+  openOv("ovEnd");
+  sfx("win");
+}
+function quizAt(i, right){
+  const box = $("quiz");
+  if (i >= QUIZ.length){
+    box.innerHTML = '<div class="kicker">Quick check</div><div class="q">' + right + " of " + QUIZ.length + " right. " + (right === QUIZ.length ? "You think like a Moon engineer." : "Scan more parts next time to learn the rest.") + "</div>";
+    return;
+  }
+  const q = QUIZ[i];
+  box.innerHTML = '<div class="kicker">Quick check ' + (i + 1) + " of " + QUIZ.length + '</div><div class="q"></div><div class="opts"></div><div class="why"></div>';
+  box.querySelector(".q").textContent = q.q;
+  const opts = box.querySelector(".opts");
+  q.opts.forEach((o, k) => {
+    const b = document.createElement("button"); b.textContent = o;
+    b.onclick = () => {
+      if (opts.dataset.done) return; opts.dataset.done = "1";
+      const ok = k === q.a;
+      [...opts.children].forEach((el, j) => el.className = j === q.a ? "right" : "wrong");
+      box.querySelector(".why").textContent = (ok ? "Right. " : "Not quite. ") + q.why;
+      sfx(ok ? "good" : "bad");
+      setTimeout(() => quizAt(i + 1, right + (ok ? 1 : 0)), 2600);
+    };
+    opts.appendChild(b);
+  });
+}
+
+/* ---------- the simulation ---------- */
+let bridgeT = 0;
+function colliderList(){
+  const all = COLLIDERS.slice();
+  if (PANEL && PANEL.state === "free") all.push({ kind: "box", x: PANEL.x, z: PANEL.z, hw: 1.3, hd: 0.8, yaw: PANEL.yaw });
+  return all;
+}
+/* how far the rover would sink into the deepest thing at this spot */
+function penetration(x, z){
+  let worst = 0;
+  for (const c of colliderList()){
+    if (c.kind === "circle"){ worst = Math.max(worst, c.r + ROVER.r * 0.9 - Math.hypot(x - c.x, z - c.z)); continue; }
+    const cs = Math.cos(c.yaw), sn = Math.sin(c.yaw);
+    const lx = (x - c.x) * cs - (z - c.z) * sn, lz = (x - c.x) * sn + (z - c.z) * cs;
+    const d = Math.hypot(lx - clamp(lx, -c.hw, c.hw), lz - clamp(lz, -c.hd, c.hd));
+    worst = Math.max(worst, ROVER.r * 0.85 - d);
+  }
+  return worst;
+}
+function collideRover(nx, nz){
+  let x = nx, z = nz;
+  const all = colliderList();
+  for (let it = 0; it < 2; it++){
+    for (const c of all){
+      if (c.kind === "circle"){
+        const dx = x - c.x, dz = z - c.z, d = Math.hypot(dx, dz), m = c.r + ROVER.r * 0.9;
+        if (d < m && d > 1e-6){ x = c.x + dx / d * m; z = c.z + dz / d * m; }
+      } else {
+        const cs = Math.cos(c.yaw), sn = Math.sin(c.yaw);
+        const lx = (x - c.x) * cs - (z - c.z) * sn, lz = (x - c.x) * sn + (z - c.z) * cs;
+        const qx = clamp(lx, -c.hw, c.hw), qz = clamp(lz, -c.hd, c.hd);
+        let dx = lx - qx, dz = lz - qz, d = Math.hypot(dx, dz);
+        const m = ROVER.r * 0.85;
+        let ox = lx, oz = lz;
+        if (d < 1e-6){
+          const px = c.hw - Math.abs(lx), pz = c.hd - Math.abs(lz);
+          if (px < pz) ox = Math.sign(lx || 1) * (c.hw + m); else oz = Math.sign(lz || 1) * (c.hd + m);
+        } else if (d < m){ ox = qx + dx / d * m; oz = qz + dz / d * m; }
+        else continue;
+        x = c.x + ox * cs + oz * sn; z = c.z - ox * sn + oz * cs;
+      }
+    }
+  }
+  return { x, z };
+}
+
+let trenchWarnT = 0;
+function stepRover(inp, dt){
+  const driving = G.mode === "drive" && G.started;
+  const thr = driving ? inp.thr : 0, steer = driving ? inp.x : 0;
+  const n = driveStep(rover, thr, steer, dt);
+  let pos = collideRover(n.x, n.z);
+  const was = penetration(rover.x, rover.z);
+  const ok = (x, z) => canDriveTo(x, z, bridge.state) && penetration(x, z) < Math.max(0.04, was);
+  if (!ok(pos.x, pos.z)){
+    if (!canDriveTo(pos.x, pos.z, bridge.state) && trenchWarnT <= 0 && bridge.state !== "level" && Math.abs(pos.z - TRENCH.z) < 6){ radio("Whoa, too deep to drive into. The bridge has to be fixed first."); trenchWarnT = 6; }
+    if (ok(pos.x, rover.z)) pos.z = rover.z;
+    else if (ok(rover.x, pos.z)) pos.x = rover.x;
+    else { pos.x = rover.x; pos.z = rover.z; }
+    n.v *= 0.3;
+  }
+  const moved = Math.hypot(pos.x - rover.x, pos.z - rover.z);
+  if (moved < Math.abs(n.v * dt) * 0.3) n.v *= 0.5;
+  rover.x = pos.x; rover.z = pos.z; rover.yaw = n.yaw; rover.v = n.v;
+  rover.wheelSpin += n.v * dt / 0.38;
+  /* sit on the ground: height and tilt from four samples */
+  const f = toWorld(rover, { x: 0, y: 0, z: -1.0 }), b = toWorld(rover, { x: 0, y: 0, z: 1.0 }), l = toWorld(rover, { x: -0.9, y: 0, z: 0 }), r = toWorld(rover, { x: 0.9, y: 0, z: 0 });
+  const h = (p) => floorAt(p.x, p.z);
+  const hf = h(f), hb = h(b), hl = h(l), hr = h(r);
+  const ty = Math.max((hf + hb + hl + hr) / 4, floorAt(rover.x, rover.z) - 0.05);
+  rover.y += (ty - rover.y) * ease(14, dt);
+  rover.pitch += (Math.atan2(hf - hb, 2.0) - rover.pitch) * ease(10, dt);
+  rover.roll += (Math.atan2(hl - hr, 1.8) - rover.roll) * ease(10, dt);
+  /* dust */
+  if (Math.abs(n.v) > 0.6 && !reduced){
+    const k = Math.abs(n.v) / ROVER.maxF;
+    if (Math.random() < k * 0.9){
+      for (const s of [-1, 1]){
+        const w = toWorld(rover, { x: s * 1.0, y: 0.05, z: n.v > 0 ? 1.2 : -1.2 });
+        const back = n.v > 0 ? 1 : -1;
+        kickDust(w.x, w.y, w.z, Math.sin(rover.yaw) * back * (0.4 + Math.random()) + (Math.random() - 0.5) * 0.6, 0.6 + Math.random() * 1.4 * k, Math.cos(rover.yaw) * back * (0.4 + Math.random()) + (Math.random() - 0.5) * 0.6);
+      }
+    }
+  }
+  /* push small loose parts out of the way */
+  for (const p of parts){
+    if (p.state !== "free" || p === PANEL) continue;
+    const dx = p.x - rover.x, dz = p.z - rover.z, d = Math.hypot(dx, dz), m = ROVER.r + p.r * 0.6;
+    if (d < m && d > 1e-6){ p.x = rover.x + dx / d * m; p.z = rover.z + dz / d * m; p.vy = Math.max(p.vy, 0); p.y = Math.max(p.y, floorAt(p.x, p.z) + p.half); }
+  }
+}
+
+function stepArm(inp, dt){
+  if (G.mode === "drive"){
+    /* tuck the arm in while driving */
+    arm.pitch += (0.15 - arm.pitch) * ease(3, dt);
+    if (!G.held.length){ arm.yaw += angDiff(0, arm.yaw) * ease(3, dt); arm.reach += (1.6 - arm.reach) * ease(3, dt); }
+    return;
+  }
+  if (!G.started || G.done) return;
+  arm.yaw -= inp.x * 1.15 * dt;
+  arm.yaw = angDiff(arm.yaw, 0);
+  arm.pitch += inp.pitch * 0.75 * dt;
+  if (inp.reachAbs != null) arm.reach += (ARM.reachMin + inp.reachAbs * (ARM.reachMax - ARM.reachMin) - arm.reach) * ease(8, dt);
+  else arm.reach += inp.reach * 1.6 * dt;
+  arm.reach = clamp(arm.reach, ARM.reachMin, ARM.reachMax);
+  arm.pitch = clamp(arm.pitch, ARM.pitchMin, ARM.pitchMax);
+  /* the claw never digs into the ground or a shelf */
+  const tip = toWorld(rover, armLocal(arm));
+  let fl = floorAt(tip.x, tip.z);
+  for (const p of G.held) if (p !== "lever") fl += p.half * 2;
+  const mp = minPitchFor(arm.reach, rover.y + ARM.mountY, fl);
+  if (arm.pitch < mp) arm.pitch = mp;
+}
+
+function stepMagnet(inp, dt){
+  const wasOn = G.magOn;
+  G.magOn = G.mode === "magnet" && inp.mag && G.started && !G.done;
+  if (G.magOn !== wasOn){
+    renderActs();
+    if (G.magOn) sfx("bounce", { pitch: 0.6, volume: 0.5 });
+    else if (G.held.length) releaseAll();
+    sendPhoneState();
+  }
+  R.magGlow.material.color.set(G.magOn ? 0x4fc3f7 : 0x223048);
+  if (!G.magOn) return;
+  const cp = clawPoint();
+  let load = G.held.reduce((s, p) => s + PART_TYPES[p.type].kg, 0);
+  for (const p of parts){
+    if (p.state === "gone" || p.state === "held" || p.state === "fixed" || p.snapAnim) continue;
+    if (p.state === "snap" && p.target !== "bay") continue;
+    const dh = Math.hypot(p.x - cp.x, p.z - cp.z), dv = cp.y - (p.y + p.half);
+    if (dh > ARM.magR || dv < -0.3 || dv > ARM.magDepth) continue;
+    const chk = magnetCheck(p.type);
+    if (!chk.ok){
+      if (!G.magTried.has(p.id)){
+        G.magTried.add(p.id);
+        tagAt(p, PART_TYPES[p.type].name, [{ text: "Not magnetic", tone: "no" }], 4);
+        if (PART_TYPES[p.type].mat === "aluminum" && !G.notes.has("aluminum")) learn("aluminum", scanChips(p.type));
+        else radio(PART_TYPES[p.type].name + ": the magnet doesn't pull on it. Try the claw.");
+      }
+      continue;
+    }
+    if (load + PART_TYPES[p.type].kg > LIFT_KG) continue;
+    /* pulled up toward the magnet */
+    if (p.state === "bed"){ G.bedItem = null; }
+    p.state = "free";
+    const tx = cp.x - p.x, ty = cp.y - 0.08 - p.half - p.y, tz = cp.z - p.z;
+    const d = Math.hypot(tx, ty, tz);
+    if (d < 0.32){
+      p.state = "held"; p.rot = p.yaw - (rover.yaw + arm.yaw); G.held.push(p); load += PART_TYPES[p.type].kg;
+      sfx("thud", { pitch: 1.6, volume: 0.6 });
+      if (p.type === "panel" || p.type === "scrap"){ if (!G.notes.has("steel")) learn("steel", scanChips(p.type)); }
+      renderActs(); sendPhoneState();
+    } else {
+      const sp = 3.2 * dt / d;
+      p.x += tx * Math.min(1, sp); p.y += ty * Math.min(1, sp); p.z += tz * Math.min(1, sp); p.vy = 0;
+      p.yaw += 0.6 * dt;
+    }
+  }
+}
+
+function stepParts(dt){
+  const cp = clawPoint();
+  const holdYaw = rover.yaw + arm.yaw;
+  let stack = 0;
+  for (const p of G.held){
+    if (p === "lever") continue;
+    const want = { x: cp.x, y: cp.y - 0.1 - p.half - stack, z: cp.z };
+    stack += G.mode === "magnet" ? p.half * 1.2 : 0;
+    p.x += (want.x - p.x) * ease(18, dt); p.y += (want.y - p.y) * ease(18, dt); p.z += (want.z - p.z) * ease(18, dt);
+    p.yaw += angDiff(holdYaw + (p.rot || 0), p.yaw) * ease(12, dt);
+  }
+  for (const p of parts){
+    if (p.snapAnim){
+      const a = p.snapAnim; a.k = Math.min(1, a.k + dt / 0.4);
+      const e = 1 - Math.pow(1 - a.k, 3);
+      let tx = a.t.x, tz = a.t.z, ty = a.t.y + p.half, tyaw = a.t.yaw != null ? a.t.yaw : a.fyaw;
+      if (a.t.id === "bed" || a.t.id === "bedScrap"){ const w = toWorld(rover, { x: ROVER.bed.x, y: ROVER.bed.y, z: ROVER.bed.z }); tx = w.x; ty = w.y + p.half; tz = w.z; tyaw = rover.yaw; }
+      if (a.t.id === "bay") ty = a.t.y + p.half;
+      if (p.type === "scrap" && a.k > 0.6) p.g.scale.setScalar(Math.max(0.01, 1 - (a.k - 0.6) / 0.4));
+      if (a.t.id === "slot"){ tyaw = a.fyaw + angDiffMod(a.t.yaw - a.fyaw, p.sym); }
+      p.x = a.fx + (tx - a.fx) * e; p.y = a.fy + (ty - a.fy) * e; p.z = a.fz + (tz - a.fz) * e;
+      p.yaw = a.fyaw + angDiff(tyaw, a.fyaw) * e;
+      if (a.k >= 1) finishSnap(p);
+    } else if (p.state === "bed"){
+      const w = toWorld(rover, { x: ROVER.bed.x, y: ROVER.bed.y, z: ROVER.bed.z });
+      p.x = w.x; p.y = w.y + p.half; p.z = w.z; p.yaw = rover.yaw;
+    } else if (p.state === "free"){
+      p.vy -= MOON_G * dt;
+      p.x += p.vx * dt; p.z += p.vz * dt; p.y += p.vy * dt;
+      const fl = floorAt(p.x, p.z) + p.half;
+      if (p.y <= fl){
+        const impact = -p.vy, fell = p.fallFrom - fl;
+        p.y = fl; p.vy = 0; p.vx *= 0.5; p.vz *= 0.5;
+        if (impact > 0.25){
+          sfx("thud", { volume: Math.min(1, impact / 2.5) });
+          for (let k = 0; k < 8 && !reduced; k++) kickDust(p.x, fl - p.half + 0.02, p.z, (Math.random() - 0.5) * 1.2, 0.3 + Math.random() * 0.9, (Math.random() - 0.5) * 1.2);
+          if (fell > 0.6 && !G.notes.has("gravity")) learn("gravity", [{ text: "Fell " + fell.toFixed(1) + " m in " + fallTime(fell, MOON_G).toFixed(1) + " s", tone: "yes" }, { text: "On Earth: " + fallTime(fell, EARTH_G).toFixed(1) + " s", tone: "no" }]);
+          if (p.type === "glass" && fell > 1.1) breakGlass(p);
+        }
+        p.fallFrom = p.y;
+        if (fl < -1 && !p.lost){ p.lost = true; setTimeout(() => respawn(p), 1600); }
+      } else if (p.vy > -0.01) p.fallFrom = Math.max(p.fallFrom, p.y);
+    }
+    p.g.position.set(p.x, p.y, p.z);
+    p.g.rotation.y = p.yaw;
+  }
+}
+function respawn(p){
+  p.lost = false;
+  if (p.state !== "free") return;
+  p.x = p.home.x; p.z = p.home.z; p.yaw = p.home.yaw; p.y = floorAt(p.x, p.z) + p.half + 1.2; p.vy = 0; p.fallFrom = p.y;
+  radio(PART_TYPES[p.type].name + " fell into the trench. A spare one is back where it started.");
+}
+function breakGlass(p){
+  sfx("pop", { pitch: 1.6 });
+  radio("Crack! Glass is brittle: it breaks instead of bending. A spare sensor is back where you found it. Lower the claw before you let go.", 6500);
+  p.x = p.home.x; p.z = p.home.z; p.y = floorAt(p.x, p.z) + p.half + 0.5; p.fallFrom = p.y; p.vy = 0;
+  if (!G.notes.has("glass")) learn("glass", scanChips("glass"));
+}
+
+function stepLever(dt){
+  if (lever.grabbed){
+    const cp = clawPoint(), pv = lever.pivot.position;
+    /* the handle follows the claw: pull it toward the rover side to throw it */
+    const a = clamp(Math.atan2(cp.z - pv.z, Math.max(0.2, cp.y - pv.y)), -0.65, 0.95);
+    lever.a += (a - lever.a) * ease(10, dt);
+    if (cp.distanceTo(leverKnobWorld()) > 1.4){ lever.grabbed = false; G.held = []; renderActs(); radio("The claw slipped off the handle. Grab it again and reach in to pull."); }
+    if (lever.a > 0.8){
+      lever.pulled = true; lever.grabbed = false; G.held = [];
+      bridge.state = "sag"; bridgeT = 0;
+      sfx("boom", { volume: 0.5 }); renderActs(); sendPhoneState();
+    }
+  } else if (!lever.pulled) lever.a += (-0.65 - lever.a) * ease(4, dt);
+  else lever.a += (0.95 - lever.a) * ease(6, dt);
+  lever.pivot.rotation.x = lever.a;
+}
+
+function stepBridge(dt){
+  bridgeT += dt;
+  const [na, fa] = bridgeAngles(bridge.state);
+  const k = ease(bridge.state === "level" ? 2.4 : 1.4, dt);
+  bridge.nearA += (na - bridge.nearA) * k; bridge.farA += (fa - bridge.farA) * k;
+  if (bridge.state === "sag"){ bridge.nearA += Math.sin(bridgeT * 2.6) * 0.0015; bridge.farA -= Math.sin(bridgeT * 2.6) * 0.0015; }
+  bridge.near.rotation.x = bridge.nearA; bridge.far.rotation.x = bridge.farA;
+  if (bridge.strut.visible) bridge.strut.rotation.x += (0.66 - bridge.strut.rotation.x) * ease(2.5, dt);
+  const pulse = 0.55 + 0.4 * Math.sin(performance.now() / 300);
+  slotPad.mat.opacity = bridge.state === "sag" ? pulse : bridge.state === "folded" ? 0.35 : 0;
+}
+
+/* the finale: power on, lights, water, the seedling opens */
+function stepTest(dt){
+  if (G.testT < 0) return;
+  G.testT += dt;
+  const t = G.testT;
+  const k = clamp((t - 0.6) / 1.6, 0, 1);
+  GH.light.intensity = 2.2 * k;
+  GH.strips.forEach((s, i) => s.material.emissiveIntensity = clamp((t - 0.6 - i * 0.25) * 2, 0, 1.6));
+  GH.glass.material.emissive = new THREE.Color(0x3a2a10).multiplyScalar(k);
+  if (CELL.g.userData.band) CELL.g.userData.band.material.emissiveIntensity = 0.25 + k * 1.4;
+  if (t > 1.6){ GH.water.visible = true; }
+  const grow = clamp((t - 2.2) / 2.5, 0, 1), eg = 1 - Math.pow(1 - grow, 3);
+  GH.sprout.scale.setScalar(0.35 + eg * 0.85);
+  GH.leaves.forEach(l => l.rotation.z = 1.2 - eg * 1.0);
+  GH.plants.forEach((pl, i) => { pl.scale.setScalar(0.5 + clamp((t - 2.4 - i * 0.05) / 2, 0, 1) * 0.5); pl.userData.leaf.material.color.setHex(grow > 0.5 ? 0x74b85a : 0x5e7a52); });
+  hubLights.forEach(w => w.material.emissiveIntensity = 0.9 + k * 0.6);
+  if (t > 1.0 && !G.flags.lit){ G.flags.lit = true; sfx("level"); radio("Lights on! Water's flowing. Look at that seedling open up.", 5000); }
+  if (t > 5.8 && !G.flags.tested){ G.flags.tested = true; updateStep(); showEnd(); }
+}
+
+function stepWater(dt){
+  if (!GH.water.visible) return;
+  const a = GH.water.geometry.attributes.position;
+  for (let i = 0; i < a.count; i++){
+    let y = a.getY(i) - dt * 1.6;
+    if (y < 1.0) y = 2.2;
+    a.setY(i, y);
+  }
+  a.needsUpdate = true;
+}
+
+function stepDust(dt){
+  let any = false;
+  for (let i = 0; i < DUST_N; i++){
+    if (dust.life[i] <= 0) continue;
+    any = true;
+    dust.life[i] -= dt;
+    dust.v[i * 3 + 1] -= MOON_G * dt;
+    dust.p[i * 3] += dust.v[i * 3] * dt; dust.p[i * 3 + 1] += dust.v[i * 3 + 1] * dt; dust.p[i * 3 + 2] += dust.v[i * 3 + 2] * dt;
+    const fl = groundHeight(dust.p[i * 3], dust.p[i * 3 + 2]);
+    if (dust.p[i * 3 + 1] < fl || dust.life[i] <= 0){ dust.life[i] = 0; dust.p[i * 3 + 1] = -50; }
+  }
+  if (any) dust.geo.attributes.position.needsUpdate = true;
+}
+
+/* ---------- drawing the rover and arm ---------- */
+const _v = new THREE.Vector3();
+function drawRover(){
+  R.group.position.set(rover.x, rover.y, rover.z);
+  R.group.rotation.set(0, 0, 0);
+  R.group.rotation.order = "YXZ";
+  R.group.rotation.y = rover.yaw; R.group.rotation.x = rover.pitch; R.group.rotation.z = rover.roll;
+  for (const w of R.wheels) w.userData.spin.rotation.x = -rover.wheelSpin;
+  const braking = Math.abs(rover.v) < 0.05 || G.mode !== "drive";
+  R.brake.forEach(b => b.material.emissiveIntensity = braking ? 1.2 : 0.2);
+  /* the arm */
+  R.turret.rotation.y = arm.yaw;
+  R.shoulder.rotation.x = arm.pitch;
+  const len = Math.max(0.2, arm.reach - 0.9);
+  R.inner.scale.z = len; R.inner.position.z = -(0.9 + len / 2);
+  /* the tool sits at the tip in world space and hangs straight down */
+  const tip = toWorld(rover, armLocal(arm));
+  R.tool.position.set(tip.x, tip.y, tip.z);
+  R.tool.rotation.y = rover.yaw + arm.yaw;
+  const closed = G.held.length > 0 && G.mode === "arm";
+  R.fingers.forEach((f, i) => { const s = i ? 1 : -1; f.rotation.z += ((closed ? 0.05 : 0.38) * s - f.rotation.z) * 0.3; });
+}
+function drawMarkers(dt){
+  const show = G.mode !== "drive" && G.started && !G.done;
+  marker.visible = show; dropLine.visible = show;
+  for (const f of field) f.visible = show && G.magOn;
+  if (!show) return;
+  const cp = clawPoint();
+  const fl = floorAt(cp.x, cp.z);
+  marker.position.set(cp.x, fl + 0.03, cp.z);
+  magArea.visible = G.mode === "magnet";
+  ring.visible = G.mode === "arm";
+  dropLine.geometry.setFromPoints([new THREE.Vector3(cp.x, cp.y - 0.1, cp.z), new THREE.Vector3(cp.x, fl + 0.05, cp.z)]);
+  dropLine.computeLineDistances();
+  /* ring color: blue when something can be grabbed, white otherwise */
+  const c = G.mode === "arm" && !G.held.length ? grabCandidates(cp) : null;
+  G.candidate = c;
+  ringMat.color.set(c ? 0x4fc3f7 : 0xdfe7f7);
+  ring.scale.setScalar(c ? 1.25 + Math.sin(performance.now() / 160) * 0.08 : 1);
+  if (G.magOn){
+    const t = performance.now() / 1000;
+    field.forEach((f, i) => {
+      const k = (t * 0.9 + i / 3) % 1;
+      const y = cp.y - 0.4 - k * Math.min(ARM.magDepth, cp.y - fl);
+      f.position.set(cp.x, y, cp.z);
+      f.scale.setScalar(1 + k * (ARM.magR / 0.33 - 1));
+      f.material.opacity = 0.5 * (1 - k);
+    });
+  }
+}
+/* highlight the part in reach, and show if a held part will fit where it is */
+let lastHi = null;
+function drawHighlights(){
+  const want = G.candidate && G.candidate !== "lever" ? G.candidate : null;
+  if (lastHi !== want){
+    if (lastHi) setGlow(lastHi.g, 0);
+    if (want) setGlow(want.g, 0.35);
+    lastHi = want;
+  }
+  lever.knob.material.emissive.setHex(G.candidate === "lever" || lever.grabbed ? 0x2f7de1 : 0x000000);
+  /* fit preview: a held part over a spot it fits glows, and the spot says so */
+  G.preview = null;
+  if (G.held.length && G.held[0] !== "lever"){
+    const f = fitFor(G.held[0]);
+    if (f){ G.preview = f; }
+  }
+  const pv = G.preview;
+  for (const p of G.held) if (p !== "lever") setGlow(p.g, pv && pv.res === "ok" ? 0.55 : 0.12);
+  if (pv && pv.res === "ok" && !G.fitSaid){ G.fitSaid = true; flash("Let go to fit it"); sfx("tick"); }
+  if (!pv || pv.res !== "ok") G.fitSaid = false;
+}
+function setGlow(g, k){
+  g.traverse(o => { if (o.isMesh && o.material && o.material.emissive){
+    if (!o.userData.ownMat){ o.material = o.material.clone(); o.userData.ownMat = true; o.userData.baseE = o.material.emissive.getHex(); o.userData.baseI = o.material.emissiveIntensity; }
+    if (k > 0){ o.material.emissive.setHex(0x2f7de1); o.material.emissiveIntensity = k; }
+    else { o.material.emissive.setHex(o.userData.baseE); o.material.emissiveIntensity = o.userData.baseI; }
+  } });
+}
+
+/* the beam goes to where the next thing happens */
+function beamTarget(){
+  const s = G.step, holding = G.held.length && G.held[0] !== "lever";
+  if (s === 0) return PLACES.approach;
+  if (s === 1) return PANEL.state === "held" ? PLACES.bay : PANEL;
+  if (s === 2) return PLACES.lever;
+  if (s === 3) return WEDGE.state === "held" ? PLACES.slot : WEDGE;
+  if (s === 4) return PLACES.far;
+  if (s === 5) return CELL.state === "held" ? null : CELL;
+  if (s === 6) return PLACES.socket;
+  if (s === 7) return PLACES.socket;
+  return null;
+}
+function drawBeam(dt){
+  const t = G.started && !G.done ? beamTarget() : null;
+  beam.visible = !!t;
+  if (!t) return;
+  const x = t.x, z = t.z, y = floorAt(x, z);
+  beam.position.x += (x - beam.position.x) * ease(5, dt);
+  beam.position.z += (z - beam.position.z) * ease(5, dt);
+  beam.position.y = y;
+  const near = Math.hypot(rover.x - x, rover.z - z);
+  beam.children[0].material.opacity = clamp((near - 2) / 10, 0.05, 0.18);
+  beam.userData.chev.position.y = 2.6 + Math.sin(performance.now() / 400) * 0.25;
+  beam.userData.chev.rotation.y += dt * 1.2;
+}
+
+/* camera: behind the rover when driving, behind the arm when working */
+const camLook = new THREE.Vector3(0, 1, 0);
+let camInit = false;
+function drawCamera(dt){
+  const z = camCtl.zoom * (innerWidth < innerHeight ? 1.35 : 1);
+  let want, look;
+  if (G.mode === "drive" || !G.started){
+    if (Math.abs(rover.v) > 0.5) camCtl.yaw += angDiff(0, camCtl.yaw) * ease(1.4, dt);
+    const yaw = rover.yaw + camCtl.yaw;
+    want = new THREE.Vector3(rover.x + Math.sin(yaw) * 7.6 * z, rover.y + 3.8 * z, rover.z + Math.cos(yaw) * 7.6 * z);
+    look = new THREE.Vector3(rover.x - Math.sin(rover.yaw) * 3, rover.y + 0.9, rover.z - Math.cos(rover.yaw) * 3);
+  } else {
+    /* a three-quarter view from behind and to the side of the arm, so the boom, the claw and the ground ring all show */
+    const cp = clawPoint();
+    const yaw = rover.yaw + arm.yaw + 0.55 + camCtl.yaw;
+    const mx = rover.x + (cp.x - rover.x) * 0.45, mz = rover.z + (cp.z - rover.z) * 0.45;
+    want = new THREE.Vector3(mx + Math.sin(yaw) * 6.6 * z, rover.y + 5.0 * z, mz + Math.cos(yaw) * 6.6 * z);
+    look = new THREE.Vector3(rover.x + (cp.x - rover.x) * 0.7, Math.min(cp.y, rover.y + 1.2) - 0.2, rover.z + (cp.z - rover.z) * 0.7);
+  }
+  want.y = Math.max(want.y, floorAt(want.x, want.z) + 1.0);
+  if (!camInit){ camera.position.copy(want); camLook.copy(look); camInit = true; }
+  camera.position.lerp(want, ease(3.2, dt));
+  camLook.lerp(look, ease(5, dt));
+  camera.lookAt(camLook);
+  /* the sun's shadow box follows the rover */
+  sunLight.position.set(rover.x + SUN_DIR.x * 60, SUN_DIR.y * 60, rover.z + SUN_DIR.z * 60);
+  sunLight.target.position.set(rover.x, 0, rover.z);
+}
+
+function drawTags(dt){
+  const w = innerWidth, h = innerHeight;
+  G.tags = G.tags.filter(t => {
+    t.t -= dt;
+    if (t.t <= 0){ t.el.remove(); return false; }
+    const v = anchorPos(t.anchor).clone().project(camera);
+    const vis = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
+    t.el.style.opacity = vis ? Math.min(1, t.t * 2) : 0;
+    t.el.style.left = ((v.x + 1) / 2 * w) + "px"; t.el.style.top = ((1 - v.y) / 2 * h) + "px";
+    return true;
+  });
+}
+
+/* ---------- the frame ---------- */
+let last = performance.now(), slowFrames = 0, phoneSendT = 0;
+function frame(now){
+  requestAnimationFrame(frame);
+  let dt = Math.min(0.05, (now - last) / 1000); last = now;
+  pollPad();
+  const live = G.started && !G.paused;
+  if (live){
+    const inp = readInput();
+    if (G.clockOn) G.t += dt;
+    stepRover(inp, dt);
+    stepArm(inp, dt);
+    stepMagnet(inp, dt);
+    stepLever(dt);
+    stepParts(dt);
+    stepTest(dt);
+    if (G.started && !G.done) updateStep();
+    $("clock").textContent = formatTime(G.t);
+  }
+  stepBridge(dt); stepWater(dt); stepDust(dt);
+  if (G.radioT > 0){ G.radioT -= dt; if (G.radioT <= 0) $("radio").classList.remove("on"); }
+  if (noteT > 0){ noteT -= dt; if (noteT <= 0) $("note").classList.remove("on"); }
+  if (trenchWarnT > 0) trenchWarnT -= dt;
+  if (flashT > 0){ flashT -= dt; if (flashT <= 0) $("flash").classList.remove("on"); }
+  if (scanLine && scanLine.visible){ scanLine.material.opacity -= dt * 1.6; if (scanLine.material.opacity <= 0) scanLine.visible = false; }
+  const tw = PLACES.tower.group.userData.beacon; tw.material.color.setHex(G.flags.lit && Math.sin(now / 300) > 0 ? 0x4fc3f7 : 0x2a3550);
+  drawRover(); drawMarkers(dt); drawHighlights(); drawBeam(dt); drawCamera(dt); drawTags(dt);
+  renderer.render(scene, camera);
+  /* keep it smooth on slower laptops: lower the resolution if frames drag */
+  if (dt > 0.034) slowFrames++; else slowFrames = Math.max(0, slowFrames - 1);
+  if (slowFrames > 90 && pixelCap > 1){ pixelCap = Math.max(1, pixelCap - 0.25); renderer.setPixelRatio(pixelCap); slowFrames = 0; }
+  phoneSendT -= dt; if (phoneSendT <= 0 && RM.ch){ phoneSendT = 2; sendPhoneState(); }
+}
+addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+/* ============================================================
+   Phone remote: the phone opens /games/salvage-remote.html and joins a
+   six-digit room over Supabase Realtime broadcast, the same way the site's
+   two-player games do. Nothing is saved; no names.
+     phone -> game:  who | hi | in {lr, fb, go, bk, mag, r} | b {b} | mode {m} | bye
+     game  -> phone: host | full {to} | st {m, held, test, paused, done, step}
+   ============================================================ */
+const SB_URL = "https://wdctkfhwygwwulipwnys.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
+const RM = { sb: null, ch: null, code: "", phoneId: null, seen: 0, id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"), busy: false };
+function loadScript(src){ return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error("load " + src)); document.head.appendChild(s); }); }
+async function rmClient(){
+  if (RM.sb) return RM.sb;
+  if (!window.supabase){
+    try { await loadScript("/assets/vendor/supabase.js"); }
+    catch (_e){ await loadScript("https://unpkg.com/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"); }
+  }
+  RM.sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, realtime: { params: { eventsPerSecond: 30 } } });
+  return RM.sb;
+}
+function rmSend(p){ if (!RM.ch) return; p.i = RM.id; try { const r = RM.ch.send({ type: "broadcast", event: "m", payload: p }); if (r && r.catch) r.catch(() => {}); } catch (_e) {} }
+function rmOpen(code){
+  return rmClient().then(sb => new Promise((ok, no) => {
+    const ch = sb.channel("spacesalvage-remote-" + code, { config: { broadcast: { self: false } } });
+    let other = false;
+    ch.on("broadcast", { event: "m" }, (e) => { const p = e.payload || {}; if (p.t === "host" && p.i !== RM.id) other = true; rmMsg(p); });
+    const to = setTimeout(() => no(new Error("timeout")), 9000);
+    ch.subscribe((s) => { if (s === "SUBSCRIBED"){ clearTimeout(to); ok({ ch, taken: () => other }); } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT"){ clearTimeout(to); no(new Error(s)); } });
+  }));
+}
+async function openPhone(){
+  openOv("ovPhone");
+  if (RM.ch || RM.busy) { paintPhone(); return; }
+  RM.busy = true;
+  $("phoneStatus").textContent = "Getting a room ready";
+  try {
+    for (let i = 0; i < 6; i++){
+      const code = makeCode(crypto.getRandomValues(new Uint32Array(1))[0]);
+      const r = await rmOpen(code);
+      RM.ch = r.ch;
+      rmSend({ t: "who" });
+      await new Promise(ok => setTimeout(ok, 700));
+      if (r.taken()){ try { await RM.sb.removeChannel(r.ch); } catch (_e) {} RM.ch = null; continue; }
+      RM.code = code;
+      break;
+    }
+    if (!RM.ch) throw new Error("busy");
+    await showQR();
+  } catch (e){
+    try { console.warn("phone room:", e && e.message || e); } catch (_e) {}
+    $("phoneStatus").textContent = "Couldn't reach the internet room. Check the connection and try again.";
+  }
+  RM.busy = false;
+  paintPhone();
+}
+function remoteUrl(){ return new URL("/games/salvage-remote.html?c=" + RM.code, document.baseURI).href; }
+async function showQR(){
+  $("roomCode").textContent = RM.code;
+  const url = remoteUrl();
+  $("remoteUrl").textContent = url.replace(/\?c=\d+$/, "");
+  try {
+    if (!window.qrcode) await loadScript("https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js");
+    const qr = window.qrcode(0, "M"); qr.addData(url); qr.make();
+    $("qrBox").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  } catch (_e){ $("qrBox").innerHTML = '<span class="small" style="color:#334;padding:12px;text-align:center">Open the link below on the phone and type the code.</span>'; }
+}
+function paintPhone(){
+  const on = !!RM.phoneId;
+  $("bPhone").classList.toggle("live", on);
+  if (!RM.ch) return;
+  $("phoneStatus").textContent = on ? "Phone connected. Tilt it to steer." : "Waiting for the phone";
+  $("bPhoneOff").hidden = !on;
+}
+$("bPhoneOff").onclick = () => { rmSend({ t: "full", to: RM.phoneId, bye: 1 }); RM.phoneId = null; paintPhone(); radio("The phone is disconnected."); };
+function rmMsg(p){
+  if (!p || p.i === RM.id || !RM.ch) return;
+  if (p.t === "who"){ rmSend({ t: "host" }); if (RM.phoneId && RM.phoneId !== p.i && performance.now() - RM.seen < 4500) rmSend({ t: "full", to: p.i }); return; }
+  if (p.t === "host") return;
+  if (!RM.phoneId || performance.now() - RM.seen > 4500){
+    if (p.t !== "hi" && p.t !== "in") return;
+    const fresh = RM.phoneId !== p.i;
+    RM.phoneId = p.i;
+    if (fresh){ paintPhone(); sfx("good"); radio("Phone connected. Tilt it like a steering wheel and hold Go."); if (!G.started) startGame(); noteDevice("phone"); setTimeout(() => closeOv("ovPhone"), 1500); }
+  }
+  if (p.i !== RM.phoneId) return;
+  RM.seen = performance.now();
+  if (p.t === "in"){
+    phone.lr = clamp(+p.lr || 0, -1, 1); phone.fb = clamp(+p.fb || 0, -1, 1);
+    phone.go = p.go ? 1 : 0; phone.bk = p.bk ? 1 : 0; phone.mag = p.mag ? 1 : 0;
+    phone.r = typeof p.r === "number" ? clamp(p.r, 0, 1) : -1;
+    phone.at = performance.now();
+    if (p.lr || p.fb || p.go || p.bk || p.mag) noteDevice("phone");
+  } else if (p.t === "b"){
+    noteDevice("phone");
+    if (p.b === "pause") togglePause();
+    else if (p.b === "start") startGame();
+    else act(p.b);
+  } else if (p.t === "mode"){ noteDevice("phone"); setMode(p.m); sendPhoneState(); }
+  else if (p.t === "bye"){ RM.phoneId = null; paintPhone(); radio("The phone left. Keys and touch still work."); }
+}
+function sendPhoneState(){
+  if (!RM.ch) return;
+  rmSend({ t: "st", m: G.mode, held: G.held.length > 0, test: G.step === 8 && G.testT < 0, paused: G.paused, done: G.done, started: G.started, r: (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin), step: G.step < STEPS.length ? STEPS[G.step].text : "Mission complete" });
+}
+addEventListener("pagehide", () => { if (RM.ch) rmSend({ t: "gone" }); });
+
+/* ---------- go ---------- */
+/* three r128 reads hex colors as linear light; turn every material's color into the sRGB we meant, once */
+function fixColors(root){
+  const done = new Set();
+  root.traverse(o => {
+    const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+    for (const m of mats){
+      if (done.has(m) || m.userData.srgb) continue;
+      done.add(m); m.userData.srgb = true;
+      if (m.color && !m.map) m.color.convertSRGBToLinear();
+      if (m.emissive) m.emissive.convertSRGBToLinear();
+    }
+  });
+}
+resetWorld();
+renderActs();
+if (matchMedia("(pointer: coarse)").matches) noteDevice("touch");
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

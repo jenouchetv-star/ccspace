@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0b1226">
+<title>Space Salvage Remote</title>
+<style>
+  :root{ --ink:#e8eefc; --soft:#c9d4ee; --muted:#9fb0d4; --bg:#0b1226; --panel:#121a30; --line:rgba(255,255,255,.14); --blue:#2f7de1; --cyan:#4fc3f7; }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:none}
+  button,input{font:inherit;color:inherit}
+  [hidden]{display:none !important}
+  .screen{position:fixed;inset:0;display:flex;flex-direction:column;padding:max(14px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));box-sizing:border-box}
+  .center{justify-content:center;align-items:center;text-align:center;gap:14px;overflow:auto}
+  h1{margin:0;font-size:24px}
+  p{margin:0;color:var(--soft);font-size:15px;line-height:1.5;max-width:420px}
+  .code{font:800 34px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.2em;text-align:center;width:9.5ch;padding:12px 10px;border-radius:14px;border:1px solid var(--line);background:#0e1730;color:#fff}
+  .code:focus{outline:2px solid var(--cyan)}
+  .cta{all:unset;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:200px;padding:14px 22px;border-radius:14px;font-size:17px;font-weight:700;box-sizing:border-box;text-align:center}
+  .cta.blue{background:var(--blue);color:#fff}
+  .cta.line{border:1px solid rgba(255,255,255,.25)}
+  .msg{min-height:1.4em;font-size:14px;color:var(--muted)}
+  .msg.err{color:#ffd6d6}
+  .steps{display:flex;gap:8px;justify-content:center}
+  .steps i{width:28px;height:5px;border-radius:3px;background:rgba(255,255,255,.18)}
+  .steps i.on{background:var(--cyan)}
+  .phoneart{width:150px;height:86px;transition:transform .3s cubic-bezier(.2,.7,.2,1)}
+
+  /* controller */
+  .top{display:flex;align-items:center;gap:8px}
+  .modes{display:flex;gap:6px;flex:1}
+  .modes button{all:unset;cursor:pointer;flex:1;text-align:center;padding:11px 6px;border-radius:12px;border:1px solid var(--line);font-weight:700;font-size:15px;background:#0e1730}
+  .modes button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+  .stat{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap}
+  .stat i{width:9px;height:9px;border-radius:50%;background:#8a94a8}
+  .stat.ok i{background:var(--cyan)}
+  .task{font-size:13px;color:var(--soft);margin:8px 2px 0;line-height:1.35;min-height:1.35em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pad{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;min-height:0}
+  .zone{background:#0e1730;border:1px solid var(--line);border-radius:18px;position:relative;display:flex;align-items:center;justify-content:center;min-height:0;overflow:hidden}
+  .wheel{width:min(150px,70%);aspect-ratio:1;border-radius:50%;border:10px solid #2a3654;position:relative;box-sizing:border-box}
+  .wheel::before{content:"";position:absolute;left:50%;top:-10px;width:10px;height:22px;margin-left:-5px;background:var(--cyan);border-radius:4px}
+  .wheel::after{content:"";position:absolute;left:10%;right:10%;top:50%;height:8px;margin-top:-4px;background:#2a3654;border-radius:4px}
+  .tiltlbl{position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:12px;color:var(--muted)}
+  .fbbar{position:absolute;right:12px;top:16%;bottom:16%;width:8px;border-radius:4px;background:#2a3654}
+  .fbbar i{position:absolute;left:-4px;width:16px;height:16px;border-radius:50%;background:var(--cyan);top:50%;margin-top:-8px}
+  .stick{position:absolute;inset:0;touch-action:none}
+  .stick i{position:absolute;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;background:rgba(232,238,252,.9)}
+  .acts{display:grid;gap:10px;align-content:stretch;grid-template-columns:1fr 1fr}
+  .b{all:unset;cursor:pointer;display:flex;align-items:center;justify-content:center;text-align:center;border-radius:16px;border:1px solid var(--line);background:#0e1730;font-weight:700;font-size:16px;min-height:52px;touch-action:none}
+  .b.big{background:var(--blue);border-color:var(--blue);color:#fff;font-size:20px;grid-column:span 2}
+  .b.on{background:#1f62b8;border-color:var(--cyan)}
+  .b.press{border-color:var(--cyan)}
+  .reach{grid-column:span 2;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--soft)}
+  .reach input{flex:1;height:40px;accent-color:var(--blue)}
+  .bottom{display:flex;gap:8px;margin-top:10px}
+  .bottom .b{flex:1;min-height:46px;font-size:14px}
+  @media (orientation: portrait){
+    .pad{grid-template-columns:1fr;grid-template-rows:1fr auto}
+    .zone{min-height:150px}
+  }
+</style>
+</head>
+<body>
+
+<!-- 1: join -->
+<section class="screen center" id="sJoin">
+  <h1>Space Salvage Remote</h1>
+  <p>Type the room code shown on the big screen, then tap Connect.</p>
+  <input class="code" id="code" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="000000" aria-label="Room code">
+  <button class="cta blue" id="bJoin">Connect</button>
+  <div class="msg" id="joinMsg" role="status"></div>
+</section>
+
+<!-- 2: calibrate -->
+<section class="screen center" id="sCal" hidden>
+  <div class="steps"><i id="st1"></i><i id="st2"></i><i id="st3"></i></div>
+  <svg class="phoneart" id="phoneArt" viewBox="0 0 150 86" aria-hidden="true"><rect x="10" y="8" width="130" height="70" rx="12" fill="#1b2747" stroke="#4fc3f7" stroke-width="3"/><rect x="22" y="18" width="106" height="50" rx="5" fill="#0b1226"/><circle cx="133" cy="43" r="3" fill="#4fc3f7"/></svg>
+  <h1 id="calTitle">Hold the phone sideways</h1>
+  <p id="calText">Hold it like a steering wheel, screen facing you. Keep it still, then tap Ready.</p>
+  <button class="cta blue" id="bReady">Ready</button>
+  <button class="cta line" id="bTouch">Use touch instead of tilting</button>
+  <div class="msg" id="calMsg" role="status"></div>
+</section>
+
+<!-- 3: controller -->
+<section class="screen" id="sPad" hidden>
+  <div class="top">
+    <div class="modes" id="modes">
+      <button data-m="drive" class="on">Drive</button>
+      <button data-m="arm">Arm</button>
+      <button data-m="magnet">Magnet</button>
+    </div>
+    <span class="stat" id="stat"><i></i><span id="statTxt">Connected</span></span>
+  </div>
+  <div class="task" id="task"></div>
+  <div class="pad">
+    <div class="zone" id="zone">
+      <div class="wheel" id="wheel"></div>
+      <div class="fbbar" id="fbbar" hidden><i id="fbdot"></i></div>
+      <div class="tiltlbl" id="tiltLbl">Tilt to steer</div>
+      <div class="stick" id="stick" hidden><i id="knob"></i></div>
+    </div>
+    <div class="acts" id="acts"></div>
+  </div>
+  <div class="bottom">
+    <button class="b" id="bScan">Scan</button>
+    <button class="b" id="bTest" hidden>Test the power</button>
+    <button class="b" id="bPause">Pause</button>
+    <button class="b" id="bCal">Tilt setup</button>
+  </div>
+</section>
+
+<script>
+"use strict";
+/* BEGIN pure */
+/* tilt: learn which way this phone tilts, then turn tilt angles into -1..1 controls */
+function wrapDeg(d){ return ((d % 360) + 540) % 360 - 180; }
+function clampN(v, a, b){ return v < a ? a : v > b ? b : v; }
+function shapeAxis(v){ v = clampN(v, -1, 1); const a = Math.abs(v); if (a < 0.12) return 0; return Math.sign(v) * (a - 0.12) / 0.88; }
+/* from a "tilt it right" sample: which sensor axis moved most, and which way */
+function learnLR(cal, beta, gamma){
+  const db = wrapDeg(beta - cal.b0), dg = wrapDeg(gamma - cal.g0);
+  if (Math.max(Math.abs(db), Math.abs(dg)) < 14) return null;
+  return Math.abs(dg) >= Math.abs(db) ? { lr: "g", lrS: Math.sign(dg) } : { lr: "b", lrS: Math.sign(db) };
+}
+/* from a "tip the top away" sample, on the other axis */
+function learnFB(cal, beta, gamma){
+  const d = cal.lr === "g" ? wrapDeg(beta - cal.b0) : wrapDeg(gamma - cal.g0);
+  if (Math.abs(d) < 12) return null;
+  return Math.sign(d);
+}
+function tiltAxes(cal, beta, gamma, range){
+  range = range || 28;
+  const db = wrapDeg(beta - cal.b0), dg = wrapDeg(gamma - cal.g0);
+  const lrRaw = cal.lr === "g" ? dg : db, fbRaw = cal.lr === "g" ? db : dg;
+  return { lr: shapeAxis(lrRaw * cal.lrS / range), fb: shapeAxis(fbRaw * (cal.fbS || 1) / range) };
+}
+function readCode(s){ const d = String(s || "").replace(/\D/g, ""); return /^[1-9]\d{5}$/.test(d) ? d : null; }
+/* END pure */
+
+const $ = (id) => document.getElementById(id);
+const show = (id) => ["sJoin", "sCal", "sPad"].forEach(s => $(s).hidden = s !== id);
+const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (_e) {} };
+
+/* ---------- connection: the same Supabase Realtime room the game opened ---------- */
+const SB_URL = "https://wdctkfhwygwwulipwnys.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
+const C = { sb: null, ch: null, code: "", id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"), hostSeen: 0, hb: 0, sendT: 0, kicked: false };
+const S = { m: "drive", held: false, test: false, paused: false, r: 0.2, step: "" };
+function loadOne(src){ return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error("load")); document.head.appendChild(s); }); }
+function loadSb(){ return window.supabase ? Promise.resolve() : loadOne("/assets/vendor/supabase.js").catch(() => loadOne("https://unpkg.com/@supabase/supabase-js@2.112.4/dist/umd/supabase.js")); }
+function send(p){ if (!C.ch) return; p.i = C.id; try { const r = C.ch.send({ type: "broadcast", event: "m", payload: p }); if (r && r.catch) r.catch(() => {}); } catch (_e) {} }
+async function connect(code){
+  await loadSb();
+  if (!C.sb) C.sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, realtime: { params: { eventsPerSecond: 30 } } });
+  if (C.ch){ try { await C.sb.removeChannel(C.ch); } catch (_e) {} C.ch = null; }
+  const ch = C.sb.channel("spacesalvage-remote-" + code, { config: { broadcast: { self: false } } });
+  ch.on("broadcast", { event: "m" }, (e) => onMsg(e.payload));
+  await new Promise((ok, no) => {
+    const to = setTimeout(() => no(new Error("timeout")), 9000);
+    ch.subscribe((s) => { if (s === "SUBSCRIBED"){ clearTimeout(to); ok(); } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT"){ clearTimeout(to); no(new Error(s)); } });
+  });
+  C.ch = ch; C.code = code; C.hostSeen = 0; C.kicked = false;
+  send({ t: "who" });
+  for (let k = 0; k < 10 && !C.hostSeen && !C.kicked; k++) await new Promise(r => setTimeout(r, 400));
+  if (C.kicked) throw new Error("full");
+  if (!C.hostSeen) throw new Error("nohost");
+  send({ t: "hi" });
+  clearInterval(C.hb);
+  C.hb = setInterval(() => {
+    send({ t: "hi" });
+    const quiet = performance.now() - C.hostSeen > 7000;
+    $("stat").classList.toggle("ok", !quiet);
+    $("statTxt").textContent = quiet ? "Looking for the game" : "Connected";
+    if (quiet) send({ t: "who" });
+  }, 2000);
+}
+function onMsg(p){
+  if (!p || p.i === C.id) return;
+  if (p.t === "host"){ C.hostSeen = performance.now(); return; }
+  if (p.t === "full" && p.to === C.id){
+    C.kicked = true;
+    if (p.bye){ clearInterval(C.hb); show("sJoin"); $("joinMsg").textContent = "The big screen disconnected this phone."; }
+    else $("joinMsg").textContent = "Another phone is already driving this rover.";
+    return;
+  }
+  if (p.t === "gone"){ $("statTxt").textContent = "The game closed"; $("stat").classList.remove("ok"); return; }
+  if (p.t === "st"){
+    C.hostSeen = performance.now();
+    const modeChanged = p.m !== S.m, heldChanged = !!p.held !== S.held;
+    S.m = p.m; S.held = !!p.held; S.test = !!p.test; S.paused = !!p.paused; S.step = p.step || "";
+    if (modeChanged && typeof p.r === "number") S.r = clampN(p.r, 0, 1);
+    paintPad(modeChanged || heldChanged);
+  }
+}
+addEventListener("pagehide", () => send({ t: "bye" }));
+
+/* ---------- join ---------- */
+const q = new URLSearchParams(location.search).get("c");
+if (readCode(q)) $("code").value = readCode(q);
+$("code").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6); });
+$("bJoin").onclick = async () => {
+  const code = readCode($("code").value);
+  if (!code){ $("joinMsg").textContent = "The code is the six numbers on the big screen."; return; }
+  /* iPhones ask before sharing tilt; this tap is when they may ask */
+  await askMotion();
+  $("joinMsg").className = "msg"; $("joinMsg").textContent = "Connecting";
+  $("bJoin").disabled = true;
+  try {
+    /* a phone that just closed the page still counts for a few seconds, so try again before giving up */
+    for (let tries = 0; ; tries++){
+      try { await connect(code); break; }
+      catch (e){
+        if (e.message !== "full" || tries >= 3) throw e;
+        $("joinMsg").textContent = "Another phone is connected. Trying again";
+        await new Promise(r => setTimeout(r, 2500));
+      }
+    }
+    buzz(30);
+    startCal();
+  } catch (e){
+    $("joinMsg").className = "msg err";
+    $("joinMsg").textContent = e.message === "nohost" ? "No game is using that code. Check the six numbers on the big screen." : e.message === "full" ? "Another phone is already driving this rover." : "Couldn't connect. Check the phone's internet and try again.";
+  }
+  $("bJoin").disabled = false;
+};
+
+/* ---------- tilt ---------- */
+const T = { beta: null, gamma: null, at: 0, cal: null, touch: false, phase: 0 };
+let motionAsked = false;
+async function askMotion(){
+  if (motionAsked) return;
+  motionAsked = true;
+  try { if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === "function") await DeviceOrientationEvent.requestPermission(); } catch (_e) {}
+  addEventListener("deviceorientation", (e) => { if (e.beta == null || e.gamma == null) return; T.beta = e.beta; T.gamma = e.gamma; T.at = performance.now(); calTick(); });
+}
+function startCal(){
+  show("sCal"); T.phase = 0; T.cal = null;
+  setCal(0, "Hold the phone sideways", "Hold it like a steering wheel, screen facing you. Keep it still, then tap Ready.");
+  $("bReady").hidden = false; $("calMsg").textContent = "";
+  /* no tilt sensor (a laptop, or tilt is blocked): go straight to touch */
+  setTimeout(() => { if (T.beta == null && !$("sCal").hidden){ $("calMsg").textContent = "This phone isn't sharing its tilt, so the touch controls are ready instead."; setTimeout(useTouch, 1600); } }, 1800);
+}
+function setCal(step, title, text){
+  ["st1", "st2", "st3"].forEach((id, i) => $(id).classList.toggle("on", i <= step));
+  $("calTitle").textContent = title; $("calText").textContent = text;
+  $("phoneArt").style.transform = step === 1 ? "rotate(18deg)" : step === 2 ? "perspective(200px) rotateX(28deg)" : "none";
+}
+$("bReady").onclick = () => {
+  if (T.beta == null){ useTouch(); return; }
+  T.cal = { b0: T.beta, g0: T.gamma, lr: null, lrS: 1, fbS: 1 };
+  T.phase = 1; $("bReady").hidden = true;
+  setCal(1, "Now turn it right", "Turn the phone to the right, like turning a steering wheel.");
+  buzz(20);
+};
+function calTick(){
+  if (T.phase === 1){
+    const r = learnLR(T.cal, T.beta, T.gamma);
+    if (r){ Object.assign(T.cal, r); T.phase = 1.5; buzz(30); setCal(2, "Back to the middle, then tip it", "Hold it level again, then tip the top of the phone away from you."); setTimeout(() => T.phase = 2, 900); }
+  } else if (T.phase === 2){
+    const f = learnFB(T.cal, T.beta, T.gamma);
+    if (f){ T.cal.fbS = f; T.phase = 3; buzz([30, 60, 30]); setCal(2, "All set", "Tilt to steer and aim. Tip away lowers the arm, tip back raises it."); setTimeout(() => usePad(false), 900); }
+  }
+}
+$("bTouch").onclick = () => useTouch();
+function useTouch(){ T.touch = true; usePad(true); }
+function usePad(touch){
+  T.touch = touch;
+  show("sPad");
+  $("wheel").hidden = touch; $("tiltLbl").hidden = touch; $("stick").hidden = !touch;
+  paintPad(true);
+  send({ t: "b", b: "start" });
+}
+$("bCal").onclick = () => { T.touch = false; startCal(); };
+
+/* ---------- touch stick ---------- */
+const stick = { x: 0, y: 0, id: null };
+(function(){
+  const el = $("stick"), knob = $("knob");
+  function move(e){
+    const r = el.getBoundingClientRect(), max = Math.min(r.width, r.height) / 2 - 36;
+    let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2); const d = Math.hypot(dx, dy);
+    if (d > max){ dx *= max / d; dy *= max / d; }
+    knob.style.transform = "translate(" + dx + "px," + dy + "px)";
+    stick.x = dx / max; stick.y = -dy / max;
+  }
+  el.addEventListener("pointerdown", (e) => { stick.id = e.pointerId; el.setPointerCapture(e.pointerId); move(e); });
+  el.addEventListener("pointermove", (e) => { if (e.pointerId === stick.id) move(e); });
+  const end = (e) => { if (e.pointerId !== stick.id) return; stick.id = null; stick.x = stick.y = 0; knob.style.transform = ""; };
+  el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
+})();
+
+/* ---------- controller ---------- */
+const hold = { go: 0, bk: 0, mag: 0 };
+function paintPad(rebuild){
+  document.querySelectorAll("#modes button").forEach(b => b.classList.toggle("on", b.dataset.m === S.m));
+  $("task").textContent = S.paused ? "Paused" : S.step;
+  $("bTest").hidden = !S.test;
+  $("bPause").textContent = S.paused ? "Resume" : "Pause";
+  $("tiltLbl").textContent = S.m === "drive" ? "Tilt to steer" : "Tilt to aim the arm";
+  $("fbbar").hidden = S.m === "drive" || T.touch;
+  if (!rebuild) return;
+  const a = $("acts");
+  if (S.m === "drive"){
+    a.innerHTML = '<button class="b big" data-h="go" style="grid-row:span 2">Go</button><button class="b" data-h="bk" style="grid-column:span 2">Back up</button>';
+  } else if (S.m === "arm"){
+    a.innerHTML = '<button class="b big" data-a="grab">' + (S.held ? "Let go" : "Grab") + '</button><button class="b" data-a="rot" style="grid-column:span 2">Rotate</button>'
+      + '<label class="reach">In<input type="range" min="0" max="100" id="reach" aria-label="Reach">Out</label>';
+  } else {
+    a.innerHTML = '<button class="b big" data-h="mag">Hold magnet</button>'
+      + '<label class="reach">In<input type="range" min="0" max="100" id="reach" aria-label="Reach">Out</label>';
+  }
+  const rg = $("reach"); if (rg){ rg.value = Math.round(S.r * 100); rg.oninput = () => { S.r = rg.value / 100; }; }
+}
+document.querySelectorAll("#modes button").forEach(b => b.onclick = () => { send({ t: "mode", m: b.dataset.m }); buzz(15); });
+$("acts").addEventListener("pointerdown", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  e.preventDefault();
+  b.classList.add("press");
+  if (b.dataset.h){ hold[b.dataset.h] = 1; b.classList.add("on"); buzz(10); try { b.setPointerCapture(e.pointerId); } catch (_e) {} }
+  if (b.dataset.a){ send({ t: "b", b: b.dataset.a }); buzz(25); }
+});
+function letGo(e){ const b = e.target.closest && e.target.closest("button"); if (b){ b.classList.remove("press", "on"); if (b.dataset.h) hold[b.dataset.h] = 0; } }
+$("acts").addEventListener("pointerup", letGo);
+$("acts").addEventListener("pointercancel", letGo);
+$("acts").addEventListener("lostpointercapture", letGo);
+$("bScan").onclick = () => { send({ t: "b", b: "scan" }); buzz(20); };
+$("bTest").onclick = () => { send({ t: "b", b: "test" }); buzz([40, 40, 40]); };
+$("bPause").onclick = () => send({ t: "b", b: "pause" });
+
+/* about 16 updates a second while the controller is open */
+setInterval(() => {
+  if ($("sPad").hidden || !C.ch) return;
+  let lr = 0, fb = 0;
+  if (T.touch){ lr = stick.x; fb = -stick.y; }
+  else if (T.cal && T.beta != null){ const a = tiltAxes(T.cal, T.beta, T.gamma); lr = a.lr; fb = a.fb; }
+  $("wheel").style.transform = "rotate(" + (lr * 90) + "deg)";
+  $("fbdot").style.top = (50 + fb * 45) + "%";
+  const msg = { t: "in", lr: +lr.toFixed(3), fb: +fb.toFixed(3), go: hold.go, bk: hold.bk, mag: hold.mag };
+  if (S.m === "drive") msg.fb = 0;
+  if ($("reach")) msg.r = +S.r.toFixed(3);
+  send(msg);
+}, 60);
+</script>
+</body>
+</html>
