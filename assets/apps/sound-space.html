@@ -15,6 +15,7 @@
 <script src="sound-space/library.js"></script>
 <script src="sound-space/lessons.js"></script>
 <script src="sound-space/cloud.js"></script>
+<script src="sound-space/midi.js"></script>
 <!--
   Sound Space (Chike's Creative Space): kids make their own short songs. Add tracks, pick an instrument for each,
   then play the piano keys or drum pads, record what you play (notes, never audio), or tap notes into the grid.
@@ -243,6 +244,14 @@ body.kbd-collapsed #kbd{ display:none; }
 .secbtn:hover{ color:var(--text); background:var(--accent-weak); }
 .secbtn svg{ width:14px; height:14px; stroke-width:2.4; }
 .secbtn[aria-expanded="false"] svg{ transform:rotate(-90deg); }
+/* a real music keyboard, in the keys' bar (the approved draft): a raised button, or a sunken chip with a teal light */
+.midi{ margin-left:auto; display:flex; align-items:center; gap:6px; min-width:0; }
+.midi .btn{ height:22px; padding:0 9px; gap:5px; font-size:11.5px; }
+.midi .btn svg{ width:15px; height:15px; flex:none; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.midi__chip{ display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 9px; border-radius:var(--r-sm); background:var(--well); box-shadow:var(--press); font-size:11.5px; font-weight:700; color:var(--text); white-space:nowrap; }
+.midi__led{ width:7px; height:7px; border-radius:50%; flex:none; background:#14B8A6; box-shadow:0 0 6px #14B8A6; }
+.midi__led.off{ background:var(--btn-a); box-shadow:inset 0 1px 1px rgba(0,0,0,.5); }
+.midi__msg{ flex:none; margin:0; padding:0 12px 6px; font-size:12px; line-height:1.4; color:var(--mute); background:linear-gradient(var(--tbar-b),var(--tbar-b)); }
 .panel{ background:linear-gradient(var(--panel-a),var(--panel-b)); overflow:auto; }
 .panel h3{ margin:0; font-size:11px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--mute); }
 .left{ border-right:1px solid var(--line); box-shadow:inset -1px 0 0 var(--hi); padding:14px 12px; display:flex; flex-direction:column; gap:10px; }
@@ -758,7 +767,14 @@ body.kbd-collapsed #kbd{ display:none; }
         <div class="gscroll" id="gscroll"><div class="grid" id="ss-grid" role="grid" aria-label="Notes"></div></div>
         <div class="edempty" id="edempty" hidden><div><b>Add a track to start</b>Press <b>Add a track</b> and pick an instrument. Then play it, record it, or tap notes into the grid.</div></div>
       </div>
-      <div class="secbar secbar--keys" id="kbd-bar"><button type="button" class="secbtn" id="kbd-toggle" data-act="toggle-keys" aria-expanded="true" aria-controls="kbd" title="Fold or unfold the keys"><i data-lucide="chevron-down"></i><span id="kbd-bar-label">Piano keys</span></button></div>
+      <div class="secbar secbar--keys" id="kbd-bar"><button type="button" class="secbtn" id="kbd-toggle" data-act="toggle-keys" aria-expanded="true" aria-controls="kbd" title="Fold or unfold the keys"><i data-lucide="chevron-down"></i><span id="kbd-bar-label">Piano keys</span></button>
+        <div class="midi" id="midi" role="group" aria-label="Real keyboard" hidden>
+          <button type="button" class="btn" id="midi-use" data-act="midi-connect" title="Play Sound Space from a music keyboard plugged in with USB"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M7 6v7M12 6v7M17 6v7"/></svg>Use a real keyboard</button>
+          <span class="midi__chip" id="midi-chip" role="status" hidden><span class="midi__led" id="midi-led"></span><span id="midi-chip-text">Keyboard connected</span></span>
+          <span class="midi__chip" id="midi-pedal" hidden>Pedal down</span>
+          <button type="button" class="btn" id="midi-retry" data-act="midi-connect" hidden>Try again</button>
+        </div></div>
+      <p class="midi__msg" id="midi-msg" hidden></p>
       <div class="kbd" id="kbd">
         <div class="kbd__side"><b id="kbd-title">Piano keys</b><span id="kbd-hint">Tap a key or use your computer keys. Press Record and what you play goes into the track.</span></div>
         <div class="keybed" id="keybed"><div class="keys" id="ss-keys" role="group" aria-label="Piano keys"></div></div>
@@ -943,8 +959,9 @@ const HELP = [
     "<p>A song can have up to 8 tracks, each with its own instrument. Pick a track on the left to change it. <b>M</b> mutes a track and <b>S</b> plays only that track. The slider sets how loud it is.</p><p>Reverb makes a track sound like it's played in a bigger room.</p><p>Sustain lets notes ring on after they end, like a piano pedal.</p>"],
   ["Playing", "Play, stop and loop", "play stop loop again repeat space",
     "<p><b>Play</b> starts the song and <b>Stop</b> stops it. With <b>Loop</b> on, the song plays again and again. " + K("Space") + " plays and stops too.</p>"],
-  ["Playing", "Piano keys", "piano keys keyboard computer higher lower octave",
-    "<p>Tap the keys, or use your computer keys: " + K("A") + " " + K("S") + " " + K("D") + " " + K("F") + " " + K("G") + " " + K("H") + " " + K("J") + " " + K("K") + " " + K("L") + " " + K(";") + " " + K("'") + " for the white keys and " + K("W") + " " + K("E") + " " + K("T") + " " + K("Y") + " " + K("U") + " " + K("O") + " " + K("P") + " for the black keys. <b>Higher</b> and <b>Lower</b> move the keys up or down.</p>"],
+  ["Playing", "Piano keys", "piano keys keyboard computer higher lower octave music real usb midi electric pedal",
+    "<p>Tap the keys, or use your computer keys: " + K("A") + " " + K("S") + " " + K("D") + " " + K("F") + " " + K("G") + " " + K("H") + " " + K("J") + " " + K("K") + " " + K("L") + " " + K(";") + " " + K("'") + " for the white keys and " + K("W") + " " + K("E") + " " + K("T") + " " + K("Y") + " " + K("U") + " " + K("O") + " " + K("P") + " for the black keys. <b>Higher</b> and <b>Lower</b> move the keys up or down.</p>"
+    + "<p>Have a music keyboard? Plug it into the computer with USB and press <b>Use a real keyboard</b>.</p>"],
   ["Playing", "Drum pads", "drum pads kit beat",
     "<p>Drum tracks get 8 pads. Tap them, or use " + K("A") + " to " + K("K") + " on your computer.</p>"],
   ["Recording", "Record what you play", "record count-in click overdub",
@@ -1117,36 +1134,45 @@ function pressTime(evTs){
   return t;
 }
 
-/* a note you play now: its own gain, so letting go of a key fades it out */
-const held = new Map();   // key -> { g, srcs, oneShot, rec }
-function noteOn(key, track, pitch, evTs){
+/* a note you play now: its own gain, so letting go of a key fades it out. vel is how hard: a real keyboard's key
+   (0.2 to 1, from SS.midi.velToVel); the on-screen and computer keys play at 0.9. */
+const held = new Map();   // key -> { g, srcs, oneShot, sus, rec, trackId, pitch }
+let pedalDown = false;    // a real keyboard's sustain pedal
+const pedalRing = new Set();   // notes let go while the pedal was down, still ringing on it
+function noteOn(key, track, pitch, evTs, vel){
   if (held.has(key)) noteOff(key);
   const c = audio(); if (!c || !track) return;
   ensureLoaded(track.instrumentId);
   const inst = I.byId(track.instrumentId); if (!inst) return;
-  const oneShot = inst.kind !== "pitched";
+  const oneShot = inst.kind !== "pitched", v = vel > 0 ? vel : 0.9;
   const g = c.createGain(); g.connect(liveBus);
   const wet = liveFx.wet(track.reverb || 0); if (wet) g.connect(wet);
-  const ev = { instrumentId:track.instrumentId, pitch, len:1, vel:0.9, gain:track.volume * 0.9, dur: oneShot ? 0.6 : 4, sustain:!!track.sustain };
+  const ev = { instrumentId:track.instrumentId, pitch, len:1, vel:v, gain:track.volume * v, dur: oneShot ? 0.6 : 4, sustain:!!track.sustain };
   let srcs = [];
   try { srcs = voices.play(ev, c.currentTime, g) || []; } catch(e){}
-  held.set(key, { g, srcs, oneShot, sus: !oneShot && !!track.sustain, rec: recordDown(track, pitch, oneShot, evTs) });
+  held.set(key, { g, srcs, oneShot, sus: !oneShot && !!track.sustain, rec: recordDown(track, pitch, oneShot, evTs, v), trackId:track.id, pitch });
   lightKey(key, track, pitch, true);
-  lessonEvent(oneShot ? "pads" : "keys");
+  liveKeyPressed(pitch, oneShot);
 }
 function noteOff(key, evTs){
   const h = held.get(key); if (!h) return;
   held.delete(key);
   if (!h.oneShot && ctx){
-    /* with Sustain on, the note rings on after the key comes up and fades out over E.SUSTAIN_TAIL */
-    const t = ctx.currentTime, tail = h.sus ? E.SUSTAIN_TAIL : 0.3;
-    try { h.g.gain.setTargetAtTime(0, t, h.sus ? E.SUSTAIN_TAIL / 7 : 0.04); } catch(e){}
+    /* with Sustain on, or the keyboard's pedal down, the note rings on after the key comes up and fades out over
+       E.SUSTAIN_TAIL. The pedal never changes the track's Sustain. */
+    const byPedal = !h.sus && pedalDown, sus = h.sus || byPedal;
+    const t = ctx.currentTime, tail = sus ? E.SUSTAIN_TAIL : 0.3;
+    try { h.g.gain.setTargetAtTime(0, t, sus ? E.SUSTAIN_TAIL / 7 : 0.04); } catch(e){}
     h.srcs.forEach(s => { try { s.stop(t + tail); } catch(e){} });
+    if (byPedal){ pedalRing.forEach(x => { if (x.until <= t) pedalRing.delete(x); }); h.until = t + tail; pedalRing.add(h); }
   }
   if (h.rec) recordUp(h.rec, evTs);
   lightKey(key, null, null, false);
 }
-function releaseAll(){ [...held.keys()].forEach(noteOff); }
+function releaseAll(){ [...held.keys()].forEach(k => noteOff(k)); dampPedal(); }
+/* Every key or pad played live (on screen, from the computer keys, or on a real keyboard) comes through here once:
+   the one place a lesson hears a key press, and where lit keys in song lessons can hook in later. */
+function liveKeyPressed(pitch, oneShot){ lessonEvent(oneShot ? "pads" : "keys"); }
 /* a short note for a tap on the grid or a preview */
 function blip(instrumentId, pitch, dur, when){
   const c = audio(); if (!c) return;
@@ -1420,12 +1446,12 @@ function stopRecording(){
 }
 /* a key or pad hit while recording: stored on the square the kid was hearing (the press time, less the time sound
    takes to reach the speakers, snapped to the nearest square), added once that square has played (no double hits) */
-function recordDown(track, pitch, oneShot, evTs){
+function recordDown(track, pitch, oneShot, evTs, vel){
   if (!recording || !ctx || track.id !== recTrackId) return null;
   const t = pressTime(evTs), lat = outLatency(), heard = t - lat;
   if (heard < recStart - recStepSec / 2) return null;
   const k = Math.round((heard - recStart) / recStepSec);
-  const p = { trackId:track.id, step:M.recordedStep(t, recStart, song.tempo, recTotal, lat, song.grid), pitch, len:1, t:heard, oneShot, inserted:false };
+  const p = { trackId:track.id, step:M.recordedStep(t, recStart, song.tempo, recTotal, lat, song.grid), pitch, len:1, vel:clamp(vel > 0 ? vel : 0.9, 0, 1), t:heard, oneShot, inserted:false };
   const due = recStart + k * recStepSec;
   const ms = Math.max(0, (due - ctx.currentTime + 0.05) * 1000);
   if (ms <= 5) insertRecorded(p);
@@ -1437,7 +1463,7 @@ function insertRecorded(p){
   p.inserted = true;
   const t = trackById(p.trackId); if (!t) return;
   if (!t.notes.some(n => n.step === p.step && n.pitch === p.pitch)){
-    t.notes.push({ step:p.step, pitch:p.pitch, len:1, vel:0.9 });
+    t.notes.push({ step:p.step, pitch:p.pitch, len:1, vel:p.vel });
     if (p.len > 1) M.setNoteLength(t, p.step, p.pitch, p.len, M.totalSteps(song));
     recChanged = true;
     if (!recording){ commit(); }
@@ -1727,6 +1753,9 @@ function renderPlayArea(){
     $("#ss-pads").innerHTML = names.map((n, i) => '<button type="button" class="pad" style="--tc:var(--' + cat + ')" data-pad="' + i + '" tabindex="-1" aria-label="' + esc(n) + '"><small>' + PADLABEL[i] + '</small><b>' + esc(n) + '</b></button>').join("");
     $("#ss-pads").setAttribute("aria-label", kind === "kit" ? "Drum pads" : "Sound pad");
   }
+  /* keys still held (a chord on a real keyboard, say) stay lit on the keys just drawn */
+  litKeys.clear();
+  held.forEach((h, k) => { if (h.trackId === t.id) lightKey(k, t, h.pitch, true); });
 }
 narrowMq.addEventListener("change", () => { if (song && !$("#editor").hidden) renderPlayArea(); });
 function lightKey(key, track, pitch, down){
@@ -1735,8 +1764,10 @@ function lightKey(key, track, pitch, down){
     const el = kindOf(track) === "pitched" ? $('#ss-keys [data-key="' + pitch + '"]') : $('#ss-pads [data-pad="' + pitch + '"]');
     if (el){ el.classList.add("down"); litKeys.set(key, el); }
   } else {
-    const el = litKeys.get(key); if (el) el.classList.remove("down");
+    /* a key the mouse, a finger or a computer key still holds stays down when the same key on a real keyboard lifts */
+    const el = litKeys.get(key);
     litKeys.delete(key);
+    if (el && ![...litKeys.values()].includes(el)) el.classList.remove("down");
   }
 }
 const litKeys = new Map();
@@ -1931,6 +1962,99 @@ document.addEventListener("keydown", e => {
 });
 document.addEventListener("keyup", e => { if (held.has("k" + e.code)) noteOff("k" + e.code, e.timeStamp); });
 window.addEventListener("blur", releaseAll);
+
+/* ============================================================
+   A real music keyboard over Web MIDI: input only, never sysex. SS.midi reads its messages; here a real key plays the
+   selected track through the same live path as an on-screen key (noteOn), keyed "m" + its pitch, so chords hold
+   together and a key the kid holds with the mouse is never taken over.
+   ============================================================ */
+let midiState = SS.midi.supported(navigator) ? "idle" : "unsupported";   // idle | connected | none | denied | unsupported
+let midiBusy = false;
+function renderMidi(){
+  const box = $("#midi"); if (!box) return;
+  box.hidden = midiState === "unsupported";   // Safari, iPad, iPhone: those browsers can't read a keyboard
+  const on = midiState === "connected", bad = midiState === "none" || midiState === "denied";
+  $("#midi-use").hidden = midiState !== "idle";
+  $("#midi-use").disabled = midiBusy;
+  $("#midi-chip").hidden = !(on || bad);
+  $("#midi-led").classList.toggle("off", !on);
+  $("#midi-chip-text").textContent = on ? "Keyboard connected" : midiState === "denied" ? "Keyboard not allowed" : "No keyboard found";
+  $("#midi-pedal").hidden = !(on && pedalDown);
+  $("#midi-retry").hidden = !bad;
+  $("#midi-retry").disabled = midiBusy;
+  $("#midi-msg").hidden = !bad;
+  $("#midi-msg").textContent = midiState === "denied"
+    ? "Press Try again and choose Allow. If the browser doesn't ask, a grown-up can allow it in the site settings next to the web address."
+    : "Plug the keyboard in with its USB cable and turn it on, then press Try again.";
+}
+/* auto: on opening, only when the browser already allows MIDI here, so it never asks; nothing plugged in then just
+   leaves the button (a keyboard plugged in later still connects by itself) */
+async function midiConnect(auto){
+  if (midiBusy || midiState === "unsupported") return;
+  midiBusy = true; renderMidi();
+  let r = { ok:false, reason:"none" };
+  try { r = await (auto ? SS.midi.autoConnect : SS.midi.connect)(navigator, midiEvent, midiChanged); } catch(e){}
+  midiBusy = false;
+  if (r.ok) midiState = "connected";
+  else if (r.reason === "unsupported") midiState = "unsupported";
+  else if (auto) midiState = midiState === "connected" ? "connected" : "idle";
+  else midiState = r.reason === "denied" ? "denied" : "none";
+  renderMidi();
+}
+/* a keyboard plugged in or pulled out after connecting */
+function midiChanged(s){
+  if (s === "connected") midiState = "connected";
+  else if (midiState === "connected"){
+    midiState = "none";
+    [...held.keys()].forEach(k => { if (k.charAt(0) === "m") noteOff(k); });
+    setPedal(false);
+  }
+  renderMidi();
+}
+function midiEvent(m){
+  if (m.type === "pedal"){ setPedal(!!m.down); return; }
+  const key = "m" + m.pitch;
+  if (m.type === "off"){ noteOff(key, m.ts); return; }
+  if (m.type !== "on" || !song || $("#editor").hidden) return;
+  const t = selTrack(); if (!t) return;
+  const kind = kindOf(t);
+  let pitch = m.pitch;
+  if (kind !== "pitched"){
+    /* drum pads and the effect pad: MIDI 36 is the first pad (the kick), 37 the next, and so on */
+    const slot = m.pitch - 36;
+    if (slot < 0 || slot >= (kind === "kit" ? 8 : 1)) return;
+    pitch = slot;
+  } else showPitch(t, pitch);
+  noteOn(key, t, pitch, m.ts, SS.midi.velToVel(m.vel));
+}
+/* The pedal down holds the notes let go as if the track's Sustain were on; lifting it lets those fade. */
+function setPedal(down){
+  if (down === pedalDown) return;
+  pedalDown = down;
+  if (!down) dampPedal();
+  renderMidi();
+}
+function dampPedal(){
+  if (ctx){
+    const t = ctx.currentTime;
+    pedalRing.forEach(h => {
+      if (!(h.until > t + 0.3)) return;   // already fading out sooner than a lift would
+      try { h.g.gain.setTargetAtTime(0, t, 0.04); } catch(e){}
+      h.srcs.forEach(s => { try { s.stop(t + 0.3); } catch(e){} });
+    });
+  }
+  pedalRing.clear();
+}
+/* A real key outside the keys on screen moves them to show it, but never while a finger, the mouse or a computer
+   key holds a key. */
+function showPitch(t, pitch){
+  const base = baseFor(t), octs = narrowMq.matches ? 1 : 2;
+  if (pitch >= base && pitch <= base + 12 * octs) return;
+  if ([...held.keys()].some(k => k.charAt(0) !== "m")) return;
+  const c = 12 * Math.floor(pitch / 12);
+  kbBase.set(t.id, pitch < base ? c : c - 12 * (octs - 1));
+  renderPlayArea();
+}
 
 /* ============================================================
    Transport and track controls
@@ -2503,6 +2627,7 @@ document.addEventListener("click", async e => {
   if (act === "focus") return toggleFocus();
   if (act === "toggle-overview") return setLayout({ overview:!layout.overview });
   if (act === "toggle-keys") return setLayout({ keys:!layout.keys });
+  if (act === "midi-connect") return midiConnect(false);
   if (!song) return;
   if (act === "home") return showHome();
   if (act === "undo") return undo();
@@ -2540,7 +2665,9 @@ document.addEventListener("click", async e => {
   if (act === "mute" || act === "solo"){ const t = trackById(id); if (!t) return; t[act] = !t[act]; commit(); renderTracks(); renderOverview(); return; }
   if (act === "sustain"){ const t = trackById(id); if (!t) return; toggleTrackSustain(t); commit(); renderTracks(); return; }
 });
-window.addEventListener("pagehide", () => { if (song) saveNow().then(flushPush); });
+window.addEventListener("pagehide", () => { SS.midi.disconnect(); setPedal(false); if (midiState === "connected") midiState = "idle"; if (song) saveNow().then(flushPush); });
+/* back from the browser's page cache: the keyboard connects again if the browser still allows it */
+window.addEventListener("pageshow", e => { if (e.persisted){ renderMidi(); midiConnect(true); } });
 /* leaving the tab: save and send what's waiting. Coming back to Home: bring in what changed in another browser. */
 document.addEventListener("visibilitychange", () => {
   if (document.hidden){ releaseAll(); if (song) saveNow().then(flushPush); return; }
@@ -2829,6 +2956,9 @@ SS.app = {
 };
 
 launch();
+/* a real music keyboard the browser already allows connects by itself, once, without asking */
+renderMidi();
+midiConnect(true);
 })();
 </script>
 </body>

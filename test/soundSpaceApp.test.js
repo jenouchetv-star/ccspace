@@ -545,6 +545,268 @@ describe("Sound Space app page", () => {
     });
   });
 
+  describe("a real music keyboard (Web MIDI)", () => {
+    /** The full source of one top-level function in the page, found by its name (string- and comment-aware). */
+    function fnSrc(name) {
+      const m = new RegExp("\\n(?:async )?function " + name + "\\(").exec(html);
+      if (!m) throw new Error("no function " + name);
+      const open = html.indexOf("{", html.indexOf(")", m.index));
+      let depth = 0;
+      for (let j = open; j < html.length; j++) {
+        const c = html[j];
+        if (c === '"' || c === "'" || c === "`") { for (j++; j < html.length && html[j] !== c; j++) if (html[j] === "\\") j++; continue; }
+        if (c === "/" && html[j + 1] === "*") { j = html.indexOf("*/", j) + 1; continue; }
+        if (c === "/" && html[j + 1] === "/") { j = html.indexOf("\n", j); continue; }
+        if (c === "{") depth++;
+        else if (c === "}" && --depth === 0) return html.slice(m.index + 1, j + 1);
+      }
+      throw new Error("unclosed function " + name);
+    }
+
+    const LIVE = ["outLatency", "pressTime", "noteOn", "noteOff", "releaseAll", "liveKeyPressed", "lightKey",
+      "recordDown", "insertRecorded", "recordUp", "midiEvent", "setPedal", "dampPedal", "showPitch"];
+
+    /** The page's own live-note code (noteOn, noteOff, recording, the MIDI handler) run against a fake audio clock,
+        fake voices and fake keys on screen: two octaves from the track's lowest C, black keys included. */
+    function live(instrumentId = "grand-piano") {
+      const SS = loadSS("model.js", "engine.js", "instruments.js", "midi.js");
+      const M = SS.model;
+      const song = M.newSong();
+      const track = M.addTrack(song, instrumentId);
+      const played = [], timers = [], events = {}, keyEls = new Map(), padEls = new Map();
+      const env = { renders: 0, commits: 0 };
+      const ctx = {
+        currentTime: 10,
+        createGain() { const g = { gain: { value: 1, calls: [], setTargetAtTime(v, t, tc) { this.calls.push([v, t, tc]); } }, connect() {} }; return g; },
+      };
+      const voices = {
+        play(ev, when) { const src = { stops: [], stop(t) { this.stops.push(t); } }; played.push({ ev, when, src }); return [src]; },
+      };
+      const el = (map, k) => { if (!map.has(k)) { const s = new Set(); map.set(k, { classList: { add: (c) => s.add(c), remove: (c) => s.delete(c), contains: (c) => s.has(c) } }); } return map.get(k); };
+      const body = `
+        const SS = env.SS, M = SS.model, E = SS.engine, I = SS.instruments;
+        const song = env.song; let sel = env.track.id; const ctx = env.ctx, voices = env.voices;
+        const liveBus = {}, liveFx = { wet: () => null };
+        let recording = false, countingIn = false, recTrackId = null, recStart = 0, recTotal = 16, recStepSec = 0.3, recTimers = [], recPending = [], recChanged = false;
+        let pedalDown = false; const pedalRing = new Set();
+        const held = new Map(), litKeys = new Map(), kbBase = new Map();
+        const narrowMq = { matches: false };
+        const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+        const audio = () => ctx, ensureLoaded = () => {}, renderMidi = () => {};
+        const trackById = id => song.tracks.find(t => t.id === id) || null, selTrack = () => trackById(sel);
+        const kindOf = t => I.byId(t.instrumentId).kind;
+        const baseFor = t => kbBase.has(t.id) ? kbBase.get(t.id) : 48;
+        const renderPlayArea = () => { env.renders++; };
+        const commit = () => { env.commits++; }, paintRow = () => {}, renderOverview = () => {};
+        const lessonEvent = n => { env.events[n] = (env.events[n] || 0) + 1; };
+        const setTimeout = (fn, ms) => { env.timers.push(fn); return env.timers.length; }, clearTimeout = () => {};
+        const $ = s => {
+          if (s === "#editor") return { hidden: false };
+          let m = /^#ss-keys \\[data-key="(\\d+)"\\]$/.exec(s);
+          if (m) { const p = +m[1], b = baseFor(selTrack()); return p >= b && p <= b + 24 ? env.key(p) : null; }
+          m = /^#ss-pads \\[data-pad="(\\d+)"\\]$/.exec(s);
+          return m ? env.pad(+m[1]) : null;
+        };
+        ${LIVE.map(fnSrc).join("\n")}
+        return { held, litKeys, kbBase, midiEvent, noteOn, noteOff, releaseAll,
+          record(start, stepSec){ recording = true; recTrackId = sel; recStart = start; recStepSec = stepSec; recTotal = M.totalSteps(song); },
+          stopRec(){ recording = false; },
+          get pedalDown(){ return pedalDown; } };`;
+      Object.assign(env, { SS, song, track, ctx, voices, events, timers, key: (p) => el(keyEls, p), pad: (i) => el(padEls, i) });
+      const h = new Function("env", "window", body)(env, {});
+      const lit = (p) => keyEls.has(p) && keyEls.get(p).classList.contains("down");
+      const flush = () => { while (timers.length) timers.shift()(); };
+      return { h, SS, M, song, track, ctx, played, events, env, lit, padLit: (i) => padEls.has(i) && padEls.get(i).classList.contains("down"), flush };
+    }
+
+    it("loads midi.js with the other Sound Space modules", () => {
+      expect(html).toMatch(/<script src="sound-space\/cloud\.js"><\/script>\r?\n<script src="sound-space\/midi\.js"><\/script>/);
+    });
+
+    it("a real note-on plays a live voice at once and lights its key, black keys included; chords hold together", () => {
+      const { h, SS, track, ctx, played, events, lit } = live();
+      h.midiEvent({ type: "on", pitch: 61, vel: 100, ts: 0 });
+      expect(played.length).toBe(1);
+      const v = SS.midi.velToVel(100);
+      expect(played[0].ev).toMatchObject({ instrumentId: "grand-piano", pitch: 61, sustain: false });
+      expect(played[0].ev.vel).toBeCloseTo(v, 6);
+      expect(played[0].ev.gain).toBeCloseTo(track.volume * v, 6);   // velocity multiplied in
+      expect(played[0].when).toBe(ctx.currentTime);                // same as an on-screen key: no added delay
+      expect(lit(61)).toBe(true);
+      expect(events.keys).toBe(1);                                 // a lesson hears it as a key press
+      h.midiEvent({ type: "on", pitch: 64, vel: 30, ts: 0 });
+      h.midiEvent({ type: "on", pitch: 67, vel: 127, ts: 0 });
+      expect(played.map((p) => p.ev.pitch)).toEqual([61, 64, 67]);
+      expect(played[1].ev.gain).toBeLessThan(played[2].ev.gain);   // softer key, softer note
+      expect([61, 64, 67].every(lit)).toBe(true);
+      expect(events.keys).toBe(3);
+      ctx.currentTime = 11;
+      h.midiEvent({ type: "off", pitch: 61, vel: 0, ts: 0 });
+      expect(lit(61)).toBe(false);
+      expect(lit(64) && lit(67)).toBe(true);
+      expect(Math.max(...played[0].src.stops)).toBeLessThanOrEqual(11.3 + 1e-9);   // no Sustain, no pedal: a quick fade
+      expect(played[1].src.stops).toEqual([]);
+    });
+
+    it("never takes a key the kid holds with the mouse", () => {
+      const { h, track, played, lit } = live();
+      h.noteOn("p1", track, 64, 0);
+      h.midiEvent({ type: "on", pitch: 64, vel: 90, ts: 0 });
+      h.midiEvent({ type: "off", pitch: 64, vel: 0, ts: 0 });
+      expect(h.held.has("p1")).toBe(true);
+      expect(played[0].src.stops).toEqual([]);   // the mouse's note still sounds
+      expect(lit(64)).toBe(true);                // and its key stays down
+    });
+
+    it("a key outside the keys on screen moves them to show it, but not while the kid is touching a key", () => {
+      const { h, track, env } = live();
+      h.midiEvent({ type: "on", pitch: 30, vel: 90, ts: 0 });
+      expect(h.kbBase.get(track.id)).toBe(24);
+      expect(env.renders).toBe(1);
+      h.midiEvent({ type: "on", pitch: 90, vel: 90, ts: 0 });
+      expect(h.kbBase.get(track.id)).toBe(72);   // 90 now in view: 72 to 96
+      expect(env.renders).toBe(2);
+      h.noteOn("p7", track, 80, 0);
+      h.midiEvent({ type: "on", pitch: 40, vel: 90, ts: 0 });
+      expect(h.kbBase.get(track.id)).toBe(72);   // a finger is down: the keys stay put
+      expect(env.renders).toBe(2);
+    });
+
+    it("while recording, a real note-on and note-off adds the note with its pitch and scaled velocity", () => {
+      const { h, SS, M, song, track, ctx, flush } = live();
+      h.record(10, 0.125);
+      ctx.currentTime = 10.5;
+      h.midiEvent({ type: "on", pitch: 64, vel: 50, ts: 0 });
+      flush();
+      ctx.currentTime = 11;
+      h.midiEvent({ type: "off", pitch: 64, vel: 0, ts: 0 });
+      const n = track.notes.find((x) => x.pitch === 64);
+      expect(n).toBeTruthy();
+      expect(n.step).toBe(4);
+      expect(n.vel).toBeCloseTo(SS.midi.velToVel(50), 6);
+      expect(n.len).toBe(M.recordedLength(0.5, 0.125));   // the same length rule as the on-screen keys
+      expect(M.validateSong(JSON.parse(JSON.stringify(song)), new Set(SS.instruments.LIST.map((x) => x.id))).ok).toBe(true);
+    });
+
+    it("the sustain pedal holds released notes over the sustain tail, lets go on lift, and never changes Sustain", () => {
+      const { h, SS, track, ctx, played } = live();
+      const tail = SS.engine.SUSTAIN_TAIL;
+      expect(tail).toBeGreaterThanOrEqual(1.5);
+      h.midiEvent({ type: "pedal", down: true });
+      expect(h.pedalDown).toBe(true);
+      h.midiEvent({ type: "on", pitch: 60, vel: 90, ts: 0 });
+      ctx.currentTime = 11;
+      h.midiEvent({ type: "off", pitch: 60, vel: 0, ts: 0 });
+      expect(Math.min(...played[0].src.stops)).toBeGreaterThanOrEqual(11 + 1.5);
+      expect(track.sustain).toBe(false);
+      ctx.currentTime = 11.4;
+      h.midiEvent({ type: "pedal", down: false });
+      expect(h.pedalDown).toBe(false);
+      expect(played[0].src.stops[played[0].src.stops.length - 1]).toBeLessThanOrEqual(11.4 + 0.3 + 1e-9);
+      expect(track.sustain).toBe(false);
+      // with the pedal up again, a released note fades quickly
+      h.midiEvent({ type: "on", pitch: 62, vel: 90, ts: 0 });
+      ctx.currentTime = 12;
+      h.midiEvent({ type: "off", pitch: 62, vel: 0, ts: 0 });
+      expect(Math.max(...played[1].src.stops)).toBeLessThanOrEqual(12.3 + 1e-9);
+    });
+
+    it("Home or a closing song lets go of every held note, pedal ones too", () => {
+      const { h, ctx, played } = live();
+      h.midiEvent({ type: "pedal", down: true });
+      h.midiEvent({ type: "on", pitch: 60, vel: 90, ts: 0 });
+      h.midiEvent({ type: "off", pitch: 60, vel: 0, ts: 0 });   // ringing on the pedal
+      h.midiEvent({ type: "on", pitch: 64, vel: 90, ts: 0 });   // still held
+      ctx.currentTime = 10.2;
+      h.releaseAll();
+      expect(h.held.size).toBe(0);
+      for (const p of played) expect(p.src.stops[p.src.stops.length - 1]).toBeLessThanOrEqual(10.2 + 0.3 + 1e-9);
+      for (const f of ["openSong", "showHome"]) expect(section(new RegExp("function " + f + "\\("), "\n}")).toContain("stopAll();");
+      expect(section(/function stopAll\(/, "\n}")).toContain("releaseAll();");
+    });
+
+    it("on a drum kit, real keys from 36 play the pads (36 the kick, 37 the next pad), and other keys are ignored", () => {
+      const { h, played, padLit, events } = live("classic-kit");
+      for (const p of [36, 38, 43, 35, 44, 60]) h.midiEvent({ type: "on", pitch: p, vel: 100, ts: 0 });
+      expect(played.map((p) => p.ev.pitch)).toEqual([0, 2, 7]);
+      expect(padLit(0) && padLit(2) && padLit(7)).toBe(true);
+      expect(events.pads).toBe(3);
+      const fx = live("siren");
+      for (const p of [36, 37]) fx.h.midiEvent({ type: "on", pitch: p, vel: 100, ts: 0 });
+      expect(fx.played.map((p) => p.ev.pitch)).toEqual([0]);   // an effect has one pad
+    });
+
+    it("every live key goes through one liveKeyPressed hook, for lessons now and lit keys later", () => {
+      expect(section(/function noteOn\(/, "function noteOff")).toContain("liveKeyPressed(pitch, oneShot)");
+      expect(fnSrc("liveKeyPressed")).toContain('lessonEvent(oneShot ? "pads" : "keys")');
+    });
+
+    describe("the keyboard controls in the keys' bar", () => {
+      const bar = section(/<div class="secbar secbar--keys" id="kbd-bar">/, '<div class="kbd" id="kbd">');
+
+      function ui(state, pedal = false) {
+        const els = {};
+        const get = (s) => { if (!els[s]) { const c = new Set(); els[s] = { hidden: false, textContent: "", disabled: false, classList: { toggle: (k, on) => (on ? c.add(k) : c.delete(k)), contains: (k) => c.has(k) } }; } return els[s]; };
+        new Function("$", "midiState", "pedalDown", "midiBusy", fnSrc("renderMidi") + "; renderMidi();")(get, state, pedal, false);
+        return get;
+      }
+
+      it("sit in the keys' bar, hidden until the page knows the browser can read a keyboard", () => {
+        expect(bar).toMatch(/<div class="midi" id="midi"[^>]*hidden/);
+        expect(bar).toMatch(/<button type="button" class="btn" id="midi-use" data-act="midi-connect"[^>]*><svg[^>]*>[\s\S]*?<\/svg>Use a real keyboard<\/button>/);
+        expect(bar).toMatch(/id="midi-retry" data-act="midi-connect"[^>]*>Try again</);
+        expect(html).toMatch(/let midiState = SS\.midi\.supported\(navigator\) \? "idle" : "unsupported"/);
+        expect(ui("unsupported")("#midi").hidden).toBe(true);   // Safari, iPad, iPhone: nothing at all
+      });
+
+      it("shows the button before connecting", () => {
+        const $ = ui("idle");
+        expect($("#midi").hidden).toBe(false);
+        expect($("#midi-use").hidden).toBe(false);
+        expect($("#midi-chip").hidden).toBe(true);
+        expect($("#midi-retry").hidden).toBe(true);
+        expect($("#midi-msg").hidden).toBe(true);
+      });
+
+      it("shows a lit chip once connected, and Pedal down while the pedal is down", () => {
+        let $ = ui("connected");
+        expect($("#midi-use").hidden).toBe(true);
+        expect($("#midi-chip").hidden).toBe(false);
+        expect($("#midi-chip-text").textContent).toBe("Keyboard connected");
+        expect($("#midi-led").classList.contains("off")).toBe(false);
+        expect($("#midi-pedal").hidden).toBe(true);
+        $ = ui("connected", true);
+        expect($("#midi-pedal").hidden).toBe(false);
+        expect(bar).toMatch(/id="midi-pedal"[^>]*>Pedal down</);
+        expect(cssText()).toMatch(/\.midi__led\{[^}]*#14B8A6/);
+      });
+
+      it("says what went wrong, with Try again and how to plug in", () => {
+        let $ = ui("none");
+        expect($("#midi-chip-text").textContent).toBe("No keyboard found");
+        expect($("#midi-led").classList.contains("off")).toBe(true);
+        expect($("#midi-retry").hidden).toBe(false);
+        expect($("#midi-msg").hidden).toBe(false);
+        expect($("#midi-msg").textContent).toBe("Plug the keyboard in with its USB cable and turn it on, then press Try again.");
+        $ = ui("denied");
+        expect($("#midi-chip-text").textContent).toBe("Keyboard not allowed");
+        expect($("#midi-retry").hidden).toBe(false);
+        expect($("#midi-pedal").hidden).toBe(true);
+      });
+
+      it("tries the keyboard once on opening without a prompt, and lets it go when the page goes away", () => {
+        expect(html).toContain("midiConnect(true)");
+        expect(fnSrc("midiConnect")).toContain("SS.midi.autoConnect");
+        expect(html).toMatch(/window\.addEventListener\("pagehide", \(\) => \{[^\n]*SS\.midi\.disconnect\(\)/);
+        expect(html).not.toMatch(/requestMIDIAccess\(\{\s*sysex:\s*true/);
+      });
+
+      it("Help tells grown-ups how", () => {
+        expect(html).toContain("Have a music keyboard? Plug it into the computer with USB and press <b>Use a real keyboard</b>.");
+      });
+    });
+  });
+
   it("closes through the site and never uses the microphone", () => {
     expect(html).toMatch(/postMessage\(\{\s*ccsStudio:\s*"close"\s*\}/);
     for (const api of ["getUserMedia", "getDisplayMedia", "MediaRecorder", "createMediaStreamSource", "SpeechRecognition"]) {
