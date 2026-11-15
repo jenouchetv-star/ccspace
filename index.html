@@ -14185,6 +14185,24 @@ async function artCloudCall(action, extra){
     return res.data;
   } catch(_e){ return { ok: false, error: "network" }; }
 }
+/** For Sound Space (opened inside the site): save or load a member's songs in their account (the sound-cloud
+    function). The same sign-in as Art Space's, forgotten the same way when the server no longer takes it. */
+async function soundCloudCall(action, extra){
+  const session = portalSavedSession();
+  if (!session) return { ok: false, error: "no_session" };
+  try {
+    const res = await sb.functions.invoke("sound-cloud", { body: Object.assign({}, extra || {}, { action: action, session: session }) });
+    if (res.error || !res.data) return { ok: false, error: "network" };
+    if (res.data.error === "no_session" && portalSavedSession() === session) artCloudForget();
+    return res.data;
+  } catch(_e){ return { ok: false, error: "network" }; }
+}
+/** Sound Space usage: add one to today's anonymous total for an event (opened, signin_shown, signed_in, song_played,
+    song_exported). Nothing about the person is sent. Admins aren't counted. */
+function soundCount(ev){
+  if (portalIsAdmin()) return;
+  try { sb.rpc("sound_space_count", { ev: ev }).then(() => {}, () => {}); } catch(_e){ /* a lost count never matters */ }
+}
 /* set when Art Space signed someone in or out, so the page behind it is redrawn when the app closes */
 let ART_SIGNIN_CHANGED = false;
 function artCloudForget(){
@@ -14215,8 +14233,9 @@ async function artSignInStart(email){
   if (r.status === "needs_consent") return { ok: false, notOnList: true, message: "That email isn’t on our mailing list yet. Press Join free to sign up. It’s free." };
   return { ok: true };
 }
-/** Step 2: the code from the email. Right, and the whole site is signed in (the same sign-in as the Subscriber's Portal). */
-async function artSignInCode(email, code){
+/** Step 2: the code from the email. Right, and the whole site is signed in (the same sign-in as the Subscriber's Portal).
+    `app` says which studio app asked ("art" or "sound"), so each counts its own sign-ins. */
+async function artSignInCode(email, code, app = "art"){
   code = String(code || "").replace(/\D/g, "");
   if (code.length !== 6) return { ok: false, message: "Type the 6 numbers from the email." };
   const r = await portalCall("verify_code", { email: String(email || ""), code: code });
@@ -14232,7 +14251,7 @@ async function artSignInCode(email, code){
   portalSaveSession(r.session);
   PortalState.phase = "idle";
   ART_SIGNIN_CHANGED = true;
-  artCount("signed_in");
+  if (app === "sound") soundCount("signed_in"); else artCount("signed_in");
   return { ok: true };
 }
 

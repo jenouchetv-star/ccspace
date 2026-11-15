@@ -14,6 +14,7 @@
 <script src="sound-space/icons.js"></script>
 <script src="sound-space/library.js"></script>
 <script src="sound-space/lessons.js"></script>
+<script src="sound-space/cloud.js"></script>
 <!--
   Sound Space (Chike's Creative Space): kids make their own short songs. Add tracks, pick an instrument for each,
   then play the piano keys or drum pads, record what you play (notes, never audio), or tap notes into the grid.
@@ -23,8 +24,10 @@
   instrument pictures), library.js (Beats and patterns, the starter song) and lessons.js (Music lessons); this page
   is the screens. No microphone, camera or speech anywhere. Sound only starts after a tap, click or key press.
 
+  Saving lives in sound-space/cloud.js: this browser's store, and the account copy through the site's
+  soundCloudCall when a member is signed in.
+
   Hooks for later work:
-  - TASK 9: saveSong/listSongs/loadSong/deleteSong (the "Saving" section) gain the account copy (soundCloudCall).
   - TASK 10: openExport() and openFile() get the WAV export and the full file checks.
 -->
 <style>
@@ -864,7 +867,7 @@ body.kbd-collapsed #kbd{ display:none; }
 <script>
 (function(){
 "use strict";
-const SS = window.SoundSpace, M = SS.model, E = SS.engine, I = SS.instruments, L = SS.library, LS = SS.lessons;
+const SS = window.SoundSpace, M = SS.model, E = SS.engine, I = SS.instruments, L = SS.library, LS = SS.lessons, C = SS.cloud;
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
@@ -938,8 +941,8 @@ const HELP = [
     "<p>Pick <b>Music lessons</b> on the first screen. Each lesson opens a song and shows a tip next to the button it is about. Do what the tip says and <b>Next step</b> lights up. You learn one music word in each lesson, and the song you made stays in Recent.</p>"],
   ["Start", "Show and hide parts", "hide show panel focus tracks library beats overview keys pads fold collapse layout",
     "<p>The buttons at the top show or hide the <b>Tracks</b> panel (" + K("[") + ") and the <b>Beats and patterns</b> panel (" + K("]") + "). <b>Focus</b> (" + K("\\") + ") hides both and folds the overview away; press it again to bring them back. The arrows on the <b>Overview</b> and <b>Piano keys</b> bars fold those parts away to give the grid more room. Sound Space remembers your layout on this device.</p>"],
-  ["Saving", "Saving and undo", "save undo redo mistake",
-    "<p>Your song saves as you go. " + K("Ctrl+Z") + " undoes and " + K("Ctrl+Y") + " redoes. The arrows at the top do the same.</p>"],
+  ["Saving", "Saving and undo", "save undo redo mistake account device browser",
+    "<p>Your song saves as you go, a moment after each change. The line at the top says where: <b>Saved on this device</b>, then <b>Saved to your account</b> when you’re signed in, so it’s there in any browser where you sign in. " + K("Ctrl+Z") + " undoes and " + K("Ctrl+Y") + " redoes. The arrows at the top do the same.</p>"],
   ["Saving", "Light or dark", "light dark theme night",
     "<p>The sun and moon button switches between light and dark. This device remembers your choice.</p>"]
 ];
@@ -996,44 +999,41 @@ function instIcon(inst, size){
 }
 
 /* ============================================================
-   Saving: songs keep in this browser (IndexedDB "ccs-sound-space", store "songs"), with a memory fallback.
-   TASK 9 replaces or extends these four functions to keep the account copy too (soundCloudCall).
+   Saving: songs keep in this browser (cloud.js's store: IndexedDB "ccs-sound-space", store "songs", with a memory
+   fallback), and for a signed-in member in their account too (see "Your account" below).
    ============================================================ */
-const DB_NAME = "ccs-sound-space", DB_STORE = "songs";
-let dbp = null, dbOk = true; const memStore = new Map();
+let storeP = null, dbOk = true;
 function openDb(){
-  if (dbp) return dbp;
-  dbp = new Promise((res, rej) => {
-    try {
-      const r = indexedDB.open(DB_NAME, 1);
-      r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains(DB_STORE)) r.result.createObjectStore(DB_STORE, { keyPath:"id" }); };
-      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-    } catch(e){ rej(e); }
-  }).catch(() => { dbOk = false; return null; });
-  return dbp;
+  if (!storeP) storeP = C.openStore().then(st => { dbOk = st.ok; return st; });
+  return storeP;
 }
-async function dbDo(mode, fn){
-  const db = await openDb();
-  if (!db) return fn(null);
-  return new Promise((res, rej) => {
-    const t = db.transaction(DB_STORE, mode), s = t.objectStore(DB_STORE), req = fn(s);
-    t.oncomplete = () => res(req && req.result !== undefined ? req.result : undefined);
-    t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
-  });
+/* the open song's owner here (the account it was last in step with), kept beside the song, never inside it */
+let songOwner = "";
+async function saveSong(s){ const st = await openDb(); return st.put(Object.assign(clone(s), songOwner ? { owner:songOwner } : {})); }
+async function listSongs(){ const st = await openDb(); return (await st.list()).filter(r => !r.deleted).map(C.songOf).sort((a, b) => (b.updatedMs || 0) - (a.updatedMs || 0)); }
+async function loadRecord(id){ const st = await openDb(); return st.get(id); }
+async function loadSong(id){ return C.songOf(await loadRecord(id)); }
+/* a deleted song leaves a marker here until the account has the delete too, so it never comes back from there */
+async function deleteSong(id){
+  const st = await openDb(), rec = await st.get(id);
+  if (song && song.id === id){ clearTimeout(pushTimer); pushTimer = 0; }
+  await st.put(C.tombstone(id, Math.max(Date.now(), ((rec && rec.updatedMs) || 0) + 1), rec && rec.owner));
+  accountHas.delete(id);
+  if (!cloud.on()) return;
+  const r = await cloud.call("delete", { id });
+  if (r && r.ok) await st.remove(id);
 }
-async function saveSong(s){ const copy = clone(s); return dbDo("readwrite", st => { if (st) return st.put(copy); memStore.set(copy.id, copy); }); }
-async function listSongs(){ const r = await dbDo("readonly", st => st ? st.getAll() : null); return (r || [...memStore.values()]).sort((a, b) => (b.updatedMs || 0) - (a.updatedMs || 0)); }
-async function loadSong(id){ const r = await dbDo("readonly", st => st ? st.get(id) : null); return r || memStore.get(id) || null; }
-async function deleteSong(id){ return dbDo("readwrite", st => { if (st) return st.delete(id); memStore.delete(id); }); }
 
 let saveTimer = 0;
 function setStatus(t, bad){ const el = $("#status"); el.textContent = t; el.classList.toggle("bad", !!bad); }
 /* the status for a song that has nothing waiting to save, honest when this browser blocks saving */
 function freshStatus(){ const st = statusFor(dbOk); setStatus(st.text, st.bad); }
+/* the same, but a song the account already has as it is here says so */
+function savedStatus(){ if (song && cloud.on() && accountHas.get(song.id) === song.updatedMs) setStatus(C.STATUS.ACCOUNT, false); else freshStatus(); }
 function queueSave(){
   if (!song) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveNow, 800);
+  saveTimer = setTimeout(saveNow, C.AUTOSAVE_MS);
 }
 async function saveNow(){
   clearTimeout(saveTimer); saveTimer = 0;
@@ -1041,6 +1041,7 @@ async function saveNow(){
   try {
     await saveSong(song);
     freshStatus();
+    queuePush();
   } catch(e){ setStatus("Couldn’t save just now", true); }
 }
 
@@ -1252,10 +1253,12 @@ function redo(){ if (!hist || busy()) return; const s = hist.redo(); if (s){ rep
 function openSong(s, opts){
   endLesson();
   stopAll();
+  flushPush();
   song = s; stash = {}; playedOnce = false;
+  songOwner = (opts && opts.owner) || "";
   clearTimeout(saveTimer); saveTimer = 0;
   freshStatus();
-  openDb().then(() => { if (song === s && !saveTimer) freshStatus(); });
+  openDb().then(() => { if (song === s && !saveTimer) savedStatus(); });
   hist = M.createHistory(100); hist.push(song);
   sel = song.tracks.length ? song.tracks[0].id : null;
   gridFocus = { r:0, c:0 };
@@ -1270,10 +1273,11 @@ function openSong(s, opts){
 async function showHome(){
   endLesson();
   stopAll();
-  if (song) await saveNow();
+  if (song){ await saveNow(); await flushPush(); }
   $("#editor").hidden = true; $("#home").hidden = false;
   startHomeFx();
   await paintHome();
+  syncHome();
 }
 
 function addTrackWith(id){
@@ -2368,7 +2372,9 @@ let blockedToastShown = false;
 async function paintHome(){
   let list = [];
   try { list = await listSongs(); } catch(e){}
-  $("#home-lede").textContent = dbOk ? "Pick a way to start. Your songs save on this device as you go."
+  paintSpace();
+  $("#home-lede").textContent = cloud.on() ? "Pick a way to start. Your songs save to your account as you go, so they’re there in any browser where you sign in."
+    : dbOk ? "Pick a way to start. Your songs save on this device as you go."
     : "Pick a way to start. This browser blocked saving, so songs won’t be kept after you close Sound Space.";
   const g = $("#gallery");
   g.innerHTML = list.length ? list.map(s => {
@@ -2383,12 +2389,13 @@ async function paintHome(){
   if (!dbOk && !blockedToastShown){ blockedToastShown = true; toast("This browser can’t keep songs between visits."); }
 }
 async function openStored(id){
-  let raw = null;
-  try { raw = await loadSong(id); } catch(e){ toast("That song couldn’t be opened just now. Try again."); return; }
+  let rec = null;
+  try { rec = await loadRecord(id); } catch(e){ toast("That song couldn’t be opened just now. Try again."); return; }
+  const raw = C.songOf(rec);
   if (!raw){ toast("That song couldn’t be opened."); return paintHome(); }
   const v = M.validateSong(raw, CATALOG_IDS);
   if (!v.ok){ toast("That song couldn’t be opened."); return; }
-  openSong(v.song, { missing:v.missing });
+  openSong(v.song, { missing:v.missing, owner:rec.owner || "" });
 }
 $("#gallery").addEventListener("click", async e => {
   const o = e.target.closest("[data-open]"); if (o){ audio(); return openStored(o.dataset.open); }
@@ -2396,7 +2403,8 @@ $("#gallery").addEventListener("click", async e => {
   if (d){
     let s = null;
     try { s = await loadSong(d.dataset.del); } catch(err){}
-    if (await ask("Delete this song?", "“" + ((s && s.title) || "My song") + "” will be gone from this device.", "Delete")){
+    const name = "“" + ((s && s.title) || "My song") + "”";
+    if (await ask("Delete this song?", cloud.on() ? name + " will be gone from your account and every browser you sign in on." : name + " will be gone from this device.", "Delete")){
       try { await deleteSong(d.dataset.del); } catch(err){ toast("That song couldn’t be deleted just now. Try again."); }
       paintHome();
     }
@@ -2430,7 +2438,7 @@ document.addEventListener("click", async e => {
   const act = b.dataset.act;
   if (act === "close-app"){
     stopAll();
-    (song ? saveNow() : Promise.resolve()).finally(() => {
+    (song ? saveNow().then(flushPush) : Promise.resolve()).finally(() => {
       if (window.parent && window.parent !== window){ try { window.parent.postMessage({ ccsStudio:"close" }, location.origin); } catch(err){} }
       else location.href = "/create/studio";
     });
@@ -2481,17 +2489,124 @@ document.addEventListener("click", async e => {
   if (act === "retry") return retryLoad(trackById(id) ? trackById(id).instrumentId : id);
   if (act === "mute" || act === "solo"){ const t = trackById(id); if (!t) return; t[act] = !t[act]; commit(); renderTracks(); renderOverview(); return; }
 });
-window.addEventListener("pagehide", () => { if (song) saveNow(); });
-document.addEventListener("visibilitychange", () => { if (document.hidden){ releaseAll(); if (song) saveNow(); } });
+window.addEventListener("pagehide", () => { if (song) saveNow().then(flushPush); });
+/* leaving the tab: save and send what's waiting. Coming back to Home: bring in what changed in another browser. */
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden){ releaseAll(); if (song) saveNow().then(flushPush); return; }
+  if ($("#editor").hidden && !launching) syncHome();
+});
 
 /* ============================================================
-   Your account: the site that opens the app holds the sign-in (Art Space's bridge). Opened on its own, the app
-   just keeps songs in this browser. TASK 9 adds the account copy through soundCloudCall.
+   Your account: songs also kept with a mailing-list member's account (their Subscriber's Portal sign-in), so they
+   show in any browser where that grown-up signs in. The copy in this browser is still the one you work on; the
+   account copy follows it. The site that opens the app holds the sign-in and the connection to the server
+   (soundCloudCall, Sound Space's own bridge); opened on its own, the app just keeps songs in this browser.
    ============================================================ */
 const cloud = {
-  host(){ try { const w = window.parent; if (w && w !== window && typeof w.artCloudSignedIn === "function" && typeof w.artSignInStart === "function") return w; } catch(e){} return null; },
-  on(){ const w = this.host(); try { return !!(w && w.artCloudSignedIn()); } catch(e){ return false; } }
+  email: "",
+  host(){ return C.host(window); },
+  on(){ const w = this.host(); try { return !!(w && w.artCloudSignedIn()); } catch(e){ return false; } },
+  async call(action, extra){
+    const w = this.host();
+    if (!w) return { ok:false, error:"no_session" };
+    let r;
+    try { r = (await w.soundCloudCall(action, extra)) || { ok:false, error:"network" }; }
+    catch(e){ return { ok:false, error:"network" }; }
+    if (r.error === "no_session") cloudLost();
+    return r;
+  }
 };
+/* songId -> the updatedMs the account has, from the last sync or save that reached it */
+const accountHas = new Map();
+/* The sign-in ended (after 30 days, or the grown-up left the mailing list), found on a save or a sync. Keep the song
+   in this browser, go back to Home, and ask them to sign in again. Songs in this browser are never removed for this. */
+let lostSignIn = false;
+function cloudLost(){
+  if (lostSignIn || launching) return;
+  lostSignIn = true;
+  clearTimeout(pushTimer); pushTimer = 0;
+  accountHas.clear();
+  setStatus("You’re not signed in, so your song is saving on this device only.");
+  (song && !$("#editor").hidden ? showHome() : paintHome()).catch(() => {}).finally(() => showSignIn(true));
+}
+/* the open song goes to the account a moment after it saved here: at most once every few seconds, never on every tap */
+let pushTimer = 0, pushing = null, lastPushAt = 0;
+const mineToPush = () => !songOwner || !cloud.email || songOwner === cloud.email;
+function queuePush(){
+  clearTimeout(pushTimer); pushTimer = 0;
+  if (!song || !cloud.on() || !mineToPush()) return;
+  pushTimer = setTimeout(pushNow, Math.max(0, lastPushAt + C.PUSH_GAP_MS - Date.now()));
+}
+/* the account's small picture of a song: Recent's picture */
+function thumbOf(s){ try { return "data:image/svg+xml;base64," + btoa(miniPicture(s).replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ')); } catch(e){ return undefined; } }
+function pushNow(){
+  clearTimeout(pushTimer); pushTimer = 0;
+  if (!song || !cloud.on() || !mineToPush()) return pushing || Promise.resolve();
+  const s = song, copy = clone(song);
+  lastPushAt = Date.now();
+  const run = (pushing || Promise.resolve()).then(() => cloud.call("put", { project:C.forCloud(copy, thumbOf(copy)) })).then(r => {
+    if (r && r.ok && !r.stale){
+      accountHas.set(copy.id, copy.updatedMs);
+      if (cloud.email && !songOwner && song === s) songOwner = cloud.email;
+    }
+    if (r && r.error === "full" && !fullWarned){ fullWarned = true; toast("Your account has 200 songs, the most it keeps. Delete some to save new ones there."); }
+    if (r && r.error === "slow_down" && song === s){ clearTimeout(pushTimer); pushTimer = setTimeout(pushNow, C.RETRY_MS); }
+    /* the status speaks for the song as it is now: a newer change waiting to save keeps the status it has */
+    if (song === s && !saveTimer && song.updatedMs === copy.updatedMs && !(r && r.error === "no_session")){ const st = C.putStatus(r); setStatus(st.text, st.bad); }
+  }, () => {});
+  pushing = run;
+  run.then(() => { if (pushing === run) pushing = null; });
+  return run;
+}
+/** Before leaving the song: send what's waiting to the account. */
+function flushPush(){ return pushTimer ? pushNow() : (pushing || Promise.resolve()); }
+/* Home: bring this browser and the account into step (newer copies win, deletes stay deleted), then repaint */
+let syncing = null, fullWarned = false;
+function syncHome(){
+  if (!cloud.on()) return Promise.resolve(false);
+  if (syncing) return syncing;
+  syncing = openDb().then(store => C.syncSongs({
+    store, call: (a, x) => cloud.call(a, x),
+    accept: p => { const v = M.validateSong(p, CATALOG_IDS); return v.ok ? v.song : null; },
+    isOpen: id => !$("#editor").hidden && !!song && song.id === id,
+    thumb: thumbOf
+  })).then(r => {
+    if (!r.ok) return false;
+    cloud.email = r.email;
+    accountHas.clear(); r.inAccount.forEach((v, k) => accountHas.set(k, v));
+    if (r.full && !fullWarned){ fullWarned = true; toast("Your account has 200 songs, the most it keeps. Delete some to save new ones there."); }
+    if ($("#editor").hidden) paintHome(); else savedStatus();
+    return r.changed;
+  }).catch(() => false).finally(() => { syncing = null; });
+  return syncing;
+}
+/** The account's space at the top of Home: songs and megabytes used, amber from 80%, red when full. Only for a
+    signed-in grown-up; songs kept only in this browser have no account limit to show. */
+let spaceAsk = 0;
+async function paintSpace(){
+  const box = $("#space");
+  if (!box) return;
+  if (!cloud.on()){ box.hidden = true; return; }
+  const ask = ++spaceAsk;
+  const r = await cloud.call("usage", {});
+  if (ask !== spaceAsk) return;
+  if (!r || !r.ok || !r.maxSongs || !r.maxBytes){ box.hidden = true; return; }
+  const mb = v => (Math.round(v / 100000) / 10).toFixed(1);
+  const pSongs = Math.min(100, r.songs / r.maxSongs * 100), pBytes = Math.min(100, r.bytes / r.maxBytes * 100);
+  const top = Math.max(pSongs, pBytes);
+  const level = top >= 100 ? "full" : top >= 80 ? "warn" : "";
+  const note = level === "full" ? "Your account is full. New songs save on this device only until you delete some."
+    : level === "warn" ? "Your account is nearly full. Delete songs you don’t need to make room." : "";
+  box.className = "space" + (level ? " space--" + level : "");
+  box.innerHTML = '<span class="space__icon"><i data-lucide="' + (level === "full" ? "circle-alert" : level === "warn" ? "triangle-alert" : "hard-drive") + '"></i></span>'
+    + '<div class="space__main"><div class="space__line"><span><b>Account space</b>' + (r.email ? ' · saved to ' + esc(r.email) : "") + '</span>'
+    + '<span><b>' + Number(r.songs) + '</b> of ' + Number(r.maxSongs) + ' songs · <b>' + mb(r.bytes) + ' MB</b> of ' + Math.round(r.maxBytes / 1000000) + ' MB</span></div>'
+    + '<div class="space__bars"><div class="space__bar" role="img" aria-label="Songs: ' + Math.round(pSongs) + '% used"><i style="width:' + pSongs.toFixed(1) + '%"></i></div>'
+    + '<div class="space__bar" role="img" aria-label="Space: ' + Math.round(pBytes) + '% used"><i style="width:' + pBytes.toFixed(1) + '%"></i></div></div>'
+    + (note ? '<div class="space__note">' + note + '</div>' : "") + '</div>';
+  box.hidden = false;
+  icons();
+}
 /* usage for the admin page: an anonymous daily total, Sound Space's own counter (admins aren't counted) */
 function count(ev){ try { const w = cloud.host(); if (w && typeof w.soundCount === "function") w.soundCount(ev); } catch(e){} }
 
@@ -2507,10 +2622,9 @@ async function signInGood(){
   const w = cloud.host();
   if (!w) return true;
   if (cloud.on()){
-    const call = typeof w.soundCloudCall === "function" ? w.soundCloudCall : (typeof w.artCloudCall === "function" ? w.artCloudCall : null);
     let r = null;
-    try { r = call ? await call("list") : { ok:true }; } catch(e){}
-    if (!r || r.ok || r.error !== "no_session") return true;
+    try { r = await w.soundCloudCall("list"); } catch(e){}
+    if (!r || r.ok || r.error !== "no_session") return true;   // signed in (or offline: keep working in this browser)
     signInEnded = true;
   }
   try { return !!(w.artSkipSignIn && w.artSkipSignIn()); } catch(e){ return false; }
@@ -2526,6 +2640,7 @@ async function launch(){
   if (!good){ await paintHome(); showSignIn(signInEnded); return; }
   launchStep("Opening your songs…", 82);
   await paintHome();
+  syncHome();
   launchStep("Ready", 100);
   await wait(350);
   closeLaunch();
@@ -2587,9 +2702,12 @@ async function checkCode(){
     inputs[0].focus();
     return;
   }
+  /* signed in: back to the loading card for a moment, then their songs (with the ones from their account) */
+  lostSignIn = false;
   $("#signin").hidden = true; $("#splash").hidden = false;
   launchStep("Opening your songs…", 82);
   await paintHome();
+  syncHome();
   launchStep("Ready", 100);
   await wait(350);
   closeLaunch();
