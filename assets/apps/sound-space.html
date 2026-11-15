@@ -1147,7 +1147,9 @@ function noteOn(key, track, pitch, evTs, vel){
   const oneShot = inst.kind !== "pitched", v = vel > 0 ? vel : 0.9;
   const g = c.createGain(); g.connect(liveBus);
   const wet = liveFx.wet(track.reverb || 0); if (wet) g.connect(wet);
-  const ev = { instrumentId:track.instrumentId, pitch, len:1, vel:v, gain:track.volume * v, dur: oneShot ? 0.6 : 4, sustain:!!track.sustain };
+  /* a real keyboard's key ("m") sounds for as long as the player holds it or the pedal keeps it, so its voice holds up
+     to 12 s: noteOff, the pedal's lift and releaseAll (blur, hide, unplug, a track change) end it before that */
+  const ev = { instrumentId:track.instrumentId, pitch, len:1, vel:v, gain:track.volume * v, dur: oneShot ? 0.6 : key.charAt(0) === "m" ? 12 : 4, sustain:!!track.sustain };
   let srcs = [];
   try { srcs = voices.play(ev, c.currentTime, g) || []; } catch(e){}
   held.set(key, { g, srcs, oneShot, sus: !oneShot && !!track.sustain, rec: recordDown(track, pitch, oneShot, evTs, v), trackId:track.id, pitch });
@@ -2012,10 +2014,12 @@ function midiChanged(s){
   renderMidi();
 }
 function midiEvent(m){
-  if (m.type === "pedal"){ setPedal(!!m.down); return; }
+  /* every open Sound Space tab hears the keyboard: one in the background never plays or records, but still lets
+     go of a key or the pedal, so nothing sticks */
+  if (m.type === "pedal"){ if (!m.down || !document.hidden) setPedal(!!m.down); return; }
   const key = "m" + m.pitch;
   if (m.type === "off"){ noteOff(key, m.ts); return; }
-  if (m.type !== "on" || !song || $("#editor").hidden) return;
+  if (m.type !== "on" || document.hidden || !song || $("#editor").hidden) return;
   const t = selTrack(); if (!t) return;
   const kind = kindOf(t);
   let pitch = m.pitch;
@@ -2024,7 +2028,12 @@ function midiEvent(m){
     const slot = m.pitch - 36;
     if (slot < 0 || slot >= (kind === "kit" ? 8 : 1)) return;
     pitch = slot;
-  } else showPitch(t, pitch);
+  } else {
+    /* a key the instrument doesn't play is left silent, like the keys Lower and Higher can't reach */
+    const inst = instOf(t), r = inst && inst.range;
+    if (r && (pitch < r[0] || pitch > r[1])) return;
+    showPitch(t, pitch);
+  }
   noteOn(key, t, pitch, m.ts, SS.midi.velToVel(m.vel));
 }
 /* The pedal down holds the notes let go as if the track's Sustain were on; lifting it lets those fade. */
@@ -2052,7 +2061,13 @@ function showPitch(t, pitch){
   if (pitch >= base && pitch <= base + 12 * octs) return;
   if ([...held.keys()].some(k => k.charAt(0) !== "m")) return;
   const c = 12 * Math.floor(pitch / 12);
-  kbBase.set(t.id, pitch < base ? c : c - 12 * (octs - 1));
+  let nb = pitch < base ? c : c - 12 * (octs - 1);
+  /* never past where Lower and Higher can go (the same limits as their buttons) */
+  const inst = instOf(t), r = inst && inst.range ? inst.range : [0, 127];
+  while (nb > r[1] - 5) nb -= 12;
+  while (nb + 12 * octs < r[0] + 5) nb += 12;
+  if (nb === base) return;
+  kbBase.set(t.id, nb);
   renderPlayArea();
 }
 

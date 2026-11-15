@@ -568,19 +568,29 @@ describe("Sound Space app page", () => {
 
     /** The page's own live-note code (noteOn, noteOff, recording, the MIDI handler) run against a fake audio clock,
         fake voices and fake keys on screen: two octaves from the track's lowest C, black keys included. */
-    function live(instrumentId = "grand-piano") {
+    function live(instrumentId = "grand-piano", opts = {}) {
       const SS = loadSS("model.js", "engine.js", "instruments.js", "midi.js");
       const M = SS.model;
       const song = M.newSong();
       const track = M.addTrack(song, instrumentId);
       const played = [], timers = [], events = {}, keyEls = new Map(), padEls = new Map();
-      const env = { renders: 0, commits: 0 };
+      const env = { renders: 0, commits: 0, narrow: { matches: !!opts.narrow }, document: { hidden: false } };
+      /* an audio clock good enough for the real engine's code voices: every automation call and stop is kept */
+      const param = (v = 0) => ({ value: v, calls: [], auto: [],
+        setValueAtTime(...a) { this.auto.push(["set", ...a]); }, linearRampToValueAtTime(...a) { this.auto.push(["lin", ...a]); },
+        exponentialRampToValueAtTime(...a) { this.auto.push(["exp", ...a]); }, cancelScheduledValues() {},
+        setTargetAtTime(v, t, tc) { this.calls.push([v, t, tc]); } });
       const ctx = {
-        currentTime: 10,
-        createGain() { const g = { gain: { value: 1, calls: [], setTargetAtTime(v, t, tc) { this.calls.push([v, t, tc]); } }, connect() {} }; return g; },
+        currentTime: 10, sampleRate: 48000,
+        createGain() { return { gain: param(1), connect() {}, disconnect() {} }; },
+        createOscillator() { return { type: "", frequency: param(440), stops: [], start(t) { this.startAt = t; }, stop(t) { this.stops.push(t); }, connect() {}, disconnect() {} }; },
       };
+      const engineVoices = opts.real ? SS.engine.createVoices(ctx, SS.instruments, "x") : null;
       const voices = {
-        play(ev, when) { const src = { stops: [], stop(t) { this.stops.push(t); } }; played.push({ ev, when, src }); return [src]; },
+        play(ev, when, dest) {
+          if (engineVoices) { const srcs = engineVoices.play(ev, when, dest); played.push({ ev, when, dest, src: srcs[0], srcs }); return srcs; }
+          const src = { stops: [], stop(t) { this.stops.push(t); } }; played.push({ ev, when, dest, src, srcs: [src] }); return [src];
+        },
       };
       const el = (map, k) => { if (!map.has(k)) { const s = new Set(); map.set(k, { classList: { add: (c) => s.add(c), remove: (c) => s.delete(c), contains: (c) => s.has(c) } }); } return map.get(k); };
       const body = `
@@ -590,11 +600,11 @@ describe("Sound Space app page", () => {
         let recording = false, countingIn = false, recTrackId = null, recStart = 0, recTotal = 16, recStepSec = 0.3, recTimers = [], recPending = [], recChanged = false;
         let pedalDown = false; const pedalRing = new Set();
         const held = new Map(), litKeys = new Map(), kbBase = new Map();
-        const narrowMq = { matches: false };
+        const narrowMq = env.narrow, document = env.document;
         const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
         const audio = () => ctx, ensureLoaded = () => {}, renderMidi = () => {};
         const trackById = id => song.tracks.find(t => t.id === id) || null, selTrack = () => trackById(sel);
-        const kindOf = t => I.byId(t.instrumentId).kind;
+        const instOf = t => I.byId(t.instrumentId), kindOf = t => I.byId(t.instrumentId).kind;
         const baseFor = t => kbBase.has(t.id) ? kbBase.get(t.id) : 48;
         const renderPlayArea = () => { env.renders++; };
         const commit = () => { env.commits++; }, paintRow = () => {}, renderOverview = () => {};
@@ -709,6 +719,82 @@ describe("Sound Space app page", () => {
       ctx.currentTime = 12;
       h.midiEvent({ type: "off", pitch: 62, vel: 0, ts: 0 });
       expect(Math.max(...played[1].src.stops)).toBeLessThanOrEqual(12.3 + 1e-9);
+    });
+
+    it("a note held a while then let go on the pedal still rings the whole sustain tail (the real engine's voice)", () => {
+      // rock-organ is a code voice that holds its level for the note's dur, then lets go: the case the pedal clipped
+      const { h, SS, ctx, played, track } = live("rock-organ", { real: true });
+      const tail = SS.engine.SUSTAIN_TAIL;
+      h.midiEvent({ type: "pedal", down: true });
+      h.midiEvent({ type: "on", pitch: 60, vel: 100, ts: 0 });   // pressed at 10 s
+      ctx.currentTime = 13.5;
+      h.midiEvent({ type: "off", pitch: 60, vel: 0, ts: 0 });     // let go at 13.5 s, the pedal still down
+      expect(played.length).toBe(1);
+      expect(played[0].srcs.length).toBeGreaterThan(0);
+      for (const o of played[0].srcs) {
+        const voiceEnd = o.stops[0] - 0.02;                        // where the voice's own envelope reaches silence
+        const liveStop = o.stops[o.stops.length - 1];              // where the live release stops it
+        expect(Math.min(voiceEnd, liveStop)).toBeGreaterThanOrEqual(13.5 + tail - 1e-9);
+      }
+      // it fades over the tail on the live gain, the same way an on-screen key with Sustain on does
+      expect(played[0].dest.gain.calls).toContainEqual([0, 13.5, tail / 7]);
+      expect(track.sustain).toBe(false);
+      // the on-screen and computer keys keep their own note length
+      h.noteOn("p1", track, 64, 0);
+      expect(played[1].ev.dur).toBe(4);
+      expect(played[0].ev.dur).toBeGreaterThanOrEqual(10);
+    });
+
+    it("a tab in the background never plays or records a real key, but still lets go of one", () => {
+      const { h, track, ctx, played, env, flush } = live();
+      h.midiEvent({ type: "on", pitch: 60, vel: 90, ts: 0 });
+      env.document.hidden = true;
+      h.record(10, 0.125);
+      h.midiEvent({ type: "on", pitch: 64, vel: 90, ts: 0 });
+      h.midiEvent({ type: "pedal", down: true });
+      flush();
+      expect(played.length).toBe(1);
+      expect(track.notes).toEqual([]);
+      expect(h.pedalDown).toBe(false);
+      ctx.currentTime = 10.5;
+      h.midiEvent({ type: "off", pitch: 60, vel: 0, ts: 0 });   // the note from before still ends
+      expect(h.held.size).toBe(0);
+      expect(Math.max(...played[0].src.stops)).toBeLessThanOrEqual(10.8 + 1e-9);
+      env.document.hidden = false;
+      h.midiEvent({ type: "on", pitch: 64, vel: 90, ts: 0 });
+      expect(played.length).toBe(2);
+    });
+
+    it("a real key outside the instrument's notes neither plays nor records, and the keys never move past Lower and Higher", () => {
+      const { h, track, played, flush } = live("grand-piano");   // 24 to 108
+      h.record(10, 0.125);
+      for (const p of [12, 23, 109, 120]) h.midiEvent({ type: "on", pitch: p, vel: 90, ts: 0 });
+      flush();
+      expect(played).toEqual([]);
+      expect(track.notes).toEqual([]);
+      h.midiEvent({ type: "on", pitch: 24, vel: 90, ts: 0 });
+      expect(played.length).toBe(1);
+      // every key an instrument plays, on a phone (one octave) and a computer (two): the view lands where Lower and
+      // Higher could take it (the same limits as their buttons)
+      const SS = loadSS("instruments.js");
+      for (const narrow of [false, true]) {
+        for (const inst of SS.instruments.LIST.filter((x) => x.kind === "pitched")) {
+          const r = live(inst.id, { narrow });
+          const octs = narrow ? 1 : 2;
+          for (let p = inst.range[0]; p <= inst.range[1]; p++) {
+            r.h.midiEvent({ type: "on", pitch: p, vel: 90, ts: 0 });
+            r.h.midiEvent({ type: "off", pitch: p, vel: 0, ts: 0 });
+            const nb = r.h.kbBase.has(r.track.id) ? r.h.kbBase.get(r.track.id) : 48;
+            if (!r.h.kbBase.has(r.track.id)) continue;
+            expect(nb % 12, inst.id).toBe(0);
+            expect(nb <= inst.range[1] - 5 && nb + 12 * octs >= inst.range[0] + 5, `${inst.id} ${p} ${nb}`).toBe(true);
+          }
+        }
+      }
+      // toy piano (60 to 100) on a phone: its top key moves the keys only as far as Higher goes
+      const toy = live("toy-piano", { narrow: true });
+      toy.h.midiEvent({ type: "on", pitch: 100, vel: 90, ts: 0 });
+      expect(toy.h.kbBase.get(toy.track.id)).toBe(84);
     });
 
     it("Home or a closing song lets go of every held note, pedal ones too", () => {
