@@ -503,6 +503,10 @@ p:last-child{ margin-bottom:0; }
 .studioinside__list svg{ grid-column:1; grid-row:1 / 3; width:24px; height:24px; margin-top:2px; color:var(--cyan); stroke-width:2.25; }
 .studioinside__list dt{ grid-column:2; grid-row:1; font-size:1.1rem; font-weight:800; }
 .studioinside__list dd{ grid-column:2; grid-row:2; margin:3px 0 0; font-size:.98rem; line-height:1.5; color:var(--ink-soft); }
+/* Sound Space's box: what it has, one line each with an icon */
+.studioinside__feats{ flex:1; list-style:none; margin:24px 0 0; padding:0; display:grid; grid-template-columns:1fr 1fr; align-content:space-evenly; gap:22px 40px; }
+.studioinside__feats li{ display:flex; align-items:center; gap:12px; font-size:1.1rem; font-weight:800; }
+.studioinside__feats svg{ width:24px; height:24px; flex:none; color:var(--cyan); stroke-width:2.25; }
 .studioinside__facts{ list-style:none; margin:26px 0 0; padding:18px 0 0; border-top:2px dashed rgba(30,40,46,.22); display:grid; gap:10px; }
 .studioinside__facts li{ display:flex; align-items:center; gap:9px; font-size:.95rem; font-weight:700; }
 .studioinside__facts svg{ width:18px; height:18px; flex:none; color:var(--cyan); }
@@ -517,7 +521,7 @@ p:last-child{ margin-bottom:0; }
 .studioart__kid img{ height:100%; object-fit:cover; object-position:center 45%; }
 @media (max-width:900px){
   .studioart__row, .studioart__row + .studioart__row{ grid-template-columns:1fr; }
-  .studioinside__list, .studio-soon__list{ grid-template-columns:1fr; }
+  .studioinside__list, .studioinside__feats, .studio-soon__list{ grid-template-columns:1fr; }
   .studioart__kid img{ aspect-ratio:3/2; height:auto; }
 }
 @media (max-width:900px){ .studio-card__logo--big{ margin:0; } }
@@ -8989,13 +8993,14 @@ const CREATE_NAV = [
    Maker Studio show on the dashboard, switched off, until their character pictures are ready.
    Each app is its own program: Art Space is a first-party file that opens in the full-window stage. */
 const STUDIO_APPS = [
-  { id:"art",  icon:"palette",   bg:"#EDE3F8", live:true, path:"assets/apps/art-studio.html", members:true, appIcon:"assets/studio/art-studio-icon.svg",
+  { id:"art",  icon:"palette",   bg:"#EDE3F8", live:true, beta:true, path:"assets/apps/art-studio.html", members:true, appIcon:"assets/studio/art-studio-icon.svg",
     preview:"assets/studio/art-space-hero-ui-2.jpg", previewLight:"assets/studio/art-space-hero-ui-2-light.jpg",
     previewAlt:"The Art Space editor with a colored comic drawing of a boy superhero in a red and blue suit running beside his dog, its brushes on the left and its layers on the right" },
   { id:"book", icon:"book-open", bg:"#E6ECFF", live:false, appIcon:"assets/studio/book-studio-icon.svg" },
   { id:"card", icon:"mail-open", bg:"#DDF5F3", live:false, appIcon:"assets/studio/card-maker-icon.svg" },
-  /* Sound Space: built, and Coming soon (live:false) until the owner says to launch it; an admin can open it already */
-  { id:"sound", icon:"audio-lines", live:false, path:"assets/apps/sound-space.html", members:true, appIcon:"assets/studio/sound-space-icon.svg",
+  /* Sound Space: built, and Coming soon (live:false) until the owner says to launch it; an admin can open it already,
+     and sees its row on the Studio page (the public sees it there once it is live) */
+  { id:"sound", icon:"audio-lines", bg:"#E6ECFF", live:false, beta:true, path:"assets/apps/sound-space.html", members:true, appIcon:"assets/studio/sound-space-icon.svg",
     preview:"assets/studio/sound-space-preview.jpg", previewLight:"assets/studio/sound-space-preview-light.jpg",
     previewAlt:"The Sound Space editor playing a hip hop song: its drums, bass and keys tracks on the left, their notes in rows of colored squares, the drum beat's grid and drum pads in the middle, and ready-made beats on the right" },
   { id:"motion", icon:"clapperboard", live:false, appIcon:"assets/studio/motion-space-icon.svg" }
@@ -12069,6 +12074,9 @@ function viewCreateStudio(){
      2. Art Space: its card (built like an activity card) beside what's inside it; then the spaces still to come
         beside a child making a pattern in it. */
   const art = STUDIO_APPS.find(s => s.id === "art");
+  /* Sound Space: its own row under Art Space once it is live (an admin sees it already); until then it is Coming soon */
+  const sound = STUDIO_APPS.find(s => s.id === "sound");
+  const soundRow = sound && (sound.live || adminSeesAll());
   const soon = STUDIO_APPS.filter(s => !s.live);
   return '<section class="section pagehead band-grad studiohero"><div class="shell">'
     + (studioSettings().live ? "" : '<p class="chip" style="margin:0 0 12px">' + ic("eye-off") + ' Hidden: only admins can see this page. Publish it on the admin Creative Space Studio page.</p>')
@@ -12087,6 +12095,7 @@ function viewCreateStudio(){
     + '<section class="section studioart" id="studio-art"><div class="shell">'
     + '<h2 class="studioart__title">' + slot(C, "studioArtHeading") + ' <span class="hl-cyan">' + slot(C, "studioArtHighlight") + '</span></h2>'
     + '<div class="studioart__row">' + (art ? studioAppCard(art) : "") + studioInsideBox() + '</div>'
+    + (soundRow ? '<div class="studioart__row studioart__row--sound">' + studioAppCard(sound) + studioSoundBox() + '</div>' : "")
     + '<div class="studioart__row studioart__row--soon">'
     + (soon.length ? studioSoonBox(soon) : "")
     + '<figure class="studioart__kid taped"><img src="assets/activities/mirror-pattern/main.jpg" width="1024" height="683" loading="lazy" alt="A girl in headphones smiles as she paints a colorful kaleidoscope pattern on a tablet on the couch"></figure>'
@@ -12105,6 +12114,19 @@ function studioInsideBox(){
     + '<p class="studiobox__sub">' + slot(C, "insideText") + '</p>'
     + '<dl class="studioinside__list">' + tools.map(t => '<div>' + ic(t[0]) + '<dt>' + slot(C, t[1] + "Title") + '</dt><dd>' + slot(C, t[1] + "Text") + '</dd></div>').join("") + '</dl>'
     + '<ul class="studioinside__facts"><li>' + ic("lock-open") + slot(C, "insideAccess") + '</li><li>' + ic("monitor-smartphone") + slot(C, "insideDevices") + '</li></ul>'
+    + '</section>';
+}
+
+/** What's inside Sound Space, beside its card: what it has (the soundFeatures words, each with an icon), then who
+    can use it and what it works on. */
+function studioSoundBox(){
+  const C = "create";
+  const icons = ["piano", "drum", "graduation-cap", "printer", "keyboard-music"];
+  const feats = slotText(C, "soundFeatures").split("·").map(x => x.trim()).filter(Boolean);
+  return '<section class="studiobox studioinside" aria-labelledby="studio-sound-title">'
+    + '<h3 class="studiobox__title" id="studio-sound-title">' + slot(C, "soundInsideHeading") + '</h3>'
+    + '<ul class="studioinside__feats">' + feats.map((f, i) => '<li>' + ic(icons[i] || "music") + '<span>' + E(f) + '</span></li>').join("") + '</ul>'
+    + '<ul class="studioinside__facts"><li>' + ic("lock-open") + slot(C, "soundInsideAccess") + '</li><li>' + ic("monitor-smartphone") + slot(C, "soundInsideDevices") + '</li></ul>'
     + '</section>';
 }
 
@@ -12134,11 +12156,13 @@ function studioSoonBox(apps){
     + '</ul></section>';
 }
 
-/** The Art Space card on the Studio page, built like an activity card: its picture with the Subscribers only badge,
-    its name and icon, what it is, then Launch, and Subscribe for someone not on the list yet (Install for someone who is). */
+/** A studio app's card on the Studio page (Art Space, Sound Space), built like an activity card: its picture with the
+    Subscribers only badge, its name and icon, what it is, then Launch, and Subscribe for someone not on the list yet
+    (Install Art Space for someone who is). An app not live yet shows only to an admin, marked so. */
 function studioAppCard(s){
   const C = "create", name = slotText(C, s.id + "Title");
-  const badge = s.live && s.members ? '<span class="card__badge chip chip--members">' + ic("lock") + ' Subscribers only</span>' : "";
+  const badge = !s.live ? '<span class="card__badge chip chip--ink">' + ic("eye-off") + ' Only admins see this</span>'
+    : s.members ? '<span class="card__badge chip chip--members">' + ic("lock") + ' Subscribers only</span>' : "";
   const media = '<div class="card__media studio-card__media' + (s.preview ? " studio-card__media--screen" : "") + '" style="background:' + s.bg + '">'
     + (s.preview ? '<img class="skel" src="' + E(s.preview) + '" alt="' + E(s.previewAlt || "") + '" loading="lazy">'
         + (s.previewLight ? '<img class="studio-card__light" src="' + E(s.previewLight) + '" alt="" loading="lazy">' : "")
@@ -12155,9 +12179,10 @@ function studioAppCard(s){
   return '<article class="card studio-card studio-card--link" data-act="open-studio-app" data-id="' + E(s.id) + '" tabindex="-1">' + media
     + '<div class="card__body">'
     + '<h3 class="card__title studio-card__title"><img class="studio-card__icon" src="' + E(s.appIcon) + '" alt="">' + slot(C, s.id + "Title")
-    + (s.id === "art" ? ' <span class="chip chip--ink" title="Art Space is in beta: it works, and we are still adding to it">Beta</span>' : "") + flip + '</h3>'
-    + '<p class="studio-card__lead">' + slot(C, s.id + "Lead") + '</p>'
-    + '<p class="studio-card__text">' + slot(C, s.id + "Text") + '</p>'
+    + (s.beta ? ' <span class="chip chip--ink" title="' + E(name) + ' is in beta: it works, and we are still adding to it">Beta</span>' : "") + flip + '</h3>'
+    /* Art Space has a first line and its text; Sound Space's text is its lead, first sentence in bold */
+    + (slotDef(C, s.id + "Lead") ? '<p class="studio-card__lead">' + slot(C, s.id + "Lead") + '</p><p class="studio-card__text">' + slot(C, s.id + "Text") + '</p>'
+      : '<p class="studio-card__lead">' + slotLead(C, s.id + "Text") + '</p>')
     + '<div class="card__foot">'
     + '<button type="button" class="btn btn--sm btn--cyan" data-act="open-studio-app" data-id="' + E(s.id) + '" aria-label="Launch ' + E(name) + '">' + ic("rocket") + ' Launch ' + E(name) + '</button>'
     + second
@@ -23239,6 +23264,9 @@ const PAGE_SLOTS = {
     { key:"soundTitle", section:"Creative Space Studio", label:"Sound Space title", fb:"Sound Space" },
     { key:"soundText", section:"Creative Space Studio", label:"Sound Space text (the first sentence shows in bold)", type:"para", fb:"Make your own music. Add tracks, pick from 120 instruments and lots of beats, then play, record and loop your song." },
     { key:"soundFeatures", section:"Creative Space Studio", label:"Sound Space: what it will do (separate with ·)", fb:"120 instruments · 420 beats and patterns · 8 song lessons · Print your music · Play a real music keyboard" },
+    { key:"soundInsideHeading", section:"Creative Space Studio", label:"Inside Sound Space: heading", fb:"Inside Sound Space" },
+    { key:"soundInsideAccess", section:"Creative Space Studio", label:"Inside Sound Space: who can use it", fb:"Join the mailing list to get access while Sound Space is free during beta." },
+    { key:"soundInsideDevices", section:"Creative Space Studio", label:"Inside Sound Space: what it works on", fb:"Computers and tablets, with a mouse, a keyboard or a finger" },
     { key:"motionTitle", section:"Creative Space Studio", label:"Motion Space title", fb:"Motion Space" },
     { key:"motionText", section:"Creative Space Studio", label:"Motion Space text (the first sentence shows in bold)", type:"para", fb:"Make your drawings move. Create short animations, one frame at a time." },
     { key:"motionFeatures", section:"Creative Space Studio", label:"Motion Space: what it will do (separate with ·)", fb:"Draw frame by frame · See the last frame as you draw · Use your Art Space drawings" },

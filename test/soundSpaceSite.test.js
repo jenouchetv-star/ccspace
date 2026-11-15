@@ -157,3 +157,69 @@ describe("the admin Studio page's Sound Space usage card", () => {
     expect(text.toLowerCase()).not.toMatch(/orange|green|#1f7a55|#2ba88e/);
   });
 });
+
+describe("the Sound Space row on the Studio page", () => {
+  const SLOT_FB = {};
+  for (const m of index.matchAll(/\{ key:"(\w+)", section:"Creative Space Studio"[^\n]*?fb:"([^"]*)"/g)) SLOT_FB[m[1]] = m[2];
+  /** viewCreateStudio and its parts, run on a copy of STUDIO_APPS with Sound Space live or not, as a visitor or an admin. */
+  function studioPage({ live, admin }) {
+    const list = apps().map((a) => (a.id === "sound" ? Object.assign({}, a, { live }) : a));
+    const env = {
+      STUDIO_APPS: list, studioSettings: () => ({ live: true }), adminSeesAll: () => admin, notFound: () => "notfound",
+      slot: (_p, k) => E(SLOT_FB[k] ?? k), slotText: (_p, k) => SLOT_FB[k] ?? k, slotLead: (_p, k) => "<b>LEAD:" + k + "</b>",
+      ic: (n) => '<i data-lucide="' + n + '"></i>', E, portalIsSubscriber: () => false, artAppInstalled: () => false,
+      slotDef: (_p, k) => (k in SLOT_FB ? {} : null)
+    };
+    const names = Object.keys(env);
+    const body = "let STUDIO_APP_OPENED = '';\n" + ["viewCreateStudio", "studioInsideBox", "studioSoonBox", "studioAppCard", "studioSoundBox"].map(fn).join("\n") + "\nreturn viewCreateStudio();";
+    return new Function(...names, body)(...names.map((k) => env[k]));
+  }
+  const rows = (h) => h.split('<div class="studioart__row').slice(1);
+  const soonList = (h) => (h.split('class="studio-soon__list"')[1] || "").split("</ul>")[0];
+
+  it("while Sound Space is Coming soon, a visitor sees it only in the Coming soon box", () => {
+    const h = studioPage({ live: false, admin: false });
+    expect(h).not.toContain('aria-label="Launch Sound Space"');
+    expect(soonList(h)).toContain('data-id="sound"');
+    expect(rows(h)).toHaveLength(2);                                   // Art Space, then Coming soon
+  });
+
+  it("an admin sees the Sound Space row before launch, marked as hidden, and it stays in Coming soon", () => {
+    const h = studioPage({ live: false, admin: true });
+    const r = rows(h);
+    expect(r).toHaveLength(3);
+    expect(r[1]).toContain('aria-label="Launch Sound Space"');
+    expect(r[1]).toMatch(/card__badge chip chip--ink"><i data-lucide="eye-off"><\/i> Only admins see this/);
+    expect(r[1]).not.toContain("Subscribers only");
+    expect(soonList(h)).toContain('data-id="sound"');
+  });
+
+  it("once live, Sound Space has its own row between Art Space and Coming soon, and leaves Coming soon", () => {
+    const h = studioPage({ live: true, admin: false });
+    const r = rows(h);
+    expect(r).toHaveLength(3);
+    expect(r[0]).toContain('aria-label="Launch Art Space"');
+    const sound = r[1];
+    expect(r[2]).toMatch(/^ studioart__row--soon/);
+    expect(soonList(h)).not.toContain('data-id="sound"');
+    expect(soonList(h)).toContain('data-id="book"');
+    // its pictures, its words, a black Beta badge and a blue Launch button
+    expect(sound).toContain('src="assets/studio/sound-space-preview.jpg"');
+    expect(sound).toContain('src="assets/studio/sound-space-preview-light.jpg"');
+    expect(sound).toContain('data-act="studio-theme"');
+    expect(sound).toContain('<p class="studio-card__lead"><b>LEAD:soundText</b></p>');
+    expect(sound).toMatch(/<span class="chip chip--ink"[^>]*>Beta<\/span>/);
+    expect(sound).toMatch(/class="btn btn--sm btn--cyan" data-act="open-studio-app" data-id="sound" aria-label="Launch Sound Space"/);
+    expect(sound).toContain("Subscribers only");
+    expect(sound).not.toContain('data-act="art-install"');
+    for (const f of SLOT_FB.soundFeatures.split(" · ")) expect(sound).toContain(E(f));
+    expect(sound).toContain("Inside Sound Space");
+    // Art Space's card is as it was: its own lead and text, and Beta
+    expect(r[0]).toContain("This is your space to make something original!");
+    expect(r[0]).toMatch(/<span class="chip chip--ink"[^>]*>Beta<\/span>/);
+  });
+
+  it("the btn--cyan button is the site's blue, and chip--ink is black", () => {
+    expect(index).toMatch(/\.chip--ink\{ background:var\(--ink\); color:var\(--paper\); \}/);
+  });
+});
