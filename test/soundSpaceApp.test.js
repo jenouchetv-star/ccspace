@@ -2112,6 +2112,10 @@ describe("Sound Space: Main volume beside the play controls", () => {
     expect(css.indexOf("@media")).toBe(css.indexOf("@media (max-width:1279px){ #ss-sheet"));
   });
 
+  it("the transport bar is a little darker than the keys bar, with its own tokens", () => {
+    expect(css).toMatch(/\.transport\{[^}]*background:linear-gradient\(var\(--trans-a\),var\(--trans-b\)\); border-bottom:1px solid var\(--line\)/);
+  });
+
   it("Counts, Grid and Speed keep plain tooltips for when their words are hidden; Main's group has no duplicate name", () => {
     expect(transport).toContain('id="ss-counts" role="radiogroup" aria-labelledby="counts-lbl" title="Counts: how long the song is"');
     expect(transport).toContain('id="ss-grid-res" role="radiogroup" aria-labelledby="gridres-lbl" title="Grid: eighths or sixteenths"');
