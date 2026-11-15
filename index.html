@@ -8546,7 +8546,7 @@ const AppState = {
       /* Space limits: studio_limits_get(), what the admin typed (kept across a rerender) and any bad values;
          the "By member" tab, Sound Space's usage, and the member whose Change row is open */
       limitsStatus:"idle", limits:null, limitsError:"", limitsDraft:{}, limitsErrors:{},
-      tab:"art", sound:{ status:"idle", data:null, error:"" }, edit:null },
+      tab:"art", sound:{ status:"idle", days:30, data:null, error:"" }, edit:null },
     shares:{ status:"idle", days:7, rows:[], error:"" },
     worldMap:{ status:"idle", svg:"" },
     newsletterCompose:{ editingId:null, templateId:null, mode:"now", scheduledAt:"",
@@ -8994,7 +8994,10 @@ const STUDIO_APPS = [
     previewAlt:"The Art Space editor with a colored comic drawing of a boy superhero in a red and blue suit running beside his dog, its brushes on the left and its layers on the right" },
   { id:"book", icon:"book-open", bg:"#E6ECFF", live:false, appIcon:"assets/studio/book-studio-icon.svg" },
   { id:"card", icon:"mail-open", bg:"#DDF5F3", live:false, appIcon:"assets/studio/card-maker-icon.svg" },
-  { id:"sound", icon:"audio-lines", live:false, appIcon:"assets/studio/sound-space-icon.svg" },
+  /* Sound Space: built, and Coming soon (live:false) until the owner says to launch it; an admin can open it already */
+  { id:"sound", icon:"audio-lines", live:false, path:"assets/apps/sound-space.html", members:true, appIcon:"assets/studio/sound-space-icon.svg",
+    preview:"assets/studio/sound-space-preview.jpg", previewLight:"assets/studio/sound-space-preview-light.jpg",
+    previewAlt:"The Sound Space editor playing a hip hop song: its drums, bass and keys tracks on the left, their notes in rows of colored squares, the drum beat's grid and drum pads in the middle, and ready-made beats on the right" },
   { id:"motion", icon:"clapperboard", live:false, appIcon:"assets/studio/motion-space-icon.svg" }
 ];
 
@@ -12165,16 +12168,18 @@ function studioAppCard(s){
 let STUDIO_APP_OPENED = "";
 /** Opens a studio app full-window with no site bar: it brings its own toolbar and Close button. */
 function openStudioStage(s){
+  /* never the camera or microphone; Sound Space may also use a music keyboard plugged into the computer, and play sound */
+  const allow = "clipboard-write; web-share" + (s.id === "sound" ? "; midi; autoplay" : "");
   openGameStage({ id:"studio-" + s.id, title: slotText("create", s.id + "Title"), icon: s.icon, path: s.path,
-    sharePath: "/create/studio/" + s.id, sandboxExtra: "allow-downloads allow-modals", bare: true });
+    sharePath: "/create/studio/" + s.id, sandboxExtra: "allow-downloads allow-modals", bare: true, allow: allow });
 }
 /** /create/studio/art: the app's own address. It opens the app full-window (once per visit to the address, so
     closing it stays closed), over the Studio page; the app's Close button goes back to /create/studio. There is no
-    separate page for it. */
+    separate page for it. An app still Coming soon opens only for an admin, to try it before launch. */
 function viewStudioApp(id){
   if (!studioSettings().live && !adminSeesAll()) return notFound("page");
   const s = STUDIO_APPS.find(x => x.id === id);
-  if (!s || !s.live) return notFound("page");
+  if (!s || !s.path || (!s.live && !adminSeesAll())) return notFound("page");
   if (STUDIO_APP_OPENED !== location.pathname){
     STUDIO_APP_OPENED = location.pathname;
     setTimeout(() => { if (!$(".gamestage")) openStudioStage(s); }, 0);
@@ -12453,7 +12458,7 @@ function gameStage(g){
     return '<div class="gamestage gamestage--bare" role="dialog" aria-modal="true" aria-label="' + E(g.title) + '">'
       + '<iframe id="gamestage-frame" src="' + E(g.path) + '" title="' + E(g.title) + '"'
       + ' sandbox="allow-scripts allow-same-origin allow-popups' + (g.sandboxExtra ? " " + E(g.sandboxExtra) : "") + '"'
-      + ' allow="clipboard-write; web-share"></iframe></div>';
+      + ' allow="' + E(g.allow || "clipboard-write; web-share") + '"></iframe></div>';
   }
   return '<div class="gamestage" role="dialog" aria-modal="true" aria-label="' + E(g.title) + '">'
     + '<div class="gamestage__bar">'
@@ -21743,9 +21748,10 @@ async function loadStudioLimits(){
   } catch(e){ st.limitsStatus = "error"; st.limitsError = (e && e.message) || "Could not load the limits."; }
   if (AppState.route && AppState.route.name === "admin") rerender();
 }
+/** Sound Space's numbers for its own usage card (with its own range) and its "By member" tab. */
 async function loadSoundUsage(days){
   const st = AppState.admin.studio;
-  st.sound.status = "loading"; st.sound.error = "";
+  st.sound.status = "loading"; st.sound.error = ""; st.sound.days = days || 0;
   try {
     const res = await sb.rpc("sound_space_usage", { range_days: days || 0 });
     if (res.error) throw new Error(res.error.message);
@@ -21753,18 +21759,40 @@ async function loadSoundUsage(days){
   } catch(e){ st.sound.status = "error"; st.sound.error = (e && e.message) || "Could not load Sound Space usage."; }
   if (AppState.route && AppState.route.name === "admin") rerender();
 }
+/** The Sound Space usage card's tiles, from sound_space_usage(range_days): the anonymous daily counts first (blue),
+    then the songs members saved. "Times opened" shows the change from the days just before, except for All. */
+function soundUsageStatsHTML(d, days){
+  d = d || {};
+  const n = (x) => Number(x || 0);
+  let change = "";
+  if (days && n(d.opened_before)){
+    const c = Math.round(100 * (n(d.opened) - n(d.opened_before)) / n(d.opened_before));
+    change = '<small>' + (c >= 0 ? "▲ " : "▼ ") + Math.abs(c) + '% on before</small>';
+  }
+  const stat = (v, label, sub, key) => '<div class="studio-stat' + (key ? " studio-stat--key" : "") + '"><b data-count="sound-' + E(label) + '">' + v + '</b><span>' + label + '</span>' + (sub || "") + '</div>';
+  return '<div class="studio-stats">'
+    + stat(n(d.opened), "Times opened", change, true)
+    + stat(n(d.signin_shown), "Saw Sign in", '<small>' + n(d.signed_in) + ' signed in</small>', true)
+    + stat(n(d.song_played), "Songs played", "", true)
+    + stat(n(d.song_exported), "Exported", '<small>as sound files</small>', true)
+    + stat(n(d.members), "Members") + stat(n(d.active7), "Active 7d")
+    + stat(n(d.songs), "Songs", '<small>saved online</small>')
+    + stat(n(d.new7), "New 7d", '<small>' + n(d.new30) + ' in 30d</small>')
+    + stat(E(studioBytesText(n(d.bytes))), "Storage")
+    + '</div>';
+}
 /** After a limit changes: the limits and the usage tables again, so every Limit cell is current. */
 function studioLimitsReload(){
   const st = AppState.admin.studio;
   loadStudioUsage(st.days);
-  if (st.sound.status !== "idle") loadSoundUsage(st.days);
+  if (st.sound.status !== "idle") loadSoundUsage(st.sound.days);
 }
 function adminStudio(){
   const cfg = studioSettings();
   const st = AppState.admin.studio;
   if (st.status === "idle") loadStudioUsage(st.days);
   if (st.limitsStatus === "idle") loadStudioLimits();
-  if (st.tab === "sound" && st.sound.status === "idle") loadSoundUsage(st.days);
+  if (st.sound.status === "idle") loadSoundUsage(st.sound.days);
   const C = "create";
   const ranges = [[7, "7d"], [30, "30d"], [90, "90d"], [0, "All"]];
   const head = '<div style="margin-bottom:14px"><span class="admin-eyebrow">Content</span>'
@@ -21835,13 +21863,28 @@ function adminStudio(){
     + ranges.map(r => '<button class="admin-btn admin-btn--sm' + ((st.days || 0) === r[0] ? " admin-btn--primary" : " admin-btn--ghost") + '" data-act="studio-range" data-days="' + r[0] + '">' + E(r[1]) + '</button>').join("")
     + '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--icon" data-act="studio-refresh" aria-label="Refresh" title="Refresh">' + ic("refresh-cw") + '</button>'
     + '</div></div>' + usage + '</div>';
-  const apps = '<div class="admin-card studio-card"><h3 class="admin-section-title" style="font-size:.92rem;margin:0 0 8px">' + ic("layout-grid") + ' Apps in the Studio</h3>'
+  /* Sound Space's own card, the same form: its tiles from sound_space_usage(), with its own range and refresh */
+  const snd = st.sound;
+  let soundUsage;
+  if (snd.status === "ready") soundUsage = soundUsageStatsHTML(snd.data, snd.days)
+    + '<p class="admin-meta studio-note">Blue figures are anonymous daily totals (no names, emails or cookies; admins aren’t counted). The rest come from songs members saved online: counts and dates only, never the songs.</p>';
+  else if (snd.status === "error") soundUsage = '<p class="admin-meta">Could not load Sound Space usage: ' + E(snd.error) + '</p>';
+  else soundUsage = '<div role="status" aria-live="polite"><span class="sr-only">Loading Sound Space usage</span><div class="studio-stats" aria-hidden="true">'
+    + Array(9).fill('<div class="studio-stat">' + skelBar(24, "55%", "--r:6px") + skelBar(11, "75%", "margin-top:7px") + '</div>').join("")
+    + '</div></div>';
+  const soundCard = '<div class="admin-card studio-card"><div class="studio-usage-head">'
+    + '<h3 class="admin-section-title" style="font-size:.92rem">' + ic("bar-chart-3") + ' Sound Space usage</h3>'
+    + '<div class="row" style="gap:6px;flex-wrap:wrap">'
+    + ranges.map(r => '<button class="admin-btn admin-btn--sm' + ((snd.days || 0) === r[0] ? " admin-btn--primary" : " admin-btn--ghost") + '" data-act="sound-range" data-days="' + r[0] + '">' + E(r[1]) + '</button>').join("")
+    + '<button class="admin-btn admin-btn--sm admin-btn--ghost admin-btn--icon" data-act="sound-refresh" aria-label="Refresh Sound Space usage" title="Refresh">' + ic("refresh-cw") + '</button>'
+    + '</div></div>' + soundUsage + '</div>';
+  const apps ='<div class="admin-card studio-card"><h3 class="admin-section-title" style="font-size:.92rem;margin:0 0 8px">' + ic("layout-grid") + ' Apps in the Studio</h3>'
     + '<ul class="studio-apps">' + STUDIO_APPS.map(a => { const nm = slotText(C, a.id + "Title");
         return '<li><b>' + E(nm) + '</b><span class="studio-app' + (a.live ? " studio-app--live" : "") + '">'
           + (a.live ? (a.members ? ic("lock") + " Subscribers only" : "Open") : "Coming soon") + '</span></li>'; }).join("")
     + '</ul></div>';
   /* left third: publishing and the apps; right two thirds: usage (one column on narrower screens) */
-  return head + '<div class="studio-layout"><div class="studio-col">' + publishing + apps + studioLimitsCardHTML(st) + '</div><div class="studio-col">' + usageCard + '</div></div>';
+  return head + '<div class="studio-layout"><div class="studio-col">' + publishing + apps + studioLimitsCardHTML(st) + '</div><div class="studio-col">' + usageCard + soundCard + '</div></div>';
 }
 
 function adminBrand(){
@@ -23194,8 +23237,8 @@ const PAGE_SLOTS = {
     { key:"cardText", section:"Creative Space Studio", label:"Card Maker Space text (the first sentence shows in bold)", type:"para", fb:"Make someone’s day with a card you designed. Create birthday wishes, thank-you notes and holiday greetings to share or print and fold." },
     { key:"cardFeatures", section:"Creative Space Studio", label:"Card Maker Space: what it will do (separate with ·)", fb:"Front, inside and back · Stickers, photos and greetings · Print and fold, or send a link" },
     { key:"soundTitle", section:"Creative Space Studio", label:"Sound Space title", fb:"Sound Space" },
-    { key:"soundText", section:"Creative Space Studio", label:"Sound Space text (the first sentence shows in bold)", type:"para", fb:"Find your sound. Make music, build beats, create sound effects and record your own voice." },
-    { key:"soundFeatures", section:"Creative Space Studio", label:"Sound Space: what it will do (separate with ·)", fb:"Beats and instruments · Record your own voice · Sound effects for stories and cards" },
+    { key:"soundText", section:"Creative Space Studio", label:"Sound Space text (the first sentence shows in bold)", type:"para", fb:"Make your own music. Add tracks, pick from 120 instruments and lots of beats, then play, record and loop your song." },
+    { key:"soundFeatures", section:"Creative Space Studio", label:"Sound Space: what it will do (separate with ·)", fb:"120 instruments · 420 beats and patterns · 8 song lessons · Print your music · Play a real music keyboard" },
     { key:"motionTitle", section:"Creative Space Studio", label:"Motion Space title", fb:"Motion Space" },
     { key:"motionText", section:"Creative Space Studio", label:"Motion Space text (the first sentence shows in bold)", type:"para", fb:"Make your drawings move. Create short animations, one frame at a time." },
     { key:"motionFeatures", section:"Creative Space Studio", label:"Motion Space: what it will do (separate with ·)", fb:"Draw frame by frame · See the last frame as you draw · Use your Art Space drawings" },
@@ -28708,8 +28751,11 @@ const ACTIONS = {
     rerender();
   },
   "refresh-storage-usage": () => { loadStorageUsage(); },
-  "studio-range": (el) => { loadStudioUsage(Number(el.getAttribute("data-days")) || null); if (AppState.admin.studio.sound.status !== "idle") loadSoundUsage(AppState.admin.studio.days); },
+  "studio-range": (el) => { loadStudioUsage(Number(el.getAttribute("data-days")) || null); },
   "studio-refresh": () => { studioLimitsReload(); loadStudioLimits(); },
+  /* the Sound Space usage card's own range and refresh (its "By member" tab reads the same numbers) */
+  "sound-range": (el) => { loadSoundUsage(Number(el.getAttribute("data-days")) || 0); rerender(); },
+  "sound-refresh": () => { loadSoundUsage(AppState.admin.studio.sound.days); rerender(); },
   /* Space limits (see studioLimitsCardHTML): retry, Back to the usual limits (after a confirm), the By member tabs,
      and a member's own limits in the Change row */
   "studio-limits-retry": () => { loadStudioLimits(); rerender(); },
@@ -28741,7 +28787,7 @@ const ACTIONS = {
     const st = AppState.admin.studio;
     st.tab = el.getAttribute("data-app") === "sound" ? "sound" : "art";
     st.edit = null;
-    if (st.tab === "sound" && st.sound.status === "idle") loadSoundUsage(st.days);
+    if (st.tab === "sound" && st.sound.status === "idle") loadSoundUsage(st.sound.days);
     rerender();
   },
   "studio-limit-edit": (el) => {
