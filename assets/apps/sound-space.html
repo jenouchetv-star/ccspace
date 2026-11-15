@@ -371,7 +371,7 @@ body.kbd-collapsed #kbd{ display:none; }
 .panel{ background:linear-gradient(var(--side-a),var(--side-b)); overflow:auto; }
 .panel h3{ margin:0; font-size:11px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--mute); }
 .left{ border-right:1px solid var(--line); box-shadow:inset -1px 0 0 var(--hi); padding:14px 12px; display:flex; flex-direction:column; gap:10px; }
-.right{ border-left:1px solid var(--line); box-shadow:inset 1px 0 0 var(--hi); padding:14px 12px; }
+.right{ border-left:1px solid var(--line); box-shadow:inset 1px 0 0 var(--hi); padding:14px 12px; display:flex; flex-direction:column; overflow:hidden; }
 .tracklist{ display:flex; flex-direction:column; gap:10px; }
 /* an instrument's picture: its drawn icon (two tones of the category color) on a raised, lightly tinted key cap */
 .tile{ width:36px; height:36px; border-radius:var(--r); display:grid; place-items:center; color:color-mix(in srgb,var(--tc) 50%,#000); flex:none; font-weight:900; font-size:15px;
@@ -619,6 +619,9 @@ body.kbd-collapsed #kbd{ display:none; }
 .lib__q{ flex:1; }
 .lib__sel:focus-visible, .lib__q:focus{ box-shadow:var(--press),0 0 0 2px var(--accent); }
 .lib__count{ margin:0 0 8px; font-size:11.5px; color:var(--mute); }
+/* the heading, filters and count stay put; only the pattern list scrolls (its scrollbar runs to the panel's edges) */
+#lib-body{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }
+.lib__scroll{ flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; margin:0 -12px -14px; padding:0 12px 14px; }
 .lib__list{ display:flex; flex-direction:column; gap:8px; }
 .pat{ --tc:var(--keys); position:relative; display:grid; grid-template-columns:minmax(0,1fr) auto 28px; grid-template-areas:"nm use use" "pv pv pl"; gap:7px 8px; align-items:center; padding:9px 9px 9px 14px;
   border-radius:7px; border:1px solid var(--tc-edge); background:linear-gradient(var(--tc-a),var(--tc-b)); box-shadow:var(--raise); }
@@ -915,7 +918,7 @@ body.kbd-collapsed #kbd{ display:none; }
 @media (max-width:900px){
   .main{ --lw:200px; --rw:0px; }
   .right{ display:none; }
-  body.lib-open .right{ display:block; }
+  body.lib-open .right{ display:flex; }
   .only-narrow{ display:inline-flex !important; }
   .title{ position:static; transform:none; width:auto; flex:1 1 auto; min-width:60px; align-items:flex-start; }
   .title input{ text-align:left; }
@@ -1134,7 +1137,7 @@ body.kbd-collapsed #kbd{ display:none; }
   .songbtn{ display:inline-flex; margin-left:auto; height:34px; padding:0 10px; flex:none; }
   /* the editor's head wraps, so the note picker and the buttons drop to their own line instead of pushing the page sideways */
   .edhead{ flex-wrap:wrap; row-gap:6px; }
-  .edhead b{ min-width:0; flex:1 1 0; overflow:hidden; text-overflow:ellipsis; }
+  .edhead b{ min-width:7em; flex:1 1 7em; overflow:hidden; text-overflow:ellipsis; }
   .edhead .acts{ margin-left:auto; flex-wrap:wrap; }
 }
 /* the narrowest phones: a little tighter, so Song keeps its margin */
@@ -1265,8 +1268,10 @@ body.kbd-collapsed #kbd{ display:none; }
           </div>
         </div>
         <p class="lib__count" id="lib-count" role="status" aria-live="polite"></p>
-        <div class="lib__list" id="lib-list" role="list"></div>
-        <button type="button" class="btn lib__more" id="lib-more" hidden>Show more</button>
+        <div class="lib__scroll" id="lib-scroll">
+          <div class="lib__list" id="lib-list" role="list"></div>
+          <button type="button" class="btn lib__more" id="lib-more" hidden>Show more</button>
+        </div>
       </div>
     </aside>
   </div>
@@ -3393,7 +3398,7 @@ function renderLibrary(force){
   const key = [t ? t.id + ":" + t.instrumentId : "", lib.forTrack, lib.type, lib.style, lib.q, lib.shown].join("|");
   if (!force && key === lib.key) return;
   /* a new track or new filters start the list from the top; Show more keeps the place */
-  if (key.slice(0, key.lastIndexOf("|")) !== lib.key.slice(0, lib.key.lastIndexOf("|"))) $("#ss-library").scrollTop = 0;
+  if (key.slice(0, key.lastIndexOf("|")) !== lib.key.slice(0, lib.key.lastIndexOf("|"))) $("#lib-scroll").scrollTop = 0;
   lib.key = key;
   const forBtn = $("#lib-for");
   forBtn.disabled = !inst;

@@ -499,7 +499,11 @@ describe("Sound Space on phones: no sideways scroll, and steadier menus", () => 
   it("the editor head wraps on phones, so its icon, name, note picker and buttons stay inside the screen", () => {
     const head = (phone.match(/\.edhead\{[^}]*\}/) || [""])[0];
     expect(head).toMatch(/flex-wrap:wrap/);
-    expect(phone).toMatch(/\.edhead b\{[^}]*min-width:0;[^}]*text-overflow:ellipsis/);
+    // the name keeps about 7em before the row wraps, so it never shrinks to just "..."
+    const name = (phone.match(/\.edhead b\{[^}]*\}/) || [""])[0];
+    expect(name).toMatch(/flex:1 1 7em/);
+    expect(name).toMatch(/min-width:7em/);
+    expect(name).toMatch(/text-overflow:ellipsis/);
     expect(phone).toMatch(/\.edhead \.acts\{[^}]*margin-left:auto/);
     expect(phone).toMatch(/\.edhead \.acts\{[^}]*flex-wrap:wrap/);
     // above 640px the head is a single row, as it was

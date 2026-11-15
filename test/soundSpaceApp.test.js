@@ -2336,6 +2336,33 @@ describe("Sound Space final fix wave", () => {
   });
 });
 
+describe("Sound Space beats and patterns filters stay fixed", () => {
+  const css = cssText();
+  const aside = section(/<aside class="panel right" id="ss-library"/, "</aside>");
+  const rule = (sel) => { const i = css.indexOf("\n" + sel + "{"); return i < 0 ? "" : css.slice(i, css.indexOf("}", i)); };
+  it("only the pattern list scrolls; the heading, filters and count sit outside it", () => {
+    const scroll = aside.indexOf('id="lib-scroll"');
+    expect(scroll).toBeGreaterThan(0);
+    expect(aside.indexOf('class="lib__filters"')).toBeLessThan(scroll);
+    expect(aside.indexOf('id="lib-count"')).toBeLessThan(scroll);
+    expect(aside.indexOf('id="lib-list"')).toBeGreaterThan(scroll);
+    expect(aside.indexOf('id="lib-more"')).toBeGreaterThan(scroll);
+    expect(rule(".right")).toMatch(/display:flex/);
+    expect(rule(".right")).toMatch(/overflow:hidden/);
+    expect(rule("#lib-body")).toMatch(/min-height:0/);
+    expect(rule(".lib__scroll")).toMatch(/overflow-y:auto/);
+    expect(rule(".lib__scroll")).toMatch(/min-height:0/);
+  });
+  it("the opened library sheet on narrow screens keeps the column layout", () => {
+    expect(css).toMatch(/body\.lib-open \.right\{ display:flex; \}/);
+    expect(css).not.toMatch(/body\.lib-open \.right\{ display:block; \}/);
+  });
+  it("changing the track scrolls the list back to the top, not the whole panel", () => {
+    expect(html).toContain('$("#lib-scroll").scrollTop = 0');
+    expect(html).not.toContain('$("#ss-library").scrollTop = 0');
+  });
+});
+
 describe("Sound Space side panels", () => {
   const css = cssText();
   it("Tracks and Beats and patterns share a darker side background than the cards inside them", () => {
