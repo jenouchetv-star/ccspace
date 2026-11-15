@@ -3171,6 +3171,32 @@ h1.admin-page-title{ font-size:1.7rem; }
 .studio-table .admin-table td{ height:auto; padding:7px 10px; font-size:.8rem; }
 .studio-table .admin-table th{ padding:6px 10px; }
 .admin-table .studio-n{ text-align:right; font-variant-numeric:tabular-nums; }
+/* admin Studio space limits */
+.studio-table .admin-table.studio-lim td, .studio-table .admin-table.studio-lim th{ padding:6px 6px; }
+.studio-lim td:first-child{ font-weight:600; font-size:.78rem; line-height:1.3; }
+.studio-num{ display:inline-flex; flex-wrap:wrap; align-items:center; gap:2px 6px; }
+.studio-num .admin-input{ width:66px; padding:4px 7px; font-size:.84rem; text-align:right; font-variant-numeric:tabular-nums; }
+.studio-num > span{ font-size:.72rem; color:var(--admin-mute); white-space:nowrap; }
+.studio-table .admin-table td.studio-nowrap{ white-space:nowrap; }
+.studio-table .admin-table td.t-title{ overflow-wrap:anywhere; min-width:130px; }
+.studio-sub{ display:block; margin-top:2px; font-size:.72rem; font-weight:500; color:var(--admin-mute); }
+.studio-num .admin-input[aria-invalid="true"]{ border-color:#C0262D; }
+.studio-lim-errors{ margin:8px 0 0; padding:0 0 0 18px; color:#C0262D; font-size:.78rem; font-weight:600; }
+.studio-lim-actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.studio-tabs{ display:inline-flex; background:var(--admin-surface-2); border-radius:7px; padding:3px; gap:3px; }
+.studio-tabs button{ border:0; background:transparent; padding:4px 10px; border-radius:5px; font:inherit; font-size:.76rem; font-weight:700; color:var(--admin-mute); cursor:pointer; }
+.studio-tabs button[aria-selected="true"]{ background:var(--admin-surface); color:var(--admin-ink); box-shadow:0 1px 2px rgba(0,0,0,.12); }
+.studio-tabs button:focus-visible{ outline:2px solid var(--admin-accent); outline-offset:1px; }
+.studio-badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:4px; background:#111114; color:#fff; font-size:.72rem; font-weight:700; white-space:nowrap; }
+.studio-std{ color:var(--admin-mute); font-size:.78rem; }
+.studio-at{ color:var(--admin-mute); font-size:.74rem; white-space:nowrap; }
+.studio-bar{ display:block; height:6px; border-radius:3px; background:var(--admin-surface-2); overflow:hidden; margin:4px 0 0 auto; width:80px; }
+.studio-bar i{ display:block; height:100%; background:#3B5BDB; }
+.studio-bar i.studio-bar--full{ background:#C0262D; }
+.studio-table .admin-table tr.studio-edit td{ background:var(--admin-surface-2); }
+.studio-edit__row{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px 14px; }
+.studio-edit__row label{ display:flex; flex-direction:column; gap:4px; font-size:.72rem; font-weight:700; color:var(--admin-mute); }
+.studio-edit__btns{ display:flex; flex-wrap:wrap; gap:6px; }
 @media (max-width:640px){ .admin-form-grid{ grid-template-columns:1fr; } }
 .admin-form-grid .col-2{ grid-column:1 / -1; }
 
@@ -8516,7 +8542,11 @@ const AppState = {
     moderationTermsShown:25,
     storageUsage:{ status:"idle", totalBytes:0, fileCount:0, largest:[] }, quickUpdate:{ log:[], panelOpen:false, selectedRegion:null },
     analytics:{ status:"idle", days:7, data:null, error:"" },
-    studio:{ status:"idle", days:30, data:null, error:"" },
+    studio:{ status:"idle", days:30, data:null, error:"",
+      /* Space limits: studio_limits_get(), what the admin typed (kept across a rerender) and any bad values;
+         the "By member" tab, Sound Space's usage, and the member whose Change row is open */
+      limitsStatus:"idle", limits:null, limitsError:"", limitsDraft:{}, limitsErrors:{},
+      tab:"art", sound:{ status:"idle", data:null, error:"" }, edit:null },
     shares:{ status:"idle", days:7, rows:[], error:"" },
     worldMap:{ status:"idle", svg:"" },
     newsletterCompose:{ editingId:null, templateId:null, mode:"now", scheduledAt:"",
@@ -14185,6 +14215,24 @@ async function artCloudCall(action, extra){
     return res.data;
   } catch(_e){ return { ok: false, error: "network" }; }
 }
+/** For Sound Space (opened inside the site): save or load a member's songs in their account (the sound-cloud
+    function). The same sign-in as Art Space's, forgotten the same way when the server no longer takes it. */
+async function soundCloudCall(action, extra){
+  const session = portalSavedSession();
+  if (!session) return { ok: false, error: "no_session" };
+  try {
+    const res = await sb.functions.invoke("sound-cloud", { body: Object.assign({}, extra || {}, { action: action, session: session }) });
+    if (res.error || !res.data) return { ok: false, error: "network" };
+    if (res.data.error === "no_session" && portalSavedSession() === session) artCloudForget();
+    return res.data;
+  } catch(_e){ return { ok: false, error: "network" }; }
+}
+/** Sound Space usage: add one to today's anonymous total for an event (opened, signin_shown, signed_in, song_played,
+    song_exported). Nothing about the person is sent. Admins aren't counted. */
+function soundCount(ev){
+  if (portalIsAdmin()) return;
+  try { sb.rpc("sound_space_count", { ev: ev }).then(() => {}, () => {}); } catch(_e){ /* a lost count never matters */ }
+}
 /* set when Art Space signed someone in or out, so the page behind it is redrawn when the app closes */
 let ART_SIGNIN_CHANGED = false;
 function artCloudForget(){
@@ -14215,8 +14263,9 @@ async function artSignInStart(email){
   if (r.status === "needs_consent") return { ok: false, notOnList: true, message: "That email isn’t on our mailing list yet. Press Join free to sign up. It’s free." };
   return { ok: true };
 }
-/** Step 2: the code from the email. Right, and the whole site is signed in (the same sign-in as the Subscriber's Portal). */
-async function artSignInCode(email, code){
+/** Step 2: the code from the email. Right, and the whole site is signed in (the same sign-in as the Subscriber's Portal).
+    `app` says which studio app asked ("art" or "sound"), so each counts its own sign-ins. */
+async function artSignInCode(email, code, app = "art"){
   code = String(code || "").replace(/\D/g, "");
   if (code.length !== 6) return { ok: false, message: "Type the 6 numbers from the email." };
   const r = await portalCall("verify_code", { email: String(email || ""), code: code });
@@ -14232,7 +14281,7 @@ async function artSignInCode(email, code){
   portalSaveSession(r.session);
   PortalState.phase = "idle";
   ART_SIGNIN_CHANGED = true;
-  artCount("signed_in");
+  if (app === "sound") soundCount("signed_in"); else artCount("signed_in");
   return { ok: true };
 }
 
@@ -21501,10 +21550,221 @@ function studioChartSVG(weeks){
     + '<text x="' + (x(last) - 12).toFixed(1) + '" y="' + (y(ls) - 8).toFixed(1) + '" class="sc-endlab sc-endlab--s">' + ls + '</text>'
     + xl + '</svg>';
 }
+/* STUDIO-LIMITS:BEGIN */
+/* Space limits for Art Space and Sound Space (supabase/studio-limits.sql). studio_limits_get() gives the limits in
+   force per app (saved values over the usual ones) and members' own limits; studio_limits_set() and
+   studio_member_limit_set() change them (admins only, checked again on the server, and logged there). Sizes are shown
+   in MB, where 1 MB = 1,000,000 bytes. A value equal to the usual one is sent as null, so it stays "the usual". */
+const STUDIO_LIMIT_APPS = [
+  { app:"art", name:"Art Space", items:"pictures", item:"picture" },
+  { app:"sound", name:"Sound Space", items:"songs", item:"song" },
+];
+const STUDIO_LIMIT_USUAL = {
+  art:   { max_items:200, max_account_bytes:100000000, max_item_bytes:3000000, max_saves_per_hour:600 },
+  sound: { max_items:200, max_account_bytes:20000000,  max_item_bytes:500000,  max_saves_per_hour:600 },
+};
+const STUDIO_LIMIT_FIELDS = [
+  { key:"max_items", label:"Items each member can save", mb:false, min:{ art:1, sound:1 }, max:{ art:2000, sound:2000 } },
+  { key:"max_account_bytes", label:"Total space for each member", mb:true, min:{ art:1000000, sound:1000000 }, max:{ art:1000000000, sound:1000000000 } },
+  { key:"max_item_bytes", label:"Largest single item", mb:true, min:{ art:100000, sound:50000 }, max:{ art:10000000, sound:2000000 } },
+  { key:"max_saves_per_hour", label:"Saves an hour", mb:false, min:{ art:60, sound:60 }, max:{ art:3600, sound:3600 } },
+];
+const studioLimitApp = app => STUDIO_LIMIT_APPS.find(a => a.app === app) || STUDIO_LIMIT_APPS[0];
+/** Bytes as MB for an input or a label: 100, 0.5, 2.25. */
+function studioMB(bytes){ return String(Math.round(Number(bytes) / 10000) / 100); }
+const studioNum = n => Number(n).toLocaleString("en-US");
+/** What a field is called in a message, e.g. "Art Space largest picture". */
+function studioLimitName(app, key){
+  const a = studioLimitApp(app);
+  return a.name + " " + ({ max_items: a.items + " each member can save", max_account_bytes: "total space",
+    max_item_bytes: "largest " + a.item, max_saves_per_hour: "saves an hour" })[key];
+}
+/** One box's value: a whole number, or MB turned into bytes. { value, error } with the range in plain words. */
+function studioLimitParse(app, key, raw){
+  const f = STUDIO_LIMIT_FIELDS.find(x => x.key === key);
+  const lo = f.min[app], hi = f.max[app];
+  const error = studioLimitName(app, key) + ": " + (f.mb ? "use " + studioMB(lo) + " to " + studioNum(Number(studioMB(hi))) + " MB." : "use a whole number from " + studioNum(lo) + " to " + studioNum(hi) + ".");
+  const s = String(raw == null ? "" : raw).trim().replace(/,/g, "");
+  if (!/^\d+(\.\d+)?$/.test(s)) return { value:null, error:error };
+  const n = Number(s);
+  if (!f.mb && !Number.isInteger(n)) return { value:null, error:error };
+  const value = f.mb ? Math.round(n * 1000000) : n;
+  return value >= lo && value <= hi ? { value:value, error:"" } : { value:null, error:error };
+}
+/** Every box in the Space limits card, read with get(name). */
+function studioLimitsRead(get){
+  const values = {}, errors = {}, raw = {};
+  STUDIO_LIMIT_APPS.forEach(a => {
+    values[a.app] = {};
+    STUDIO_LIMIT_FIELDS.forEach(f => {
+      const name = "lim-" + a.app + "-" + f.key, r = get(name);
+      raw[name] = r == null ? "" : String(r);
+      const p = studioLimitParse(a.app, f.key, r);
+      if (p.error) errors[name] = p.error; else values[a.app][f.key] = p.value;
+    });
+  });
+  return { values:values, errors:errors, raw:raw };
+}
+/** The apps whose limits would change: a different number, or a custom one set back to the usual number. */
+function studioLimitsChanged(limits, values){
+  return STUDIO_LIMIT_APPS.map(a => a.app).filter(app => {
+    const cur = (limits && limits[app]) || STUDIO_LIMIT_USUAL[app], usual = STUDIO_LIMIT_USUAL[app], custom = (cur && cur.custom) || {};
+    return STUDIO_LIMIT_FIELDS.some(f => {
+      const v = values[app][f.key];
+      return v !== cur[f.key] || (!!custom[f.key] && v === usual[f.key]);
+    });
+  });
+}
+/** studio_limits_set's arguments for one app; a usual value (or no values at all) goes as null. */
+function studioLimitsArgs(app, v){
+  const usual = STUDIO_LIMIT_USUAL[app], arg = key => (v && v[key] != null && v[key] !== usual[key]) ? v[key] : null;
+  return { p_app:app, p_max_items:arg("max_items"), p_max_account_bytes:arg("max_account_bytes"), p_max_item_bytes:arg("max_item_bytes"), p_max_saves_per_hour:arg("max_saves_per_hour") };
+}
+/** Saves the given apps one after another; resolves to the new studio_limits_get(), or throws the server's words. */
+async function studioLimitsSave(rpc, apps, values){
+  let data = null;
+  for (const app of apps){
+    const res = await rpc("studio_limits_set", studioLimitsArgs(app, values && values[app]));
+    if (res.error) throw new Error(res.error.message || "Could not save the limits.");
+    data = res.data;
+  }
+  return data;
+}
+function studioLimitsCardHTML(st){
+  const head = '<h3 class="admin-section-title" style="font-size:.92rem;margin:0 0 4px">' + ic("hard-drive") + ' Space limits</h3>'
+    + '<p class="admin-meta studio-note" style="margin-top:0">What every member can keep in their account. Change a number and press Save. It applies right away.</p>';
+  if (st.limitsStatus === "error")
+    return '<div class="admin-card studio-card">' + head + '<p class="admin-meta">Could not load the limits: ' + E(st.limitsError) + '</p>'
+      + '<button type="button" class="admin-btn admin-btn--sm admin-btn--ghost" data-act="studio-limits-retry">' + ic("refresh-cw") + ' Try again</button></div>';
+  if (st.limitsStatus !== "ready" || !st.limits)
+    return '<div class="admin-card studio-card">' + head + '<p class="admin-meta" role="status">Loading the limits…</p></div>';
+  const errs = st.limitsErrors || {}, draft = st.limitsDraft || {};
+  const box = (a, f) => {
+    const name = "lim-" + a.app + "-" + f.key, cur = st.limits[a.app] || STUDIO_LIMIT_USUAL[a.app];
+    const value = draft[name] != null ? draft[name] : (f.mb ? studioMB(cur[f.key]) : String(cur[f.key]));
+    const label = f.key === "max_items" ? a.name + " " + a.items : f.key === "max_account_bytes" ? a.name + " total space in MB"
+      : f.key === "max_item_bytes" ? a.name + " largest " + a.item + " in MB" : a.name + " saves an hour";
+    return '<td><span class="studio-num"><input class="admin-input" name="' + name + '" value="' + E(value) + '" inputmode="' + (f.mb ? "decimal" : "numeric") + '"'
+      + ' autocomplete="off" data-studio-lim="card" aria-label="' + E(label) + '"' + (errs[name] ? ' aria-invalid="true"' : "") + '>'
+      + '<span>' + (f.mb ? "MB" : f.key === "max_items" ? a.items : "saves") + '</span></span></td>';
+  };
+  const messages = Object.keys(errs).map(k => errs[k]);
+  return '<form class="admin-card studio-card studio-limits" data-act="save-studio-limits" aria-label="Space limits" novalidate>' + head
+    + '<div class="admin-table-wrap studio-table"><table class="admin-table studio-lim"><thead><tr><th></th>'
+    + STUDIO_LIMIT_APPS.map(a => '<th>' + E(a.name) + '</th>').join("") + '</tr></thead><tbody>'
+    + STUDIO_LIMIT_FIELDS.map(f => '<tr><td>' + E(f.label) + '</td>' + STUDIO_LIMIT_APPS.map(a => box(a, f)).join("") + '</tr>').join("")
+    + '</tbody></table></div>'
+    + (messages.length ? '<ul class="studio-lim-errors" role="alert">' + messages.map(m => '<li>' + E(m) + '</li>').join("") + '</ul>' : "")
+    + '<div class="studio-lim-actions"><button type="submit" class="admin-btn admin-btn--sm admin-btn--primary">' + ic("save") + ' Save limits</button>'
+    + '<button type="button" class="admin-btn admin-btn--sm admin-btn--ghost" data-act="studio-limits-usual">Back to the usual limits</button></div>'
+    + '<p class="admin-meta studio-note">Lowering a limit never deletes anything. A member already over it keeps everything, but can\'t add more until they make room. Each change goes in the activity log.</p>'
+    + '</form>';
+}
+/** A member's limits for one app: from their usage row when it has them, else their own limits, else the app's. */
+function studioMemberLimit(app, m, limits){
+  m = m || {};
+  if (m.max_items != null && m.max_bytes != null) return { items:Number(m.max_items), bytes:Number(m.max_bytes), custom:!!m.custom };
+  const cur = (limits && limits[app]) || STUDIO_LIMIT_USUAL[app];
+  const email = String(m.email || "").toLowerCase();
+  const own = ((limits && limits.members) || []).find(x => x.app === app && String(x.email || "").toLowerCase() === email);
+  return { items:own && own.max_items != null ? Number(own.max_items) : cur.max_items,
+           bytes:own && own.max_account_bytes != null ? Number(own.max_account_bytes) : cur.max_account_bytes, custom:!!own };
+}
+/** Bytes in the limits' units (1 MB = 1,000,000 bytes, 1 GB = 1,000 MB), so 19 MB of 20 MB reads as such. */
+function studioBytesText(bytes){
+  const n = Number(bytes || 0);
+  return !n ? "—" : n >= 1e9 ? (n / 1e9).toFixed(2) + " GB" : n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1000)) + " KB";
+}
+/** Storage used, with a bar that fills against the member's own limit: blue, red at 90% or more. */
+function studioStorageHTML(bytes, max){
+  const n = Number(bytes || 0), pct = max ? Math.min(100, Math.round(100 * n / max)) : 0;
+  return studioBytesText(n) + '<span class="studio-bar"><i' + (pct >= 90 ? ' class="studio-bar--full"' : "") + ' style="width:' + pct + '%"></i></span>';
+}
+function studioLimitCellHTML(eff, count, bytes){
+  const tag = eff.custom ? '<span class="studio-badge">Custom · ' + eff.items + ' · ' + studioMB(eff.bytes) + ' MB</span>' : '<span class="studio-std">Standard</span>';
+  const at = Number(count) >= eff.items ? "at the item limit" : Number(bytes) >= eff.bytes ? "at the space limit" : "";
+  return tag + (at ? ' <span class="studio-at">· ' + at + '</span>' : "");
+}
+/** The Change row's two boxes: an empty box means the standard value for that one. */
+function studioMemberLimitRead(app, rawItems, rawMB){
+  const out = { items:null, bytes:null, errors:[] };
+  if (String(rawItems == null ? "" : rawItems).trim()){ const p = studioLimitParse(app, "max_items", rawItems); if (p.error) out.errors.push(p.error); else out.items = p.value; }
+  if (String(rawMB == null ? "" : rawMB).trim()){ const p = studioLimitParse(app, "max_account_bytes", rawMB); if (p.error) out.errors.push(p.error); else out.bytes = p.value; }
+  return out;
+}
+async function studioMemberLimitSave(rpc, app, email, items, bytes){
+  const res = await rpc("studio_member_limit_set", { p_app:app, p_email:email, p_max_items:items, p_max_account_bytes:bytes });
+  if (res.error) throw new Error(res.error.message || "Could not save this member's limits.");
+  return res.data;
+}
+/** "By member" for one app, with the Limit column, a Change button per member, and the open Change row. */
+function studioMemberTableHTML(app, rows, st){
+  const a = studioLimitApp(app);
+  rows = Array.isArray(rows) ? rows : [];
+  if (!rows.length) return '<p class="admin-meta">No member has saved a ' + a.item + ' yet.</p>';
+  const cols = 5, edit = st.edit;
+  const body = rows.map(m => {
+    const email = String(m.email || "").toLowerCase(), count = app === "art" ? m.pictures : m.songs;
+    const eff = studioMemberLimit(app, m, st.limits);
+    const open = !!edit && edit.app === app && String(edit.email || "").toLowerCase() === email;
+    /* the columns of the approved draft; paint / pixel and the dates sit in a muted line under the email */
+    const sub = (app === "art" ? Number(m.paint || 0) + ' paint · ' + Number(m.pixel || 0) + ' pixel · ' : "")
+      + 'first ' + E(fmtDate(m.first)) + ' · last saved ' + E(m.last ? fmtDate(new Date(Number(m.last)).toISOString()) : "--");
+    let tr = '<tr data-email="' + E(email) + '"><td class="t-title">' + E(m.email || "").replace("@", "@<wbr>") + '<span class="studio-sub">' + sub + '</span></td>'
+      + '<td class="studio-n">' + Number(count || 0) + '</td>'
+      + '<td class="studio-n studio-nowrap">' + studioStorageHTML(m.bytes, eff.bytes) + '</td>'
+      + '<td>' + studioLimitCellHTML(eff, count, m.bytes) + '</td>'
+      + '<td class="studio-n"><button type="button" class="admin-btn admin-btn--sm admin-btn--ghost" data-act="studio-limit-edit" data-app="' + app + '" data-email="' + E(email) + '" aria-expanded="' + open + '">Change</button></td></tr>';
+    if (open){
+      const d = edit.draft || {};
+      tr += '<tr class="studio-edit"><td colspan="' + cols + '"><div class="studio-edit__row">'
+        + '<label>Items<span class="studio-num"><input class="admin-input" id="slm-items" data-studio-lim="member" value="' + E(d.items != null ? d.items : String(eff.items)) + '" inputmode="numeric" autocomplete="off"><span>' + a.items + '</span></span></label>'
+        + '<label>Total space<span class="studio-num"><input class="admin-input" id="slm-mb" data-studio-lim="member" value="' + E(d.mb != null ? d.mb : studioMB(eff.bytes)) + '" inputmode="decimal" autocomplete="off"><span>MB</span></span></label>'
+        + '<div class="studio-edit__btns"><button type="button" class="admin-btn admin-btn--sm admin-btn--primary" data-act="studio-member-limit-save" data-app="' + app + '" data-email="' + E(email) + '">Save for this member</button>'
+        + '<button type="button" class="admin-btn admin-btn--sm admin-btn--ghost" data-act="studio-member-limit-standard" data-app="' + app + '" data-email="' + E(email) + '">Back to standard</button>'
+        + '<button type="button" class="admin-btn admin-btn--sm admin-btn--ghost" data-act="studio-limit-cancel">Cancel</button></div></div>'
+        + (edit.errors && edit.errors.length ? '<ul class="studio-lim-errors" role="alert">' + edit.errors.map(x => '<li>' + E(x) + '</li>').join("") + '</ul>' : "")
+        + '<p class="admin-meta studio-note">Only this member gets these limits. The largest item and saves an hour stay the same for everyone.</p></td></tr>';
+    }
+    return tr;
+  }).join("");
+  return '<div class="admin-table-wrap studio-table"><table class="admin-table"><thead><tr><th>Member</th><th class="studio-n">' + (app === "art" ? "Pictures" : "Songs") + '</th>'
+    + '<th class="studio-n">Storage</th><th>Limit</th><th><span class="sr-only">Change</span></th></tr></thead><tbody>'
+    + body + '</tbody></table></div>';
+}
+/* STUDIO-LIMITS:END */
+async function loadStudioLimits(){
+  const st = AppState.admin.studio;
+  st.limitsStatus = "loading"; st.limitsError = "";
+  try {
+    const res = await sb.rpc("studio_limits_get");
+    if (res.error) throw new Error(res.error.message);
+    st.limits = res.data; st.limitsStatus = "ready";
+  } catch(e){ st.limitsStatus = "error"; st.limitsError = (e && e.message) || "Could not load the limits."; }
+  if (AppState.route && AppState.route.name === "admin") rerender();
+}
+async function loadSoundUsage(days){
+  const st = AppState.admin.studio;
+  st.sound.status = "loading"; st.sound.error = "";
+  try {
+    const res = await sb.rpc("sound_space_usage", { range_days: days || 0 });
+    if (res.error) throw new Error(res.error.message);
+    st.sound.data = res.data; st.sound.status = "ready";
+  } catch(e){ st.sound.status = "error"; st.sound.error = (e && e.message) || "Could not load Sound Space usage."; }
+  if (AppState.route && AppState.route.name === "admin") rerender();
+}
+/** After a limit changes: the limits and the usage tables again, so every Limit cell is current. */
+function studioLimitsReload(){
+  const st = AppState.admin.studio;
+  loadStudioUsage(st.days);
+  if (st.sound.status !== "idle") loadSoundUsage(st.days);
+}
 function adminStudio(){
   const cfg = studioSettings();
   const st = AppState.admin.studio;
   if (st.status === "idle") loadStudioUsage(st.days);
+  if (st.limitsStatus === "idle") loadStudioLimits();
+  if (st.tab === "sound" && st.sound.status === "idle") loadSoundUsage(st.days);
   const C = "create";
   const ranges = [[7, "7d"], [30, "30d"], [90, "90d"], [0, "All"]];
   const head = '<div style="margin-bottom:14px"><span class="admin-eyebrow">Content</span>'
@@ -21541,9 +21801,14 @@ function adminStudio(){
       return '<small class="' + (c >= 0 ? "studio-up" : "studio-down") + '">' + (c >= 0 ? "▲ " : "▼ ") + Math.abs(c) + '%</small>';
     };
     const stat = (n, label, sub, key) => '<div class="studio-stat' + (key ? " studio-stat--key" : "") + '"><b data-count="studio-' + E(label) + '">' + n + '</b><span>' + label + '</span>' + (sub || "") + '</div>';
-    const members = (d.by_member || []).map(m => '<tr data-email="' + E(String(m.email || "").toLowerCase()) + '">'
-      + '<td class="t-title">' + E(m.email || "") + '</td><td class="studio-n">' + m.pictures + '</td><td class="studio-n">' + m.paint + ' / ' + m.pixel + '</td>'
-      + '<td>' + E(fmtDate(m.first)) + '</td><td>' + E(m.last ? fmtDate(new Date(Number(m.last)).toISOString()) : "--") + '</td><td class="studio-n">' + E(formatBytes(Number(m.bytes))) + '</td></tr>').join("");
+    /* "By member": Art Space from art_studio_usage(), Sound Space from sound_space_usage(), each with its Limit column */
+    const tab = st.tab === "sound" ? "sound" : "art";
+    const snd = st.sound;
+    const members = tab === "art" ? studioMemberTableHTML("art", d.by_member, st)
+      : snd.status === "ready" ? studioMemberTableHTML("sound", snd.data && snd.data.by_member, st)
+      : snd.status === "error" ? '<p class="admin-meta">Could not load Sound Space usage: ' + E(snd.error) + '</p>'
+      : '<p class="admin-meta" role="status">Loading Sound Space…</p>';
+    const tabs = '<div class="studio-tabs" role="tablist" aria-label="App">' + STUDIO_LIMIT_APPS.map(a => '<button type="button" role="tab" aria-selected="' + (a.app === tab) + '" data-act="studio-member-tab" data-app="' + a.app + '">' + E(a.name) + '</button>').join("") + '</div>';
     usage = '<div class="studio-stats' + Motion.arrived("studio-usage") + '">'
       + stat(d.opened, "Times opened", change(d.opened, d.opened_before), true)
       + stat(d.signin_shown, "Saw Sign in", '<small>' + d.signed_in + ' signed in</small>', true)
@@ -21552,15 +21817,15 @@ function adminStudio(){
       + stat(d.members, "Members") + stat(d.active7, "Active 7d")
       + stat(d.pictures, "Pictures", '<small>' + d.paint + ' paint · ' + d.pixel + ' pixel</small>')
       + stat(d.new7, "New 7d", '<small>' + d.new30 + ' in 30d</small>')
-      + stat(E(formatBytes(Number(d.bytes))), "Storage")
+      + stat(E(studioBytesText(d.bytes)), "Storage")
       + '</div>'
       + '<div class="studio-split">'
       + '<div class="studio-trend"><div class="studio-trend__head"><h4>Week by week</h4><span class="studio-key"><i class="k-o"></i>Opened <i class="k-s"></i>Pictures saved</span></div>' + studioChartSVG(d.weeks) + '</div>'
-      + '<div class="studio-trend"><div class="studio-trend__head"><h4>By member</h4>'
+      + '<div class="studio-trend"><div class="studio-trend__head"><h4>By member</h4>' + tabs
       + '<input class="admin-input studio-search" type="search" placeholder="Search by email" aria-label="Search members by email" '
       + 'oninput="var q=this.value.trim().toLowerCase();this.closest(\'.studio-trend\').querySelectorAll(\'tbody tr[data-email]\').forEach(function(r){r.hidden=!!q&&r.getAttribute(\'data-email\').indexOf(q)<0})"></div>'
-      + (members ? '<div class="admin-table-wrap studio-table"><table class="admin-table"><thead><tr><th>Member</th><th class="studio-n">Pictures</th><th class="studio-n">Paint / pixel</th><th>First</th><th>Last saved</th><th class="studio-n">Storage</th></tr></thead><tbody>' + members + '</tbody></table></div>'
-        : '<p class="admin-meta">No member has saved a picture yet.</p>')
+      + members
+      + '<p class="admin-meta studio-note">The bar shows how full each member\'s space is under their own limit. It turns red at 90%.</p>'
       + '</div></div>'
       + '<p class="admin-meta studio-note">Blue figures are anonymous daily totals counted from ' + E(fmtDate(STUDIO_COUNTS_SINCE)) + ' (no names, emails or cookies; admins aren’t counted). The rest come from pictures members saved: counts and dates only, never the pictures.</p>';
   }
@@ -21576,7 +21841,7 @@ function adminStudio(){
           + (a.live ? (a.members ? ic("lock") + " Subscribers only" : "Open") : "Coming soon") + '</span></li>'; }).join("")
     + '</ul></div>';
   /* left third: publishing and the apps; right two thirds: usage (one column on narrower screens) */
-  return head + '<div class="studio-layout"><div class="studio-col">' + publishing + apps + '</div><div class="studio-col">' + usageCard + '</div></div>';
+  return head + '<div class="studio-layout"><div class="studio-col">' + publishing + apps + studioLimitsCardHTML(st) + '</div><div class="studio-col">' + usageCard + '</div></div>';
 }
 
 function adminBrand(){
@@ -28443,8 +28708,68 @@ const ACTIONS = {
     rerender();
   },
   "refresh-storage-usage": () => { loadStorageUsage(); },
-  "studio-range": (el) => { loadStudioUsage(Number(el.getAttribute("data-days")) || null); },
-  "studio-refresh": () => { loadStudioUsage(AppState.admin.studio.days); },
+  "studio-range": (el) => { loadStudioUsage(Number(el.getAttribute("data-days")) || null); if (AppState.admin.studio.sound.status !== "idle") loadSoundUsage(AppState.admin.studio.days); },
+  "studio-refresh": () => { studioLimitsReload(); loadStudioLimits(); },
+  /* Space limits (see studioLimitsCardHTML): retry, Back to the usual limits (after a confirm), the By member tabs,
+     and a member's own limits in the Change row */
+  "studio-limits-retry": () => { loadStudioLimits(); rerender(); },
+  "studio-limits-usual": () => {
+    openModal('<div class="admin-scope" style="font-family:var(--admin-font-body);color:var(--admin-ink)">'
+      + '<div class="modal__head"><div><span class="admin-eyebrow">Creative Space Studio</span>'
+      + '<h3 class="admin-section-title" style="margin-top:4px;text-transform:none">Back to the usual limits?</h3></div>'
+      + '<button type="button" class="admin-btn admin-btn--ghost admin-btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
+      + '<p class="admin-meta">Art Space and Sound Space go back to 200 pictures or songs, 100 MB or 20 MB in all, 3 MB or 0.5 MB for the largest one, and 600 saves an hour. Members\' own limits stay. Nothing is deleted.</p>'
+      + '<div class="modal__foot"><button type="button" class="admin-btn admin-btn--ghost" data-act="close-modal">Cancel</button>'
+      + '<button type="button" class="admin-btn admin-btn--primary" data-act="studio-limits-usual-confirm">Back to the usual limits</button></div></div>',
+      null, "admin-modal");
+  },
+  "studio-limits-usual-confirm": async () => {
+    closeModal();
+    const st = AppState.admin.studio;
+    const apps = STUDIO_LIMIT_APPS.map(a => a.app).filter(app => {
+      const c = (st.limits && st.limits[app] && st.limits[app].custom) || {};
+      return Object.keys(c).some(k => c[k]);
+    });
+    if (!apps.length){ toast("These are already the usual limits."); return; }
+    try { st.limits = await studioLimitsSave((n, args) => sb.rpc(n, args), apps, null); }
+    catch(e){ toast("Could not change the limits: " + e.message, "bad"); return; }
+    st.limitsDraft = {}; st.limitsErrors = {};
+    toast("Space limits are back to the usual ones.", "good");
+    studioLimitsReload();
+  },
+  "studio-member-tab": (el) => {
+    const st = AppState.admin.studio;
+    st.tab = el.getAttribute("data-app") === "sound" ? "sound" : "art";
+    st.edit = null;
+    if (st.tab === "sound" && st.sound.status === "idle") loadSoundUsage(st.days);
+    rerender();
+  },
+  "studio-limit-edit": (el) => {
+    const st = AppState.admin.studio, app = el.getAttribute("data-app"), email = el.getAttribute("data-email");
+    st.edit = st.edit && st.edit.app === app && st.edit.email === email ? null : { app: app, email: email, draft: {}, errors: [] };
+    rerender();
+    const box = document.getElementById("slm-items"); if (box) box.focus();
+  },
+  "studio-limit-cancel": () => { AppState.admin.studio.edit = null; rerender(); },
+  "studio-member-limit-save": async (el) => {
+    const st = AppState.admin.studio, app = el.getAttribute("data-app"), email = el.getAttribute("data-email");
+    const items = (document.getElementById("slm-items") || {}).value, mb = (document.getElementById("slm-mb") || {}).value;
+    const read = studioMemberLimitRead(app, items, mb);
+    if (read.errors.length){ st.edit = { app: app, email: email, draft: { items: items, mb: mb }, errors: read.errors }; rerender(); return; }
+    try { st.limits = await studioMemberLimitSave((n, args) => sb.rpc(n, args), app, email, read.items, read.bytes); }
+    catch(e){ st.edit = { app: app, email: email, draft: { items: items, mb: mb }, errors: [e.message] }; rerender(); return; }
+    st.edit = null;
+    toast("Limits saved for " + email + ".", "good");
+    studioLimitsReload();
+  },
+  "studio-member-limit-standard": async (el) => {
+    const st = AppState.admin.studio, app = el.getAttribute("data-app"), email = el.getAttribute("data-email");
+    try { st.limits = await studioMemberLimitSave((n, args) => sb.rpc(n, args), app, email, null, null); }
+    catch(e){ toast("Could not change this member's limits: " + e.message, "bad"); return; }
+    st.edit = null;
+    toast(email + " is back to the standard limits.", "good");
+    studioLimitsReload();
+  },
   "set-analytics-range": (el) => { loadAnalytics(Number(el.getAttribute("data-days")) || 7); },
   "refresh-analytics": () => { loadAnalytics(AppState.admin.analytics.days); },  /* also reloads the share counts */
   "media-upload": () => {
@@ -29721,6 +30046,21 @@ async function handleSubmit(form, act){
     return;
   }
 
+  if (act === "save-studio-limits"){
+    const st = AppState.admin.studio;
+    const read = studioLimitsRead(name => form.elements[name] ? form.elements[name].value : "");
+    st.limitsDraft = read.raw; st.limitsErrors = read.errors;
+    if (Object.keys(read.errors).length){ rerender(); return; }
+    const apps = studioLimitsChanged(st.limits, read.values);
+    if (!apps.length){ st.limitsDraft = {}; toast("Nothing changed."); rerender(); return; }
+    try { st.limits = await studioLimitsSave((n, args) => sb.rpc(n, args), apps, read.values); }
+    catch(e){ toast("Could not save the limits: " + e.message, "bad"); return; }
+    st.limitsDraft = {}; st.limitsErrors = {};
+    toast("Space limits saved: " + apps.map(app => studioLimitApp(app).name).join(" and "), "good");
+    studioLimitsReload();
+    return;
+  }
+
   if (act === "save-brand-settings"){
     const patch = {};
     BRAND_FIELDS.forEach(f => { patch[f.key] = form.elements[f.key].value.trim(); });
@@ -29957,6 +30297,13 @@ document.addEventListener("input", (ev) => {
   const act = el.getAttribute && el.getAttribute("data-act");
   if (act === "portal-photo-text"){ portalPhotosSync(el.closest(".pphotos")); return; }
   if (el.id === "cp-input"){ CopilotState.draft = el.value; return; }
+  /* the Studio page's space limits: keep what the admin typed if the page redraws (the usage loading in, say) */
+  if (el.getAttribute && el.getAttribute("data-studio-lim")){
+    const st = AppState.admin.studio;
+    if (el.getAttribute("data-studio-lim") === "card") st.limitsDraft[el.name] = el.value;
+    else if (st.edit){ st.edit.draft = st.edit.draft || {}; st.edit.draft[el.id === "slm-items" ? "items" : "mb"] = el.value; }
+    return;
+  }
   if (el.getAttribute && el.getAttribute("data-ehrow")){ ehEdit(el); return; }
   if (el.getAttribute && el.getAttribute("data-cpm")){ copilotEdit(el); return; }
   writerOnInput(el);
