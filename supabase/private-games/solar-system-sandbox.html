@@ -76,6 +76,11 @@
   .dock button.on .ball{outline:2px solid var(--cyan);outline-offset:3px}
   .dock .ball{border-radius:50%;background-size:200% 100%;background-position:center;box-shadow:inset -4px -3px 6px rgba(0,0,0,.55)}
   .label{position:fixed;pointer-events:none;font-size:12px;color:#fff;text-shadow:0 1px 3px #000;transform:translate(-50%,-150%);white-space:nowrap}
+  /* compare sizes: the name and how wide it is, under each globe */
+  .label.under{transform:translate(-50%,0);text-align:center;line-height:1.3;background:rgba(5,8,18,.62);border-radius:8px;padding:3px 8px;text-shadow:none}
+  .label.under.beside{transform:translate(10px,-50%);text-align:left}
+  .label.under small{display:block;font-size:11px;color:var(--soft)}
+  .ib[aria-pressed="true"]{background:var(--blue);border-color:var(--blue);color:#fff}
 
   /* help */
   .help{position:fixed;inset:0;background:rgba(4,7,16,.62);display:none;align-items:center;justify-content:center}
@@ -99,8 +104,15 @@
   }
   @media (max-width: 640px){
     .card{left:8px;right:8px;width:auto;top:auto;bottom:86px;max-height:46vh}
-    .banner{top:60px;font-size:13px}
+    .banner{top:60px;font-size:13px;left:8px;right:8px;transform:none;max-width:none}
     .title .name{display:none}
+  }
+  @media (max-width: 420px){
+    .bar{padding:0 8px}
+    .btns{gap:4px}
+    .ib{padding:7px}
+    .speed button{padding:7px 8px}
+    .speed span{min-width:30px}
   }
 </style>
 </head>
@@ -111,6 +123,7 @@
     <button class="ib" id="bPause"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg><span class="lbl">Pause</span></button>
     <span class="speed"><button id="bSlow" aria-label="Slower">&minus;</button><span><span class="word">Speed </span><span id="speedTxt">1x</span></span><button id="bFast" aria-label="Faster">+</button></span>
     <button class="ib" id="bView" aria-expanded="false" aria-controls="view"><svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span class="lbl">View</span></button>
+    <button class="ib" id="bCompare" aria-pressed="false"><svg viewBox="0 0 24 24"><circle cx="6" cy="15" r="3"/><circle cx="16" cy="11" r="6"/></svg><span class="lbl">Compare sizes</span></button>
     <button class="ib" id="bReset"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span class="lbl">Start over</span></button>
     <span class="sound-slot" id="soundSlot"></span>
     <button class="ib" id="bHelp" aria-label="How to play"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
@@ -138,13 +151,17 @@
   <span id="bannerTxt"></span>
   <button class="cta blue" id="bDone">Done</button>
 </div>
+<div class="banner" id="cmpBanner" role="status">
+  <span>Real sizes, side by side. The space between them is not to scale.</span>
+  <button class="cta blue" id="bCmpDone">Back to orbits</button>
+</div>
 <div class="help" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
   <div class="helpcard">
     <h2 id="helpTitle">Explore the solar system</h2>
     <div class="step"><span class="n">1</span><div><b>Tap a planet</b><span>Pick one from the bar at the bottom, or tap it out in space.</span></div></div>
     <div class="step"><span class="n">2</span><div><b>Look around</b><span>Drag to turn. Scroll or pinch to zoom.</span></div></div>
     <div class="step"><span class="n">3</span><div><b>Move a planet</b><span>See how the Sun's gravity changes its orbit.</span></div></div>
-    <p class="keys">Keyboard: arrow keys pick a planet, Space pauses, M moves, I looks inside. A game controller works too.</p>
+    <p class="keys">Keyboard: arrow keys pick a planet, Space pauses, M moves, I looks inside, C compares sizes. A game controller works too.</p>
     <button class="cta blue" id="helpGo" style="margin-top:14px">Start exploring</button>
   </div>
 </div>
@@ -171,6 +188,14 @@ function clampOrbit(a, lo, hi){ return Math.max(lo, Math.min(hi, a)); }
 function padDead(v, dz){ return Math.abs(v) < dz ? 0 : (v - Math.sign(v) * dz) / (1 - dz); }
 /* turn the cutaway so its open quarter faces the camera */
 function cutawayYaw(dx, dz){ return Math.atan2(dx, dz) + Math.PI / 4; }
+/* Compare sizes: real widths, Earth = 1 (NASA fact sheets) */
+const REAL = { sun: 109.1, mercury: 0.383, venus: 0.949, earth: 1, mars: 0.532, jupiter: 11.21, saturn: 9.45, uranus: 4.01, neptune: 3.88 };
+/* centers for a row of globes, left to right, starting just right of the Sun's edge at x = 0.
+   r is each globe's radius, ext how far it reaches sideways (Saturn's rings reach past the planet) */
+function lineupLayout(list){
+  let x = 12;
+  return list.map(o => { x += 2 + o.r * 0.35 + o.ext; const c = x; x += o.ext; return c; });
+}
 
 /* ---------- facts for the card: kid-friendly words, US units ---------- */
 const INFO = {
@@ -236,7 +261,9 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 4000);
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.minDistance = 4; controls.maxDistance = 420; controls.enablePan = false;
-function overviewPos(){ const k = Math.max(1, 1.45 / camera.aspect); return new THREE.Vector3(0, 70 * k, 150 * k); }
+/* the overview looks a little below the flat edge of the grid, so the Sun, deep in its well, sits near the middle */
+const OV_Y = -12;
+function overviewPos(){ const k = Math.max(1, 1.45 / camera.aspect); return new THREE.Vector3(0, 70 * k + OV_Y, 150 * k); }
 camera.position.copy(overviewPos());
 
 const loader = new THREE.TextureLoader();
@@ -381,7 +408,8 @@ function setOrbit(p, a){
 }
 
 /* gravity grid: a stretchy sheet that dips under the Sun and under each planet */
-const SHEET = 260, N = 104, G = 170, SUN_SOFT = 7;
+/* the Sun is 333,000 times heavier than Earth, so its well is far deeper than any planet's: it sinks until the sheet wraps up around its middle */
+const SHEET = 260, N = 104, G = 170, SUN_G = 420, SUN_SOFT = 9.5;
 const sheetGeo = new THREE.BufferGeometry();
 const gridPos = new Float32Array((N + 1) * (N + 1) * 3), gridCol = new Float32Array((N + 1) * (N + 1) * 3), idx = [];
 for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++){
@@ -393,8 +421,8 @@ sheetGeo.setAttribute("color", new THREE.BufferAttribute(gridCol, 3));
 sheetGeo.setIndex(idx);
 const sheet = new THREE.LineSegments(sheetGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.42, depthWrite: false, blending: THREE.AdditiveBlending }));
 scene.add(sheet);
-const EDGE = G / (SHEET * 0.5);
-function sunWell(x, z){ return -G / Math.sqrt(x * x + z * z + SUN_SOFT * SUN_SOFT) + EDGE; }
+const EDGE = SUN_G / (SHEET * 0.5);
+function sunWell(x, z){ return -SUN_G / Math.sqrt(x * x + z * z + SUN_SOFT * SUN_SOFT) + EDGE; }
 function well(x, z){
   let h = sunWell(x, z);
   for (const p of P){ const dx = x - p.wx, dz = z - p.wz, s = p.r * 1.6; h -= G * p.mass * 9 / Math.sqrt(dx * dx + dz * dz + s * s); }
@@ -439,7 +467,7 @@ function place(){
     for (let k = 0; k < pts.count; k++) pts.setY(k, gridOn ? well(pts.getX(k), pts.getZ(k)) + 0.05 : 0);
     pts.needsUpdate = true;
   });
-  sun.position.y = gridOn ? well(0, 0) + SUN_R * 0.75 : 0;
+  sun.position.y = gridOn ? well(0, 0) + SUN_R : 0;
   glows.forEach(s => s.position.copy(sun.position));
 }
 
@@ -465,6 +493,29 @@ function buildCutaway(id, radius, map){
 P.forEach(p => { p.cut = buildCutaway(p.id, p.r, p.map); p.pivot.add(p.cut); });
 const sunCut = buildCutaway("sun", SUN_R, null); scene.add(sunCut);
 
+/* ---------- Compare sizes: the Sun and the planets in a row at their real sizes ---------- */
+const cmp = new THREE.Group(); cmp.visible = false; scene.add(cmp);
+/* the Sun is so big that only its edge fits: a glowing wall on the left */
+const cmpSun = new THREE.Mesh(new THREE.SphereGeometry(SUN_R, 160, 80), sunMat);
+cmpSun.scale.setScalar(REAL.sun / SUN_R); cmpSun.position.x = -REAL.sun; cmp.add(cmpSun);
+const cmpLight = new THREE.DirectionalLight(0xffffff, 1.1); cmpLight.position.set(-40, 20, 100); cmp.add(cmpLight);
+const cmpRow = P.map(p => ({ p: p, r: REAL[p.id], ext: REAL[p.id] * (p.rings ? 2.3 : 1) }));
+lineupLayout(cmpRow).forEach((x, i) => {
+  const o = cmpRow[i], p = o.p, node = new THREE.Object3D(), tilt = new THREE.Object3D();
+  node.position.x = x; cmp.add(node);
+  tilt.rotation[p.rings ? "x" : "z"] = THREE.MathUtils.degToRad(p.tilt || 0);
+  tilt.scale.setScalar(o.r / p.r); node.add(tilt);
+  p.cmpBody = new THREE.Mesh(p.body.geometry, p.body.material); tilt.add(p.cmpBody);
+  p.tiltNode.children.filter(c => c !== p.body && c.geometry && c.geometry.type === "RingGeometry").forEach(ring => tilt.add(ring.clone()));
+  p.cmpX = x; p.cmpR = o.r; p.cmpExt = o.ext;
+});
+const CMP_END = cmpRow[cmpRow.length - 1].p.cmpX + cmpRow[cmpRow.length - 1].ext;
+/* the whole row on a wide screen; on a tall phone, the Sun's edge to Jupiter, and a drag slides along to the rest */
+function cmpHome(){
+  if (camera.aspect < 1){ const j = P[4]; return new THREE.Vector3(j.cmpX * 0.62, 4, j.cmpX * 0.75 / camera.aspect); }
+  const k = Math.max(1, 1.8 / camera.aspect); return new THREE.Vector3(CMP_END * 0.56, 8 * k, (CMP_END * 0.62 + 20) * k);
+}
+
 /* ---------- UI ---------- */
 const $ = id => document.getElementById(id);
 function sfx(name, opts){ if (window.CCSSound) CCSSound.play(name, opts); }
@@ -481,7 +532,12 @@ BODIES.forEach(p => {
   b.onclick = () => select(p);
   dock.appendChild(b);
   if (p.body){ p.label = document.createElement("div"); p.label.className = "label"; p.label.textContent = p.name; labels.appendChild(p.label); }
+  /* Compare sizes label: the name, and how many Earths wide it is */
+  p.cmpLabel = document.createElement("div"); p.cmpLabel.className = "label under" + (p.id === "sun" ? " beside" : ""); p.cmpLabel.style.display = "none";
+  p.cmpLabel.innerHTML = "<b>" + p.name + "</b><small>" + (p.id === "sun" ? "109x Earth" : INFO[p.id].size) + "</small>";
+  labels.appendChild(p.cmpLabel);
 });
+let comparing = false;
 
 let current = null;       /* the body whose card is open (the Sun or a planet) */
 let focus = null;         /* the planet the camera rides with */
@@ -507,8 +563,8 @@ function renderCard(){
   $("cWeigh").innerHTML = id === "earth"
     ? 'A kid who weighs <b>60 lb</b> here at home. Tap another planet to see how much that kid would weigh there.'
     : 'A kid who weighs <b>60 lb</b> on Earth would weigh <b>' + weighLb(d.g).toLocaleString("en-US") + ' lb</b> ' + where + '.';
-  $("cMove").hidden = id === "sun" || inside || !!moving;
-  $("cInside").hidden = !!moving;
+  $("cMove").hidden = id === "sun" || inside || !!moving || comparing;
+  $("cInside").hidden = !!moving || comparing;
   $("cMove").textContent = "Move " + name;
   $("cInside").textContent = inside ? "See outside" : "See inside";
 }
@@ -519,17 +575,50 @@ function select(p){
   dock.querySelectorAll("button").forEach(x => x.classList.toggle("on", x.dataset.id === p.id));
   const btn = dock.querySelector('[data-id="' + p.id + '"]'); if (btn && btn.scrollIntoView) btn.scrollIntoView({ block: "nearest", inline: "nearest" });
   renderCard(); card.classList.add("open");
-  if (!focus){ camTarget.set(0, sun.position.y, 0); camWant = new THREE.Vector3(0, sun.position.y + 30, 62); }
+  if (comparing){ focus = null; cmpFly(p); }
+  else if (!focus){ camTarget.set(0, sun.position.y, 0); camWant = new THREE.Vector3(0, sun.position.y + 30, 62); }
   flying = true;
   sfx("whoosh", { volume: 0.5 });
+}
+/* Compare sizes: glide along the row to a globe, close enough that it fills a good part of the screen with its neighbours beside it */
+function cmpFly(p){
+  const k = Math.max(1, 1.3 / camera.aspect);
+  if (p.id === "sun"){ camTarget.set(P[1].cmpX, 0, 0); camWant = new THREE.Vector3(P[1].cmpX + 8, 3 * k, 26 * k); return; }
+  const d = Math.max(2.4, p.cmpExt * 3.4) * k;
+  camTarget.set(p.cmpX, 0, 0); camWant = new THREE.Vector3(p.cmpX, d * 0.14, d);
 }
 function overview(){
   if (moving) finishMove();
   if (inside) setInside(false);
   current = null; focus = null; card.classList.remove("open");
   dock.querySelectorAll("button").forEach(x => x.classList.remove("on"));
-  camTarget.set(0, 0, 0); camWant = overviewPos(); flying = true;
+  if (comparing){ camTarget.set(cmpHome().x, 0, 0); camWant = cmpHome(); }
+  else { camTarget.set(0, OV_Y, 0); camWant = overviewPos(); }
+  flying = true;
 }
+function setCompare(on){
+  if (on === comparing) return;
+  if (moving) finishMove();
+  if (inside) setInside(false);
+  comparing = on;
+  cmp.visible = on;
+  [sun].concat(glows, belts, orbitLines, P.map(p => p.pivot)).forEach(o => o.visible = !on);
+  sheet.visible = !on && gridOn;
+  $("cmpBanner").classList.toggle("open", on);
+  $("bCompare").setAttribute("aria-pressed", on);
+  /* in the row, a drag slides along it (the row is wide); in orbit, a drag turns the view */
+  controls.enablePan = on; controls.screenSpacePanning = true;
+  controls.mouseButtons.LEFT = on ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+  controls.mouseButtons.RIGHT = on ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
+  controls.touches.ONE = on ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
+  controls.minDistance = on ? 1.2 : 4;
+  BODIES.forEach(b => { b.cmpLabel.style.display = on ? "" : "none"; if (b.label) b.label.style.display = on ? "none" : ""; });
+  if (current){ renderCard(); if (on){ focus = null; cmpFly(current); } else { focus = current.id === "sun" ? null : current; if (!focus){ camTarget.set(0, sun.position.y, 0); camWant = new THREE.Vector3(0, sun.position.y + 30, 62); } } flying = true; }
+  else overview();
+  sfx("whoosh", { volume: 0.5 });
+}
+$("bCompare").onclick = () => setCompare(!comparing);
+$("bCmpDone").onclick = () => setCompare(false);
 function step(dir){
   const i = current ? BODIES.indexOf(current) : (dir > 0 ? -1 : 0);
   select(BODIES[(i + dir + BODIES.length) % BODIES.length]);
@@ -595,9 +684,10 @@ renderer.domElement.addEventListener("pointerup", e => {
   if (moving){ if (dragging) sfx("tick", { volume: 0.6 }); dragging = false; return; }
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObjects([sun].concat(P.map(p => p.body)).filter(o => o.visible));
+  const theSun = comparing ? cmpSun : sun, key = comparing ? "cmpBody" : "body";
+  const hits = ray.intersectObjects([theSun].concat(P.map(p => p[key])).filter(o => o.visible));
   if (!hits.length) return;
-  const o = hits[0].object; select(o === sun ? SUN_BODY : P.find(p => p.body === o));
+  const o = hits[0].object; select(o === theSun ? SUN_BODY : P.find(p => p[key] === o));
 });
 
 /* top bar */
@@ -622,7 +712,7 @@ $("bView").onclick = () => { sfx("click", { volume: 0.6 }); setView(!view.classL
 addEventListener("pointerdown", e => { if (!view.contains(e.target) && !$("bView").contains(e.target)) setView(false); });
 function setOpt(opt, on){
   const r = view.querySelector('[data-opt="' + opt + '"]'); r.setAttribute("aria-checked", on);
-  if (opt === "grid"){ gridOn = on; sheet.visible = on; placeBelts(); }
+  if (opt === "grid"){ gridOn = on; sheet.visible = on && !comparing; placeBelts(); }
   if (opt === "orbits") orbitsOn = on;
   if (opt === "names") labels.style.display = on ? "" : "none";
   sfx("tick", { pitch: on ? 1 : 0.8, volume: 0.7 });
@@ -630,6 +720,7 @@ function setOpt(opt, on){
 view.querySelectorAll(".row").forEach(r => r.onclick = () => setOpt(r.dataset.opt, r.getAttribute("aria-checked") !== "true"));
 function startOver(){
   if (moving) finishMove();
+  if (comparing) setCompare(false);
   P.forEach(p => { setOrbit(p, p.a0); p.ang = p.ang0; });
   speedI = 2; speedText(); if (paused) setPaused(false);
   overview(); sfx("whoosh", { volume: 0.5 });
@@ -650,6 +741,7 @@ function back(){
   if (moving) return finishMove();
   if (inside) return setInside(false);
   if (current) return overview();
+  if (comparing) return setCompare(false);
 }
 
 /* keyboard */
@@ -663,7 +755,8 @@ addEventListener("keydown", e => {
   else if (e.key === "ArrowLeft" && !moving){ e.preventDefault(); step(-1); }
   else if (e.key === " " && !onButton){ e.preventDefault(); setPaused(!paused); }
   else if (e.key === "m" || e.key === "M"){ if (moving) finishMove(); else startMove(); }
-  else if (e.key === "i" || e.key === "I"){ if (current && !moving){ sfx("flip", { volume: 0.6 }); setInside(!inside); } }
+  else if (e.key === "i" || e.key === "I"){ if (current && !moving && !comparing){ sfx("flip", { volume: 0.6 }); setInside(!inside); } }
+  else if (e.key === "c" || e.key === "C") setCompare(!comparing);
   else if (e.key === "g" || e.key === "G") setOpt("grid", !gridOn);
   else if (e.key === "+" || e.key === "=") setSpeed(speedI + 1);
   else if (e.key === "-" || e.key === "_") setSpeed(speedI - 1);
@@ -701,8 +794,8 @@ function pollPad(dt){
     } else {
       if (hitB(15) || hitB(5)) step(1);
       if (hitB(14) || hitB(4)) step(-1);
-      if (hitB(0) && current){ if (current.id !== "sun" && !inside) startMove(); }
-      if (hitB(3) && current){ sfx("flip", { volume: 0.6 }); setInside(!inside); }
+      if (hitB(0) && current && !comparing){ if (current.id !== "sun" && !inside) startMove(); }
+      if (hitB(3) && current && !comparing){ sfx("flip", { volume: 0.6 }); setInside(!inside); }
     }
     /* turn the view with either stick (not while moving, when the left stick moves the planet); zoom with the triggers */
     const tx = (moving ? 0 : lx) + rx, ty = (moving ? 0 : ly) + ry, zoom = 1 + (val(6) - val(7)) * dt * 1.4;
@@ -712,21 +805,42 @@ function pollPad(dt){
 }
 addEventListener("gamepadconnected", () => sfx("tick", { volume: 0.5 }));
 
+/* Compare sizes labels sit under each globe (the Sun's beside its edge); where the small planets crowd together,
+   a label that would overlap the one before it waits until you zoom in */
+const toCam = new THREE.Vector3();
+function placeCmpLabels(){
+  let lastRight = -Infinity;
+  BODIES.forEach(b => {
+    if (b.id === "sun"){
+      /* the point on the Sun's outline, as seen from the camera, a little above the row */
+      toCam.copy(camera.position).sub(cmpSun.position).normalize();
+      const dist = camera.position.distanceTo(cmpSun.position), c = Math.min(1, REAL.sun / dist), s = Math.sqrt(1 - c * c);
+      v.set(1, 0.13, 0); v.addScaledVector(toCam, -v.dot(toCam)).normalize();
+      v.multiplyScalar(s).addScaledVector(toCam, c).multiplyScalar(REAL.sun).add(cmpSun.position);
+    } else v.set(b.cmpX, -b.cmpR * (b.rings ? 1.25 : 1.1) - 0.15, 0);
+    v.project(camera);
+    const x = (v.x + 1) / 2 * innerWidth, y = (1 - v.y) / 2 * innerHeight, w = b.cmpLabel.offsetWidth || 60;
+    const fits = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 && (x - w / 2 > lastRight + 6 || b === current);
+    b.cmpLabel.style.display = fits ? "" : "none";
+    if (fits){ b.cmpLabel.style.left = x + "px"; b.cmpLabel.style.top = y + "px"; lastRight = x + w / 2; }
+  });
+}
+
 /* ---------- loop ---------- */
 addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); if (view.classList.contains("open")) setView(true); });
 const clock = new THREE.Clock(), v = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), viewOff = { x: 0, y: 0 };
-camTarget.set(0, 0, 0);
+camTarget.set(0, OV_Y, 0); controls.target.set(0, OV_Y, 0);
 placeBelts();
 function frame(){
   const real = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
   const dt = paused ? 0 : real * SPEEDS[speedI];
   pollPad(real);
   sunMat.uniforms.t.value = t;
-  P.forEach(p => { if (p !== moving || !dragging) p.ang += dt * (365 / p.per) * 0.12; p.body.rotation.y += dt * 0.25; });
+  P.forEach(p => { if (p !== moving || !dragging) p.ang += dt * (365 / p.per) * 0.12; p.body.rotation.y += dt * 0.25; p.cmpBody.rotation.y = p.body.rotation.y; });
   const earth = P[2]; earth.moonAng += dt * 1.2; earth.moon.position.set(Math.cos(earth.moonAng) * 3.4, 0, -Math.sin(earth.moonAng) * 3.4);
   belts.forEach(bl => bl.rotation.y += dt * bl.userData.spin);
   const before = focus ? focus.pivot.position.clone() : null;
-  place(); if (gridOn) updateSheet();
+  place(); if (gridOn && !comparing) updateSheet();
   if (moving && !paused && !dragging && Math.random() < 0.02) renderCard();
   if (focus && flying){
     /* fly in from the Sun's side, a little off to one side and above, so the day side shows */
@@ -739,7 +853,8 @@ function frame(){
     const moved = focus.pivot.position.clone().sub(before);
     camera.position.add(moved); controls.target.add(moved); camTarget.copy(focus.pivot.position);
   }
-  if (!focus && current && current.id === "sun") camTarget.y = sun.position.y;
+  if (!focus && current && current.id === "sun" && !comparing) camTarget.y = sun.position.y;
+  if (comparing && !flying) camTarget.copy(controls.target);   /* a drag slides along the row; stay where it leaves you */
   controls.target.lerp(camTarget, flying ? 0.08 : 1);
   if (flying && camWant){ camera.position.lerp(camWant, 0.07); if (camera.position.distanceTo(camWant) < 0.25){ flying = false; camWant = null; } }
   controls.update();
@@ -752,7 +867,7 @@ function frame(){
   const near = focus && !flying && camera.position.distanceTo(focus.pivot.position) < focus.r * 12;
   sheet.material.opacity += ((near ? 0.12 : 0.42) - sheet.material.opacity) * 0.08;
   P.forEach(p => {
-    p.orbit.visible = (orbitsOn || p === moving) && !(inside && current === p);
+    p.orbit.visible = !comparing && (orbitsOn || p === moving) && !(inside && current === p);
     p.orbit.material.color.setHex(p === moving ? 0x4fc3f7 : 0x9fb8e8); p.orbit.material.opacity = p === moving ? 0.9 : 0.22;
   });
   /* the cutaway keeps its open side toward you */
@@ -761,9 +876,10 @@ function frame(){
     if (current.id === "sun") sunCut.position.copy(sun.position);
     c.rotation.y = cutawayYaw(camera.position.x - pos.x, camera.position.z - pos.z);
   }
-  P.forEach(p => { v.copy(p.pivot.position); v.y += p.r * 1.2; v.project(camera);
+  if (!comparing) P.forEach(p => { v.copy(p.pivot.position); v.y += p.r * 1.2; v.project(camera);
     const vis = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
     p.label.style.display = vis ? "" : "none"; p.label.style.left = ((v.x + 1) / 2 * innerWidth) + "px"; p.label.style.top = ((1 - v.y) / 2 * innerHeight) + "px"; });
+  else placeCmpLabels();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }

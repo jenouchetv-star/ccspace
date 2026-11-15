@@ -85,6 +85,37 @@ describe("Solar System Sandbox: the cards", () => {
   });
 });
 
+describe("Solar System Sandbox: compare sizes", () => {
+  const C = new Function(helpers + "\nreturn { REAL: typeof REAL === 'undefined' ? null : REAL, lineupLayout: typeof lineupLayout === 'undefined' ? null : lineupLayout };")();
+  it("uses the real widths, Earth = 1, from NASA's fact sheets", () => {
+    expect(C.REAL).toBeTruthy();
+    expect(C.REAL.earth).toBe(1);
+    expect(C.REAL.sun).toBeCloseTo(109.1, 1);
+    expect(C.REAL.jupiter).toBeCloseTo(11.21, 2);
+    expect(C.REAL.mercury).toBeLessThan(C.REAL.mars);
+    expect(C.REAL.uranus).toBeGreaterThan(C.REAL.neptune);
+  });
+  it("lines the globes up left to right without any two touching, rings included", () => {
+    const row = [{ r: 1, ext: 1 }, { r: 11.2, ext: 11.2 }, { r: 9.45, ext: 9.45 * 2.3 }, { r: 0.38, ext: 0.38 }];
+    const xs = C.lineupLayout(row);
+    expect(xs[0] - row[0].ext).toBeGreaterThan(0);                 /* clear of the Sun's edge at x = 0 */
+    for (let i = 1; i < xs.length; i++) expect(xs[i] - row[i].ext).toBeGreaterThan(xs[i - 1] + row[i - 1].ext);
+  });
+  it("has a Compare sizes button, a C key, and says the gaps are not to scale", () => {
+    expect(html).toContain('id="bCompare"');
+    expect(html).toContain('e.key === "c" || e.key === "C"');
+    expect(html).toContain("The space between them is not to scale.");
+  });
+  it("sinks the Sun deeper than any planet, so it sits low in its well", () => {
+    expect(html).toMatch(/SUN_G = (\d+)/);
+    expect(Number(html.match(/SUN_G = (\d+)/)[1])).toBeGreaterThan(Number(html.match(/N = \d+, G = (\d+)/)[1]));
+  });
+  it("tells players about Compare sizes on the Play page", () => {
+    const start = site.indexOf('G({ id:"game-spacetime"'), row = site.slice(start, site.indexOf('leadsTo:"act-orrery"', start));
+    expect(row).toContain("Press Compare sizes");
+  });
+});
+
 describe("Solar System Sandbox: the page", () => {
   it("loads only three.js, its orbit controls and the shared sound kit (no Tailwind or MathJax)", () => {
     const srcs = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]);

@@ -1,13 +1,13 @@
-// Chike's Space Salvage is a subscribers-only 3D game (supabase/private-games/space-salvage.html): kids drive a
+// Remote Lunar Salvage is a subscribers-only 3D game (supabase/private-games/remote-lunar-salvage.html): kids drive a
 // Moon rover, switch between Drive, Arm and Magnet, and fix an outpost. Its science and rules (which tool lifts
 // which material, Moon gravity, the trench and bridge, the arm's reach, what fits where, the mission's steps) sit
 // between BEGIN/END pure markers so they can be tested here without a browser. The phone remote
-// (games/salvage-remote.html) has its own pure block for turning phone tilt into controls.
+// (games/lunar-salvage-remote.html) has its own pure block for turning phone tilt into controls.
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 
-const game = readFileSync(new URL("../supabase/private-games/space-salvage.html", import.meta.url), "utf8");
-const remote = readFileSync(new URL("../games/salvage-remote.html", import.meta.url), "utf8");
+const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
+const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
 const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
@@ -201,12 +201,12 @@ describe("the phone remote", () => {
     expect(T.readCode("588344")).toBe("588344");
   });
   it("both pages use the same room channel", () => {
-    expect(game).toContain('"spacesalvage-remote-" + code');
-    expect(remote).toContain('"spacesalvage-remote-" + code');
+    expect(game).toContain('"lunarsalvage-remote-" + code');
+    expect(remote).toContain('"lunarsalvage-remote-" + code');
   });
   it("the game links to the remote page, and that page exists", () => {
-    expect(game).toContain("/games/salvage-remote.html?c=");
-    expect(existsSync(new URL("../games/salvage-remote.html", import.meta.url))).toBe(true);
+    expect(game).toContain("/games/lunar-salvage-remote.html?c=");
+    expect(existsSync(new URL("../games/lunar-salvage-remote.html", import.meta.url))).toBe(true);
   });
   it("learns which way this phone tilts", () => {
     const cal = { b0: 0, g0: 0 };
@@ -255,5 +255,16 @@ describe("the pages", () => {
     expect(game).toContain('addEventListener("keydown"');
     expect(game).toContain('id="stick"');
     expect(remote).toContain("DeviceOrientationEvent.requestPermission");
+  });
+});
+
+describe("the camera", () => {
+  it("drives with the camera beside the rover, a little ahead, so its front shows", () => {
+    const m = game.match(/const CAM_SIDE = Math\.PI \/ 2 \+ ([\d.]+);/);
+    expect(m).toBeTruthy();
+    const off = Math.PI / 2 + Number(m[1]);
+    expect(off).toBeGreaterThan(Math.PI / 2);          /* past straight-beside, toward the front */
+    expect(off).toBeLessThan(Math.PI * 0.75);          /* but still from the side, not head-on */
+    expect(game).toContain("const yaw = rover.yaw + CAM_SIDE + camCtl.yaw;");
   });
 });
