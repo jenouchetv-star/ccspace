@@ -29,14 +29,14 @@
   Saving lives in sound-space/cloud.js: this browser's store, and the account copy through the site's
   soundCloudCall when a member is signed in.
 
-  Hooks for later work:
-  - TASK 10: openExport() and openFile() get the WAV export and the full file checks.
+  Export (the top bar's blue button) makes a WAV of the song 1, 2 or 4 times through, and saves the project file that
+  Open a file on Home reads back. Both are made in this browser; nothing is sent anywhere.
 -->
 <style>
 :root{
   /* one color per kind of instrument (no orange, no green, no rainbow) */
   --drums:#D946EF; --keys:#5B8CFF; --strings:#8B5CF6; --winds:#F2C14E; --bass:#14B8A6; --fx:#FF5C8A;
-  --go:#14B8A6; --rec:#A0185A;
+  --go:#14B8A6; --rec:#8E2457;
   /* corners, as tight as Art Space's: panels, cards, dialogs and tiles 10px; buttons, chips, inputs, wells and track
      cards 7px; grid pads, cells and strip squares 3px; piano keys 4px (bottom corners only); drum pads 6px */
   --r:10px; --r-sm:7px; --r-pad:3px; --r-key:4px; --r-drum:6px;
@@ -263,15 +263,15 @@ svg.lucide{ width:16px; height:16px; stroke-width:1.9; flex:none; }
 .play{ background:radial-gradient(circle at 50% 30%,#5EE6D8,#14B8A6 55%,#0B8378); box-shadow:inset 0 2px 0 rgba(255,255,255,.35),0 3px 0 #075E57,0 6px 14px rgba(20,184,166,.4); color:#05312D; }
 .play svg{ fill:#05312D; }
 .play.on{ box-shadow:inset 0 2px 5px rgba(0,0,0,.35),0 1px 0 #075E57,0 0 0 3px rgba(94,230,216,.45),0 0 18px rgba(20,184,166,.6); transform:translateY(2px); }
-.rec{ background:radial-gradient(circle at 50% 30%,#D2558F,#A0185A 55%,#6E0F3D); box-shadow:inset 0 2px 0 rgba(255,255,255,.35),0 3px 0 #4F0A2B,0 6px 14px rgba(160,24,90,.4); }
+.rec{ background:radial-gradient(circle at 50% 30%, #C0638F, #8E2457 55%, #651A3E); box-shadow:inset 0 2px 0 rgba(255,255,255,.35),0 3px 0 #4A1430,0 6px 14px rgba(142,36,87,.3); }
 .rec svg{ fill:#fff; }
-.rec.on{ transform:translateY(2px); box-shadow:inset 0 2px 5px rgba(0,0,0,.35),0 1px 0 #4F0A2B,0 0 0 3px rgba(228,106,158,.5),0 0 18px rgba(160,24,90,.75); animation:recglow 1.6s ease-in-out infinite; }
-@keyframes recglow{ 50%{ box-shadow:inset 0 2px 5px rgba(0,0,0,.35),0 1px 0 #4F0A2B,0 0 0 3px rgba(228,106,158,.25),0 0 8px rgba(160,24,90,.4); } }
+.rec.on{ transform:translateY(2px); box-shadow:inset 0 2px 5px rgba(0,0,0,.35),0 1px 0 #4A1430,0 0 0 3px rgba(214,120,160,.4),0 0 18px rgba(142,36,87,.55); animation:recglow 1.6s ease-in-out infinite; }
+@keyframes recglow{ 50%{ box-shadow:inset 0 2px 5px rgba(0,0,0,.35),0 1px 0 #4A1430,0 0 0 3px rgba(214,120,160,.2),0 0 8px rgba(142,36,87,.3); } }
 .stop{ width:38px; height:38px; background:radial-gradient(circle at 50% 30%,#55555E,#3A3A42 60%,#2A2A30); box-shadow:inset 0 2px 0 rgba(255,255,255,.18),0 3px 0 #111,0 5px 10px rgba(0,0,0,.4); }
 .stop svg{ width:15px; height:15px; fill:#fff; }
 .lcd{ min-width:62px; height:34px; padding:0 10px; border-radius:var(--r-sm); background:var(--well); box-shadow:var(--press); display:grid; place-items:center;
   color:var(--lcd); font:800 13px ui-monospace,Consolas,monospace; font-variant-numeric:tabular-nums; text-shadow:var(--lcd-glow); }
-.lcd.cue{ color:#E46A9E; text-shadow:0 0 8px rgba(160,24,90,.6); }
+.lcd.cue{ color:#D678A0; text-shadow:0 0 8px rgba(142,36,87,.55); }
 .toggle{ display:inline-flex; align-items:center; gap:8px; height:34px; padding:0 12px 0 10px; border-radius:var(--r-sm); border:1px solid var(--btn-edge);
   background:linear-gradient(var(--btn-a),var(--btn-b)); box-shadow:var(--raise); font-weight:800; font-size:12.5px; color:var(--text); }
 .toggle:active{ box-shadow:var(--press); }
@@ -685,6 +685,25 @@ body.kbd-collapsed #kbd{ display:none; }
 .ask__box h2{ margin:0 0 6px; font-size:16px; }
 .ask__box p{ margin:0 0 18px; font-size:13.5px; line-height:1.5; color:var(--mute); }
 .ask__btns{ display:flex; justify-content:flex-end; gap:8px; }
+/* Export: the song as a sound file (WAV) to play anywhere, or the project file to open again later */
+.export__box{ width:min(420px,100%); max-height:calc(100vh - 32px); max-height:calc(100dvh - 32px); overflow:auto; display:flex; flex-direction:column; gap:14px; padding:18px 20px 20px; background:linear-gradient(var(--panel-a),var(--panel-b)); color:var(--text); border:1px solid var(--btn-edge); border-radius:var(--r); box-shadow:var(--pop); }
+.export__head{ display:flex; align-items:center; gap:10px; }
+.export__head h2{ display:flex; align-items:center; gap:8px; margin:0 auto 0 0; font-size:17px; }
+.export__head h2 svg{ width:20px; height:20px; color:var(--accent-text); }
+.export__lede{ margin:-6px 0 0; font-size:13.5px; line-height:1.5; color:var(--mute); }
+.export__field{ display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+.export__field > span{ font-size:13.5px; font-weight:800; }
+.export__times button{ min-width:56px; padding:9px 16px; font-size:15px; }
+.export__len{ margin:0; font-size:12.5px; color:var(--mute); font-variant-numeric:tabular-nums; }
+.export__go{ height:44px; font-size:15px; }
+.export__go svg.lucide{ width:18px; height:18px; }
+.export__msg{ margin:0; font-size:13px; line-height:1.45; color:var(--text); }
+.export__bar{ height:8px; border-radius:4px; background:var(--well); box-shadow:var(--press); overflow:hidden; }
+.export__bar i{ display:block; width:0; height:100%; border-radius:4px; background:linear-gradient(var(--accent-a),var(--accent-b)); transition:width .2s cubic-bezier(.2,.7,.3,1); }
+.export__proj{ display:flex; flex-wrap:wrap; align-items:center; gap:10px 12px; padding-top:14px; border-top:1px solid var(--line); }
+.export__proj p{ flex:1 1 190px; min-width:0; margin:0; font-size:12.5px; line-height:1.45; color:var(--mute); }
+.export__proj b{ display:block; color:var(--text); font-size:13.5px; }
+@media (prefers-reduced-motion:reduce){ .export__bar i{ transition:none; } }
 /* Help: a centred modal (the approved draft): categories and a search on the left, topic cards or one topic on the right */
 .help{ position:fixed; inset:0; z-index:60; display:grid; place-items:center; padding:24px; background:var(--overlay); }
 .help__box{ width:min(940px,100%); height:min(640px, calc(100vh - 48px)); display:grid; grid-template-columns:230px minmax(0,1fr); background:linear-gradient(var(--panel-a),var(--panel-b)); color:var(--text); border:1px solid var(--btn-edge); border-radius:14px; box-shadow:var(--pop); overflow:hidden; }
@@ -1276,6 +1295,24 @@ body.kbd-collapsed #kbd{ display:none; }
     <p class="sheet__foot" id="sheet-foot"></p>
   </div>
 </div>
+<div id="export" class="modal" hidden>
+  <div class="export__box" role="dialog" aria-modal="true" aria-labelledby="export-title" aria-describedby="export-lede">
+    <div class="export__head">
+      <h2 id="export-title"><i data-lucide="audio-waveform"></i>Export your song</h2>
+      <button type="button" class="btn icon btn--ghost" id="export-close" data-exp="close" aria-label="Close" title="Close"><i data-lucide="x"></i></button>
+    </div>
+    <p class="export__lede" id="export-lede">Make a sound file of your song. It plays on phones, computers and music apps.</p>
+    <div class="export__field"><span id="export-times-lbl">How many times through?</span><div class="well export__times" id="export-times" role="radiogroup" aria-labelledby="export-times-lbl"><button type="button" role="radio" data-times="1" aria-checked="false">1</button><button type="button" role="radio" data-times="2" aria-checked="true">2</button><button type="button" role="radio" data-times="4" aria-checked="false">4</button></div>
+      <p class="export__len" id="export-len"></p></div>
+    <div class="export__bar" id="export-bar" hidden><i id="export-fill"></i></div>
+    <p class="export__msg" id="export-msg" role="status" aria-live="polite" hidden></p>
+    <button type="button" class="btn btn--primary export__go" id="export-go" data-exp="wav"><i data-lucide="download"></i><span>Download WAV</span></button>
+    <div class="export__proj">
+      <p><b>Project file</b>A copy of the song itself. Open it again later with Open a file.</p>
+      <button type="button" class="btn" id="export-proj" data-exp="project"><i data-lucide="file-down"></i>Save project file</button>
+    </div>
+  </div>
+</div>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -1312,9 +1349,9 @@ const PADLABEL = ["A","S","D","F","G","H","J","K"];
    Small things: toast, ask, help, theme
    ============================================================ */
 let toastTimer = 0;
-function toast(msg){
+function toast(msg, ms){   /* a longer notice can stay up longer */
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 3200);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), ms || 3200);
 }
 function ask(title, text, yesLabel){
   const box = $("#ask"), back = document.activeElement;
@@ -1359,8 +1396,9 @@ const HELP = [
     "<p>Pick <b>Music lessons</b> on the first screen. In each lesson you build a real song, like Twinkle Twinkle Little Star. A tip shows next to the button it is about. Purple outlines on the grid show where the song's notes go: tap them to fill them in. Do what the tip says and <b>Next step</b> lights up. You learn one music word in each lesson, and the song you made stays in Recent.</p>"],
   ["Start", "Show and hide parts", "hide show panel focus tracks library beats overview keys pads fold collapse layout",
     "<p>The buttons at the top show or hide the <b>Tracks</b> panel (" + K("[") + ") and the <b>Beats and patterns</b> panel (" + K("]") + "). <b>Focus</b> (" + K("\\") + ") hides both and folds the overview away; press it again to bring them back. The arrows on the <b>Overview</b> and <b>Piano keys</b> bars fold those parts away to give the grid more room. Sound Space remembers your layout on this device.</p>"],
-  ["Saving", "Saving and undo", "save undo redo mistake account device browser",
-    "<p>Your song saves as you go, a moment after each change. The line at the top says where: <b>Saved on this device</b>, then <b>Saved to your account</b> when you’re signed in, so it’s there in any browser where you sign in. " + K("Ctrl+Z") + " undoes and " + K("Ctrl+Y") + " redoes. The arrows at the top do the same.</p>"],
+  ["Saving", "Saving and undo", "save undo redo mistake account device browser export wav sound file download project open",
+    "<p>Your song saves as you go, a moment after each change. The line at the top says where: <b>Saved on this device</b>, then <b>Saved to your account</b> when you’re signed in, so it’s there in any browser where you sign in. " + K("Ctrl+Z") + " undoes and " + K("Ctrl+Y") + " redoes. The arrows at the top do the same.</p>"
+    + "<p><b>Export</b> makes a sound file of your song (a WAV) that plays anywhere. Pick how many times through, then press <b>Download WAV</b>. <b>Save project file</b> keeps a copy of the song itself. Open it again with <b>Open a file</b> on the first screen.</p>"],
   ["Saving", "Light or dark", "light dark theme night",
     "<p>The sun and moon button switches between light and dark. This device remembers your choice.</p>"]
 ];
@@ -1550,7 +1588,7 @@ async function deleteSong(id){
 
 let saveTimer = 0;
 /* `full`: the account is full, which shows in maroon (as its full bar does); other bad statuses stay red */
-function setStatus(t, bad, full){ const el = $("#status"); el.textContent = t; el.classList.toggle("bad", !!bad); el.classList.toggle("full", !!bad && !!full); }
+function setStatus(t, bad, full){ const el = $("#status"); el.textContent = t; el.title = t; el.classList.toggle("bad", !!bad); el.classList.toggle("full", !!bad && !!full); }
 /* the status for a song that has nothing waiting to save, honest when this browser blocks saving */
 function freshStatus(){ const st = statusFor(dbOk); setStatus(st.text, st.bad); }
 /* the same, but a song the account already has as it is here says so */
@@ -1751,8 +1789,8 @@ function loadLayout(storage){
 function saveLayout(storage, state){
   try { if (!storage) return false; storage.setItem(LAYOUT_KEY, JSON.stringify(state)); return true; } catch(e){ return false; }
 }
-/* The save status a song starts with. TASK 10: once Save project file exists, NOT_SAVED also says "Use Save project file." */
-const NOT_SAVED = "Not saved: this browser blocked saving";
+/* The save status a song starts with. When this browser blocks saving, it says how to keep the song anyway. */
+const NOT_SAVED = "Not saved: use Export, then Save project file";
 function statusFor(saving){ return saving ? { text:"Saved on this device", bad:false } : { text:NOT_SAVED, bad:true }; }
 /* The part of the editor a layout toggle can hide that holds a lesson step's control, or null when none does. */
 function lessonPanel(target){
@@ -2026,7 +2064,7 @@ function openSong(s, opts){
   audio();
   renderAll(true);
   if (opts && opts.save) saveNow();
-  if (opts && opts.missing && opts.missing.length) toast("Some instruments in this song aren’t in Sound Space: " + opts.missing.join(", ") + ". Those tracks stay silent.");
+  if (opts && opts.missing && opts.missing.length) toast("Some instruments in this song aren’t in Sound Space: " + opts.missing.map(id => String(id).replace(/[-_]+/g, " ")).join(", ") + ". Those tracks stay silent.", 8000);
 }
 async function showHome(){
   endLesson();
@@ -2666,10 +2704,11 @@ applyLayout();
    Keyboard: computer keys play, Ctrl+Z / Ctrl+Y undo and redo, Space plays and stops
    ============================================================ */
 const typing = el => el && (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el.tagName === "INPUT" && !/^(range|button|checkbox|radio)$/.test(el.type)));
-const dialogOpen = () => !$("#picker").hidden || !$("#ask").hidden || !$("#help").hidden || !$("#launch").hidden || !$("#lessons").hidden || !$("#sheet").hidden;
+const dialogOpen = () => !$("#picker").hidden || !$("#ask").hidden || !$("#help").hidden || !$("#launch").hidden || !$("#lessons").hidden || !$("#sheet").hidden || !$("#export").hidden;
 document.addEventListener("keydown", e => {
   if (sheetKey(e)) return;
   if (helpKeyDown(e)) return;
+  if (exportKey(e)) return;
   if (!$("#lessons").hidden && e.key === "Escape"){ e.preventDefault(); closeLessons(); return; }
   if (!$("#picker").hidden && e.key === "Escape"){ e.preventDefault(); closePicker(); return; }
   if (e.key === "Escape" && document.body.classList.contains("lib-open")){ document.body.classList.remove("lib-open"); applyLayout(); return; }
@@ -3394,8 +3433,136 @@ $("#tip").addEventListener("click", e => {
   else if (b.dataset.act === "lesson-quit") endLesson();
   else if (b.dataset.act === "lesson-more"){ showHome().then(openLessons); }
 });
-/* TASK 10: the WAV export dialog */
-function openExport(){ toast("Export is coming in a moment."); }
+/* ============================================================
+   Export: the song as a sound file (WAV) to play anywhere, and the project file to open again later. The WAV is made
+   off-screen by SS.engine.renderOffline (the same sounds, reverb and effects as playing) and written by SS.wav.
+   Everything happens in this browser: nothing is sent anywhere.
+   ============================================================ */
+/* ---- Export: the parts the tests run on their own (test/soundSpaceSafety.test.js) ---- */
+const EXPORT_TIMES = [1, 2, 4];
+/* a file name every computer accepts: letters, digits and hyphens, at most 40 of them, or my-song */
+function cleanTitle(t){
+  const s = String(t == null ? "" : t).normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
+  return s || "my-song";
+}
+/* "About 34 seconds long", "About 1 minute 5 seconds long" */
+function lengthText(sec){
+  const n = Math.max(1, Math.round(sec)), m = Math.floor(n / 60), s = n % 60;
+  const part = (v, w) => v + " " + w + (v === 1 ? "" : "s");
+  return "About " + (m ? part(m, "minute") + (s ? " " + part(s, "second") : "") : part(s, "second")) + " long";
+}
+/* ---- end of Export parts ---- */
+let exportTimes = 2;
+let exportBack = null, exportRun = 0, exportBusy = false;
+const songHasNotes = () => !!song && song.tracks.some(t => t.notes.length);
+function openExport(){
+  if (!song) return;
+  exportBack = document.activeElement;
+  exportSay("");
+  $("#export").hidden = false;
+  paintExport();
+  const on = $('#export-times [aria-checked="true"]');
+  if (on && !on.disabled) on.focus(); else $("#export-close").focus();
+}
+function closeExport(){
+  exportRun++; exportBusy = false;   /* a sound file still being made is let go */
+  $("#export").hidden = true; $("#export-bar").hidden = true;
+  if (exportBack && exportBack.focus) try { exportBack.focus(); } catch(e){}
+}
+function paintExport(){
+  if ($("#export").hidden || !song) return;
+  const empty = !songHasNotes();
+  $$("#export-times button").forEach(b => { b.setAttribute("aria-checked", String(+b.dataset.times === exportTimes)); b.disabled = exportBusy || empty; });
+  $("#export-len").textContent = empty ? "Add some notes first, then you can make a sound file." : lengthText(E.exportFrames(song, exportTimes) / 44100);
+  $("#export-go").disabled = exportBusy || empty;
+}
+function exportSay(text){ const m = $("#export-msg"); m.textContent = text; m.hidden = !text; }
+function exportBar(f){ $("#export-fill").style.width = Math.round(clamp(f, 0, 1) * 100) + "%"; }
+function downloadFile(blob, name){
+  const url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = name; a.hidden = true;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+async function exportWav(){
+  if (!song || exportBusy || !songHasNotes()) return;
+  const Base = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!Base){ exportSay("This browser can’t make sound files. Try a different browser."); return; }
+  const go = $("#export-go"), run = ++exportRun, times = exportTimes, snap = clone(song);
+  const name = cleanTitle(song.title) + ".wav", seconds = E.exportFrames(snap, times) / 44100;
+  exportBusy = true; go.disabled = true; paintExport();
+  exportSay("Making your song…"); exportBar(0); $("#export-bar").hidden = false;
+  /* the bar follows the off-screen clock as it makes the song */
+  let made = null;
+  class Watched extends Base { constructor(a, b, c){ super(a, b, c); made = this; } }
+  const tick = setInterval(() => { if (made && run === exportRun) exportBar(made.currentTime / seconds); }, 100);
+  let res = null;
+  try { res = await E.renderOffline(snap, times, c => E.createVoices(c, I, SAMPLE_BASE), { OfflineAudioContext: Watched }); } catch(e){}
+  clearInterval(tick);
+  if (run !== exportRun) return;   /* the window was closed */
+  if (res && res.buffer){
+    exportBar(1);
+    await wait(30);   /* let the full bar show before the file is written */
+    try {
+      const b = res.buffer, ch = [];
+      for (let i = 0; i < b.numberOfChannels; i++) ch.push(b.getChannelData(i));
+      downloadFile(new Blob([SS.wav.encodeWav(ch, b.sampleRate)], { type:"audio/wav" }), name);
+    } catch(e){ res = null; }
+  }
+  if (run !== exportRun) return;
+  exportBusy = false; go.disabled = false; $("#export-bar").hidden = true; paintExport();
+  if (!$("#export .export__box").contains(document.activeElement)) go.focus();   /* focus went with the button while it waited */
+  if (!res || !res.buffer){ exportSay("Your sound file couldn’t be made just now. Try again."); return; }
+  count("song_exported");
+  const silent = res.failed.map(id => { const x = I.byId(id); return x ? x.name : String(id).replace(/[-_]+/g, " "); });
+  exportSay(silent.length
+    ? "Your sound file is in your downloads, but these instruments didn’t load, so they’re silent in your sound file: " + silent.join(", ") + ". Check your internet and try again."
+    : "Done! Your sound file is in your downloads: " + name);
+}
+function saveProjectFile(){
+  if (!song) return;
+  const name = cleanTitle(song.title) + ".soundspace.json", data = clone(song);
+  delete data.owner;
+  downloadFile(new Blob([JSON.stringify(data, null, 2)], { type:"application/json" }), name);
+  exportSay("Done! Your project file is in your downloads: " + name + ". Open it again any time with Open a file.");
+}
+function setExportTimes(n){
+  if (exportBusy || EXPORT_TIMES.indexOf(n) < 0) return;
+  exportTimes = n; paintExport();
+}
+$("#export").addEventListener("click", e => {
+  if (e.target === e.currentTarget) return closeExport();   /* the dimmed area around the window */
+  const t = e.target.closest("[data-times]");
+  if (t && !t.disabled) return setExportTimes(+t.dataset.times);
+  const b = e.target.closest("[data-exp]"); if (!b || b.disabled) return;
+  const a = b.dataset.exp;
+  if (a === "close") return closeExport();
+  if (a === "wav") return exportWav();
+  if (a === "project") return saveProjectFile();
+});
+$("#export-times").addEventListener("keydown", e => {
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  e.preventDefault();
+  const i = clamp(EXPORT_TIMES.indexOf(exportTimes) + (e.key === "ArrowRight" ? 1 : -1), 0, EXPORT_TIMES.length - 1);
+  setExportTimes(EXPORT_TIMES[i]);
+  const b = $('#export-times [data-times="' + exportTimes + '"]'); if (b) b.focus();
+});
+/* While the window is open it has every key: Escape closes it, Tab stays inside, and the editor's shortcuts wait */
+function exportKey(e){
+  if ($("#export").hidden) return false;
+  if (e.key === "Escape"){ e.preventDefault(); closeExport(); return true; }
+  if (e.key === "Tab") exportTrap(e);
+  return true;
+}
+function exportTrap(e){
+  const box = $("#export .export__box");
+  const items = $$("#export button").filter(x => !x.disabled && x.tabIndex !== -1 && !x.closest("[hidden]"));
+  if (!items.length){ e.preventDefault(); return; }
+  const first = items[0], last = items[items.length - 1], at = document.activeElement, inside = box.contains(at);
+  if (e.shiftKey && (at === first || !inside)){ e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (at === last || !inside)){ e.preventDefault(); first.focus(); }
+}
 
 /* ============================================================
    Sheet music: the song as real notation in a window, to print or save as PDF. SS.notation writes the song in ABC
@@ -3632,7 +3799,8 @@ $("#home").addEventListener("click", e => {
   else if (kind === "lessons") openLessons();
   else openStarter(kind);
 });
-/* TASK 10 adds the full checks and notices; this already refuses anything that isn't our song format */
+/* Open a file: a project file from Save project file (.json only). Anything that isn't a Sound Space song is refused;
+   a song with instruments Sound Space doesn't have opens, and a notice names them (openSong). */
 $("#file-in").addEventListener("change", async e => {
   const f = e.target.files && e.target.files[0]; e.target.value = "";
   if (!f) return;

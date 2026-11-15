@@ -216,7 +216,7 @@ describe("Sound Space app page", () => {
     }
     expect(bad).toEqual([]);
     // The category colors are exactly the approved ones.
-    for (const c of ["#D946EF", "#5B8CFF", "#8B5CF6", "#F2C14E", "#14B8A6", "#FF5C8A", "#A0185A"]) {
+    for (const c of ["#D946EF", "#5B8CFF", "#8B5CF6", "#F2C14E", "#14B8A6", "#FF5C8A", "#8E2457"]) {
       expect(css.toUpperCase()).toContain(c);
     }
   });
@@ -342,7 +342,7 @@ describe("Sound Space app page", () => {
 
     it("never claims a song is saved when this browser blocks saving", () => {
       expect(statusFor(true)).toEqual({ text: "Saved on this device", bad: false });
-      expect(statusFor(false)).toEqual({ text: "Not saved: this browser blocked saving", bad: true });
+      expect(statusFor(false)).toEqual({ text: "Not saved: use Export, then Save project file", bad: true });
       // the markup starts neutral, and every song that opens gets the honest status straight away
       expect(html).toContain('<small id="status" role="status"></small>');
       const open = html.slice(html.indexOf("function openSong("), html.indexOf("async function showHome("));
@@ -2137,10 +2137,16 @@ describe("Sound Space: Main volume beside the play controls", () => {
     expect(off).toContain("E.CHAIN_HOLD");
   });
 
-  it("Record is maroon: --rec is #A0185A and .rec never uses the old red", () => {
-    expect(css).toMatch(/--rec:#A0185A;/);
+  it("Record is a soft maroon: --rec is #8E2457 and .rec never uses the old red", () => {
+    expect(css).toMatch(/--rec:#8E2457;/);
     const rules = css.split("\n").filter((l) => /^\.rec\b|^@keyframes recglow|^\.lcd\.cue/.test(l)).join("\n");
-    expect(rules).toContain("#A0185A");
+    expect(rules).toContain("#8E2457");
+    // owner: "tone down the color just a bit" - the same hue, softer; the account-space maroon stays as it was
+    expect(rules).toContain(".rec{ background:radial-gradient(circle at 50% 30%, #C0638F, #8E2457 55%, #651A3E);");
+    expect(rules).toContain("0 3px 0 #4A1430,0 6px 14px rgba(142,36,87,.3)");
+    expect(rules).toMatch(/\.rec\.on\{[^}]*rgba\(214,120,160,\.4\),0 0 18px rgba\(142,36,87,\.55\); animation:recglow/);
+    expect(rules).toContain(".lcd.cue{ color:#D678A0; text-shadow:0 0 8px rgba(142,36,87,.55); }");
+    expect(rules).not.toMatch(/#A0185A|160,24,90|228,106,158/);
     expect(rules).not.toMatch(/#FF4D5A|255,77,90|#FF8C95|#C22633|#8E1824/i);
     expect(css).toMatch(/\.rec svg\{ fill:#fff; \}/);
   });
