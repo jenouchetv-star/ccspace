@@ -232,8 +232,9 @@ describe("the Sound Space row on the Studio page", () => {
     expect(feats.map((m) => m[2])).toEqual(["120 instruments", "420 beats and patterns", "Tracks and a mixer", "8 song lessons", "Play and record", "Sheet music and export"]);
     for (const m of feats) expect(m[3].length).toBeGreaterThan(20);
     expect(feats[5][3]).toBe("See your song as printable sheet music, or save a sound file or a project file.");
-    expect(box).toContain("Join the mailing list for limited free access during the Sound Space beta.");
-    expect(SLOT_FB.insideAccess).toBe("Join the mailing list for limited free access during the Art Space beta.");
+    expect(box).toContain("Join and get limited free access during the Sound Space beta.");
+    expect(SLOT_FB.insideAccess).toBe("Join and get limited free access during the Art Space beta.");
+    expect(SLOT_FB.soonText).not.toMatch(/beats/i);   // Sound Space is out, so Coming soon no longer promises beats
     expect(box).toContain('<dl class="studioinside__list">');
     // Art Space's card is as it was: its own lead and text, and Beta
     expect(r[0]).toContain("This is your space to make something original!");
