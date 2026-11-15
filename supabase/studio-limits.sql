@@ -14,8 +14,11 @@
 -- through the RPCs below, which check is_active_admin() and write each change to the activity log (audit_log, the
 -- same rows the admin portal's db.log() writes). Lowering a limit never deletes anything.
 --
--- Also here: sound_space_usage(range_days), the admins' Sound Space numbers, with each member's effective limits.
--- Needs: subscribers, profiles, audit_log, is_active_admin() (supabase/migration.sql) and supabase/sound-space.sql.
+-- Also here: sound_space_usage(range_days), the admins' Sound Space numbers, with each member's effective limits,
+-- and (at the end) a REPLACEMENT for the live art_studio_usage(range_days) that adds the same three keys to its
+-- by_member rows and otherwise returns exactly what it did.
+-- Needs: subscribers, profiles, audit_log, is_active_admin() (supabase/migration.sql), supabase/sound-space.sql, and
+-- Art Space's live art_projects and art_studio_daily tables.
 -- Safe to run again.
 
 create table if not exists public.studio_limits (
@@ -347,3 +350,111 @@ end;
 $$;
 revoke all on function public.sound_space_usage(int) from public, anon;
 grant execute on function public.sound_space_usage(int) to authenticated;
+
+-- ---------------------------------------------------------------------------------------------------------------
+-- REPLACES the live art_studio_usage(range_days): the admins' Art Space numbers. Everything it returned before stays
+-- exactly the same (the body below is the live one, from pg_get_functiondef on 2026-11-14); the only additions are
+-- three keys on each by_member row: max_items and max_bytes (that member's effective limits: their own over Art
+-- Space's over the usual 200 pictures and 100 MB) and custom (whether they have their own). by_member is grouped by
+-- email, as before; if two subscriber rows ever share an email, the most recently changed own limits are shown.
+-- search_path gains pg_temp; security definer, stable, the is_active_admin() check ('not allowed', 42501), the
+-- 7/30/90/all ranges and the America/New_York day are unchanged.
+create or replace function public.art_studio_usage(range_days integer default 30)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $function$
+declare
+  tz constant text := 'America/New_York';
+  today date := (now() at time zone tz)::date;
+  since date;
+  prev_since date;
+  result jsonb;
+begin
+  if not is_active_admin() then raise exception 'not allowed' using errcode = '42501'; end if;
+  if range_days is not null and range_days not in (7, 30, 90) then range_days := 30; end if;
+  since := case when range_days is null then null else today - (range_days - 1) end;
+  prev_since := case when range_days is null then null else since - range_days end;
+
+  with live as (
+    select a.*, (a.created_at at time zone tz)::date as made_day
+    from art_projects a join subscribers s on s.id = a.subscriber_id
+    where not a.deleted and s.data->>'status' = 'published'
+  ),
+  in_range as (select * from live where since is null or made_day >= since),
+  per_member_days as (
+    select subscriber_id, count(distinct made_day) as days from in_range group by subscriber_id
+  ),
+  counts as (
+    select event, sum(count)::int as n from art_studio_daily
+    where since is null or day >= since group by event
+  ),
+  prev_open as (
+    select coalesce(sum(count), 0)::int as n from art_studio_daily
+    where event = 'opened' and prev_since is not null and day >= prev_since and day < since
+  ),
+  weeks as (
+    select generate_series(date_trunc('week', today::timestamp)::date - 49, date_trunc('week', today::timestamp)::date, interval '7 days')::date as wk
+  ),
+  week_rows as (
+    select w.wk,
+      coalesce((select sum(d.count) from art_studio_daily d where d.event = 'opened' and d.day >= w.wk and d.day < w.wk + 7), 0)::int as opened,
+      coalesce((select count(*) from live l where l.made_day >= w.wk and l.made_day < w.wk + 7), 0)::int as saved
+    from weeks w
+  ),
+  members as (
+    select s.data->>'email' as email,
+      count(*)::int as pictures,
+      count(*) filter (where l.kind = 'paint')::int as paint,
+      count(*) filter (where l.kind = 'pixel')::int as pixel,
+      min(l.created_at) as first_at,
+      max(l.updated_ms)::bigint as last_ms,
+      coalesce(sum(l.bytes), 0)::bigint as bytes,
+      array_agg(distinct l.subscriber_id) as sids
+    from live l join subscribers s on s.id = l.subscriber_id
+    group by s.data->>'email'
+  ),
+  art_row as (
+    select g.max_items, g.max_account_bytes from studio_limits g where g.app = 'art'
+  ),
+  member_limits as (
+    select m.*,
+      coalesce(o.max_items, (select max_items from art_row), 200) as max_items,
+      coalesce(o.max_account_bytes, (select max_account_bytes from art_row), 100000000)::bigint as max_bytes,
+      o.subscriber_id is not null as custom
+    from members m
+    left join lateral (
+      select x.subscriber_id, x.max_items, x.max_account_bytes from studio_member_limits x
+      where x.app = 'art' and x.subscriber_id = any(m.sids)
+      order by x.updated_at desc limit 1
+    ) o on true
+  )
+  select jsonb_build_object(
+    'range', range_days,
+    'today', today,
+    'opened', coalesce((select n from counts where event = 'opened'), 0),
+    'opened_before', (select n from prev_open),
+    'signin_shown', coalesce((select n from counts where event = 'signin_shown'), 0),
+    'signed_in', coalesce((select n from counts where event = 'signed_in'), 0),
+    'joined', coalesce((select n from counts where event = 'joined'), 0),
+    'came_back_members', (select count(*) from per_member_days where days >= 2),
+    'active_members', (select count(*) from per_member_days),
+    'members', (select count(distinct subscriber_id) from live),
+    'active7', (select count(distinct subscriber_id) from live where updated_ms > (extract(epoch from now() - interval '7 days') * 1000)),
+    'pictures', (select count(*) from live),
+    'paint', (select count(*) from live where kind = 'paint'),
+    'pixel', (select count(*) from live where kind = 'pixel'),
+    'new7', (select count(*) from live where made_day > today - 7),
+    'new30', (select count(*) from live where made_day > today - 30),
+    'bytes', (select coalesce(sum(bytes), 0) from live),
+    'weeks', (select coalesce(jsonb_agg(jsonb_build_object('week', wk, 'opened', opened, 'saved', saved) order by wk), '[]'::jsonb) from week_rows),
+    'by_member', (select coalesce(jsonb_agg(jsonb_build_object('email', email, 'pictures', pictures, 'paint', paint, 'pixel', pixel,
+                   'first', first_at, 'last', last_ms, 'bytes', bytes,
+                   'max_items', max_items, 'max_bytes', max_bytes, 'custom', custom) order by last_ms desc), '[]'::jsonb) from member_limits)
+  ) into result;
+  return result;
+end $function$;
+revoke all on function public.art_studio_usage(integer) from public, anon;
+grant execute on function public.art_studio_usage(integer) to authenticated;

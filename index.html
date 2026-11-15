@@ -21670,12 +21670,15 @@ function studioMemberLimit(app, m, limits){
   return { items:own && own.max_items != null ? Number(own.max_items) : cur.max_items,
            bytes:own && own.max_account_bytes != null ? Number(own.max_account_bytes) : cur.max_account_bytes, custom:!!own };
 }
-/** Storage used (in the limits' MB, so 19 MB of 20 MB reads as such), with a bar that fills against the member's
-    own limit: blue, red at 90% or more. */
+/** Bytes in the limits' units (1 MB = 1,000,000 bytes, 1 GB = 1,000 MB), so 19 MB of 20 MB reads as such. */
+function studioBytesText(bytes){
+  const n = Number(bytes || 0);
+  return !n ? "—" : n >= 1e9 ? (n / 1e9).toFixed(2) + " GB" : n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1000)) + " KB";
+}
+/** Storage used, with a bar that fills against the member's own limit: blue, red at 90% or more. */
 function studioStorageHTML(bytes, max){
   const n = Number(bytes || 0), pct = max ? Math.min(100, Math.round(100 * n / max)) : 0;
-  const used = !n ? "—" : n >= 1000000 ? (n / 1000000).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1000)) + " KB";
-  return used + '<span class="studio-bar"><i' + (pct >= 90 ? ' class="studio-bar--full"' : "") + ' style="width:' + pct + '%"></i></span>';
+  return studioBytesText(n) + '<span class="studio-bar"><i' + (pct >= 90 ? ' class="studio-bar--full"' : "") + ' style="width:' + pct + '%"></i></span>';
 }
 function studioLimitCellHTML(eff, count, bytes){
   const tag = eff.custom ? '<span class="studio-badge">Custom · ' + eff.items + ' · ' + studioMB(eff.bytes) + ' MB</span>' : '<span class="studio-std">Standard</span>';
@@ -21814,7 +21817,7 @@ function adminStudio(){
       + stat(d.members, "Members") + stat(d.active7, "Active 7d")
       + stat(d.pictures, "Pictures", '<small>' + d.paint + ' paint · ' + d.pixel + ' pixel</small>')
       + stat(d.new7, "New 7d", '<small>' + d.new30 + ' in 30d</small>')
-      + stat(E(formatBytes(Number(d.bytes))), "Storage")
+      + stat(E(studioBytesText(d.bytes)), "Storage")
       + '</div>'
       + '<div class="studio-split">'
       + '<div class="studio-trend"><div class="studio-trend__head"><h4>Week by week</h4><span class="studio-key"><i class="k-o"></i>Opened <i class="k-s"></i>Pictures saved</span></div>' + studioChartSVG(d.weeks) + '</div>'

@@ -29,6 +29,88 @@ const get = () => one("select studio_limits_get() as v");
 const setArt = (items, total, item, saves) => admin("select studio_limits_set('art', $1, $2, $3, $4)", [items, total, item, saves]);
 const setSound = (items, total, item, saves) => admin("select studio_limits_set('sound', $1, $2, $3, $4)", [items, total, item, saves]);
 
+// The live art_studio_usage() before this change, as pg_get_functiondef returned it on 2026-11-14 (renamed to
+// art_studio_usage_before so both can run side by side): the replacement must return everything this returns.
+const ART_USAGE_BEFORE = `CREATE OR REPLACE FUNCTION public.art_studio_usage_before(range_days integer DEFAULT 30)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  tz constant text := 'America/New_York';
+  today date := (now() at time zone tz)::date;
+  since date;
+  prev_since date;
+  result jsonb;
+begin
+  if not is_active_admin() then raise exception 'not allowed' using errcode = '42501'; end if;
+  if range_days is not null and range_days not in (7, 30, 90) then range_days := 30; end if;
+  since := case when range_days is null then null else today - (range_days - 1) end;
+  prev_since := case when range_days is null then null else since - range_days end;
+
+  with live as (
+    select a.*, (a.created_at at time zone tz)::date as made_day
+    from art_projects a join subscribers s on s.id = a.subscriber_id
+    where not a.deleted and s.data->>'status' = 'published'
+  ),
+  in_range as (select * from live where since is null or made_day >= since),
+  per_member_days as (
+    select subscriber_id, count(distinct made_day) as days from in_range group by subscriber_id
+  ),
+  counts as (
+    select event, sum(count)::int as n from art_studio_daily
+    where since is null or day >= since group by event
+  ),
+  prev_open as (
+    select coalesce(sum(count), 0)::int as n from art_studio_daily
+    where event = 'opened' and prev_since is not null and day >= prev_since and day < since
+  ),
+  weeks as (
+    select generate_series(date_trunc('week', today::timestamp)::date - 49, date_trunc('week', today::timestamp)::date, interval '7 days')::date as wk
+  ),
+  week_rows as (
+    select w.wk,
+      coalesce((select sum(d.count) from art_studio_daily d where d.event = 'opened' and d.day >= w.wk and d.day < w.wk + 7), 0)::int as opened,
+      coalesce((select count(*) from live l where l.made_day >= w.wk and l.made_day < w.wk + 7), 0)::int as saved
+    from weeks w
+  ),
+  members as (
+    select s.data->>'email' as email,
+      count(*)::int as pictures,
+      count(*) filter (where l.kind = 'paint')::int as paint,
+      count(*) filter (where l.kind = 'pixel')::int as pixel,
+      min(l.created_at) as first_at,
+      max(l.updated_ms)::bigint as last_ms,
+      coalesce(sum(l.bytes), 0)::bigint as bytes
+    from live l join subscribers s on s.id = l.subscriber_id
+    group by s.data->>'email'
+  )
+  select jsonb_build_object(
+    'range', range_days,
+    'today', today,
+    'opened', coalesce((select n from counts where event = 'opened'), 0),
+    'opened_before', (select n from prev_open),
+    'signin_shown', coalesce((select n from counts where event = 'signin_shown'), 0),
+    'signed_in', coalesce((select n from counts where event = 'signed_in'), 0),
+    'joined', coalesce((select n from counts where event = 'joined'), 0),
+    'came_back_members', (select count(*) from per_member_days where days >= 2),
+    'active_members', (select count(*) from per_member_days),
+    'members', (select count(distinct subscriber_id) from live),
+    'active7', (select count(distinct subscriber_id) from live where updated_ms > (extract(epoch from now() - interval '7 days') * 1000)),
+    'pictures', (select count(*) from live),
+    'paint', (select count(*) from live where kind = 'paint'),
+    'pixel', (select count(*) from live where kind = 'pixel'),
+    'new7', (select count(*) from live where made_day > today - 7),
+    'new30', (select count(*) from live where made_day > today - 30),
+    'bytes', (select coalesce(sum(bytes), 0) from live),
+    'weeks', (select coalesce(jsonb_agg(jsonb_build_object('week', wk, 'opened', opened, 'saved', saved) order by wk), '[]'::jsonb) from week_rows),
+    'by_member', (select coalesce(jsonb_agg(jsonb_build_object('email', email, 'pictures', pictures, 'paint', paint, 'pixel', pixel,
+                   'first', first_at, 'last', last_ms, 'bytes', bytes) order by last_ms desc), '[]'::jsonb) from members)
+  ) into result;
+  return result;
+end $function$`;
+
 beforeAll(async () => {
   db = new PGlite();
   // Supabase's starting point: the browser roles, auth.uid(), the admins' profiles and is_active_admin(), the site's
@@ -44,6 +126,10 @@ beforeAll(async () => {
       select exists (select 1 from profiles where id = auth.uid() and status = 'active') $$;
     create table subscribers (id text primary key, data jsonb not null, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
     create table audit_log (id text primary key, data jsonb not null, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+    create table art_projects (subscriber_id text not null references subscribers(id) on delete cascade, project_id text not null, title text not null default '',
+      kind text not null default 'paint', thumb text, data jsonb, bytes int not null default 0, updated_ms bigint not null default 0,
+      deleted boolean not null default false, created_at timestamptz not null default now(), primary key (subscriber_id, project_id));
+    create table art_studio_daily (day date not null, event text not null, count int not null default 0, primary key (day, event));
     alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
     alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
     grant usage on schema public to anon, authenticated, service_role;
@@ -51,12 +137,13 @@ beforeAll(async () => {
     grant execute on function is_active_admin() to anon, authenticated;
   `);
   await db.exec(soundSql);
+  await db.exec(ART_USAGE_BEFORE);
   await db.exec(sql);
 }, 60000);
 
 beforeEach(async () => {
   await db.exec(`
-    delete from studio_member_limits; delete from studio_limits; delete from audit_log;
+    delete from studio_member_limits; delete from studio_limits; delete from audit_log; delete from art_projects; delete from art_studio_daily;
     delete from sound_projects; delete from sound_space_daily; delete from subscribers;
     insert into subscribers (id, data) values
       ('sub-a', '{"email":"Parent.One@example.test","status":"published"}'),
@@ -234,6 +321,71 @@ describe("studio-limits.sql: one member's own limits", () => {
     expect(await q("select count(*)::int as n from studio_member_limits")).toEqual([{ n: 2 }]);
     await db.exec("delete from subscribers where id = 'sub-b'");
     expect(await q("select * from studio_member_limits")).toEqual([]);
+  });
+});
+
+describe("studio-limits.sql: art_studio_usage() replaced, with each member's limits", () => {
+  const NEW_KEYS = ["max_items", "max_bytes", "custom"];
+  const strip = (u) => ({ ...u, by_member: u.by_member.map((m) => Object.fromEntries(Object.entries(m).filter(([k]) => !NEW_KEYS.includes(k)))) });
+  beforeEach(async () => {
+    const now = Date.now(), day = 86_400_000;
+    await db.exec(`
+      insert into subscribers (id, data) values
+        ('sub-c', '{"email":"gone@example.test","status":"unsubscribed"}'),
+        ('sub-d', '{"email":"d@example.test","status":"published"}');
+      insert into art_projects (subscriber_id, project_id, kind, data, bytes, updated_ms, deleted, created_at) values
+        ('sub-a', 'pic-1', 'paint', '{}', 1000, ${now - 1000}, false, now() - interval '2 days'),
+        ('sub-a', 'pic-2', 'pixel', '{}', 2500, ${now - 3 * day}, false, now() - interval '12 days'),
+        ('sub-a', 'pic-3', 'paint', null, 0, ${now}, true, now() - interval '1 day'),
+        ('sub-b', 'pic-1', 'paint', '{}', 700, ${now - 20 * day}, false, now() - interval '20 days'),
+        ('sub-c', 'pic-1', 'paint', '{}', 900, ${now - 500}, false, now() - interval '3 days'),
+        ('sub-d', 'pic-1', 'pixel', '{}', 300, ${now - 40 * day}, false, now() - interval '40 days'),
+        ('sub-d', 'pic-2', 'paint', '{}', 400, ${now - 39 * day}, false, now() - interval '39 days');
+      insert into art_studio_daily (day, event, count) values
+        ((now() at time zone 'America/New_York')::date, 'opened', 5), ((now() at time zone 'America/New_York')::date - 3, 'opened', 2),
+        ((now() at time zone 'America/New_York')::date - 10, 'opened', 4), ((now() at time zone 'America/New_York')::date - 60, 'opened', 7),
+        ((now() at time zone 'America/New_York')::date, 'signin_shown', 3), ((now() at time zone 'America/New_York')::date, 'signed_in', 2),
+        ((now() at time zone 'America/New_York')::date - 1, 'joined', 1);
+    `);
+  });
+
+  it("returns everything the live one did, with the same values, for every range", async () => {
+    for (const r of [7, 30, 90, null, 45, 0]) {
+      const before = await one("select art_studio_usage_before($1) as v", [r]);
+      const after = await one("select art_studio_usage($1) as v", [r]);
+      expect(Object.keys(after).sort(), String(r)).toEqual(Object.keys(before).sort());
+      expect(strip(after), String(r)).toEqual(before);
+    }
+    const u = await one("select art_studio_usage(7) as v");
+    expect(u).toMatchObject({ range: 7, members: 3, pictures: 5, paint: 3, pixel: 2, bytes: 4900, opened: 7, opened_before: 4, signin_shown: 3, signed_in: 2, joined: 1 });
+    expect(await one("select art_studio_usage() as v")).toMatchObject({ range: 30 });   // the default stays 30
+    expect(u.by_member.map((m) => m.email)).toEqual(["Parent.One@example.test", "b@example.test", "d@example.test"]);
+    expect(Object.keys(u.by_member[0]).sort()).toEqual(["bytes", "custom", "email", "first", "last", "max_bytes", "max_items", "paint", "pictures", "pixel"]);
+  });
+
+  it("gives each member their effective limits: their own over Art Space's over the usual ones", async () => {
+    const lims = async () => (await one("select art_studio_usage(30) as v")).by_member.map((m) => [m.email, m.max_items, m.max_bytes, m.custom]);
+    expect(await lims()).toEqual([
+      ["Parent.One@example.test", 200, 100000000, false], ["b@example.test", 200, 100000000, false], ["d@example.test", 200, 100000000, false]]);
+    await setArt(300, 250000000, null, null);
+    await admin("select studio_member_limit_set('art', 'b@example.test', 500, null)");
+    await admin("select studio_member_limit_set('art', 'd@example.test', 50, 5000000)");
+    await admin("select studio_member_limit_set('sound', 'parent.one@example.test', 7, 7000000)");   // Sound Space's: ignored here
+    expect(await lims()).toEqual([
+      ["Parent.One@example.test", 300, 250000000, false], ["b@example.test", 500, 250000000, true], ["d@example.test", 50, 5000000, true]]);
+    await setArt(null, null, null, null);
+    await admin("select studio_member_limit_set('art', 'd@example.test', null, null)");
+    expect((await lims()).map((r) => r.slice(1))).toEqual([[200, 100000000, false], [500, 100000000, true], [200, 100000000, false]]);
+  });
+
+  it("is still admins only, security definer, stable, with search_path public, pg_temp", async () => {
+    await expect(as("anon", "", "select art_studio_usage(30)")).rejects.toThrow(/permission denied/);
+    await expect(as("authenticated", STRANGER, "select art_studio_usage(30)")).rejects.toThrow(/not allowed/);
+    const fn = (await q("select prosecdef, provolatile, proconfig from pg_proc where proname = 'art_studio_usage'"))[0];
+    expect(fn).toMatchObject({ prosecdef: true, provolatile: "s" });
+    expect(fn.proconfig.join(",")).toBe("search_path=public, pg_temp");
+    const ex = (await q("select has_function_privilege('anon', 'art_studio_usage(integer)', 'execute') as a, has_function_privilege('authenticated', 'art_studio_usage(integer)', 'execute') as b"))[0];
+    expect(ex).toEqual({ a: false, b: true });
   });
 });
 

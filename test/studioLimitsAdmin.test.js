@@ -10,7 +10,7 @@ const block = (index.split("/* STUDIO-LIMITS:BEGIN */")[1] || "").split("/* STUD
 const E = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const L = new Function("E", "ic", "formatBytes", "fmtDate", block + `; return { STUDIO_LIMIT_USUAL, studioMB, studioLimitParse, studioLimitsRead,
   studioLimitsChanged, studioLimitsArgs, studioLimitsSave, studioLimitsCardHTML, studioMemberLimit, studioStorageHTML, studioLimitCellHTML,
-  studioMemberTableHTML, studioMemberLimitRead, studioMemberLimitSave };`)(E, (n) => `<i data-lucide="${n}"></i>`, (n) => (n / 1048576).toFixed(1) + " MB", (d) => String(d || "--"));
+  studioBytesText, studioMemberTableHTML, studioMemberLimitRead, studioMemberLimitSave };`)(E, (n) => `<i data-lucide="${n}"></i>`, (n) => (n / 1048576).toFixed(1) + " MB", (d) => String(d || "--"));
 
 /** What studio_limits_get() returns with nothing saved, with optional changes per app and members' own limits. */
 function limitsOf(changes = {}, members = []) {
@@ -189,6 +189,11 @@ describe("By member: the Limit column and the Change row", () => {
     // the same MB as the limits (1 MB = 1,000,000 bytes), so 19 MB of 20 MB reads as such
     expect(L.studioStorageHTML(19_000_000, 20_000_000)).toMatch(/^19\.0 MB<span class="studio-bar"><i class="studio-bar--full" style="width:95%">/);
     expect(L.studioStorageHTML(30_000, 20_000_000)).toMatch(/^30 KB/);
+    // and the page's overall Storage figure uses the same units
+    expect(L.studioBytesText(248_500_000)).toBe("248.5 MB");
+    expect(L.studioBytesText(1_250_000_000)).toBe("1.25 GB");
+    expect(L.studioBytesText(0)).toBe("—");
+    expect(index.split("function adminStudio(){")[1].split("\n}\n")[0]).toContain('stat(E(studioBytesText(d.bytes)), "Storage")');
     expect(index.split(".studio-bar i.studio-bar--full{")[1].split("}")[0]).toContain("#C0262D");
   });
 
