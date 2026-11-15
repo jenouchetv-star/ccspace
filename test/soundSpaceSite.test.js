@@ -173,7 +173,7 @@ describe("the Sound Space row on the Studio page", () => {
       STUDIO_APPS: list, studioSettings: () => ({ live: true }), adminSeesAll: () => admin, notFound: () => "notfound",
       slot: (_p, k) => E(SLOT_FB[k] ?? k), slotText: (_p, k) => SLOT_FB[k] ?? k, slotLead: (_p, k) => "<b>LEAD:" + k + "</b>",
       ic: (n) => '<i data-lucide="' + n + '"></i>', E, portalIsSubscriber: () => false, artAppInstalled: () => false,
-      slotDef: (_p, k) => (k in SLOT_FB ? {} : null)
+      slotDef: (_p, k) => (k in SLOT_FB ? {} : null), location: { origin: "https://site.test" }
     };
     const names = Object.keys(env);
     const body = "let STUDIO_APP_OPENED = '';\n" + ["viewCreateStudio", "studioInsideBox", "studioSoonBox", "studioAppCard", "studioSoundBox"].map(fn).join("\n") + "\nreturn viewCreateStudio();";
@@ -240,6 +240,19 @@ describe("the Sound Space row on the Studio page", () => {
     // Art Space's card is as it was: its own lead and text, and Beta
     expect(r[0]).toContain("This is your space to make something original!");
     expect(r[0]).toMatch(/<span class="chip chip--ink"[^>]*>Beta<\/span>/);
+  });
+
+  it("the Studio intro, the Art Space card and the Sound Space card each have a Share button", () => {
+    const h = studioPage({ live: true, admin: false });
+    const share = (url, title) => new RegExp('<button type="button" class="btn (btn--sm )?btn--paper no-print" data-act="share" data-url="' + url.replace(/[.]/g, "\.") + '" data-title="' + title + '"><i data-lucide="share-2"></i> Share</button>');
+    const hero = (h.split('class="studiohero__ctas"')[1] || "").split("</div>")[0];
+    expect(hero).toMatch(share("https://site.test/create/studio", "Creative Space Studio"));
+    const r = rows(h);
+    const foot = (row) => (row.split('class="card__foot"')[1] || "").split("</div>")[0];
+    expect(foot(r[0])).toMatch(share("https://site.test/create/studio/art", "Art Space"));
+    expect(foot(r[1])).toMatch(share("https://site.test/create/studio/sound", "Sound Space"));
+    // Launch stays first and stays the blue one
+    expect(foot(r[1]).indexOf("Launch Sound Space")).toBeLessThan(foot(r[1]).indexOf('data-act="share"'));
   });
 
   it("the btn--cyan button is the site's blue, and chip--ink is black", () => {
