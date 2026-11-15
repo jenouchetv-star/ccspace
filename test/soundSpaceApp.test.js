@@ -1077,6 +1077,7 @@ describe("Sound Space song lessons in the page", () => {
     expect(tick).toContain(".after(");
     expect(tick).toContain("commit()");
     expect(tick).toContain("guideOffEnd(");
+    expect(fnSource("undo")).toContain("lesson.spread = false");   // undo takes the copied beat back, so the tip line goes too
   });
 
   it("lights the next key of the record lesson, and moves on only when the kid plays it", () => {
