@@ -2151,3 +2151,184 @@ describe("Sound Space: Main volume beside the play controls", () => {
     expect(css).toMatch(/\.rec svg\{ fill:#fff; \}/);
   });
 });
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Final fix wave: transport buttons, Export while a sound file is made, the pattern preview's playhead and outline,
+   Count-in beside Loop, darker drum pads, small tile corners and the picker's outline Hear button
+   --------------------------------------------------------------------------------------------------------------- */
+describe("Sound Space final fix wave", () => {
+  const css = cssText();
+  const rule = (sel) => { const i = css.indexOf("\n" + sel + "{"); return i < 0 ? "" : css.slice(i + 1, css.indexOf("}", i) + 1); };
+
+  it("Play, Record and Stop are rounded squares, not circles, with Record's maroon and its pulse kept", () => {
+    const round = rule(".round");
+    expect(round).toBeTruthy();
+    expect(round).not.toMatch(/border-radius:50%/);
+    expect(round).toMatch(/border-radius:var\(--r-sm\)/);
+    expect(round).toMatch(/width:46px; height:46px/);
+    expect(rule(".rec")).toMatch(/#8E2457/);
+    expect(rule(".rec.on")).toMatch(/animation:recglow/);
+    expect(rule(".stop")).not.toMatch(/border-radius:50%/);
+  });
+
+  describe("Export while a sound file is being made", () => {
+    function exportUi() {
+      const el = (o) => Object.assign({ hidden: false, disabled: false, focused: 0, focus() { this.focused++; }, contains: () => true, textContent: "", style: {} }, o);
+      const els = { "#export": el({ hidden: true }), "#export-bar": el({ hidden: true }), "#export-go": el(), "#export-close": el(), "#export .export__box": el(), "#export-msg": el(), "#export-fill": el(), "#export-len": el() };
+      const $ = (s) => els[s] || null;
+      const calls = { stopAll: 0, said: [], downloads: [] };
+      const env = {
+        $, $$: () => [], song: { title: "My song", tracks: [{ notes: [{ step: 0 }] }] },
+        stopAll: () => { calls.stopAll++; }, exportSay: (t) => calls.said.push(t), paintExport: () => {}, exportBar: () => {},
+        clamp: (v, a, b) => Math.max(a, Math.min(b, v)), document: { activeElement: null }, EXPORT_TIMES: [1, 2, 4],
+        exportTrap: () => {}, cleanTitle: (t) => t, clone: (o) => JSON.parse(JSON.stringify(o)), count: () => {}, wait: () => Promise.resolve(),
+        downloadFile: (b, n) => calls.downloads.push(n), SAMPLE_BASE: "", I: { byId: () => null },
+        SS: { wav: { encodeWav: () => new Uint8Array(4) } }, Blob: class { constructor(p) { this.p = p; } },
+        setInterval: () => 0, clearInterval: () => {},
+        window: { OfflineAudioContext: class {} }, E: { exportFrames: () => 44100, createVoices: () => ({}), renderOffline: null }
+      };
+      const names = Object.keys(env);
+      const body = "let exportTimes = 2, exportBack = null, exportRun = 0, exportBusy = false;\nconst songHasNotes = () => true;\n"
+        + ["openExport", "closeExport", "exportKey", "exportClick", "exportWav", "setExportTimes"].map(pageFn).join("\n")
+        + "\nreturn { openExport, closeExport, exportKey, exportClick, exportWav, get busy(){ return exportBusy; } };";
+      const api = new Function(...names, body)(...names.map((k) => env[k]));
+      return { api, els, env, calls };
+    }
+
+    it("opening Export stops the song playing", () => {
+      const { api, els, calls } = exportUi();
+      api.openExport();
+      expect(els["#export"].hidden).toBe(false);
+      expect(calls.stopAll).toBe(1);
+    });
+
+    it("a tap on the dimmed area or Escape does nothing while the WAV is being made, and closes it otherwise", async () => {
+      const { api, els, env } = exportUi();
+      let finish;
+      env.E.renderOffline = () => new Promise((r) => { finish = r; });
+      api.openExport();
+      const making = api.exportWav();
+      expect(api.busy).toBe(true);
+      const scrim = els["#export"];
+      api.exportClick({ target: scrim, currentTarget: scrim });
+      expect(scrim.hidden).toBe(false);
+      let prevented = false;
+      expect(api.exportKey({ key: "Escape", preventDefault() { prevented = true; } })).toBe(true);
+      expect(prevented).toBe(true);
+      expect(scrim.hidden).toBe(false);
+      finish({ buffer: { numberOfChannels: 1, sampleRate: 44100, getChannelData: () => new Float32Array(4) }, failed: [] });
+      await making;
+      expect(api.busy).toBe(false);
+      api.exportClick({ target: scrim, currentTarget: scrim });
+      expect(scrim.hidden).toBe(true);
+      api.openExport();
+      api.exportKey({ key: "Escape", preventDefault() {} });
+      expect(scrim.hidden).toBe(true);
+    });
+
+    it("a finished WAV with no list of silent instruments still says Done", async () => {
+      const { api, env, calls } = exportUi();
+      env.E.renderOffline = async () => ({ buffer: { numberOfChannels: 1, sampleRate: 44100, getChannelData: () => new Float32Array(4) } });
+      api.openExport();
+      await api.exportWav();
+      expect(calls.downloads).toEqual(["My song.wav"]);
+      expect(calls.said[calls.said.length - 1]).toMatch(/^Done! Your sound file is in your downloads: My song\.wav/);
+    });
+  });
+
+  describe("the playing pattern card", () => {
+    const block = html.split("/* ---- helpers the tests run on their own")[1].split("/* ---- end of helpers")[0];
+    const { previewHeadAt } = (() => { try { return new Function(block.slice(block.indexOf("*/") + 2) + "; return { previewHeadAt };")(); } catch (e) { return {}; } })();
+
+    it("the line moves across the preview at the pattern's speed and length, and goes when it ends", () => {
+      expect(typeof previewHeadAt).toBe("function");
+      // 16 squares of a quarter second each: 4 seconds across
+      expect(previewHeadAt(-0.1, 0.25, 16, false)).toBe(null);           // not started yet
+      expect(previewHeadAt(0, 0.25, 16, false)).toEqual({ x: 0, at: 0 });
+      expect(previewHeadAt(1, 0.25, 16, false)).toEqual({ x: 0.25, at: 4 });
+      expect(previewHeadAt(1.1, 0.25, 16, false).x).toBeCloseTo(0.275, 6); // a smooth glide between squares
+      expect(previewHeadAt(4, 0.25, 16, false)).toBe(null);               // played through: the line goes
+      // with reduced motion it jumps square by square
+      expect(previewHeadAt(1.1, 0.25, 16, true)).toEqual({ x: 0.25, at: 4 });
+      expect(previewHeadAt(1.24, 0.25, 16, true)).toEqual({ x: 0.25, at: 4 });
+      expect(previewHeadAt(1.25, 0.25, 16, true)).toEqual({ x: 0.3125, at: 5 });
+    });
+
+    it("each note in the picture knows where it starts and ends, so it lights as the line passes", () => {
+      const CAT = { drums: { color: "#D946EF" }, keys: { color: "#5B8CFF" } };
+      const TYPE_TC = { drums: "drums", melody: "keys" };
+      const patPicture = new Function("CAT", "TYPE_TC", pageFn("patPicture") + "; return patPicture;")(CAT, TYPE_TC);
+      const svg = patPicture({ type: "melody", counts: 4, grid: 2, notes: [{ step: 0, len: 2, pitch: 60 }, { step: 4, len: 1, pitch: 62 }] });
+      expect(svg).toMatch(/<rect data-s="0" data-e="2" /);
+      expect(svg).toMatch(/<rect data-s="4" data-e="5" /);
+      expect(css).toMatch(/\.pat__pv rect\.lit\{[^}]*\}/);
+    });
+
+    it("the playing card gets its category color outline, and loses it when it stops", () => {
+      const card = (id) => { const c = { cls: new Set(), classList: { toggle(n, on) { if (on) c.cls.add(n); else c.cls.delete(n); } } }; return { btn: { dataset: { libPlay: id }, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, closest: () => c }, c }; };
+      const a = card("p1"), b = card("p2");
+      let pv = { id: "p1" };
+      const mark = new Function("$$", "getPv", pageFn("markPreview").replace(/\bpv\b/g, "getPv()") + "; return markPreview;")(() => [a.btn, b.btn], () => pv);
+      mark();
+      expect(a.c.cls.has("pat--on")).toBe(true);
+      expect(b.c.cls.has("pat--on")).toBe(false);
+      expect(a.btn.attrs["aria-pressed"]).toBe("true");
+      pv = null; mark();
+      expect(a.c.cls.has("pat--on")).toBe(false);
+      const on = rule(".pat.pat--on");
+      expect(on).toMatch(/border-color:var\(--tc\)/);
+      expect(on).toMatch(/0 0 0 2px color-mix\(in srgb,var\(--tc\) 30%,transparent\)/);
+      expect(rule(".pat__head")).toMatch(/width:2px/);
+      expect(html).toContain(`'<div class="pat' + (pv && pv.id === p.id ? " pat--on" : "") + '"`);   // a re-drawn list keeps it
+    });
+  });
+
+  it("Count-in sits right after Loop, before the line and Counts, Grid and Speed", () => {
+    const bar = section(/<div class="transport"/, "\n  </div>");
+    const at = (s) => bar.indexOf(s);
+    expect(at('id="ss-loop"')).toBeGreaterThan(0);
+    expect(at('id="ss-countin"')).toBeGreaterThan(at('id="ss-loop"'));
+    expect(at('id="ss-countin"')).toBeLessThan(at('class="sep"'));
+    expect(at('class="sep"')).toBeLessThan(at('id="ss-counts"'));
+    const between = bar.slice(at('id="ss-loop"'), bar.lastIndexOf("<button", at('id="ss-countin"')));
+    expect(between.match(/<button|<div|<span class="sep"/g)).toBe(null);   // nothing between Loop and Count-in
+  });
+
+  it("drum and effect pads are dark cards with a 2px line in their color across the top, lit only when hit", () => {
+    const pad = rule(".pad");
+    expect(pad).toBeTruthy();
+    expect(pad).not.toMatch(/linear-gradient\(color-mix\(in srgb,var\(--tc\)/);      // no bright full-color gradient at rest
+    expect(pad).toMatch(/background:linear-gradient\(var\(--tc-a\),var\(--tc-b\)\)/);
+    expect(pad).toMatch(/border:1px solid var\(--tc-edge\)/);
+    expect(pad).toMatch(/color:var\(--text\)/);
+    const top = rule(".pad::before");
+    expect(top).toMatch(/top:0/);
+    expect(top).toMatch(/height:2px/);
+    expect(top).toMatch(/left:8px; right:8px/);
+    expect(top).toMatch(/background:var\(--tc\)/);
+    expect(top).toMatch(/border-radius:0 0 2px 2px/);
+    expect(css).toMatch(/\.pad:active, \.pad\.down\{[^}]*background:color-mix\(in srgb,var\(--tc\) 35%,var\(--tc-b\)\)/);
+    expect(css).toMatch(/\.pad:hover\{[^}]*translateY\(-1px\)/);
+    const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion:reduce){\n  .launch"));
+    expect(reduced.slice(0, reduced.indexOf("\n}\n"))).toContain(".pad:hover, .pad:active, .pad.down{ transform:none; }");
+  });
+
+  it("the small and medium instrument tiles have 4px corners, the picker's big picture 8px; the others keep theirs", () => {
+    expect(rule(".tile--sm")).toMatch(/border-radius:4px/);
+    expect(rule(".tile--md")).toMatch(/border-radius:4px/);
+    expect(rule(".tile--art")).toMatch(/border-radius:8px/);
+    expect(rule(".tile")).toMatch(/border-radius:var\(--r\)/);
+  });
+
+  it("the picker's Hear button is a plain outline: no teal or color fill, a border, 4px corners", () => {
+    const pl = rule(".ins__pl");
+    expect(pl).toBeTruthy();
+    expect(pl).not.toMatch(/#14B8A6|#5EE6D8|#0B8378|var\(--go\)|var\(--tc\)|radial-gradient/);
+    expect(pl).toMatch(/background:transparent/);
+    expect(pl).toMatch(/border:1\.5px solid/);
+    expect(pl).toMatch(/border-radius:4px/);
+    expect(pl).toMatch(/width:28px; height:28px/);
+    expect(rule(".ins__pl svg")).not.toMatch(/#05312D/);
+    expect(css).toMatch(/\.ins__pl:hover\{[^}]*background:rgba\(255,255,255,\.12\)/);
+  });
+});
