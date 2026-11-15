@@ -1129,3 +1129,274 @@ describe("Sound Space song lessons in the page", () => {
     expect(css).toMatch(/\.wk\.lit\{[^}]*box-shadow:[^}]*rgba\(139,92,246/i);
   });
 });
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Sheet music: the song as real notation in a window, to print or save as PDF
+   --------------------------------------------------------------------------------------------------------------- */
+/** The full source of one top-level function in the page, found by its name (string- and comment-aware). */
+function pageFn(name) {
+  const m = new RegExp("\\n(?:async )?function " + name + "\\(").exec(html);
+  if (!m) throw new Error("no function " + name);
+  const open = html.indexOf("{", html.indexOf(")", m.index));
+  let depth = 0;
+  for (let j = open; j < html.length; j++) {
+    const c = html[j];
+    if (c === '"' || c === "'" || c === "`") { for (j++; j < html.length && html[j] !== c; j++) if (html[j] === "\\") j++; continue; }
+    if (c === "/" && html[j + 1] === "*") { j = html.indexOf("*/", j) + 1; continue; }
+    if (c === "/" && html[j + 1] === "/") { j = html.indexOf("\n", j); continue; }
+    if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return html.slice(m.index + 1, j + 1);
+  }
+  throw new Error("unclosed function " + name);
+}
+
+describe("Sound Space sheet music in the page", () => {
+  const SS = loadSS("model.js", "engine.js", "instruments.js", "icons.js", "library.js", "lessons.js", "notation.js");
+  const CAT = {}; SS.instruments.CATEGORIES.forEach((c) => { CAT[c.id] = c; });
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const FNS = ["loadAbcjs", "openSheet", "closeSheet", "paintSheet", "drawSheet", "sheetChips", "sheetClick", "sheetKey", "sheetTrap", "sheetChanged"];
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  function makeSong() {
+    const s = SS.model.newSong({ title: "Space jam" });
+    const piano = SS.model.addTrack(s, "grand-piano"), bass = SS.model.addTrack(s, "double-bass"), kit = SS.model.addTrack(s, "classic-kit");
+    piano.notes.push({ step: 0, pitch: 60, len: 4, vel: 100 }, { step: 4, pitch: 62, len: 4, vel: 100 });
+    bass.notes.push({ step: 0, pitch: 36, len: 8, vel: 100 });
+    kit.notes.push({ step: 0, pitch: 0, len: 1, vel: 100 }, { step: 4, pitch: 1, len: 1, vel: 100 });
+    return s;
+  }
+
+  /** the sheet functions run against fake elements; returns the fakes and the functions */
+  function setup(song, opts = {}) {
+    const doc = { activeElement: null, body: null, head: { added: [], appendChild(x) { this.added.push(x); } }, createElement: (tag) => ({ tag, remove() {} }) };
+    const els = {};
+    function el(name) {
+      const attrs = {}, cls = new Set();
+      return {
+        name, hidden: true, textContent: "", innerHTML: "", disabled: false, dataset: {},
+        setAttribute(k, v) { attrs[k] = String(v); }, getAttribute(k) { return k in attrs ? attrs[k] : null; },
+        classList: { add: (k) => cls.add(k), remove: (k) => cls.delete(k), contains: (k) => cls.has(k), toggle: (k, on) => ((on === undefined ? !cls.has(k) : on) ? cls.add(k) : cls.delete(k)) },
+        focus() { doc.activeElement = this; }, closest: () => null, contains: (x) => !!(x && x.inSheet),
+      };
+    }
+    const $ = (s) => (els[s] = els[s] || el(s));
+    doc.body = el("body");
+    const focusables = opts.focusables || [];
+    const $$ = () => focusables;
+    const drawn = [];
+    const A = { renderAbc: (target, abc, o) => drawn.push({ target, abc, o }) };
+    const win = opts.noAbcjs ? {} : { ABCJS: A };
+    const store = new Map(opts.stored || []);
+    const storage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
+    const printed = [];
+    win.print = () => printed.push(1);
+    const narrowMq = { matches: !!opts.narrow };
+    const opener = el("opener");
+    doc.activeElement = opener;
+    const trackById = (id) => song.tracks.find((t) => t.id === id) || null;
+    const instOf = (t) => SS.instruments.byId(t.instrumentId);
+    const timers = [];
+    const setTimeout_ = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
+    const consts = ["ABCJS_SRC", "SHEET_EMPTY"].map((n) => (new RegExp("\\nconst " + n + " = [^\\n]*\\n").exec(html) || [""])[0]).join("");
+    const body = consts
+      + "let sheetBack = null, sheetWhich = \"all\", sheetNames = " + (opts.names === false ? "false" : "true") + ", abcjsLoading = null, sheetTimer = 0;\n"
+      + FNS.map(pageFn).join("\n")
+      + "\nreturn { " + FNS.join(", ") + ", state: () => ({ sheetWhich, sheetNames }) };";
+    const api = new Function("$", "$$", "song", "SS", "CAT", "esc", "trackById", "instOf", "narrowMq", "document", "window", "safeStorage", "setTimeout", "clearTimeout", body)(
+      $, $$, song, SS, CAT, esc, trackById, instOf, narrowMq, doc, win, () => storage, setTimeout_, () => {});
+    return { api, $, doc, drawn, store, printed, opener, timers, win };
+  }
+  const chip = (id) => ({ dataset: { sheet: "track", id }, disabled: false });
+  const click = (env, target) => env.api.sheetClick({ target: { closest: () => target }, currentTarget: env.$("#sheet") });
+
+  it("puts a Sheet music button next to Export, and a dialog with Print, Save as PDF and Close", () => {
+    const bar = section(/<section id="editor"/, "</header>");
+    expect(bar).toMatch(/<button type="button" class="btn" id="ss-sheet" data-act="sheet"[^>]*>[\s\S]*?<span class="label-wide">Sheet music<\/span><\/button>\s*<button type="button" class="btn btn--primary" id="ss-export"/);
+    expect(html).toContain('if (act === "sheet") return openSheet();');
+    const dlg = section(/<div id="sheet" class="modal sheet" hidden>/, '<div id="toast"');
+    expect(dlg).toMatch(/role="dialog" aria-modal="true" aria-labelledby="sheet-title"/);
+    expect(dlg).toMatch(/<button type="button" class="btn" id="sheet-print" data-sheet="print"[^>]*>[\s\S]*?Print<\/button>/);
+    expect(dlg).toMatch(/<button type="button" class="btn btn--primary" id="sheet-pdf" data-sheet="print"[^>]*>[\s\S]*?Save as PDF<\/button>/);
+    expect(dlg).toMatch(/<button type="button" class="btn icon" id="sheet-close" data-sheet="close" aria-label="Close"/);
+    expect(dlg).toMatch(/<button type="button" class="toggle" id="sheet-names" data-sheet="names" aria-pressed="true"><span class="led" aria-hidden="true"><\/span>Note names<\/button>/);
+    expect(dlg).toContain("Add some notes, then come back to see them as sheet music.");
+    // the bar keeps clear of the centered song name: the word "Sheet music" only on wide screens
+    expect(cssText()).toMatch(/@media \(max-width:1279px\)\{ #ss-sheet \.label-wide\{ display:none; \}/);
+    // abcjs draws into an inner box, so the white page keeps its margins
+    expect(dlg).toContain('<div class="sheet__paper" id="sheet-page"><div id="sheet-paper"></div></div>');
+  });
+
+  it("the Sheet music button opens the dialog with the song's name, and draws the whole song", async () => {
+    const s = makeSong();
+    const env = setup(s);
+    env.api.openSheet();
+    expect(env.$("#sheet").hidden).toBe(false);
+    expect(env.doc.body.classList.contains("sheet-open")).toBe(true);
+    expect(env.$("#sheet-title").textContent).toBe("Sheet music: Space jam");
+    expect(env.doc.activeElement).toBe(env.$("#sheet-close"));
+    expect(env.$("#sheet-foot").textContent).toBe("Made from your song: 4 beats in a bar, Speed 120. Change a note in the editor and the sheet music changes too.");
+    await tick();
+    expect(env.drawn.length).toBe(1);
+    expect(env.drawn[0].target).toBe(env.$("#sheet-paper"));
+    expect(env.drawn[0].abc).toBe(SS.notation.toAbc(s, { tracks: "all", names: true }));
+    expect(env.drawn[0].o.responsive).toBe("resize");
+    expect(env.$("#sheet-page").hidden).toBe(false);
+    expect(env.$("#sheet-empty").hidden).toBe(true);
+  });
+
+  it("on a phone the page keeps its size and scrolls sideways instead of shrinking", async () => {
+    const env = setup(makeSong(), { narrow: true });
+    env.api.openSheet();
+    await tick();
+    expect(env.drawn[0].o.responsive).toBeUndefined();
+    expect(env.drawn[0].o.staffwidth).toBeGreaterThanOrEqual(560);
+    const css = cssText();
+    expect(css).toMatch(/\.sheet__scroll\{[^}]*overflow:auto/);
+    expect(css).toMatch(/@media \(max-width:640px\)\{[\s\S]*?\.sheet__box\{[^}]*height:100%/);
+  });
+
+  it("the chips show All tracks, then each track with its color, and switch which track is drawn", async () => {
+    const s = makeSong();
+    const env = setup(s);
+    env.api.openSheet();
+    const chips = env.$("#sheet-chips").innerHTML;
+    const labels = [...chips.matchAll(/<button type="button" class="chip"[^>]*data-sheet="track" data-id="([^"]*)" aria-pressed="(true|false)">(?:<i style="background:([^"]+)"[^>]*><\/i>)?([^<]+)<\/button>/g)];
+    expect(labels.map((m) => m[4])).toEqual(["All tracks", "Grand piano", "Double bass", "Classic kit"]);
+    expect(labels.map((m) => m[2])).toEqual(["true", "false", "false", "false"]);
+    expect(labels.slice(1).map((m) => m[3])).toEqual([CAT.keys.color, CAT.bass.color, CAT.drums.color]);
+    click(env, chip(s.tracks[1].id));
+    expect(env.api.state().sheetWhich).toBe(s.tracks[1].id);
+    expect(env.$("#sheet-chips").innerHTML).toMatch(new RegExp('data-id="' + s.tracks[1].id + '" aria-pressed="true"'));
+    await tick();
+    const last = env.drawn[env.drawn.length - 1].abc;
+    expect(last).toBe(SS.notation.toAbc(s, { tracks: s.tracks[1].id, names: true }));
+    expect(last.match(/\nV:/g).length).toBe(1);
+    click(env, chip("all"));
+    expect(env.api.state().sheetWhich).toBe("all");
+  });
+
+  it("the Note names switch turns the letter lines off and on, and is remembered", async () => {
+    const s = makeSong();
+    const env = setup(s);
+    env.api.openSheet();
+    await tick();
+    expect(env.drawn[0].abc).toMatch(/\nw: /);
+    expect(env.$("#sheet-names").getAttribute("aria-pressed")).toBe("true");
+    click(env, { dataset: { sheet: "names" }, disabled: false });
+    await tick();
+    expect(env.api.state().sheetNames).toBe(false);
+    expect(env.$("#sheet-names").getAttribute("aria-pressed")).toBe("false");
+    expect(env.drawn[env.drawn.length - 1].abc).not.toMatch(/\nw: /);
+    expect(env.store.get("ccs-sound-space-sheet-names")).toBe("0");
+    click(env, { dataset: { sheet: "names" }, disabled: false });
+    await tick();
+    expect(env.drawn[env.drawn.length - 1].abc).toMatch(/\nw: /);
+    expect(env.store.get("ccs-sound-space-sheet-names")).toBe("1");
+    // on by default; the saved choice is read in a try/catch
+    expect(pageFn("loadSheetNames")).toMatch(/try \{[^}]*getItem\(SHEET_NAMES_KEY\) !== "0"[^}]*\} catch\(e\)\{ return true; \}/);
+  });
+
+  it("Escape closes it and gives focus back to the button; Tab stays inside", () => {
+    let env = null;
+    const first = { inSheet: true, disabled: false, focus() { env.doc.activeElement = this; }, closest: () => null };
+    const last = { inSheet: true, disabled: false, focus() { env.doc.activeElement = this; }, closest: () => null };
+    env = setup(makeSong(), { focusables: [first, last] });
+    env.api.openSheet();
+    let prevented = 0;
+    const key = (k, shift) => env.api.sheetKey({ key: k, shiftKey: !!shift, preventDefault: () => prevented++ });
+    env.doc.activeElement = last;
+    expect(key("Tab")).toBe(true);
+    expect(env.doc.activeElement).toBe(first);
+    expect(key("Tab", true)).toBe(true);
+    expect(env.doc.activeElement).toBe(last);
+    expect(key("Escape")).toBe(true);
+    expect(prevented).toBe(3);
+    expect(env.$("#sheet").hidden).toBe(true);
+    expect(env.doc.body.classList.contains("sheet-open")).toBe(false);
+    expect(env.doc.activeElement).toBe(env.opener);
+    expect(key("Escape")).toBe(false);   // closed: other keys work again
+    // the page's key handler asks the sheet first, and the other shortcuts stay off while it is open
+    expect(html).toMatch(/document\.addEventListener\("keydown", e => \{\n  if \(sheetKey\(e\)\) return;/);
+    expect(html).toMatch(/const dialogOpen = \(\) => [^\n]*!\$\("#sheet"\)\.hidden/);
+  });
+
+  it("the dimmed area and Close shut it; Print and Save as PDF open the print window", () => {
+    const env = setup(makeSong());
+    env.api.openSheet();
+    click(env, { dataset: { sheet: "print" }, disabled: false });
+    expect(env.printed.length).toBe(1);
+    env.api.sheetClick({ target: env.$("#sheet"), currentTarget: env.$("#sheet") });
+    expect(env.$("#sheet").hidden).toBe(true);
+    env.api.openSheet();
+    click(env, { dataset: { sheet: "close" }, disabled: false });
+    expect(env.$("#sheet").hidden).toBe(true);
+    expect(html).toContain('$("#sheet").addEventListener("click", sheetClick);');
+  });
+
+  it("an empty song shows the friendly line instead of the page, and nothing to print", async () => {
+    const s = SS.model.newSong({ title: "Nothing yet" });
+    SS.model.addTrack(s, "grand-piano");
+    const env = setup(s);
+    env.api.openSheet();
+    await tick();
+    expect(env.$("#sheet-empty").hidden).toBe(false);
+    expect(env.$("#sheet-empty").textContent).toBe("Add some notes, then come back to see them as sheet music.");
+    expect(env.$("#sheet-page").hidden).toBe(true);
+    expect(env.drawn.length).toBe(0);
+    expect(env.$("#sheet-print").disabled).toBe(true);
+    expect(env.$("#sheet-pdf").disabled).toBe(true);
+  });
+
+  it("changes to the song while it is open draw it again, a moment later", () => {
+    expect(pageFn("commit")).toContain("sheetChanged();");
+    expect(pageFn("replaceSong")).toContain("sheetChanged();");
+    const env = setup(makeSong());
+    env.api.sheetChanged();
+    expect(env.timers.length).toBe(0);           // closed: nothing to do
+    env.api.openSheet();
+    env.api.sheetChanged();
+    expect(env.timers.length).toBe(1);
+    expect(env.timers[0].ms).toBeGreaterThanOrEqual(80);
+  });
+
+  it("loads abcjs from the vendor folder the first time, never from a CDN", async () => {
+    const env = setup(makeSong(), { noAbcjs: true });
+    const p = env.api.loadAbcjs();
+    expect(env.api.loadAbcjs()).toBe(p);         // one script tag, however often it is asked
+    expect(env.doc.head.added.length).toBe(1);
+    const tag = env.doc.head.added[0];
+    expect(tag.tag).toBe("script");
+    expect(tag.src).toBe("../vendor/abcjs/abcjs-basic-min.js");
+    env.win.ABCJS = { renderAbc() {} };
+    tag.onload();
+    await expect(p).resolves.toBe(env.win.ABCJS);
+    expect(html).toContain('const ABCJS_SRC = "../vendor/abcjs/abcjs-basic-min.js"');
+    expect(html).not.toMatch(/<script[^>]*abcjs/);                         // not loaded with the page
+    expect(html).not.toMatch(/jsdelivr|unpkg|cdnjs/i);
+    const vendored = readFileSync(new URL("../assets/vendor/abcjs/abcjs-basic-min.js", import.meta.url), "utf8");
+    expect(vendored.slice(0, 120)).toContain("abcjs_basic v6.4.4");
+    expect(existsSync(new URL("../assets/vendor/abcjs/LICENSE", import.meta.url))).toBe(true);
+    expect(html).toMatch(/<script src="sound-space\/notation\.js"><\/script>/);
+  });
+
+  it("if abcjs cannot load, it says so and tries again next time", async () => {
+    const env = setup(makeSong(), { noAbcjs: true });
+    env.api.openSheet();
+    const tag = env.doc.head.added[0];
+    tag.onerror();
+    await tick(); await tick();
+    expect(env.$("#sheet-empty").hidden).toBe(false);
+    expect(env.$("#sheet-empty").textContent).toMatch(/couldn’t load/);
+    env.api.loadAbcjs();
+    expect(env.doc.head.added.length).toBe(2);
+  });
+
+  it("prints only the page, in black on white, with no app around it", () => {
+    const css = cssText();
+    const print = (/@media print\{([\s\S]*?)\n\}/.exec(css) || [])[1] || "";
+    expect(print).toMatch(/body\.sheet-open > \*:not\(#sheet\)\{[^}]*display:none/);
+    expect(print).toMatch(/\.sheet__head, \.sheet__tools, \.sheet__foot[^{]*\{[^}]*display:none/);
+    expect(print).toMatch(/\.sheet__paper\{[^}]*background:#fff[^}]*color:#000/);
+    expect(css).toMatch(/\.sheet__paper\{[^}]*background:#fff/);
+  });
+});

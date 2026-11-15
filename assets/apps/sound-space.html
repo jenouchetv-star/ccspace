@@ -16,6 +16,7 @@
 <script src="sound-space/lessons.js"></script>
 <script src="sound-space/cloud.js"></script>
 <script src="sound-space/midi.js"></script>
+<script src="sound-space/notation.js"></script>
 <!--
   Sound Space (Chike's Creative Space): kids make their own short songs. Add tracks, pick an instrument for each,
   then play the piano keys or drum pads, record what you play (notes, never audio), or tap notes into the grid.
@@ -120,6 +121,10 @@ svg.lucide{ width:16px; height:16px; stroke-width:1.9; flex:none; }
 .title small{ font-size:11px; color:var(--mute); max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .title small.bad{ color:var(--danger); font-weight:700; }
 .label-wide{ display:inline; }
+/* the bar keeps clear of the centered song name: Sheet music shows its word only on wide screens, Export below ~1020px
+   drops its word too (both keep their icon and their name for screen readers) */
+@media (max-width:1279px){ #ss-sheet .label-wide{ display:none; } #ss-sheet{ width:32px; padding:0; } }
+@media (max-width:1020px){ #ss-export .label-wide{ display:none; } }
 
 /* ---------- home ---------- */
 /* every screen fills the whole window (100dvh so phone browser bars never cut it off); the page itself never scrolls */
@@ -516,6 +521,44 @@ body.kbd-collapsed #kbd{ display:none; }
   background:#F2F2F5; color:#1C1C22; padding:9px 15px; border-radius:var(--r); font-size:12.5px; font-weight:600; max-width:min(92vw,480px); z-index:90; text-align:center; box-shadow:var(--pop); }
 :root:not([data-theme="dark"]) #toast{ background:#1C1C22; color:#fff; }
 #toast.show{ transform:translateX(-50%) translateY(0); visibility:visible; }
+/* Sheet music: the song as real notation on a white page, to print or save as PDF. Full screen on phones, where the
+   page keeps its size and scrolls sideways so the notes never get too small to read. */
+.sheet__box{ width:min(920px,100%); max-height:calc(100vh - 32px); max-height:calc(100dvh - 32px); display:flex; flex-direction:column; color:var(--text);
+  background:linear-gradient(var(--panel-a),var(--panel-b)); border:1px solid var(--btn-edge); border-radius:var(--r); box-shadow:var(--pop); overflow:hidden; }
+.sheet__head{ display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--line); }
+.sheet__head h2{ margin:0 auto 0 0; font-size:16px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sheet__tools{ display:flex; align-items:center; gap:8px; padding:10px 14px; }
+.sheet__tools .chips{ flex:1; min-width:0; }
+.sheet__tools .toggle{ flex:none; height:28px; font-size:12px; }
+.sheet .chip i{ width:9px; height:9px; border-radius:2px; flex:none; box-shadow:inset 0 0 0 1px rgba(0,0,0,.25); }
+.sheet__scroll{ flex:1; min-height:0; overflow:auto; padding:0 14px 14px; }
+.sheet__scroll:focus-visible{ outline-offset:-2px; }
+.sheet__paper{ background:#fff; color:#111114; border-radius:3px; padding:18px 18px 8px; box-shadow:0 2px 8px rgba(0,0,0,.35); }
+.sheet__paper svg{ display:block; }
+.sheet__empty{ margin:0; padding:30px 18px; border-radius:var(--r-sm); background:var(--well); box-shadow:var(--press); color:var(--mute); font-size:14px; line-height:1.5; text-align:center; }
+.sheet__foot{ margin:0; padding:9px 14px 12px; border-top:1px solid var(--line); color:var(--mute); font-size:12px; line-height:1.5; }
+@media (max-width:640px){
+  .sheet{ padding:0; }
+  .sheet__box{ width:100%; height:100%; max-height:none; border:0; border-radius:0; }
+  /* the name on its own line with Close beside it, then Print and Save as PDF */
+  .sheet__head{ position:relative; flex-wrap:wrap; padding:10px 52px 10px 12px; }
+  .sheet__head h2{ flex:1 1 100%; margin:5px 0 4px; }
+  #sheet-close{ position:absolute; right:10px; top:9px; }
+  .sheet__tools{ flex-wrap:wrap; padding:10px 12px; }
+  .sheet__scroll{ padding:0 12px 12px; }
+  .sheet__paper{ width:max-content; min-width:100%; }
+}
+/* Print and Save as PDF: only the white page, black on white, with nothing of the app around it */
+@media print{
+  html, body{ height:auto !important; overflow:visible !important; background:#fff !important; }
+  body.sheet-open > *:not(#sheet){ display:none !important; }
+  body.sheet-open #sheet{ position:static; display:block; padding:0; background:none; }
+  .sheet__box{ width:auto; height:auto; max-height:none; border:0; border-radius:0; box-shadow:none; background:#fff; overflow:visible; }
+  .sheet__head, .sheet__tools, .sheet__foot, .sheet__empty{ display:none !important; }
+  .sheet__scroll{ overflow:visible; padding:0; }
+  .sheet__paper{ background:#fff; color:#000; box-shadow:none; border-radius:0; padding:0; width:auto; min-width:0; }
+  .sheet__paper svg{ max-width:100%; height:auto; }
+}
 
 /* launch: the loading card every time the app opens, then (when needed) the Sign in window. The same design as
    Art Space's: white words over the blurred picture on the left, the picture up close on the right. The picture is a
@@ -629,6 +672,9 @@ body.kbd-collapsed #kbd{ display:none; }
   body.hide-tracks .left{ display:flex; }
   #tg-tracks, .left .panel__head{ display:none; }
   .appbar{ gap:4px; padding:0 6px; }
+  /* Sheet music and Export, icons only, a little narrower so the bar still fits a phone */
+  #ss-sheet, #ss-export{ padding:0 7px; }
+  .appbar .sep{ margin:0 1px; }
   .backsite img{ display:none; }
   .appmark--editor{ margin-left:2px; }
   .transport{ gap:8px; padding:8px 10px; }
@@ -743,6 +789,7 @@ body.kbd-collapsed #kbd{ display:none; }
     <button type="button" class="btn icon tg" id="tg-focus" data-act="focus" aria-pressed="false" aria-label="Focus" title="Focus: hide the panels and fold the overview  \"><i data-lucide="maximize-2"></i></button>
     <button type="button" class="btn icon" data-act="help" aria-label="Help" title="Help"><i data-lucide="circle-help"></i></button>
     <button type="button" class="btn icon" data-act="theme" aria-label="Light or dark" title="Light or dark"><i data-lucide="sun-moon"></i></button>
+    <button type="button" class="btn" id="ss-sheet" data-act="sheet" aria-label="Sheet music" title="See your song as sheet music, to print or save"><i data-lucide="file-music"></i><span class="label-wide">Sheet music</span></button>
     <button type="button" class="btn btn--primary" id="ss-export" data-act="export" aria-label="Export" title="Export your song as a sound file"><i data-lucide="download"></i><span class="label-wide">Export</span></button>
   </header>
 
@@ -905,6 +952,25 @@ body.kbd-collapsed #kbd{ display:none; }
     <input id="help-q" class="help__search" type="search" placeholder="Search help, like record or loop" autocomplete="off">
     <div id="help-list" class="help__list"></div>
     <p id="help-none" class="help__none" hidden>No topics match that. Try another word, like keys, loop or record.</p>
+  </div>
+</div>
+<div id="sheet" class="modal sheet" hidden>
+  <div class="sheet__box" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet__head">
+      <h2 id="sheet-title">Sheet music</h2>
+      <button type="button" class="btn" id="sheet-print" data-sheet="print" title="Print the sheet music"><i data-lucide="printer"></i>Print</button>
+      <button type="button" class="btn btn--primary" id="sheet-pdf" data-sheet="print" title="In the print window, pick Save as PDF"><i data-lucide="download"></i>Save as PDF</button>
+      <button type="button" class="btn icon" id="sheet-close" data-sheet="close" aria-label="Close" title="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="sheet__tools">
+      <div class="chips" id="sheet-chips" role="group" aria-label="Tracks to show"></div>
+      <button type="button" class="toggle" id="sheet-names" data-sheet="names" aria-pressed="true"><span class="led" aria-hidden="true"></span>Note names</button>
+    </div>
+    <div class="sheet__scroll" tabindex="0" role="region" aria-label="The sheet music">
+      <div class="sheet__paper" id="sheet-page"><div id="sheet-paper"></div></div>
+      <p class="sheet__empty" id="sheet-empty" hidden>Add some notes, then come back to see them as sheet music.</p>
+    </div>
+    <p class="sheet__foot" id="sheet-foot"></p>
   </div>
 </div>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -1318,6 +1384,7 @@ function commit(){
   if (player) player.update(song);
   renderUndo();
   queueSave();
+  sheetChanged();
 }
 function replaceSong(s){
   if (song && (song.grid || 2) !== (s.grid || 2)) stash = {};
@@ -1327,8 +1394,9 @@ function replaceSong(s){
   if (voices) song.tracks.forEach(t => ensureLoaded(t.instrumentId));
   renderAll();
   queueSave();
+  sheetChanged();
 }
-const busy = () => recording || countingIn;
+const busy =() => recording || countingIn;
 function undo(){ if (!hist || busy()) return; const s = hist.undo(); if (s){ replaceSong(s); renderUndo(); if (lesson) lesson.spread = false; /* the copied beat is gone, so the tip stops saying it plays all through */ } }
 function redo(){ if (!hist || busy()) return; const s = hist.redo(); if (s){ replaceSong(s); renderUndo(); } }
 
@@ -1955,8 +2023,9 @@ applyLayout();
    Keyboard: computer keys play, Ctrl+Z / Ctrl+Y undo and redo, Space plays and stops
    ============================================================ */
 const typing = el => el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !/^(range|button|checkbox|radio)$/.test(el.type)));
-const dialogOpen = () => !$("#picker").hidden || !$("#ask").hidden || !$("#help").hidden || !$("#launch").hidden || !$("#lessons").hidden;
+const dialogOpen = () => !$("#picker").hidden || !$("#ask").hidden || !$("#help").hidden || !$("#launch").hidden || !$("#lessons").hidden || !$("#sheet").hidden;
 document.addEventListener("keydown", e => {
+  if (sheetKey(e)) return;
   if (!$("#help").hidden && e.key === "Escape"){ e.preventDefault(); closeHelp(); return; }
   if (!$("#lessons").hidden && e.key === "Escape"){ e.preventDefault(); closeLessons(); return; }
   if (!$("#picker").hidden && e.key === "Escape"){ e.preventDefault(); closePicker(); return; }
@@ -2604,6 +2673,118 @@ $("#tip").addEventListener("click", e => {
 function openExport(){ toast("Export is coming in a moment."); }
 
 /* ============================================================
+   Sheet music: the song as real notation in a window, to print or save as PDF. SS.notation writes the song in ABC
+   and abcjs (vendored in ../vendor/abcjs, MIT) draws it. abcjs loads the first time the window opens, never with
+   the page and never from a CDN.
+   ============================================================ */
+const ABCJS_SRC = "../vendor/abcjs/abcjs-basic-min.js", SHEET_NAMES_KEY = "ccs-sound-space-sheet-names";
+const SHEET_EMPTY = "Add some notes, then come back to see them as sheet music.";
+let sheetBack = null, sheetWhich = "all", sheetNames = loadSheetNames(), abcjsLoading = null, sheetTimer = 0;
+/* Note names are on unless this browser remembers them off */
+function loadSheetNames(){ try { const st = safeStorage(); return !st || st.getItem(SHEET_NAMES_KEY) !== "0"; } catch(e){ return true; } }
+function loadAbcjs(){
+  if (window.ABCJS) return Promise.resolve(window.ABCJS);
+  if (!abcjsLoading) abcjsLoading = new Promise((ok, fail) => {
+    const tag = document.createElement("script");
+    tag.src = ABCJS_SRC; tag.async = true;
+    tag.onload = () => { if (window.ABCJS) ok(window.ABCJS); else { abcjsLoading = null; fail(new Error("abcjs")); } };
+    tag.onerror = () => { abcjsLoading = null; tag.remove(); fail(new Error("abcjs")); };   /* the next open tries again */
+    document.head.appendChild(tag);
+  });
+  return abcjsLoading;
+}
+function openSheet(){
+  if (!song) return;
+  sheetBack = document.activeElement;
+  $("#sheet").hidden = false;
+  document.body.classList.add("sheet-open");
+  paintSheet();
+  $("#sheet-close").focus();
+}
+function closeSheet(){
+  clearTimeout(sheetTimer); sheetTimer = 0;
+  $("#sheet").hidden = true;
+  document.body.classList.remove("sheet-open");
+  if (sheetBack && sheetBack.focus) try { sheetBack.focus(); } catch(e){}
+}
+/* All tracks, then one chip per track with its instrument's color */
+function sheetChips(){
+  const chip = (id, label, color) => '<button type="button" class="chip" data-sheet="track" data-id="' + esc(id) + '" aria-pressed="' + (sheetWhich === id) + '">'
+    + (color ? '<i style="background:' + color + '" aria-hidden="true"></i>' : "") + esc(label) + '</button>';
+  return chip("all", "All tracks", "") + song.tracks.map(t => {
+    const inst = instOf(t), cat = inst ? CAT[inst.category] : null;
+    return chip(t.id, inst ? inst.name : "Track", cat ? cat.color : "#8C8C98");
+  }).join("");
+}
+function paintSheet(){
+  if (!song || $("#sheet").hidden) return;
+  if (sheetWhich !== "all" && !trackById(sheetWhich)) sheetWhich = "all";
+  $("#sheet-title").textContent = "Sheet music: " + song.title;
+  const was = document.activeElement, chipId = was && was.dataset && was.dataset.sheet === "track" ? was.dataset.id : null;
+  $("#sheet-chips").innerHTML = sheetChips();
+  if (chipId !== null) $$("#sheet-chips [data-sheet]").forEach(b => { if (b.dataset.id === chipId) b.focus(); });
+  $("#sheet-names").setAttribute("aria-pressed", String(sheetNames));
+  $("#sheet-foot").textContent = "Made from your song: 4 beats in a bar, Speed " + song.tempo + ". Change a note in the editor and the sheet music changes too.";
+  const msg = $("#sheet-empty"), page = $("#sheet-page"), empty = !SS.notation.hasNotes(song, sheetWhich);
+  $("#sheet-print").disabled = empty; $("#sheet-pdf").disabled = empty;
+  if (empty){ msg.textContent = SHEET_EMPTY; msg.hidden = false; page.hidden = true; return; }
+  loadAbcjs().then(drawSheet, () => {
+    if ($("#sheet").hidden) return;
+    msg.textContent = "The sheet music couldn’t load just now. Close this and try again.";
+    msg.hidden = false; page.hidden = true;
+    $("#sheet-print").disabled = true; $("#sheet-pdf").disabled = true;
+  });
+}
+/* wide screens: the page fits the window; phones: it keeps its size and scrolls sideways */
+function drawSheet(A){
+  if (!song || $("#sheet").hidden || !SS.notation.hasNotes(song, sheetWhich)) return;
+  const msg = $("#sheet-empty"), page = $("#sheet-page");
+  const abc = SS.notation.toAbc(song, { tracks: sheetWhich, names: sheetNames });
+  const opts = { add_classes: true, paddingtop: 0, paddingbottom: 0, paddingleft: 0, paddingright: 0 };
+  if (narrowMq.matches) opts.staffwidth = 640; else opts.responsive = "resize";
+  msg.hidden = true; page.hidden = false;
+  /* abcjs draws into the inner box (in resize mode it sets that box's size itself); the page around it keeps its margins */
+  try { A.renderAbc($("#sheet-paper"), abc, opts); }
+  catch(e){ msg.textContent = "The sheet music couldn’t be drawn just now."; msg.hidden = false; page.hidden = true; }
+}
+function sheetClick(e){
+  if (e.target === e.currentTarget) return closeSheet();   /* the dimmed area around the window */
+  const b = e.target.closest("[data-sheet]"); if (!b || b.disabled) return;
+  const a = b.dataset.sheet;
+  if (a === "close") return closeSheet();
+  if (a === "print") return window.print();   /* Save as PDF is a choice in the print window */
+  if (a === "names"){
+    sheetNames = !sheetNames;
+    try { const st = safeStorage(); if (st) st.setItem(SHEET_NAMES_KEY, sheetNames ? "1" : "0"); } catch(err){}
+    return paintSheet();
+  }
+  if (a === "track"){ sheetWhich = b.dataset.id; return paintSheet(); }
+}
+/* While the window is open it has every key: Escape closes it, Tab stays inside, and the editor's shortcuts wait */
+function sheetKey(e){
+  if ($("#sheet").hidden) return false;
+  if (e.key === "Escape"){ e.preventDefault(); closeSheet(); return true; }
+  if (e.key === "Tab") sheetTrap(e);
+  return true;
+}
+function sheetTrap(e){
+  const box = $("#sheet .sheet__box");
+  const items = $$("#sheet button, #sheet [tabindex]").filter(x => !x.disabled && x.tabIndex !== -1 && !x.closest("[hidden]"));
+  if (!items.length){ e.preventDefault(); return; }
+  const first = items[0], last = items[items.length - 1], at = document.activeElement, inside = box.contains(at);
+  if (e.shiftKey && (at === first || !inside)){ e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (at === last || !inside)){ e.preventDefault(); first.focus(); }
+}
+/* the song changed while the window is open (an edit, undo, recording): draw it again, a moment later */
+function sheetChanged(){
+  if ($("#sheet").hidden) return;
+  clearTimeout(sheetTimer);
+  sheetTimer = setTimeout(() => { sheetTimer = 0; paintSheet(); }, 150);
+}
+$("#sheet").addEventListener("click", sheetClick);
+narrowMq.addEventListener("change", () => paintSheet());
+
+/* ============================================================
    Home: New, Recent and Open a file
    ============================================================ */
 function miniPicture(s){
@@ -2767,6 +2948,7 @@ document.addEventListener("click", async e => {
   if (act === "undo") return undo();
   if (act === "redo") return redo();
   if (act === "export") return openExport();
+  if (act === "sheet") return openSheet();
   if (act === "add-track") return openPicker("add");
   if (act === "change-inst") return openPicker("change");
   if (act === "lib-open"){ document.body.classList.add("lib-open"); renderLibrary(); applyLayout(); const c = $(".lib__close"); if (c) c.focus(); return; }
