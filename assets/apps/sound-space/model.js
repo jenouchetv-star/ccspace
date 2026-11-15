@@ -17,8 +17,22 @@
   const SONG_KEYS = ["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs"];
   // reverb: 0 Off, 1 Room, 2 Hall, 3 Big hall, 4 Stadium. sustain: notes ring on after they end (pitched instruments only).
   // Songs saved before these two have neither; they open as reverb 0 and sustain false.
-  const TRACK_KEYS = ["id", "instrumentId", "volume", "mute", "solo", "notes", "reverb", "sustain"];
+  // chorus, dyn and eq: each track's Chorus, Dynamics and EQ. Songs saved before them have none; they open with every
+  // effect off (fillTrackDefaults).
+  const TRACK_KEYS = ["id", "instrumentId", "volume", "mute", "solo", "notes", "reverb", "sustain", "chorus", "dyn", "eq"];
   const REVERB_MAX = 4;
+  // chorus: { kind, amount 0-100 }; dyn: { kind, amount 0-100 }; eq: { low, mid, high: whole dB from -12 to 12, lowcut }.
+  // No gate: Sound Space's sounds have no background noise for one to take away.
+  const FX = {
+    CHORUS_KINDS: ["off", "chorus", "flanger", "phaser"],
+    DYN_KINDS: ["off", "compress", "limit"],
+    EQ_MAX: 12,
+    CHORUS_AMOUNT: 45,
+    DYN_AMOUNT: 50
+  };
+  const defaultChorus = () => ({ kind: "off", amount: FX.CHORUS_AMOUNT });
+  const defaultDyn = () => ({ kind: "off", amount: FX.DYN_AMOUNT });
+  const defaultEq = () => ({ low: 0, mid: 0, high: 0, lowcut: false });
   const NOTE_KEYS = ["step", "pitch", "len", "vel"];
 
   function makeId() {
@@ -70,18 +84,34 @@
 
   function addTrack(song, instrumentId) {
     if (song.tracks.length >= CONST.MAX_TRACKS) return null;
-    const track = { id: makeId(), instrumentId, volume: 0.8, mute: false, solo: false, notes: [], reverb: 0, sustain: false };
+    const track = { id: makeId(), instrumentId, volume: 0.8, mute: false, solo: false, notes: [], reverb: 0, sustain: false,
+      chorus: defaultChorus(), dyn: defaultDyn(), eq: defaultEq() };
     song.tracks.push(track);
     return track;
   }
 
-  // Gives every track that lacks them reverb 0 and sustain false (songs saved before those existed).
+  // Gives every track that lacks them reverb 0, sustain false and every effect off (songs saved before those existed).
   function fillTrackDefaults(song) {
     (song.tracks || []).forEach((t) => {
       if (t.reverb === undefined) t.reverb = 0;
       if (t.sustain === undefined) t.sustain = false;
+      if (t.chorus === undefined) t.chorus = defaultChorus();
+      if (t.dyn === undefined) t.dyn = defaultDyn();
+      if (t.eq === undefined) t.eq = defaultEq();
     });
     return song;
+  }
+
+  // An effect's settings: an object with exactly these keys.
+  const exactKeys = (o, keys) => !!o && typeof o === "object" && !Array.isArray(o) &&
+    Object.keys(o).length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(o, k));
+  const isAmount = (n) => isInt(n) && n >= 0 && n <= 100;
+  const isBand = (n) => isInt(n) && n >= -FX.EQ_MAX && n <= FX.EQ_MAX;
+  function validKindAmount(o, kinds) {
+    return exactKeys(o, ["kind", "amount"]) && kinds.indexOf(o.kind) >= 0 && isAmount(o.amount);
+  }
+  function validEq(o) {
+    return exactKeys(o, ["low", "mid", "high", "lowcut"]) && isBand(o.low) && isBand(o.mid) && isBand(o.high) && typeof o.lowcut === "boolean";
   }
 
   function toggleNote(track, step, pitch, vel) {
@@ -194,6 +224,9 @@
       if (typeof t.mute !== "boolean" || typeof t.solo !== "boolean") return bad("bad_field");
       if (t.reverb !== undefined && (!isInt(t.reverb) || t.reverb < 0 || t.reverb > REVERB_MAX)) return bad("bad_field");
       if (t.sustain !== undefined && typeof t.sustain !== "boolean") return bad("bad_field");
+      if (t.chorus !== undefined && !validKindAmount(t.chorus, FX.CHORUS_KINDS)) return bad("bad_field");
+      if (t.dyn !== undefined && !validKindAmount(t.dyn, FX.DYN_KINDS)) return bad("bad_field");
+      if (t.eq !== undefined && !validEq(t.eq)) return bad("bad_field");
       if (!Array.isArray(t.notes)) return bad("bad_notes");
       for (const n of t.notes) {
         if (!n || typeof n !== "object" || Array.isArray(n)) return bad("bad_note");
@@ -288,6 +321,7 @@
   SS.model = {
     CONST,
     TRACK_KEYS,
+    FX,
     newSong,
     addTrack,
     fillTrackDefaults,

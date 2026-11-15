@@ -361,4 +361,90 @@ describe("Sound Space model", () => {
       }
     });
   });
+
+  // Owner: Chorus, Dynamics and EQ on each track (docs/mockups/sound-space-track-effects-draft.html).
+  describe("chorus, dynamics and EQ on each track", () => {
+    const ids = new Set(["piano"]);
+    const good = () => { const m = M(); const s = m.newSong(); m.addTrack(s, "piano"); return JSON.parse(JSON.stringify(s)); };
+    const OFF = { chorus: { kind: "off", amount: 45 }, dyn: { kind: "off", amount: 50 }, eq: { low: 0, mid: 0, high: 0, lowcut: false } };
+
+    it("new tracks start with every effect off, and the three are track keys", () => {
+      const m = M();
+      const t = m.addTrack(m.newSong(), "piano");
+      expect({ chorus: t.chorus, dyn: t.dyn, eq: t.eq }).toEqual(OFF);
+      for (const k of ["chorus", "dyn", "eq"]) expect(m.TRACK_KEYS).toContain(k);
+      expect(m.FX.CHORUS_KINDS).toEqual(["off", "chorus", "flanger", "phaser"]);
+      expect(m.FX.DYN_KINDS).toEqual(["off", "compress", "limit"]);
+      expect(m.FX.EQ_MAX).toBe(12);
+    });
+
+    it("a song saved before the effects opens with them off, and the input is left as it was", () => {
+      const m = M();
+      const old = good();
+      for (const k of ["chorus", "dyn", "eq"]) delete old.tracks[0][k];
+      const r = m.validateSong(old, ids);
+      expect(r.ok).toBe(true);
+      const t = r.song.tracks[0];
+      expect({ chorus: t.chorus, dyn: t.dyn, eq: t.eq }).toEqual(OFF);
+      expect(old.tracks[0]).not.toHaveProperty("chorus");
+      const filled = m.fillTrackDefaults({ tracks: [{ id: "a" }, { id: "b", chorus: { kind: "phaser", amount: 70 }, dyn: { kind: "limit", amount: 10 }, eq: { low: 3, mid: 0, high: -5, lowcut: true } }] });
+      expect(filled.tracks[0].chorus).toEqual(OFF.chorus);
+      expect(filled.tracks[0].eq).toEqual(OFF.eq);
+      expect(filled.tracks[1].chorus).toEqual({ kind: "phaser", amount: 70 });
+      expect(filled.tracks[1].eq).toEqual({ low: 3, mid: 0, high: -5, lowcut: true });
+      // each track gets its own objects, never one shared default
+      const two = m.fillTrackDefaults({ tracks: [{ id: "a" }, { id: "b" }] });
+      expect(two.tracks[0].eq).not.toBe(two.tracks[1].eq);
+    });
+
+    it("keeps good values", () => {
+      const m = M();
+      for (const kind of ["off", "chorus", "flanger", "phaser"]) for (const amount of [0, 45, 100]) {
+        const o = good(); o.tracks[0].chorus = { kind, amount };
+        const r = m.validateSong(o, ids);
+        expect(r.ok, kind + " " + amount).toBe(true);
+        expect(r.song.tracks[0].chorus).toEqual({ kind, amount });
+      }
+      for (const kind of ["off", "compress", "limit"]) {
+        const o = good(); o.tracks[0].dyn = { kind, amount: 100 };
+        expect(m.validateSong(o, ids).ok, kind).toBe(true);
+      }
+      const o = good(); o.tracks[0].eq = { low: -12, mid: 0, high: 12, lowcut: true };
+      expect(m.validateSong(o, ids).song.tracks[0].eq).toEqual({ low: -12, mid: 0, high: 12, lowcut: true });
+    });
+
+    it("rejects bad kinds, amounts out of range or not whole, bad EQ bands, and extra or missing keys", () => {
+      const m = M();
+      const bad = (field, value) => { const o = good(); o.tracks[0][field] = value; return m.validateSong(o, ids); };
+      const no = { ok: false, error: "bad_field" };
+      for (const c of [
+        { kind: "wah", amount: 45 }, { kind: "chorus", amount: 101 }, { kind: "chorus", amount: 4.5 }, { kind: "chorus", amount: -1 },
+        { kind: "chorus", amount: "45" }, { kind: "chorus" }, { amount: 45 }, { kind: "chorus", amount: 45, rate: 2 }, null, "chorus", [], 3,
+        { kind: "compress", amount: 50 },
+      ]) expect(bad("chorus", c), "chorus " + JSON.stringify(c)).toEqual(no);
+      for (const d of [
+        { kind: "gate", amount: 50 }, { kind: "compress", amount: 101 }, { kind: "limit", amount: 4.5 }, { kind: "limit", amount: 50, knee: 3 }, { kind: "limit" }, null,
+        { kind: "phaser", amount: 50 },
+      ]) expect(bad("dyn", d), "dyn " + JSON.stringify(d)).toEqual(no);
+      for (const e of [
+        { low: -13, mid: 0, high: 0, lowcut: false }, { low: 0, mid: 13, high: 0, lowcut: false }, { low: "3", mid: 0, high: 0, lowcut: false },
+        { low: 1.5, mid: 0, high: 0, lowcut: false }, { low: 0, mid: 0, high: 0, lowcut: "yes" }, { low: 0, mid: 0, high: 0 },
+        { low: 0, mid: 0, high: 0, lowcut: false, bass: 2 }, null, [],
+      ]) expect(bad("eq", e), "eq " + JSON.stringify(e)).toEqual(no);
+    });
+
+    it("a full song with every effect on every track stays far under the 500 KB song limit", () => {
+      const m = M();
+      const s = m.newSong();
+      for (let i = 0; i < m.CONST.MAX_TRACKS; i++) {
+        const t = m.addTrack(s, "piano");
+        t.chorus = { kind: "flanger", amount: 100 }; t.dyn = { kind: "compress", amount: 100 }; t.eq = { low: -12, mid: 12, high: -12, lowcut: true };
+      }
+      const plain = JSON.parse(JSON.stringify(s));
+      plain.tracks.forEach((t) => { delete t.chorus; delete t.dyn; delete t.eq; });
+      const extra = JSON.stringify(s).length - JSON.stringify(plain).length;
+      expect(extra).toBeLessThan(2000);   // about 150 bytes a track
+      expect(m.validateSong(JSON.parse(JSON.stringify(s)), ids).ok).toBe(true);
+    });
+  });
 });

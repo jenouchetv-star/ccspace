@@ -99,6 +99,7 @@ function fakeCtx(sampleRate = 44100) {
     decodeAudioData: async () => ctx.createBuffer(1, 100, 44100),
     destination: { kind: "destination" },
   };
+  // each node gets its own params (extra is a function, so two oscillators never share one frequency)
   const source = (kind, extra) => () =>
     makeNode(ctx, kind, {
       isSource: true,
@@ -108,19 +109,19 @@ function fakeCtx(sampleRate = 44100) {
       stop(t) {
         this.stoppedAt = t === undefined ? ctx.currentTime : t;
       },
-      ...extra,
+      ...extra(),
     });
-  ctx.createOscillator = source("osc", {
+  ctx.createOscillator = source("osc", () => ({
     type: "sine",
     frequency: makeParam(440),
     detune: makeParam(0),
     setPeriodicWave() {},
-  });
-  ctx.createBufferSource = source("buf", {
+  }));
+  ctx.createBufferSource = source("buf", () => ({
     buffer: null,
     loop: false,
     playbackRate: makeParam(1),
-  });
+  }));
   ctx.createGain = () => makeNode(ctx, "gain", { gain: makeParam(1) });
   ctx.createBiquadFilter = () =>
     makeNode(ctx, "filter", {
@@ -718,6 +719,265 @@ describe("Sound Space reverb and sustain", () => {
     expect(fx.input(0)).toBe(bus);
     fx.disconnect();
     expect(conv.disconnected).toBe(true);
+  });
+});
+
+// ---- Chorus, Dynamics and EQ on each track ---------------------------------
+// Owner: docs/mockups/sound-space-track-effects-draft.html. Order: EQ, Chorus, Dynamics, then the dry output and the
+// reverb send. Nothing is built for an effect that is off.
+
+describe("Sound Space track effects", () => {
+  const E = SS.engine;
+  const OFF = () => ({ chorus: { kind: "off", amount: 45 }, dyn: { kind: "off", amount: 50 }, eq: { low: 0, mid: 0, high: 0, lowcut: false } });
+  const songWith = (fx, opts = {}) => {
+    const song = SS.model.newSong();
+    song.grid = 2; song.tempo = 100;
+    const t = SS.model.addTrack(song, opts.id || "ep");
+    Object.assign(t, OFF(), fx);
+    if (opts.strip) { delete t.chorus; delete t.dyn; delete t.eq; }
+    t.reverb = opts.reverb || 0;
+    for (let s = 0; s < (opts.notes || 4); s++) SS.model.toggleNote(t, s, 60, 1);
+    return song;
+  };
+  const playFor = (song, ticks = 40) => {
+    const ctx = fakeCtx();
+    const voices = E.createVoices(ctx, stubCatalog(recipeRecords), "samples");
+    let tick = null;
+    const player = E.createPlayer(ctx, voices, { setInterval: (fn) => ((tick = fn), 1), clearInterval: () => {} });
+    player.start(song, { fromStep: 0 });
+    for (let i = 0; i < ticks; i++) { ctx.currentTime += 0.025; tick(); }
+    return { ctx, player, tick: () => tick() };
+  };
+  const kinds = (ctx, k) => ctx.nodes.filter((n) => n.kind === k);
+  const comps = (ctx) => kinds(ctx, "comp");
+
+  it("events carry their track's effects", () => {
+    const song = songWith({ chorus: { kind: "phaser", amount: 60 }, eq: { low: 3, mid: 0, high: -5, lowcut: true } });
+    const ev = E.compileEvents(song, 0, 1)[0];
+    expect(ev.chorus).toEqual({ kind: "phaser", amount: 60 });
+    expect(ev.eq).toEqual({ low: 3, mid: 0, high: -5, lowcut: true });
+    expect(ev.dyn).toEqual({ kind: "off", amount: 50 });
+  });
+
+  it("a track with every effect off builds exactly what a song from before the effects builds", () => {
+    const a = playFor(songWith({})), b = playFor(songWith({}, { strip: true }));
+    expect(a.ctx.nodes.map((n) => n.kind)).toEqual(b.ctx.nodes.map((n) => n.kind));
+    expect(kinds(a.ctx, "delay").length).toBe(0);
+    expect(comps(a.ctx).length).toBe(1);   // the master's own
+    expect(E.trackFxOn(OFF())).toEqual({ chorus: false, dyn: false, eq: false, any: false });
+    expect(E.trackFxOn({})).toEqual({ chorus: false, dyn: false, eq: false, any: false });
+  });
+
+  it("chorus builds two modulated delays of 15-25 ms with slow LFOs, and amount 0 is dry", () => {
+    const ctx = fakeCtx();
+    const ch = E.buildTrackChain(ctx, { ...OFF(), chorus: { kind: "chorus", amount: 100 } });
+    const delays = kinds(ctx, "delay");
+    expect(delays.length).toBe(2);
+    for (const d of delays) {
+      expect(d.delayTime.value).toBeGreaterThanOrEqual(0.015);
+      expect(d.delayTime.value).toBeLessThanOrEqual(0.025);
+    }
+    expect(ch.lfos.length).toBeGreaterThanOrEqual(1);
+    for (const o of ch.lfos) {
+      expect(o.frequency.value).toBeGreaterThanOrEqual(0.6);
+      expect(o.frequency.value).toBeLessThanOrEqual(1.2);
+      expect(o.startedAt).not.toBe(null);
+      const depth = ctx.nodes.find((n) => n.kind === "gain" && o.connected.includes(n));
+      expect(depth.gain.value).toBeGreaterThan(0);
+      expect(delays.some((d) => depth.connected.includes(d.delayTime))).toBe(true);
+    }
+    // amount 0: the wet side is silent and the dry side is at full level
+    const c0 = fakeCtx();
+    const dry = E.buildTrackChain(c0, { ...OFF(), chorus: { kind: "chorus", amount: 0 } });
+    expect(dry.wet.gain.value).toBe(0);
+    expect(dry.dry.gain.value).toBe(1);
+  });
+
+  it("flanger: one short delay with a faster sweep and feedback that can never run away", () => {
+    const ctx = fakeCtx();
+    const ch = E.buildTrackChain(ctx, { ...OFF(), chorus: { kind: "flanger", amount: 100 } });
+    const delays = kinds(ctx, "delay");
+    expect(delays.length).toBe(1);
+    expect(delays[0].delayTime.value).toBeGreaterThanOrEqual(0.001);
+    expect(delays[0].delayTime.value).toBeLessThanOrEqual(0.005);
+    expect(ch.lfos.length).toBe(1);
+    expect(ch.lfos[0].frequency.value).toBeGreaterThan(1.2);
+    const fb = ctx.nodes.find((n) => n.kind === "gain" && delays[0].connected.includes(n) && n.connected.includes(delays[0]));
+    expect(fb).toBeTruthy();
+    expect(fb.gain.value).toBeGreaterThan(0);
+    expect(fb.gain.value).toBeLessThanOrEqual(E.FLANGER_FEEDBACK_MAX);
+    expect(E.FLANGER_FEEDBACK_MAX).toBeLessThan(0.8);
+  });
+
+  it("phaser: 4 allpass filters swept by an LFO and mixed with the dry sound", () => {
+    const ctx = fakeCtx();
+    const ch = E.buildTrackChain(ctx, { ...OFF(), chorus: { kind: "phaser", amount: 60 } });
+    const ap = kinds(ctx, "filter").filter((f) => f.type === "allpass");
+    expect(ap.length).toBe(4);
+    expect(ch.lfos.length).toBe(1);
+    const lfo = ch.lfos[0];
+    for (const f of ap) expect(ctx.nodes.some((g) => g.kind === "gain" && lfo.connected.includes(g) && g.connected.includes(f.frequency))).toBe(true);
+    expect(ch.dry.gain.value).toBeGreaterThan(0);
+    expect(ch.wet.gain.value).toBeGreaterThan(0);
+  });
+
+  it("compress: a compressor whose threshold falls and ratio rises with amount, with makeup so the level stays about the same", () => {
+    const at = (amount) => { const ctx = fakeCtx(); E.buildTrackChain(ctx, { ...OFF(), dyn: { kind: "compress", amount } }); return comps(ctx)[0]; };
+    const lo = at(0), hi = at(100), mid = at(50);
+    expect(lo.threshold.value).toBeCloseTo(-10, 5);
+    expect(hi.threshold.value).toBeCloseTo(-34, 5);
+    expect(lo.ratio.value).toBeCloseTo(2, 5);
+    expect(hi.ratio.value).toBeCloseTo(6, 5);
+    expect(mid.threshold.value).toBeLessThan(lo.threshold.value);
+    expect(mid.ratio.value).toBeGreaterThan(lo.ratio.value);
+    // The browser's compressor lifts its output by (1 / gain at full level)^0.6 (the Web Audio spec); the makeup gain on
+    // top brings a typical note back to where it was.
+    const level = (kind, amount, inDb) => {
+      const s = E.dynSettings(kind, amount);
+      const out = (x) => (x <= s.threshold ? x : s.threshold + (x - s.threshold) / s.ratio);
+      const auto = -0.6 * out(0);
+      return out(inDb) + auto + s.makeupDb;
+    };
+    for (const kind of ["compress", "limit"]) for (const a of [0, 25, 50, 75, 100]) {
+      expect(Math.abs(level(kind, a, E.DYN_TYPICAL_DB) - E.DYN_TYPICAL_DB), kind + " " + a).toBeLessThan(1.5);
+    }
+    const ctx = fakeCtx();
+    const ch = E.buildTrackChain(ctx, { ...OFF(), dyn: { kind: "compress", amount: 100 } });
+    const c = comps(ctx)[0];
+    const makeup = ctx.nodes.find((n) => n.kind === "gain" && c.connected.includes(n));
+    expect(makeup.gain.value).toBeCloseTo(Math.pow(10, E.dynSettings("compress", 100).makeupDb / 20), 6);
+    expect(ch.output).toBe(makeup);
+  });
+
+  it("limit: ratio 20, a 1 ms attack, and a threshold from -1 to -12 dB", () => {
+    const at = (amount) => { const ctx = fakeCtx(); E.buildTrackChain(ctx, { ...OFF(), dyn: { kind: "limit", amount } }); return comps(ctx)[0]; };
+    const lo = at(0), hi = at(100);
+    expect(lo.ratio.value).toBe(20);
+    expect(lo.attack.value).toBeCloseTo(0.001, 6);
+    expect(lo.threshold.value).toBeCloseTo(-1, 5);
+    expect(hi.threshold.value).toBeCloseTo(-12, 5);
+  });
+
+  it("EQ: low cut is a 90 Hz highpass, then a 200 Hz low shelf, a 1 kHz peak (Q 0.8) and a 4 kHz high shelf, in that order", () => {
+    const ctx = fakeCtx();
+    const ch = E.buildTrackChain(ctx, { ...OFF(), eq: { low: 3, mid: -4, high: 5, lowcut: true } });
+    const f = kinds(ctx, "filter");
+    expect(f.map((x) => x.type)).toEqual(["highpass", "lowshelf", "peaking", "highshelf"]);
+    expect(f.map((x) => x.frequency.value)).toEqual([90, 200, 1000, 4000]);
+    expect(f[0].Q.value).toBeCloseTo(0.7, 6);
+    expect(f[2].Q.value).toBeCloseTo(0.8, 6);
+    expect(f.slice(1).map((x) => x.gain.value)).toEqual([3, -4, 5]);
+    // chained in order from the input
+    expect(ch.input.connected).toContain(f[0]);
+    for (let i = 0; i < 3; i++) expect(f[i].connected).toContain(f[i + 1]);
+    // a band at 0 builds nothing
+    const c2 = fakeCtx();
+    E.buildTrackChain(c2, { ...OFF(), eq: { low: 0, mid: 0, high: 2, lowcut: false } });
+    expect(kinds(c2, "filter").map((x) => x.type)).toEqual(["highshelf"]);
+    expect(E.buildTrackChain(fakeCtx(), OFF())).toBe(null);
+  });
+
+  it("the order is EQ, then Chorus, then Dynamics", () => {
+    const ctx = fakeCtx();
+    const ch = E.buildTrackChain(ctx, { chorus: { kind: "chorus", amount: 50 }, dyn: { kind: "compress", amount: 50 }, eq: { low: 0, mid: 0, high: 4, lowcut: false } });
+    const shelf = kinds(ctx, "filter").find((f) => f.type === "highshelf");
+    const delays = kinds(ctx, "delay");
+    const comp = comps(ctx)[0];
+    // the shelf feeds the chorus: its dry gain and both delays
+    expect(shelf.connected).toContain(ch.dry);
+    for (const d of delays) expect(shelf.connected).toContain(d);
+    // the chorus's mix feeds the compressor
+    const mix = ctx.nodes.find((n) => n.kind === "gain" && n.connected.includes(comp));
+    expect(ch.dry.connected).toContain(mix);
+    expect(ch.wet.connected).toContain(mix);
+  });
+
+  it("playback builds each track's chain once and reuses it for every note, then into the reverb send", () => {
+    const song = songWith({ chorus: { kind: "chorus", amount: 50 }, dyn: { kind: "compress", amount: 50 } }, { notes: 8, reverb: 2 });
+    const { ctx, player } = playFor(song, 60);
+    expect(kinds(ctx, "delay").length).toBe(2);
+    expect(comps(ctx).length).toBe(2);   // the track's and the master's
+    const conv = kinds(ctx, "convolver")[0];
+    const send = ctx.nodes.find((n) => n.kind === "gain" && n.connected.includes(conv));
+    const trackComp = comps(ctx).find((c) => !c.connected.includes(ctx.destination));
+    const makeup = ctx.nodes.find((n) => n.kind === "gain" && trackComp.connected.includes(n));
+    expect(makeup.connected).toContain(send);
+    player.stop();
+  });
+
+  it("a change applies to the notes that follow; the old chain is let go after its notes end", () => {
+    const song = songWith({ chorus: { kind: "chorus", amount: 50 } }, { notes: 16 });
+    const { ctx, player, tick } = playFor(song, 10);
+    expect(kinds(ctx, "delay").length).toBe(2);
+    const first = kinds(ctx, "delay");
+    const changed = JSON.parse(JSON.stringify(song));
+    changed.tracks[0].chorus = { kind: "flanger", amount: 80 };
+    player.update(changed);
+    for (let i = 0; i < 40; i++) { ctx.currentTime += 0.025; tick(); }
+    expect(kinds(ctx, "delay").length).toBe(3);
+    // switching every effect off goes back to the plain path for the notes after
+    const off = JSON.parse(JSON.stringify(changed));
+    off.tracks[0].chorus.kind = "off";
+    player.update(off);
+    const before = kinds(ctx, "delay").length;
+    for (let i = 0; i < 400; i++) { ctx.currentTime += 0.025; tick(); }
+    expect(kinds(ctx, "delay").length).toBe(before);
+    // long after, the retired chains are taken out of the graph
+    for (const d of first) expect(d.disconnected).toBe(true);
+    player.stop();
+  });
+
+  it("stop() stops every LFO and takes every effect node out of the graph", () => {
+    const song = songWith({ chorus: { kind: "phaser", amount: 70 }, dyn: { kind: "limit", amount: 50 }, eq: { low: 2, mid: 0, high: 0, lowcut: true } });
+    const { ctx, player } = playFor(song);
+    const lfos = ctx.sources().filter((s) => s.kind === "osc" && s.frequency.value < 5);
+    expect(lfos.length).toBeGreaterThan(0);
+    const fx = ctx.nodes.filter((n) => n.kind === "filter" && (n.type === "allpass" || n.type === "highpass" || n.type === "lowshelf"));
+    player.stop();
+    for (const o of lfos) expect(o.stoppedAt).not.toBe(null);
+    for (const n of fx) expect(n.disconnected).toBe(true);
+    for (const c of comps(ctx)) expect(c.disconnected).toBe(true);
+  });
+
+  it("renderOffline puts each track through its chain, so the WAV has the effects", async () => {
+    const song = songWith({ chorus: { kind: "flanger", amount: 60 }, eq: { low: 0, mid: 6, high: 0, lowcut: false } }, { notes: 4 });
+    const { Offline, last } = fakeOffline();
+    await E.renderOffline(song, 2, (ctx) => E.createVoices(ctx, stubCatalog(recipeRecords), "samples"), { OfflineAudioContext: Offline });
+    const ctx = last();
+    expect(kinds(ctx, "delay").length).toBe(1);   // once, for all 8 notes
+    expect(kinds(ctx, "filter").filter((f) => f.type === "peaking").length).toBe(1);
+    const comp = comps(ctx)[0];
+    const bus = ctx.nodes.find((n) => n.kind === "gain" && n.connected.includes(comp));
+    const mix = ctx.nodes.find((n) => n.kind === "gain" && n.connected.includes(bus) && n !== bus);
+    expect(mix).toBeTruthy();
+  });
+
+  it("the export tail covers a flanger's feedback", () => {
+    const base = songWith({}, { reverb: 4 });
+    const fl = songWith({ chorus: { kind: "flanger", amount: 100 } }, { reverb: 4 });
+    expect(E.songTail(fl)).toBeGreaterThan(E.songTail(base));
+    expect(E.exportFrames(fl, 1)).toBeGreaterThan(E.exportFrames(base, 1));
+  });
+
+  it("live: a track with every effect off adds nothing, so its notes keep today's compressor-free path", () => {
+    const ctx = fakeCtx();
+    const bus = E.createLiveBus(ctx);
+    const chains = E.createTrackChains(ctx);
+    const before = ctx.nodes.length;
+    expect(chains.input({ trackId: "a", ...OFF() }, [bus], 10)).toBe(null);
+    expect(ctx.nodes.length).toBe(before);
+    expect(comps(ctx).length).toBe(0);
+    // EQ only: still no compressor
+    const eqIn = chains.input({ trackId: "b", ...OFF(), eq: { low: 4, mid: 0, high: 0, lowcut: false } }, [bus], 10);
+    expect(eqIn).toBeTruthy();
+    expect(comps(ctx).length).toBe(0);
+    // only a track with Dynamics on goes through a compressor, and it is built once
+    const d1 = chains.input({ trackId: "c", ...OFF(), dyn: { kind: "compress", amount: 40 } }, [bus], 10);
+    const d2 = chains.input({ trackId: "c", ...OFF(), dyn: { kind: "compress", amount: 40 } }, [bus], 10);
+    expect(d1).toBe(d2);
+    expect(comps(ctx).length).toBe(1);
+    chains.disconnect();
+    expect(comps(ctx)[0].disconnected).toBe(true);
   });
 });
 

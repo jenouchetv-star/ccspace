@@ -42,6 +42,9 @@
           gain: t.volume * song.volume * n.vel,
           reverb: t.reverb || 0,
           sustain: !!t.sustain,
+          chorus: t.chorus,
+          dyn: t.dyn,
+          eq: t.eq,
         });
       }
     }
@@ -65,11 +68,13 @@
   }
 
   // How long a song keeps sounding after its last note: 2 s, or longer when a
-  // track with notes rings on (sustain, pitched instruments) into a reverb.
+  // track with notes rings on (sustain, pitched instruments) into a reverb, or
+  // through a flanger's feedback.
   function songTail(song) {
     const byId = SS.instruments && SS.instruments.byId;
     let rev = 0;
     let sus = 0;
+    let fb = 0;
     for (const t of song.tracks || []) {
       if (!t.notes || !t.notes.length) continue;
       const lv = REVERB_LEVELS[t.reverb];
@@ -78,8 +83,9 @@
         const rec = byId ? byId(t.instrumentId) : null;
         if (!rec || rec.kind === "pitched") sus = SUSTAIN_TAIL;
       }
+      if (t.chorus && t.chorus.kind === "flanger") fb = FLANGER_TAIL;
     }
-    return Math.max(2, sus + rev + 0.5);
+    return Math.max(2, sus + rev + fb + 0.5);
   }
 
   function exportFrames(song, times, sampleRate, tailSec) {
@@ -828,6 +834,224 @@
     return { wet, input, disconnect };
   }
 
+  // ---- Track effects: EQ, then Chorus, then Dynamics ----------------------
+  // Each track's chain sits between its voices and its dry output plus reverb
+  // send. An effect that is off builds nothing, and a track with every effect
+  // off has no chain at all, so its sound takes exactly the path it always did.
+
+  // A flanger's feedback never reaches this, so it always dies away (at most
+  // about 70 ms of ringing at 5 ms a pass); FLANGER_TAIL covers it in exports.
+  const FLANGER_FEEDBACK_MAX = 0.6;
+  const FLANGER_TAIL = 0.25;
+  // A note's peak level the Dynamics makeup is set for (a track note at full
+  // volume peaks around here).
+  const DYN_TYPICAL_DB = -12;
+  // How long a chain stays connected after its last note ends: enough for
+  // sustain, a voice's ring and its release.
+  const CHAIN_HOLD = SUSTAIN_TAIL + 1.5;
+
+  const amountOf = (o) => Math.max(0, Math.min(1, (o && +o.amount) / 100 || 0));
+  // Which of a track's effects are on. EQ is on when a band is not 0 or Low cut is on.
+  function trackFxOn(t) {
+    const c = t && t.chorus, d = t && t.dyn, e = t && t.eq;
+    const chorus = !!c && (c.kind === "chorus" || c.kind === "flanger" || c.kind === "phaser");
+    const dyn = !!d && (d.kind === "compress" || d.kind === "limit");
+    const eq = !!e && (!!e.low || !!e.mid || !!e.high || !!e.lowcut);
+    return { chorus, dyn, eq, any: chorus || dyn || eq };
+  }
+  // Everything that decides how a track's chain is built; "" when every effect is off.
+  function fxKey(t) {
+    const on = trackFxOn(t);
+    if (!on.any) return "";
+    return [
+      on.eq ? "e" + [t.eq.low | 0, t.eq.mid | 0, t.eq.high | 0, t.eq.lowcut ? 1 : 0].join(",") : "",
+      on.chorus ? "c" + t.chorus.kind + amountOf(t.chorus) : "",
+      on.dyn ? "d" + t.dyn.kind + amountOf(t.dyn) : "",
+    ].join("|");
+  }
+
+  // Compress: the threshold falls (-10 to -34 dB) and the ratio rises (2 to 6) with amount. Limit: ratio 20, a 1 ms
+  // attack, the threshold from -1 to -12 dB. The browser's compressor already lifts its output by
+  // (1 / its gain at full level)^0.6 (the Web Audio spec), so makeupDb is what is left to bring a typical note back to
+  // the level it had.
+  function dynSettings(kind, amount) {
+    const a = Math.max(0, Math.min(1, (+amount || 0) / 100));
+    const s = kind === "limit"
+      ? { threshold: -1 - 11 * a, ratio: 20, knee: 0, attack: 0.001, release: 0.1 }
+      : { threshold: -10 - 24 * a, ratio: 2 + 4 * a, knee: 6, attack: 0.01, release: 0.2 };
+    const out = (x) => (x <= s.threshold ? x : s.threshold + (x - s.threshold) / s.ratio);
+    const auto = -0.6 * out(0);
+    s.makeupDb = DYN_TYPICAL_DB - (out(DYN_TYPICAL_DB) + auto);
+    return s;
+  }
+
+  // One track's chain: { input, output, dry, wet (the chorus's two sides, or null), lfos, disconnect() }, or null when
+  // every effect is off. Nothing is connected to the outside yet.
+  function buildTrackChain(ctx, t) {
+    const on = trackFxOn(t);
+    if (!on.any) return null;
+    const nodes = [];
+    const lfos = [];
+    const add = (n) => (nodes.push(n), n);
+    const gain = (v) => { const g = add(ctx.createGain()); g.gain.value = v; return g; };
+    const lfo = (hz) => {
+      const o = add(ctx.createOscillator());
+      o.type = "sine";
+      o.frequency.value = hz;
+      o.start(ctx.currentTime);
+      lfos.push(o);
+      return o;
+    };
+    const input = gain(1);
+    let cur = input;
+    let dry = null;
+    let wet = null;
+
+    if (on.eq) {
+      const e = t.eq;
+      const band = (type, hz, q, db) => {
+        const f = add(filterNode(ctx, type, hz, q));
+        if (db !== undefined) f.gain.value = db;
+        cur.connect(f);
+        cur = f;
+      };
+      if (e.lowcut) band("highpass", 90, 0.7);
+      if (e.low) band("lowshelf", 200, undefined, e.low);
+      if (e.mid) band("peaking", 1000, 0.8, e.mid);
+      if (e.high) band("highshelf", 4000, undefined, e.high);
+    }
+
+    if (on.chorus) {
+      const kind = t.chorus.kind;
+      const a = amountOf(t.chorus);
+      const src = cur;
+      const mix = gain(1);
+      const delay = (base, max) => {
+        const d = add(ctx.createDelay(max));
+        d.delayTime.value = base;
+        return d;
+      };
+      // an LFO swinging `param` by +-depth around where it sits
+      const sweep = (osc, depth, param) => { const g = gain(depth); osc.connect(g); g.connect(param); };
+      if (kind === "chorus") {
+        // two voices a little behind the dry one, each wobbling its delay (and so its pitch) at its own slow rate
+        dry = gain(1 - 0.25 * a);
+        wet = gain(0.5 * a);
+        [[0.015, 0.8], [0.022, 1.1]].forEach(([base, hz]) => {
+          const d = delay(base, 0.05);
+          sweep(lfo(hz), 0.004 * a, d.delayTime);
+          src.connect(d);
+          d.connect(wet);
+        });
+      } else if (kind === "flanger") {
+        // one very short delay sweeping about 1-5 ms, faster than the chorus, fed back into itself for the jet sound
+        dry = gain(1 - 0.3 * a);
+        wet = gain(0.6 * a);
+        const d = delay(0.003, 0.02);
+        sweep(lfo(1.5), 0.0018 * a, d.delayTime);
+        const fb = gain(Math.min(FLANGER_FEEDBACK_MAX, 0.2 + 0.4 * a));
+        d.connect(fb);
+        fb.connect(d);
+        src.connect(d);
+        d.connect(wet);
+      } else {
+        // phaser: 4 allpass filters whose frequencies swing together, mixed with the dry sound
+        dry = gain(1 - 0.4 * a);
+        wet = gain(0.6 * a);
+        const osc = lfo(0.5);
+        let p = src;
+        [440, 880, 1760, 3520].forEach((hz) => {
+          const f = add(filterNode(ctx, "allpass", hz, 0.6));
+          sweep(osc, hz * 0.6 * a, f.frequency);
+          p.connect(f);
+          p = f;
+        });
+        p.connect(wet);
+      }
+      src.connect(dry);
+      dry.connect(mix);
+      wet.connect(mix);
+      cur = mix;
+    }
+
+    if (on.dyn) {
+      const s = dynSettings(t.dyn.kind, t.dyn.amount);
+      const comp = add(ctx.createDynamicsCompressor());
+      comp.threshold.value = s.threshold;
+      comp.ratio.value = s.ratio;
+      comp.knee.value = s.knee;
+      comp.attack.value = s.attack;
+      comp.release.value = s.release;
+      const makeup = gain(Math.pow(10, s.makeupDb / 20));
+      cur.connect(comp);
+      comp.connect(makeup);
+      cur = makeup;
+    }
+
+    return {
+      input,
+      output: cur,
+      dry,
+      wet,
+      lfos,
+      disconnect() {
+        for (const o of lfos) {
+          try { o.stop(); } catch (e) { /* already stopped */ }
+        }
+        for (const n of nodes) {
+          try { n.disconnect(); } catch (e) { /* already gone */ }
+        }
+      },
+    };
+  }
+
+  // Every track's chain for one player, one export or the live keys. input(t, dests, until) gives the node a voice of
+  // track t (an event or a track: trackId or id) plays into: its chain, built the first time and reused for every note
+  // after, its output feeding each of dests. It gives null when every effect is off, so the caller plays straight into
+  // dests as before. A changed setting (or reverb send) builds a new chain for the notes that follow; the old one stays
+  // until its notes have rung out (`until`, seconds on the audio clock), then sweep(now) takes it out of the graph.
+  // disconnect() takes every chain out.
+  function createTrackChains(ctx) {
+    const byTrack = new Map();
+    let retired = [];
+    const same = (a, b) => a.length === b.length && a.every((d, i) => d === b[i]);
+    return {
+      input(t, dests, until) {
+        const id = t.trackId !== undefined ? t.trackId : t.id;
+        const key = fxKey(t);
+        let e = byTrack.get(id);
+        if (e && (e.key !== key || !same(e.dests, dests))) {
+          retired.push(e);
+          byTrack.delete(id);
+          e = null;
+        }
+        if (!key) return null;
+        if (!e) {
+          const chain = buildTrackChain(ctx, t);
+          dests.forEach((d) => chain.output.connect(d));
+          e = { key, dests: dests.slice(), chain, until: 0 };
+          byTrack.set(id, e);
+        }
+        if (until > e.until) e.until = until;
+        return e.chain.input;
+      },
+      sweep(now) {
+        if (!retired.length) return;
+        retired = retired.filter((e) => {
+          if (e.until > now) return true;
+          e.chain.disconnect();
+          return false;
+        });
+      },
+      disconnect() {
+        byTrack.forEach((e) => e.chain.disconnect());
+        retired.forEach((e) => e.chain.disconnect());
+        byTrack.clear();
+        retired = [];
+      },
+    };
+  }
+
   function makeMaster(ctx) {
     const bus = ctx.createGain();
     const comp = ctx.createDynamicsCompressor();
@@ -851,6 +1075,7 @@
     let song = null;
     let master = null;
     let fx = null;
+    let chains = null;
     let handle = null;
     let step = 0;
     let nextTime = 0;
@@ -891,7 +1116,9 @@
           }
           const evs = compileEvents(song, step, step + 1);
           for (const ev of evs) {
-            const made = voices.play(Object.assign({}, ev, { dur: ev.len * stepDur }), nextTime, fx.input(ev.reverb));
+            const dest = fx.input(ev.reverb);
+            const into = chains.input(ev, [dest], nextTime + ev.len * stepDur + CHAIN_HOLD) || dest;
+            const made = voices.play(Object.assign({}, ev, { dur: ev.len * stepDur }), nextTime, into);
             for (const s of made || []) live.push({ src: s, when: nextTime });
           }
           queue.push({ time: nextTime, step });
@@ -905,6 +1132,7 @@
         if (cb) cb(heard.step);
       }
       live = live.filter((l) => l.when > now - 6);
+      chains.sweep(now);
       if (ended && !queue.length && now >= nextTime + Math.max(1.2, songTail(song))) api.stop();
     }
 
@@ -914,6 +1142,7 @@
       click = !!(opts && opts.click);
       master = makeMaster(ctx);
       fx = createReverb(ctx, master.bus);
+      chains = createTrackChains(ctx);
       step = ((opts && opts.fromStep) || 0) % total();
       stepDur = stepSeconds(song.tempo, song.grid);
       nextTime = ctx.currentTime + 0.06;
@@ -942,6 +1171,7 @@
       try { master.bus.disconnect(); } catch (e) { /* ignore */ }
       try { master.comp.disconnect(); } catch (e) { /* ignore */ }
       fx.disconnect();
+      chains.disconnect();
       lastReported = null;
       if (cb) cb(-1);
     }
@@ -981,15 +1211,17 @@
       }
       const master = makeMaster(ctx);
       const fx = createReverb(ctx, master.bus);
+      const chains = createTrackChains(ctx);
       const total = SS.model.totalSteps(song);
       const dur = stepSeconds(song.tempo, song.grid);
       const evs = compileEvents(song, 0, total);
       for (let r = 0; r < times; r++) {
         for (const ev of evs) {
+          const dest = fx.input(ev.reverb);
           voices.play(
             Object.assign({}, ev, { dur: ev.len * dur }),
             (r * total + ev.step) * dur,
-            fx.input(ev.reverb)
+            chains.input(ev, [dest], Infinity) || dest
           );
         }
       }
@@ -1005,6 +1237,12 @@
     createLiveBus,
     createReverb,
     REVERB_LEVELS,
+    trackFxOn,
+    dynSettings,
+    buildTrackChain,
+    createTrackChains,
+    FLANGER_FEEDBACK_MAX,
+    DYN_TYPICAL_DB,
     SUSTAIN_TAIL,
     compileEvents,
     stepsToSchedule,

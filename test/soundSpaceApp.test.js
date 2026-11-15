@@ -442,7 +442,7 @@ describe("Sound Space app page", () => {
       expect(b).toContain(`aria-controls="${ctl}"`);
     }
     // each side panel has its own hide button in its header
-    expect(html).toMatch(/<div class="panel__head"><h3>Tracks<\/h3><button[^>]*data-act="toggle-tracks"[^>]*aria-label="Hide tracks"/);
+    expect(html).toMatch(/<div class="panel__head"><h3>Tracks<\/h3>[^\n]*?<button[^>]*data-act="toggle-tracks"[^>]*aria-label="Hide tracks"/);
     expect(html).toMatch(/<h3>Beats and patterns<\/h3><button[^>]*data-act="toggle-lib"[^>]*aria-label="Hide beats and patterns"/);
     // hiding a panel from its own header hands keyboard focus to the app bar toggle
     expect(html).toContain('if (act === "toggle-tracks"){ const inside = !!b.closest(".panel"); toggleTracks(); if (inside) $("#tg-tracks").focus(); return; }');
@@ -534,7 +534,8 @@ describe("Sound Space app page", () => {
       expect(audio).toContain("liveFx = E.createReverb(ctx, liveBus)");
       const on = section(/function noteOn\(/, "function noteOff");
       expect(on).toContain("g.connect(liveBus)");
-      expect(on).toContain("const wet = liveFx.wet(track.reverb || 0); if (wet) g.connect(wet);");
+      expect(on).toContain("const wet = liveFx.wet(track.reverb || 0);");
+      expect(on).toContain("if (wet) g.connect(wet);");
       expect(on).toContain("sustain:!!track.sustain");
       const off = section(/function noteOff\(/, "function releaseAll");
       expect(off).toContain("E.SUSTAIN_TAIL");
@@ -830,6 +831,299 @@ describe("Sound Space app page", () => {
     });
   });
 
+  /* Owner: Chorus, Dynamics and EQ on each track behind "More sound", a compact Add track at the top of the Tracks
+     panel (docs/mockups/sound-space-track-effects-draft.html), and the pattern card's Use at the top right. */
+  describe("track effects, Add track at the top, and Use at the top right", () => {
+    const block = html.split("/* ---- helpers the tests run on their own")[1].split("/* ---- end of helpers")[0];
+    let got = {};
+    try { got = new Function(block.slice(block.indexOf("*/") + 2) + "; return { trackCard, trackFxMore, fxLights, eqText, setTrackFx, addTrackState, tracksEmptyHtml, lessonTargetFor, lessonPanel, focusKeyOf, setTrackInstrument };")(); } catch (e) { /* each test below fails on its own */ }
+    const { trackCard, trackFxMore, fxLights, eqText, setTrackFx, addTrackState, tracksEmptyHtml, lessonTargetFor, lessonPanel, focusKeyOf, setTrackInstrument } = got;
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
+    const OFF = () => ({ chorus: { kind: "off", amount: 45 }, dyn: { kind: "off", amount: 50 }, eq: { low: 0, mid: 0, high: 0, lowcut: false } });
+    const piano = (o) => Object.assign({ id: "t1", instrumentId: "grand-piano", volume: 0.8, mute: false, solo: false, notes: [], reverb: 0, sustain: false }, OFF(), o);
+    const tag = (h, re) => (h.match(re) || [""])[0];
+    const card = (t, o) => trackCard(t, Object.assign({ label: "Keys", instName: "Grand piano", icon: '<span class="tile"></span>', sel: true, open: true, muted: false, pitched: true, kind: "pitched", fxOpen: false, note: "" }, o), esc);
+    const css = cssText();
+    const rule = (sel) => { const i = css.indexOf(sel + "{"); return i < 0 ? "" : css.slice(i, css.indexOf("}", i) + 1); };
+    const moreBtn = (h) => tag(h, /<button[^>]*data-act="more-sound"[^>]*>[\s\S]*?<\/button>/);
+    const lights = (h) => [...moreBtn(h).matchAll(/<i class="fxdot( on)?" data-fx="(\w+)"/g)].map((m) => [m[2], !!m[1]]);
+    const group = (h, g) => tag(h, new RegExp('<div class="fxg fxg--' + g + '"[\\s\\S]*?<!--/fxg-->'));
+
+    it("More sound sits under Sustain in the open card, with aria-expanded, aria-controls and a turning chevron", () => {
+      const h = card(piano());
+      const b = moreBtn(h);
+      expect(b).toContain('type="button"');
+      expect(b).toContain('aria-expanded="false"');
+      expect(b).toContain('aria-controls="tfx-t1"');
+      expect(b).toContain(">More sound<");
+      expect(b).toContain('class="fxmore__chev"');
+      expect(h.indexOf('data-act="more-sound"')).toBeGreaterThan(h.indexOf('data-act="sustain"'));
+      expect(tag(h, /<div class="track__fxs[^"]*"[^>]*>/)).toBe('<div class="track__fxs" id="tfx-t1" inert>');
+      const open = card(piano(), { fxOpen: true });
+      expect(moreBtn(open)).toContain('aria-expanded="true"');
+      expect(tag(open, /<div class="track__fxs[^"]*"[^>]*>/)).toBe('<div class="track__fxs open" id="tfx-t1">');
+      // the same 220 ms grid-rows motion as the card, decelerating; the chevron turns
+      expect(rule(".track__fxs")).toMatch(/display:grid; grid-template-rows:0fr; transition:grid-template-rows \.22s var\(--ease\)/);
+      expect(rule(".track__fxs.open")).toContain("grid-template-rows:1fr");
+      expect(rule(".track__fxs > div")).toMatch(/overflow:hidden; min-height:0/);
+      expect(rule('.fxmore[aria-expanded="true"] .fxmore__chev')).toContain("rotate(180deg)");
+      // toggling: remembered per track for this visit (not saved in the song), and no rebuild of the list
+      const tg = section(/function toggleFx\(/, "\nfunction ");
+      expect(tg).toMatch(/fxOpen\.(add|delete)\(/);
+      expect(tg).toContain('classList.toggle("open", open)');
+      expect(tg).toContain('toggleAttribute("inert", !open)');
+      expect(tg).toContain('setAttribute("aria-expanded", String(open))');
+      expect(tg).not.toContain("commit(");
+      expect(tg).not.toContain("renderTracks(");
+      expect(html).toMatch(/const fxOpen = new Set\(\);/);
+      expect(html).toMatch(/if \(act === "more-sound"\) return toggleFx\(id\);/);
+      expect(section(/function renderTracks\(/, "\nfunction ")).toContain("fxOpen:fxOpen.has(t.id)");
+    });
+
+    it("the three lights show which effects are on, in teal; EQ counts as on for any band or Low cut", () => {
+      expect(lights(card(piano()))).toEqual([["chorus", false], ["dyn", false], ["eq", false]]);
+      const t = piano({ chorus: { kind: "chorus", amount: 45 }, eq: { low: 0, mid: 0, high: 3, lowcut: false } });
+      expect(lights(card(t))).toEqual([["chorus", true], ["dyn", false], ["eq", true]]);
+      expect(fxLights(piano({ eq: { low: 0, mid: 0, high: 0, lowcut: true } }), "pitched")).toEqual({ chorus: false, dyn: false, eq: true });
+      expect(fxLights(piano({ dyn: { kind: "limit", amount: 20 } }), "kit")).toEqual({ chorus: false, dyn: true, eq: false });
+      expect(fxLights({}, "pitched")).toEqual({ chorus: false, dyn: false, eq: false });   // a song from before the effects
+      // the button says it for a screen reader too
+      expect(moreBtn(card(t))).toMatch(/<span class="sr-only">: Chorus on, Dynamics off, EQ on<\/span>/);
+      expect(css).toMatch(/\.fxdot\.on\{[^}]*#14B8A6/);
+      // a drag on an EQ fader or an Amount updates them at once
+      expect(html).toMatch(/function paintFxLights\(/);
+    });
+
+    it("Chorus: Off, Chorus, Flanger, Phaser and an Amount fader with a % box, dimmed and disabled while Off", () => {
+      const t = piano();
+      const ch = group(trackFxMore(t, "Keys", "pitched", true, esc), "chorus");
+      expect(ch).toContain(">Chorus</h4>");
+      expect(ch).toContain("Makes one sound like a few playing together, with a gentle wobble.");
+      const sel = tag(ch, /<select[\s\S]*?<\/select>/);
+      expect(sel).toContain('class="tkind"');
+      expect(sel).toContain('data-fx="chorus"');
+      expect(sel).toContain('aria-label="Keys chorus kind"');
+      expect([...sel.matchAll(/<option value="(\w+)"[^>]*>([^<]+)</g)].map((m) => [m[1], m[2]])).toEqual([["off", "Off"], ["chorus", "Chorus"], ["flanger", "Flanger"], ["phaser", "Phaser"]]);
+      expect(sel).toContain('<option value="off" selected>Off</option>');
+      const range = tag(ch, /<input[^>]*type="range"[^>]*>/);
+      for (const a of ['class="slider slider--sm tamt"', 'data-fx="chorus"', 'min="0"', 'max="100"', 'value="45"', 'aria-label="Keys chorus amount"', " disabled"]) expect(range).toContain(a);
+      const num = tag(ch, /<input[^>]*type="number"[^>]*>/);
+      for (const a of ['class="tamtnum"', 'data-fx="chorus"', 'value="45"', " disabled"]) expect(num).toContain(a);
+      expect(ch).toMatch(/<div class="fxg__row is-off">/);
+      expect(ch).toContain('<span class="fader" style="--steps:10">');
+      // picking a kind turns Amount on
+      expect(setTrackFx(t, "chorus", "kind", "flanger")).toBe(true);
+      expect(t.chorus).toEqual({ kind: "flanger", amount: 45 });
+      const on = group(trackFxMore(t, "Keys", "pitched", true, esc), "chorus");
+      expect(tag(on, /<input[^>]*type="range"[^>]*>/)).not.toContain("disabled");
+      expect(tag(on, /<input[^>]*type="number"[^>]*>/)).not.toContain("disabled");
+      expect(on).not.toContain("is-off");
+      expect(on).toContain('<option value="flanger" selected>Flanger</option>');
+      // bad values never get in
+      expect(setTrackFx(t, "chorus", "kind", "wah")).toBe(false);
+      expect(t.chorus.kind).toBe("flanger");
+      expect(setTrackFx(t, "chorus", "amount", 150)).toBe(true);
+      expect(t.chorus.amount).toBe(100);
+      expect(setTrackFx(t, "chorus", "amount", "33.6")).toBe(true);
+      expect(t.chorus.amount).toBe(34);
+      expect(setTrackFx(t, "chorus", "amount", 34)).toBe(false);   // the same value is no new undo step
+      // a song from before the effects gets the defaults the first time
+      const old = { id: "x" };
+      expect(setTrackFx(old, "dyn", "kind", "compress")).toBe(true);
+      expect(old.dyn).toEqual({ kind: "compress", amount: 50 });
+      expect(rule(".fxg__row.is-off")).toMatch(/opacity:\.45/);
+    });
+
+    it("Dynamics: Off, Compress, Limit and an Amount, dimmed while Off", () => {
+      const t = piano({ dyn: { kind: "compress", amount: 60 } });
+      const dy = group(trackFxMore(t, "Drums", "kit", true, esc), "dyn");
+      expect(dy).toContain(">Dynamics</h4>");
+      expect(dy).toContain("Evens out loud and quiet notes so the track sounds steady.");
+      const sel = tag(dy, /<select[\s\S]*?<\/select>/);
+      expect([...sel.matchAll(/<option value="(\w+)"[^>]*>([^<]+)</g)].map((m) => m[2])).toEqual(["Off", "Compress", "Limit"]);
+      expect(sel).toContain('<option value="compress" selected>Compress</option>');
+      expect(tag(dy, /<input[^>]*type="range"[^>]*>/)).toContain('value="60"');
+      expect(tag(dy, /<input[^>]*type="range"[^>]*>/)).not.toContain("disabled");
+      expect(group(trackFxMore(piano(), "Drums", "kit", true, esc), "dyn")).toContain("is-off");
+      expect(html).not.toMatch(/>Gate</);   // no gate (the draft explains why)
+    });
+
+    it("EQ: three small upright faders from -12 to +12 with the signed value above, and a Low cut switch", () => {
+      expect(eqText(3)).toBe("+3");
+      expect(eqText(0)).toBe("0");
+      expect(eqText(-5)).toBe("\u22125");
+      const t = piano({ eq: { low: 3, mid: 0, high: -5, lowcut: true } });
+      const eq = group(trackFxMore(t, "Keys", "pitched", true, esc), "eq");
+      expect(eq).toContain(">EQ</h4>");
+      expect(eq).toContain("Turn the low, middle and high sounds up or down. Low cut takes away deep rumble.");
+      const faders = [...eq.matchAll(/<div class="vf"><b class="vf__val"[^>]*>([^<]*)<\/b><span class="vf__slot"><span class="fader fader--v" style="--steps:8"><input([^>]*)><\/span><\/span><span class="vf__lab">(\w+)<\/span><\/div>/g)];
+      expect(faders.map((m) => [m[3], m[1]])).toEqual([["Low", "+3"], ["Mid", "0"], ["High", "\u22125"]]);
+      const low = faders[0][2];
+      for (const a of ['type="range"', 'class="slider teq"', 'data-band="low"', 'data-id="t1"', 'min="-12"', 'max="12"', 'step="1"', 'value="3"', 'aria-label="Keys low sounds"', 'aria-valuetext="+3"']) expect(low).toContain(a);
+      expect(low).toMatch(/title="[^"]*[Dd]ouble-click[^"]*0[^"]*"/);
+      const cut = tag(eq, /<button[^>]*data-act="lowcut"[^>]*>[\s\S]*?<\/button>/);
+      expect(cut).toContain('aria-pressed="true"');
+      expect(cut).toContain('class="track__led"');
+      expect(cut).toContain("Low cut");
+      // values are kept to whole steps from -12 to 12
+      const u = piano();
+      expect(setTrackFx(u, "eq", "low", -13)).toBe(true);
+      expect(u.eq.low).toBe(-12);
+      expect(setTrackFx(u, "eq", "high", "4.4")).toBe(true);
+      expect(u.eq.high).toBe(4);
+      expect(setTrackFx(u, "eq", "lowcut", true)).toBe(true);
+      expect(u.eq.lowcut).toBe(true);
+      expect(setTrackFx(u, "eq", "bass", 3)).toBe(false);
+      // dragging shows the signed value live; a double-click puts it back to 0 in one undo step; a drag is one step
+      expect(html).toMatch(/const q = e\.target\.closest\("\.teq"\);[^\n]*setTrackFx\(t, "eq", q\.dataset\.band, q\.value\)[^\n]*eqText\(/);
+      expect(html).toMatch(/\$\("#track-list"\)\.addEventListener\("dblclick", e => \{[^\n]*\.teq[^\n]*setTrackFx\(t, "eq", q\.dataset\.band, 0\)[^\n]*commit\(\)/);
+      expect(html).toMatch(/if \(e\.target\.closest\("\.tamt, \.teq"\)\) return commit\(\);/);
+      expect(html).toMatch(/if \(act === "lowcut"\)\{[^\n]*setTrackFx\(t, "eq", "lowcut", !t\.eq\.lowcut\)[^\n]*commit\(\); renderTracks\(\);/);
+      // the upright fader is the same mixer fader turned on its side, with a mark at 0
+      expect(rule(".fader--v")).toContain("rotate(-90deg)");
+      expect(css).toMatch(/\.vf__slot\{[^}]*height:/);
+    });
+
+    it("a kind change and a typed amount go through commit; the Amount box keys work like the volume box", () => {
+      expect(html).toMatch(/const k = e\.target\.closest\("\.tkind"\); if \(k\)\{[^\n]*setTrackFx\(t, k\.dataset\.fx, "kind", k\.value\)[^\n]*commit\(\); renderTracks\(\);/);
+      expect(html).toMatch(/const a = e\.target\.closest\("\.tamtnum"\); if \(a\) return typedAmount\(a, a\.value\);/);
+      const ta = section(/function typedAmount\(/, "\nfunction ");
+      expect(ta).toContain('setTrackFx(t, n.dataset.fx, "amount"');
+      expect(ta).toContain("commit();");
+      expect(html).toMatch(/volBoxKey\(e\.key, e\.shiftKey, a\.value, t\[a\.dataset\.fx\]\.amount\)/);
+      // focus comes back to the same control after the card is rebuilt
+      expect(focusKeyOf({ tagName: "SELECT", dataset: { id: "b", fx: "dyn" }, classList: { contains: (c) => c === "tkind" } })).toBe('.tkind[data-id="b"][data-fx="dyn"]');
+      expect(focusKeyOf({ tagName: "INPUT", dataset: { id: "b", band: "mid" }, classList: { contains: (c) => c === "teq" } })).toBe('.teq[data-id="b"][data-band="mid"]');
+      expect(focusKeyOf({ tagName: "INPUT", dataset: { id: "b" }, classList: { contains: (c) => c === "tnum" } })).toBe('.tnum[data-id="b"]');
+    });
+
+    it("drums get all three groups; effects tracks get EQ only", () => {
+      const kit = trackFxMore(piano(), "Drums", "kit", true, esc);
+      for (const g of ["chorus", "dyn", "eq"]) expect(group(kit, g), g).not.toBe("");
+      const fx = trackFxMore(piano(), "Effects", "fx", true, esc);
+      expect(group(fx, "chorus")).toBe("");
+      expect(group(fx, "dyn")).toBe("");
+      expect(group(fx, "eq")).not.toBe("");
+      expect(lights(card(piano(), { kind: "fx", pitched: false })).map((l) => l[0])).toEqual(["eq"]);
+      // changing a track to an effect turns its Chorus and Dynamics off, so nothing hidden keeps sounding
+      const byId = (id) => ({ "grand-piano": { kind: "pitched" }, "zap": { kind: "fx" }, "kit": { kind: "kit" } })[id] || null;
+      const t = piano({ chorus: { kind: "phaser", amount: 70 }, dyn: { kind: "limit", amount: 30 } });
+      setTrackInstrument({}, t, "zap", byId);
+      expect(t.chorus).toEqual({ kind: "off", amount: 70 });
+      expect(t.dyn).toEqual({ kind: "off", amount: 30 });
+      const k = piano({ dyn: { kind: "compress", amount: 30 } });
+      setTrackInstrument({}, k, "kit", byId);
+      expect(k.dyn.kind).toBe("compress");
+      const card2 = section(/function trackCard\(/, "\nfunction ");
+      expect(card2).toContain("trackFxMore(t, o.label, o.kind");
+      expect(section(/function renderTracks\(/, "\nfunction ")).toContain("kind:kindOf(t)");
+    });
+
+    it("live notes go through the selected track's chain only when an effect is on; otherwise today's path", () => {
+      const audio = section(/function audio\(/, "/* touch screens");
+      expect(audio).toContain("liveChains = E.createTrackChains(ctx)");
+      const on = section(/function noteOn\(/, "function noteOff");
+      expect(on).toContain("const wet = liveFx.wet(track.reverb || 0);");
+      expect(on).toMatch(/const fxIn = liveChains\.input\(track, wet \? \[liveBus, wet\] : \[liveBus\], [^)]+\);/);
+      expect(on).toContain("if (fxIn) g.connect(fxIn); else { g.connect(liveBus); if (wet) g.connect(wet); }");
+      expect(on).toContain("liveChains.sweep(c.currentTime);");
+    });
+
+    it("Add track: a small blue button in the Tracks panel head, with the count, keeping id ss-add-track", () => {
+      const aside = section(/<aside class="panel left" id="ss-tracks"/, "</aside>");
+      const head = section(/<div class="panel__head"><h3>Tracks<\/h3>/, "</div>");
+      expect(head).toMatch(/<h3>Tracks<\/h3><span class="tracks__count" id="track-count"[^>]*><\/span><button type="button" class="addbtn" id="ss-add-track" data-act="add-track"[^>]*><i data-lucide="plus"><\/i>Add track<\/button><button[^>]*data-act="toggle-tracks"/);
+      expect(aside).not.toContain('class="hint"');
+      expect(aside).not.toContain('class="addtrack"');
+      expect(aside.indexOf('id="ss-add-track"')).toBeLessThan(aside.indexOf('id="track-list"'));
+      expect(addTrackState(3, 8)).toEqual({ count: "3 of 8", full: false, empty: false, title: "Add a track. Up to 8 tracks. M mutes a track, S plays it on its own." });
+      expect(addTrackState(0, 8)).toMatchObject({ count: "0 of 8", empty: true, full: false });
+      expect(addTrackState(8, 8)).toEqual({ count: "8 of 8", full: true, empty: false, title: "8 tracks is the most a song can have" });
+      const rt = section(/function renderTracks\(/, "\nfunction ");
+      expect(rt).toContain("const st = addTrackState(song.tracks.length, M.CONST.MAX_TRACKS);");
+      expect(rt).toContain('$("#ss-add-track").disabled = st.full || busy();');
+      expect(rt).toContain('$("#ss-add-track").title = st.title;');
+      expect(rt).toContain('$("#ss-add-track").hidden = st.empty;');
+      expect(rt).toContain('$("#track-count").textContent = st.count;');
+      // blue is the call to action; it presses down, never bounces
+      expect(rule(".addbtn")).toMatch(/background:linear-gradient\(var\(--accent-a\),var\(--accent-b\)\)/);
+      expect(rule(".addbtn")).toContain("margin-left:auto");
+      expect(rule(".addbtn:disabled")).toMatch(/opacity/);
+      expect(rule(".tracks__count")).toContain("color:var(--faint)");
+      // the old tip lives in Help now
+      expect(html).toContain("<b>M</b> mutes a track and <b>S</b> plays only that track.");
+    });
+
+    it("an empty song shows a big Add your first track button in the list; it adds a track the same way", () => {
+      const e = tracksEmptyHtml();
+      expect(e).toMatch(/<button type="button" class="addtrack" id="ss-add-first" data-act="add-track"><i data-lucide="plus"><\/i>Add your first track<\/button>/);
+      expect(e).toMatch(/role="listitem"/);
+      const rt = section(/function renderTracks\(/, "\nfunction ");
+      expect(rt).toMatch(/song\.tracks\.length \? song\.tracks\.map\([\s\S]*: tracksEmptyHtml\(\)/);
+      expect(rule(".tracks__empty")).toMatch(/place-items:center|justify-content:center/);
+    });
+
+    it("lesson steps that add a track point at the head button, or at Add your first track when the song is empty", () => {
+      expect(lessonTargetFor("#ss-add-track", 0)).toBe("#ss-add-first");
+      expect(lessonTargetFor("#ss-add-track", 2)).toBe("#ss-add-track");
+      expect(lessonTargetFor("#ss-grid", 0)).toBe("#ss-grid");
+      expect(lessonPanel("#ss-add-first")).toBe("tracks");
+      // every step that targets it: lesson 8 starts empty, so its first step points at the big button
+      const SS = loadSS("model.js", "instruments.js", "icons.js", "library.js", "lessons.js");
+      const steps = SS.lessons.LESSONS.flatMap((l) => l.steps.map((s, i) => ({ l, s, i }))).filter((x) => x.s.target === "#ss-add-track");
+      expect(steps.length).toBeGreaterThan(0);
+      const first = steps.find((x) => x.i === 0);
+      expect(first.l.startSong.tracks.length).toBe(0);
+      expect(lessonTargetFor(first.s.target, first.l.startSong.tracks.length)).toBe("#ss-add-first");
+      expect(section(/function placeTip\(/, "\nfunction ")).toContain("lessonTargetFor(st.target, song ? song.tracks.length : 0)");
+      expect(section(/function revealLessonTarget\(/, "\nfunction ")).toContain("lessonTargetFor(target, song ? song.tracks.length : 0)");
+    });
+
+    it("phones: More sound shows on the selected card and the groups open full width under the track row", () => {
+      const last = html.slice(html.lastIndexOf("@media (max-width:640px){"), html.indexOf("</style>"));
+      expect(last).toMatch(/\.left\{[^}]*position:relative[^}]*overflow:visible/);
+      expect(last).toMatch(/\.tracklist\{[^}]*overflow-x:auto/);
+      expect(last).toMatch(/\.track\{[^}]*position:static/);
+      expect(last).toMatch(/\.track__fxs\{[^}]*position:absolute; left:0; right:0; top:100%/);
+      expect(last).toMatch(/\.left \.panel__head\{[^}]*display:flex/);
+      expect(last).toMatch(/\.vf__slot\{[^}]*height:(9[6-9]|1[0-9]{2})px/);   // a taller upright fader for fingers
+      expect(html.indexOf("@media (max-width:640px)")).toBeLessThan(html.indexOf("@media (max-width:640px){\n  .main{"));   // the sheet block stays first
+    });
+
+    it("reduced motion: More sound opens at once and nothing on it moves", () => {
+      const rm = html.slice(html.lastIndexOf("@media (prefers-reduced-motion:reduce){"));
+      const blk = rm.slice(0, rm.indexOf("\n}"));
+      for (const s of [".track__fxs", ".fxmore", ".fxmore__chev", ".fxdot", ".addbtn"]) expect(blk, s).toContain(s);
+    });
+
+    it("colors stay in the palette: the lit lines use the track's color, the lights teal, the group panels have a light theme", () => {
+      expect(css).toMatch(/:root\{[\s\S]*?--fxg-a:/);
+      expect(css).toMatch(/:root\[data-theme="dark"\]\{[^}]*--fxg-a:#1E1E23/);
+      expect(rule(".fxg")).toMatch(/background:var\(--fxg-a\)/);
+      expect(rule(".fader")).toContain("--c:var(--tc)");
+    });
+
+    it("Help explains More sound in plain words", () => {
+      expect(html).toContain("<b>More sound</b>");
+      expect(html).toMatch(/Chorus[^<]*sound like a few playing together/);
+      expect(html).toMatch(/Dynamics[^<]*loud and quiet/);
+      expect(html).toMatch(/EQ[^<]*low, middle and high/);
+    });
+
+    it("the pattern card's Use sits at the top right, beside the name; the preview and play stay below", () => {
+      const lib = section(/function renderLibrary\(/, "\nfunction ");
+      const m = lib.match(/'<div class="pat__nm">[^\n]*<\/div>'\s*\+ '<button type="button" class="btn" data-lib-use="/);
+      expect(m).not.toBe(null);
+      expect(lib.indexOf("data-lib-use")).toBeLessThan(lib.indexOf('class="pat__pv"'));
+      expect(lib).toContain('aria-label="Use \' + esc(p.name) + \'" title="Put it on the selected track">Use</button>');
+      const pat = rule(".pat");
+      expect(pat).toContain('grid-template-areas:"nm use use" "pv pv pl"');
+      expect(pat).toContain("grid-template-columns:minmax(0,1fr) auto 28px");
+      expect(rule(".pat__nm small")).toMatch(/white-space:nowrap; overflow:hidden; text-overflow:ellipsis/);
+      expect(rule(".pat::before")).toContain("width:2px");
+    });
+  });
+
   describe("a real music keyboard (Web MIDI)", () => {
     /** The full source of one top-level function in the page, found by its name (string- and comment-aware). */
     function fnSrc(name) {
@@ -881,7 +1175,7 @@ describe("Sound Space app page", () => {
       const body = `
         const SS = env.SS, M = SS.model, E = SS.engine, I = SS.instruments;
         const song = env.song; let sel = env.track.id; const ctx = env.ctx, voices = env.voices;
-        const liveBus = {}, liveFx = { wet: () => null };
+        const liveBus = {}, liveFx = { wet: () => null }, liveChains = { input: () => null, sweep() {} };
         let recording = false, countingIn = false, recTrackId = null, recStart = 0, recTotal = 16, recStepSec = 0.3, recTimers = [], recPending = [], recChanged = false;
         let pedalDown = false; const pedalRing = new Set();
         const held = new Map(), litKeys = new Map(), kbBase = new Map();
