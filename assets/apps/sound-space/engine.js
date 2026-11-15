@@ -1036,21 +1036,35 @@
         if (!e) {
           const chain = buildTrackChain(ctx, t);
           dests.forEach((d) => chain.output.connect(d));
-          e = { key, dests: dests.slice(), chain, until: 0 };
+          e = { key, dests: dests.slice(), chain, until: 0, held: 0 };
           byTrack.set(id, e);
         }
         if (until > e.until) e.until = until;
         return e.chain.input;
       },
+      // A key held on the track: its chain is never swept while any key is down. hold(t) pins the chain the last input()
+      // gave, and gives release(until): called at key up with the time the notes will have rung out.
+      hold(t) {
+        const e = byTrack.get(t.trackId !== undefined ? t.trackId : t.id);
+        if (!e || !fxKey(t)) return () => {};
+        e.held++;
+        let done = false;
+        return (until) => {
+          if (done) return;
+          done = true;
+          e.held--;
+          if (until > e.until) e.until = until;
+        };
+      },
       sweep(now) {
         byTrack.forEach((e, id) => {
-          if (e.until > now) return;
+          if (e.held > 0 || e.until > now) return;
           e.chain.disconnect();
           byTrack.delete(id);
         });
         if (!retired.length) return;
         retired = retired.filter((e) => {
-          if (e.until > now) return true;
+          if (e.held > 0 || e.until > now) return true;
           e.chain.disconnect();
           return false;
         });
@@ -1256,6 +1270,7 @@
     FLANGER_FEEDBACK_MAX,
     DYN_TYPICAL_DB,
     SUSTAIN_TAIL,
+    CHAIN_HOLD,
     compileEvents,
     stepsToSchedule,
     exportFrames,

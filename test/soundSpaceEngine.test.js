@@ -979,6 +979,38 @@ describe("Sound Space track effects", () => {
     expect(kinds(ctx, "delay").length).toBe(4);
   });
 
+  it("a key held past the chain's time keeps its chain: a second note never sweeps it away", () => {
+    const ctx = fakeCtx();
+    const bus = ctx.createGain();
+    const chains = E.createTrackChains(ctx);
+    const t = { trackId: "a", ...OFF(), chorus: { kind: "chorus", amount: 50 } };
+    const first = chains.input(t, [bus], 16);
+    const release = chains.hold(t);
+    chains.sweep(20);   // a second key pressed 20 s in, the first still down
+    expect(first.disconnected).toBe(false);
+    expect(chains.input(t, [bus], 36)).toBe(first);
+    chains.sweep(40);   // even much later, while held
+    expect(first.disconnected).toBe(false);
+    release(45);   // key up: the chain lives to the release end plus the hold
+    chains.sweep(44);
+    expect(first.disconnected).toBe(false);
+    chains.sweep(46);
+    expect(first.disconnected).toBe(true);
+    // a track with every effect off has nothing to hold
+    expect(typeof chains.hold({ trackId: "z", ...OFF() })).toBe("function");
+    // a chain retired by a changed setting also waits for its held key
+    const t2 = { trackId: "b", ...OFF(), chorus: { kind: "chorus", amount: 50 } };
+    const old = chains.input(t2, [bus], 1);
+    const rel2 = chains.hold(t2);
+    const fresh = chains.input({ ...t2, chorus: { kind: "chorus", amount: 80 } }, [bus], 1);
+    expect(fresh).not.toBe(old);
+    chains.sweep(100);
+    expect(old.disconnected).toBe(false);
+    rel2(101);
+    chains.sweep(102);
+    expect(old.disconnected).toBe(true);
+  });
+
   it("a track deleted mid-loop has its chain let go soon after, while the song keeps playing", () => {
     const song = songWith({ chorus: { kind: "chorus", amount: 50 } }, { notes: 16 });
     const t2 = SS.model.addTrack(song, "organ");

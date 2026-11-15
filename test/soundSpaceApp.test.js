@@ -216,7 +216,7 @@ describe("Sound Space app page", () => {
     }
     expect(bad).toEqual([]);
     // The category colors are exactly the approved ones.
-    for (const c of ["#D946EF", "#5B8CFF", "#8B5CF6", "#F2C14E", "#14B8A6", "#FF5C8A", "#FF4D5A"]) {
+    for (const c of ["#D946EF", "#5B8CFF", "#8B5CF6", "#F2C14E", "#14B8A6", "#FF5C8A", "#A0185A"]) {
       expect(css.toUpperCase()).toContain(c);
     }
   });
@@ -1236,7 +1236,7 @@ describe("Sound Space app page", () => {
       const body = `
         const SS = env.SS, M = SS.model, E = SS.engine, I = SS.instruments;
         const song = env.song; let sel = env.track.id; const ctx = env.ctx, voices = env.voices;
-        const liveBus = {}, liveFx = { wet: () => null }, liveChains = { input: () => null, sweep() {} };
+        const liveBus = {}, liveFx = { wet: () => null }, liveChains = { input: () => null, sweep() {}, hold: () => () => {} };
         let recording = false, countingIn = false, recTrackId = null, recStart = 0, recTotal = 16, recStepSec = 0.3, recTimers = [], recPending = [], recChanged = false;
         let pedalDown = false; const pedalRing = new Set();
         const held = new Map(), litKeys = new Map(), kbBase = new Map();
@@ -2039,5 +2039,96 @@ describe("Sound Space sheet music in the page", () => {
     expect(print).toMatch(/\.sheet__head, \.sheet__tools, \.sheet__foot[^{]*\{[^}]*display:none/);
     expect(print).toMatch(/\.sheet__paper\{[^}]*background:#fff[^}]*color:#000/);
     expect(css).toMatch(/\.sheet__paper\{[^}]*background:#fff/);
+  });
+});
+
+/* Owner: the Main volume is labelled, has a % box like the track volumes, and sits beside the play controls. */
+describe("Sound Space: Main volume beside the play controls", () => {
+  const block = html.split("/* ---- helpers the tests run on their own")[1].split("/* ---- end of helpers")[0];
+  let got = {};
+  try { got = new Function(block.slice(block.indexOf("*/") + 2) + "; return { applyVolText, volBoxKey, volPercent };")(); } catch (e) { /* each test fails on its own */ }
+  const { applyVolText, volBoxKey, volPercent } = got;
+  const css = cssText();
+  const transport = section(/<div class="transport"/, '<div class="main">');
+  const order = (...ids) => ids.map((id) => transport.indexOf(id));
+
+  it("comes right after the beat counter, before Loop, keeping its id", () => {
+    const [beat, live, vol, loop, countin] = order('id="ss-beat"', 'id="rec-live"', 'id="ss-volume"', 'id="ss-loop"', 'id="ss-countin"');
+    expect(beat).toBeGreaterThan(0);
+    expect(vol).toBeGreaterThan(live);
+    expect(vol).toBeLessThan(loop);
+    expect(vol).toBeLessThan(countin);
+    expect(transport).toMatch(/<span class="fader fader--main" style="--steps:10;--c:#14B8A6"><input type="range" class="slider" id="ss-volume" min="0" max="100" value="80" aria-label="Main volume"><\/span>/);
+  });
+
+  it("is labelled Main, with a speaker icon first and a % box last", () => {
+    const grp = section(/<div class="field vol"/, "</div>");
+    expect(grp).toMatch(/<i data-lucide="volume-2"><\/i><span class="vol__lab">Main<\/span><span class="fader fader--main"/);
+    expect(grp).toMatch(/<input type="number" class="mnum" id="ss-volnum" min="0" max="100" step="1" inputmode="numeric" value="80" aria-label="Main volume, percent">/);
+    expect(grp).toMatch(/<span class="track__unit" aria-hidden="true">%<\/span>/);
+    expect(grp.indexOf('id="ss-volume"')).toBeLessThan(grp.indexOf('id="ss-volnum"'));
+  });
+
+  it("the box mirrors the slider, and the slider and the box go through one setter", () => {
+    expect(html).toMatch(/function setMainVolume\(/);
+    const set = section(/function setMainVolume\(/, "\n}");
+    expect(set).toContain('$("#ss-volume").value = String(p);');
+    expect(set).toContain('$("#ss-volnum").value = String(p);');
+    expect(set).toContain("liveBus.gain.value = song.volume");
+    expect(html).toMatch(/\$\("#ss-volume"\)\.addEventListener\("input", e => \{ if \(!song\) return; setMainVolume\(e\.target\.value\);/);
+    // on a song open and an undo the box follows the song
+    const sync = section(/\$\("#ss-volume"\)\.value = Math\.round\(song\.volume \* 100\);/, "renderUndo();");
+    expect(sync).toContain('$("#ss-volnum").value');
+  });
+
+  it("typing 50 sets the song volume to 0.5 in one undo step; Escape restores; clamps to 0-100", () => {
+    const song = { volume: 0.8 };
+    expect(applyVolText(song, "50")).toEqual({ value: 50, changed: true });
+    expect(song.volume).toBe(0.5);
+    expect(applyVolText(song, "50").changed).toBe(false);   // no second undo step for the same number
+    expect(applyVolText(song, "150").value).toBe(100);
+    expect(song.volume).toBe(1);
+    expect(applyVolText(song, "-3").value).toBe(0);
+    expect(song.volume).toBe(0);
+    expect(applyVolText(song, "abc")).toEqual({ value: 0, changed: false });
+    expect(volBoxKey("Escape", false, "42", 80)).toEqual({ show: 80, blur: true });
+    expect(volBoxKey("ArrowUp", true, "95", 95)).toEqual({ set: 100 });
+    expect(volBoxKey("ArrowDown", false, "0", 0)).toEqual({ set: 0 });
+    expect(volPercent(0.5)).toBe(50);
+    const typed = section(/function typedMainVolume\(/, "\n}");
+    expect(typed).toContain("applyVolText(song, text)");
+    expect(typed).toContain("if (res.changed) commit();");
+    expect(html).toMatch(/\$\("#ss-volnum"\)\.addEventListener\("change", e => typedMainVolume\(e\.target\.value\)\)/);
+    expect(html).toMatch(/\$\("#ss-volnum"\)\.addEventListener\("keydown", e => \{[\s\S]*?volBoxKey\(e\.key, e\.shiftKey, n\.value, volPercent\(song\.volume\)\)/);
+  });
+
+  it("fits the bar: narrower fader, then no % below 1100px; the Main label stays above 640px; phones keep the box", () => {
+    expect(css).toMatch(/\.vol\{ margin-left:0; \}/);
+    expect(css).toMatch(/\.vol__lab\{[^}]*color:var\(--mute\)/);
+    expect(css).toMatch(/@media \(max-width:1439px\) and \(min-width:641px\)\{[^\n]*\.fader--main\{ width:80px; \}/);
+    expect(css).toMatch(/@media \(max-width:1100px\) and \(min-width:641px\)\{[^}]*\.vol__box \.track__unit\{ display:none; \}/);
+    expect(css).not.toMatch(/\.vol__lab\{ display:none/);
+    // the first @media block in the stylesheet is untouched
+    expect(css.indexOf("@media")).toBe(css.indexOf("@media (max-width:1279px){ #ss-sheet"));
+  });
+
+  it("Help says what Main does", () => {
+    expect(html).toContain("Main sets how loud the whole song plays. Each track's Volume is in its card.");
+  });
+
+  it("live: a held key pins its track's chain until it is let go, then the chain lives to the release end plus the hold", () => {
+    const on = section(/function noteOn\(/, "function noteOff");
+    expect(on).toMatch(/release:liveChains\.hold\(track\)/);
+    const off = section(/function noteOff\(/, "function releaseAll");
+    expect(off).toMatch(/if \(h\.release\) h\.release\(/);
+    expect(off).toContain("E.CHAIN_HOLD");
+  });
+
+  it("Record is maroon: --rec is #A0185A and .rec never uses the old red", () => {
+    expect(css).toMatch(/--rec:#A0185A;/);
+    const rules = css.split("\n").filter((l) => /^\.rec\b|^@keyframes recglow|^\.lcd\.cue/.test(l)).join("\n");
+    expect(rules).toContain("#A0185A");
+    expect(rules).not.toMatch(/#FF4D5A|255,77,90|#FF8C95|#C22633|#8E1824/i);
+    expect(css).toMatch(/\.rec svg\{ fill:#fff; \}/);
   });
 });
