@@ -234,6 +234,7 @@ describe("the Sound Space row on the Studio page", () => {
     expect(feats[5][3]).toBe("See your song as printable sheet music, or save a sound file or a project file.");
     expect(box).toContain("Join and get limited free access during the Sound Space beta.");
     expect(SLOT_FB.insideAccess).toBe("Join and get limited free access during the Art Space beta.");
+    expect(SLOT_FB.insideDevices).toBe("It works on computers and tablets using a mouse, pen, or finger.");
     expect(SLOT_FB.soonText).not.toMatch(/beats/i);   // Sound Space is out, so Coming soon no longer promises beats
     expect(box).toContain('<dl class="studioinside__list">');
     // Art Space's card is as it was: its own lead and text, and Beta
