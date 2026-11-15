@@ -314,9 +314,13 @@ svg.lucide{ width:16px; height:16px; stroke-width:1.9; flex:none; }
   box-shadow:0 2px 0 #3A3A42, 0 4px 8px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.8); transition:transform .12s var(--ease), box-shadow .12s var(--ease); }
 .fader .slider:hover::-webkit-slider-thumb{ transform:translateY(-1px); box-shadow:0 3px 0 #3A3A42, 0 6px 12px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.8); }
 .fader .slider:active::-webkit-slider-thumb{ transform:translateY(0) scale(.97); }
-.fader .slider::-moz-range-track{ height:8px; background:transparent; border:0; }
+.fader .slider::-moz-range-track{ height:8px; border:0; background:linear-gradient(90deg, transparent 3px, var(--groove) 3px calc(100% - 3px), transparent calc(100% - 3px)) center / 100% 2px no-repeat; }
 .fader .slider::-moz-range-thumb{ width:14px; height:24px; border-radius:3px; border:1px solid #55555F; box-sizing:border-box;
-  background:linear-gradient(90deg, transparent 5px, var(--c) 5px 7px, transparent 7px), linear-gradient(#F4F4F7, #B9B9C3 55%, #8E8E99);
+  background:
+    linear-gradient(90deg, transparent 5px, var(--c) 5px 7px, transparent 7px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,.28) 0 1px, transparent 1px 3px) 1px 3px / 4px 16px no-repeat,
+    repeating-linear-gradient(90deg, rgba(0,0,0,.28) 0 1px, transparent 1px 3px) 7px 3px / 4px 16px no-repeat,
+    linear-gradient(#F4F4F7, #B9B9C3 55%, #8E8E99);
   box-shadow:0 2px 0 #3A3A42, 0 4px 8px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.8); transition:transform .12s var(--ease); }
 .fader .slider:hover::-moz-range-thumb{ transform:translateY(-1px); }
 .fader .slider:active::-moz-range-thumb{ transform:scale(.97); }
@@ -1544,7 +1548,7 @@ function trackFxRows(t, label, pitched, esc){
 function trackCard(t, o, esc){
   const id = esc(t.id), label = esc(o.label);
   return '<div class="track' + (o.sel ? " sel" : "") + (o.open ? " open" : "") + (o.muted ? " muted" : "") + '" role="listitem" data-id="' + id + '" style="--tc:var(--' + (o.cat || "keys") + ')">'
-    + '<div class="track__head" data-act="select-track" data-id="' + id + '">'
+    + '<div class="track__head" data-head="' + id + '">'
     + '<button type="button" class="track__main" data-act="select-track" data-id="' + id + '" aria-expanded="' + !!o.open + '" aria-controls="tmore-' + id + '" aria-label="' + esc(o.label + ": " + (o.ariaInst || o.instName)) + '">'
     + o.icon + '<span class="nm"><b>' + label + '</b><small>' + esc(o.instName) + '</small></span></button>'
     + '<span class="ms"><button type="button" class="msb msb--m" data-act="mute" data-id="' + id + '" aria-pressed="' + !!t.mute + '" aria-label="Mute ' + label + '" title="Mute">M</button>'
@@ -1554,6 +1558,13 @@ function trackCard(t, o, esc){
     + trackVolRow(t, o.label, esc)
     + trackFxRows(t, o.label, o.pitched, esc)
     + '</div></div></div>' + (o.note || "") + '</div>';
+}
+/* The selector that finds the focused control again after its part of the screen is rebuilt. It names the control's
+   own tag, so it can never land on a wrapper that shares its data (querySelector takes the first match). */
+function focusKeyOf(a){
+  if (a.dataset && a.dataset.act && a.dataset.id) return String(a.tagName || "").toLowerCase() + '[data-act="' + a.dataset.act + '"][data-id="' + a.dataset.id + '"]';
+  for (const c of ["tvol", "trev", "tnum", "tpick"]) if (a.classList && a.classList.contains(c)) return '.' + c + '[data-id="' + a.dataset.id + '"]';
+  return null;
 }
 /* Which card to build open, and which to open next. A real change of the selected track builds the list as it was
    (the old card open), then opens the new one while the old one closes, so only that animates. A re-render, the first
@@ -1598,6 +1609,7 @@ function commit(){
 function replaceSong(s){
   if (song && (song.grid || 2) !== (s.grid || 2)) stash = {};
   song = s;
+  openTrack = null;   /* a replaced song shows its open card as it is */
   if (player) player.update(song);
   if (!trackById(sel)) sel = song.tracks.length ? song.tracks[0].id : null;
   if (voices) song.tracks.forEach(t => ensureLoaded(t.instrumentId));
@@ -1615,6 +1627,7 @@ function openSong(s, opts){
   flushPush();
   M.fillTrackDefaults(s);   /* songs saved before Reverb and Sustain open with them off */
   song = s; stash = {}; playedOnce = false;
+  openTrack = null;   /* the editor appears with the selected card already open, never animating */
   pickedNote = finestNote(spc());   /* a new song starts on the sixteenth note, a song saved on eighths on the eighth */
   songOwner = (opts && opts.owner) || "";
   clearTimeout(saveTimer); saveTimer = 0;
@@ -1812,14 +1825,7 @@ function setPlayhead(step){
    ============================================================ */
 function keepFocus(fn){
   const a = document.activeElement;
-  let key = null;
-  if (a && a !== document.body){
-    if (a.dataset && a.dataset.act && a.dataset.id) key = '[data-act="' + a.dataset.act + '"][data-id="' + a.dataset.id + '"]';
-    else if (a.classList && a.classList.contains("tvol")) key = '.tvol[data-id="' + a.dataset.id + '"]';
-    else if (a.classList && a.classList.contains("trev")) key = '.trev[data-id="' + a.dataset.id + '"]';
-    else if (a.classList && a.classList.contains("tnum")) key = '.tnum[data-id="' + a.dataset.id + '"]';
-    else if (a.classList && a.classList.contains("tpick")) key = '.tpick[data-id="' + a.dataset.id + '"]';
-  }
+  const key = a && a !== document.body ? focusKeyOf(a) : null;
   fn();
   if (key){ const b = $(key); if (b && b !== a) try { b.focus(); } catch(e){} }
 }
@@ -2490,6 +2496,10 @@ function typedVolume(n, text){
   const r = n.closest(".track__fx").querySelector(".tvol"); if (r) r.value = String(res.value);
   if (res.changed) commit();
 }
+/* a click on a card's head outside its buttons (the chevron, the padding) is a press of the head button */
+$("#track-list").addEventListener("click", e => {
+  const h = e.target.closest("[data-head]"); if (h && !e.target.closest("[data-act]")){ const b = h.querySelector(".track__main"); if (b) b.click(); }
+});
 $("#track-list").addEventListener("input", e => {
   const r = e.target.closest(".trev"); if (r){ const t = trackById(r.dataset.id); if (t){ const nm = setTrackReverb(t, r.value); r.setAttribute("aria-valuetext", nm); const p = r.closest(".track__fx").querySelector(".tpick"); if (p) p.value = String(t.reverb); } return; }
   const s = e.target.closest(".tvol"); if (!s) return;

@@ -651,7 +651,7 @@ describe("Sound Space app page", () => {
       expect(tag(closed, /<div class="track__more"[^>]*>/)).toContain(" inert");
       expect(closed).toContain('<span class="track__chev" aria-hidden="true">');
       // the head selects (M and S sit in it but are their own buttons), and the card is never built mid-animation
-      expect(closed).toMatch(/<div class="track__head" data-act="select-track" data-id="t1">/);
+      expect(closed).toMatch(/<div class="track__head" data-head="t1">/);
       expect(open + closed).not.toContain("animating");
       expect(card(piano(), { note: '<div class="track__note">x</div>' })).toMatch(/<\/div><\/div><\/div><div class="track__note">x<\/div><\/div>$/);   // a sound note shows even when closed
     });
@@ -674,6 +674,45 @@ describe("Sound Space app page", () => {
       const co = section(/function cardOpen\(/, "\nfunction ");
       expect(co).toMatch(/toggleAttribute\("inert", !open\)/);
       expect(co).toMatch(/setAttribute\("aria-expanded", String\(open\)\)/);
+    });
+
+    /* Fix round 1: after Enter or Space on a card's head button the list is rebuilt, and keepFocus must find that
+       same button again. querySelector returns the first match in document order, so the key must never match the
+       head div (not focusable) before the button. This runs keepFocus's key on the real card markup and finds the
+       first match in document order the way querySelector does. */
+    it("keyboard selection: focus comes back to the selected track's head button after the rebuild", () => {
+      const { focusKeyOf } = (() => { try { return new Function(block.slice(block.indexOf("*/") + 2) + "; return { focusKeyOf };")(); } catch (e) { return {}; } })();
+      expect(focusKeyOf).toBeTypeOf("function");
+      const tracks = ["a", "b", "c"].map((id) => piano({ id }));
+      const list = tracks.map((t) => card(t, { sel: t.id === "b", open: t.id === "b" })).join("");
+      // each opening tag in document order, with its tag name and attributes
+      const tags = [...list.matchAll(/<([a-z]+)((?:\s+[a-z-]+(?:="[^"]*")?)*)\s*>/g)].map((m) => ({ tag: m[1], attrs: Object.fromEntries([...m[2].matchAll(/([a-z-]+)(?:="([^"]*)")?/g)].map((x) => [x[1], x[2] === undefined ? "" : x[2]])) }));
+      const querySelector = (sel) => {
+        const m = /^([a-z]*)((?:\[[a-z-]+="[^"]*"\])+)$/.exec(sel);
+        if (!m) throw new Error("unexpected key " + sel);
+        const need = [...m[2].matchAll(/\[([a-z-]+)="([^"]*)"\]/g)].map((x) => [x[1], x[2]]);
+        return tags.find((t) => (!m[1] || t.tag === m[1]) && need.every(([k, v]) => t.attrs[k] === v)) || null;
+      };
+      // the second track's head button had focus when Enter selected it
+      const btn = { tagName: "BUTTON", dataset: { act: "select-track", id: "b" }, classList: { contains: () => false } };
+      const found = querySelector(focusKeyOf(btn));
+      expect(found && found.tag).toBe("button");
+      expect(found.attrs.class).toBe("track__main");
+      expect(found.attrs["data-id"]).toBe("b");
+      expect(found.attrs["aria-expanded"]).toBe("true");   // announced as open
+      // only the button carries the select-track pair; the head has its own marker
+      expect(tags.filter((t) => t.attrs["data-act"] === "select-track" && t.attrs["data-id"] === "b").map((t) => t.tag)).toEqual(["button"]);
+      // the other keys still come back too
+      expect(focusKeyOf({ tagName: "INPUT", dataset: { id: "b" }, classList: { contains: (c) => c === "tnum" } })).toBe('.tnum[data-id="b"]');
+      expect(focusKeyOf({ tagName: "BUTTON", dataset: { act: "mute", id: "b" }, classList: { contains: () => false } })).toBe('button[data-act="mute"][data-id="b"]');
+      // keepFocus uses it, and a click anywhere else on the head is handed to that button
+      expect(section(/function keepFocus\(/, "\nfunction ")).toContain("const key = a && a !== document.body ? focusKeyOf(a) : null;");
+      expect(html).toMatch(/const h = e\.target\.closest\("\[data-head\]"\); if \(h && !e\.target\.closest\("\[data-act\]"\)\)\{ const b = h\.querySelector\("\.track__main"\); if \(b\) b\.click\(\); \}/);
+    });
+
+    it("opening or replacing a song never animates a card as it appears", () => {
+      expect(section(/function openSong\(/, "\nfunction ")).toContain("openTrack = null;");
+      expect(section(/function replaceSong\(/, "\nfunction ")).toContain("openTrack = null;");
     });
 
     it("M and S never change the selection or the open state", () => {
@@ -731,6 +770,9 @@ describe("Sound Space app page", () => {
       expect(css).toMatch(/\.fader \.slider::-moz-range-thumb\{[^}]*width:14px; height:24px/);
       expect(css).toMatch(/\.fader \.slider::-webkit-slider-thumb\{[^}]*var\(--c\)/);
       expect(css).toMatch(/:root\{[\s\S]*?--tick:rgba\(28,28,34/);   // dark ticks on the light theme
+      // Firefox gets the groove and the grip lines too
+      expect(css).toMatch(/\.fader \.slider::-moz-range-track\{[^}]*var\(--groove\)[^}]*center \/ 100% 2px no-repeat/);
+      expect(css).toMatch(/\.fader \.slider::-moz-range-thumb\{[^}]*repeating-linear-gradient\(90deg, rgba\(0,0,0,\.28\) 0 1px, transparent 1px 3px\) 1px 3px \/ 4px 16px no-repeat,[^}]*7px 3px \/ 4px 16px no-repeat/);
       // a selector list with a -webkit- pseudo-element would drop the whole rule in Firefox
       expect(css).not.toMatch(/::-webkit-slider-thumb[^{]*::-moz-range-thumb|::-moz-range-thumb[^{]*::-webkit-slider-thumb/);
     });
