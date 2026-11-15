@@ -20,10 +20,12 @@ const song = (M, id, updatedMs, title = "My song") => Object.assign(M.newSong({ 
 function fakeAccount(email = "grownup@example.test") {
   const rows = new Map();
   const calls = [];
-  let down = false;
+  let down = false, slow = false, hook = null;
   const call = async (action, extra) => {
     calls.push({ action, extra });
+    if (hook) await hook(action, extra);       // what the grown-up does while this call is on its way
     if (down) return { ok: false, error: "network" };
+    if (action === "put" && slow) return { ok: false, error: "slow_down" };
     if (action === "list") return { ok: true, email, items: [...rows.values()].map((r) => ({ id: r.id, title: r.title, thumb: "", updated: r.updated, deleted: r.deleted })) };
     if (action === "get") { const r = rows.get(extra.id); return r && !r.deleted ? { ok: true, project: JSON.parse(JSON.stringify(r.data)), updated: r.updated } : { ok: false, error: "not_found" }; }
     if (action === "put") {
@@ -37,7 +39,7 @@ function fakeAccount(email = "grownup@example.test") {
     if (action === "usage") return { ok: true, email, songs: [...rows.values()].filter((r) => !r.deleted).length, bytes: 10, maxSongs: 200, maxBytes: 20_000_000 };
     return { ok: false, error: "unknown" };
   };
-  return { rows, calls, call, set down(v) { down = v; } };
+  return { rows, calls, call, set down(v) { down = v; }, set slow(v) { slow = v; }, set hook(f) { hook = f; } };
 }
 
 describe("Sound Space saving (cloud.js)", () => {
@@ -197,6 +199,167 @@ describe("Sound Space saving (cloud.js)", () => {
       expect(r.ok).toBe(false);
       expect(await store.get("song-five")).toMatchObject({ id: "song-five" });
     });
+  });
+});
+
+describe("fix round 1: deletes during a sync, the save rate, and whose songs go where", () => {
+  async function setup(email) {
+    const S = SS(), M = S.model, C = S.cloud;
+    const store = await C.openStore();
+    const acct = fakeAccount(email);
+    const accept = (p) => { const v = M.validateSong(p, new Set()); return v.ok ? v.song : null; };
+    const sync = (opts) => C.syncSongs(Object.assign({ store, call: acct.call, accept }, opts));
+    return { M, C, store, acct, sync };
+  }
+  /** The grown-up deletes a song on Home, the way the page does it (once, while the given call is on its way). */
+  function deleteDuring(C, store, acct, action, id, syncBusy) {
+    let done = false;
+    acct.hook = async (a) => {
+      if (done || a !== action) return;
+      done = true;
+      await C.deleteSong({ store, id, call: acct.call, syncBusy: () => syncBusy });
+    };
+  }
+
+  for (const busy of [true, false]) {
+    it(`a song deleted while a sync is uploading stays deleted (marker ${busy ? "kept for the next sync" : "cleared at once"})`, async () => {
+      const { M, C, store, acct, sync } = await setup();
+      await store.put(song(M, "song-a", 1000, "Sent first"));
+      await store.put(song(M, "song-b", 1000, "Deleted mid-sync"));
+      deleteDuring(C, store, acct, "put", "song-b", busy);
+      await sync();
+      acct.hook = null;
+      expect(acct.rows.has("song-b")).toBe(false);                          // never sent to the account
+      const here = await store.get("song-b");
+      expect(here === null || here.deleted === true).toBe(true);            // and not written back here
+      expect((await store.list()).filter((r) => !r.deleted).map((r) => r.id)).toEqual(["song-a"]);
+      await sync();
+      expect(await store.get("song-b")).toBe(null);                         // the next sync clears any marker
+      expect(acct.rows.has("song-b")).toBe(false);
+    });
+  }
+
+  it("a song deleted while its newer copy downloads stays deleted", async () => {
+    const { M, C, store, acct, sync } = await setup();
+    await store.put(song(M, "song-x", 1000, "Here"));
+    await acct.call("put", { project: song(M, "song-x", 2000, "There") });
+    // the account has already answered with the song when the grown-up deletes it here
+    let done = false;
+    const call = async (a, x) => {
+      const r = await acct.call(a, x);
+      if (a === "get" && !done) { done = true; await C.deleteSong({ store, id: "song-x", call: acct.call, syncBusy: () => false }); }
+      return r;
+    };
+    await sync({ call });
+    expect(await store.get("song-x")).toBe(null);
+    expect(acct.rows.get("song-x").deleted).toBe(true);
+  });
+
+  it("a newer save made during a sync is not overwritten by the sync's older copy", async () => {
+    const { M, store, acct, sync } = await setup();
+    await store.put(song(M, "song-a", 1000));
+    await store.put(song(M, "song-b", 1000, "Old"));
+    let done = false;
+    acct.hook = async (a) => { if (a === "put" && !done){ done = true; await store.put(song(M, "song-b", 5000, "Newer")); } };
+    await sync();
+    acct.hook = null;
+    const b = await store.get("song-b");
+    expect(b).toMatchObject({ title: "Newer", updatedMs: 5000 });
+    expect(b.owner).toBe(undefined);   // the sync didn't claim a copy it didn't send
+  });
+
+  it("with nobody signed in, a delete removes the song outright, unless an account has it", async () => {
+    const { M, C, store } = await setup();
+    await store.put(song(M, "local-only", 1000));
+    await store.put(Object.assign(song(M, "in-account", 1000), { owner: "grownup@example.test" }));
+    await C.deleteSong({ store, id: "local-only", call: null });
+    expect(await store.list().then((l) => l.map((r) => r.id))).not.toContain("local-only");   // no marker left
+    await C.deleteSong({ store, id: "in-account", call: null });
+    // its account still has it, so a marker waits for that account's next sync (then is cleared)
+    expect(await store.get("in-account")).toMatchObject({ deleted: true, owner: "grownup@example.test" });
+  });
+
+  it("signed in, a delete reaches the account and leaves nothing behind (or a marker when the account can't be reached)", async () => {
+    const { M, C, store, acct } = await setup();
+    await acct.call("put", { project: song(M, "song-a", 1000) });
+    await store.put(song(M, "song-a", 1000));
+    await C.deleteSong({ store, id: "song-a", call: acct.call });
+    expect(acct.rows.get("song-a").deleted).toBe(true);
+    expect(await store.get("song-a")).toBe(null);
+    await store.put(song(M, "song-b", 1000));
+    acct.down = true;
+    await C.deleteSong({ store, id: "song-b", call: acct.call });
+    expect(await store.get("song-b")).toMatchObject({ deleted: true });
+  });
+
+  it("a song that belongs to an account only goes to that account, and not while the account is unknown", async () => {
+    const { M, C, store, acct, sync } = await setup("");
+    expect(C.mine("", "")).toBe(true);                       // made here, never in an account: goes to whoever signs in
+    expect(C.mine("", "b@example.test")).toBe(true);
+    expect(C.mine("a@example.test", "")).toBe(false);        // the account isn't known yet
+    expect(C.mine("a@example.test", "b@example.test")).toBe(false);
+    expect(C.mine("a@example.test", "a@example.test")).toBe(true);
+    await store.put(Object.assign(song(M, "theirs", 1000), { owner: "a@example.test" }));
+    await store.put(song(M, "fresh", 1000));
+    await sync();                                             // the account answered without saying whose it is
+    expect(acct.rows.has("theirs")).toBe(false);
+    expect(acct.rows.has("fresh")).toBe(true);
+  });
+
+  it("saves to the account at most every 10 seconds, and a slow down holds every save until it ends", () => {
+    const C = SS().cloud;
+    expect(C.PUSH_GAP_MS).toBe(10000);
+    expect(3600000 / C.PUSH_GAP_MS).toBeLessThanOrEqual(600 * 0.6);   // leaves room under the server's 600 an hour
+    let t = 50_000;
+    const gate = C.createPushGate({ now: () => t });
+    expect(gate.delay(false)).toBe(0);
+    gate.sent();
+    t += 1000;
+    expect(gate.delay(false)).toBe(9000);     // a change waits for the gap
+    expect(gate.delay(true)).toBe(0);         // leaving the song may send at once
+    gate.result({ ok: false, error: "slow_down" });
+    expect(gate.delay(true)).toBe(C.RETRY_MS);   // but not during a slow down: nothing goes before it ends
+    expect(gate.delay(false)).toBe(C.RETRY_MS);
+    gate.result({ ok: true });                   // nothing shortens it
+    t += C.RETRY_MS - 1;
+    expect(gate.delay(true)).toBe(1);
+    t += 1;
+    expect(gate.delay(true)).toBe(0);
+  });
+
+  it("a sync's uploads count against the same saves, and stop at a slow down", async () => {
+    const { M, C, store, acct, sync } = await setup();
+    let t = 1_000_000;
+    const gate = C.createPushGate({ now: () => t });
+    for (const id of ["song-1", "song-2", "song-3"]) await store.put(song(M, id, 1000));
+    acct.slow = true;
+    await sync({ gate });
+    expect(acct.calls.filter((c) => c.action === "put")).toHaveLength(1);   // the first slow down stops the rest
+    expect(gate.delay(true)).toBe(C.RETRY_MS);
+    acct.slow = false;
+    await sync({ gate });
+    expect(acct.calls.filter((c) => c.action === "put")).toHaveLength(1);   // still held: nothing sent
+    t += C.RETRY_MS;
+    await sync({ gate });
+    expect(acct.rows.size).toBe(3);
+    expect(gate.delay(false)).toBe(C.PUSH_GAP_MS);                          // and the open song's next save waits the gap
+  });
+
+  it("the page uses the gate, the delete and the account check from cloud.js", () => {
+    expect(page).toContain("const pushGate = C.createPushGate();");
+    expect(page).toMatch(/pushTimer = setTimeout\(pushNow, pushGate\.delay\(false\)\)/);
+    expect(page).toMatch(/const wait = pushGate\.delay\(true\);/);
+    expect(page).toContain("pushGate.result(r);");
+    expect(page).not.toContain("C.RETRY_MS");                 // the gate holds slow downs, not a timer of its own
+    expect(page).toContain("const mineToPush = () => C.mine(songOwner, cloud.email);");
+    expect(page).toMatch(/gate: pushGate/);
+    expect(page).toMatch(/C\.deleteSong\(\{ store: st, id, call: cloud\.on\(\) \? \(a, x\) => cloud\.call\(a, x\) : null, syncBusy: \(\) => !!syncing \}\)/);
+    // the account is known from the moment the sign-in is checked, and forgotten when it ends or changes
+    expect(page).toMatch(/r = await w\.soundCloudCall\("list"\);[^]*?cloud\.setEmail\(r && r\.ok \? r\.email : ""\);/);
+    const lost = page.slice(page.indexOf("function cloudLost("), page.indexOf("\n}", page.indexOf("function cloudLost(")));
+    expect(lost).toContain('cloud.setEmail("");');
+    const check = page.slice(page.indexOf("async function checkCode("), page.indexOf("\n}", page.indexOf("async function checkCode(")));
+    expect(check).toContain('cloud.setEmail("");');
   });
 });
 

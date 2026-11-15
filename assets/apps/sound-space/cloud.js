@@ -13,7 +13,7 @@
 
   const DB_NAME = "ccs-sound-space", DB_STORE = "songs";
   const AUTOSAVE_MS = 1500;          // the song saves this long after the last change
-  const PUSH_GAP_MS = 6000;          // and goes to the account at most this often (the server allows 600 saves an hour)
+  const PUSH_GAP_MS = 10000;         // and goes to the account at most this often (360 of the server's 600 saves an hour)
   const RETRY_MS = 300000;           // after "slow down", try the account again this much later
   const MAX_THUMB = 60000;           // the account's small picture limit (the server checks it too)
   const STATUS = { DEVICE: "Saved on this device", ACCOUNT: "Saved to your account" };
@@ -141,6 +141,43 @@
     return { text: d + ". It goes to your account next time.", bad: false };
   }
 
+  /** Does a song with this owner go to the signed-in account? A song never in an account goes to whoever signs in;
+      a song that belongs to an account goes only to that account, and nowhere while the account isn't known yet. */
+  function mine(owner, email) { return !owner || (!!email && owner === email); }
+
+  /** How soon the next save may go to the account. The server allows 600 saves an hour per member; a save at most
+      every PUSH_GAP_MS uses 360 of them, leaving room for leaving a song (which may send at once, `force`) and for
+      syncs. After a "slow down" nothing goes, forced or not, until RETRY_MS has passed. */
+  function createPushGate(o) {
+    const now = (o && o.now) || (() => Date.now());
+    let lastAt = -Infinity, holdUntil = 0;
+    return {
+      delay(force) { const t = now(); return Math.max(0, holdUntil - t, force ? 0 : lastAt + PUSH_GAP_MS - t); },
+      sent() { lastAt = now(); },
+      result(r) { if (r && r.error === "slow_down") holdUntil = Math.max(holdUntil, now() + RETRY_MS); },
+      get holdUntil() { return holdUntil; }
+    };
+  }
+
+  /** Delete a song here, and in the account when `call` is given (someone is signed in).
+      - Nobody signed in, and the song was never in an account: it is simply removed; no marker stays.
+      - Otherwise a marker stays here until the account has the delete, so the song can't come back from there. It
+        is cleared at once when the account takes the delete, unless a sync is running (`syncBusy()`): that sync
+        planned with the song still here, so the marker stays for the next sync to clear. */
+  async function deleteSong(o) {
+    const { store, id } = o;
+    const rec = await store.get(id);
+    if (!o.call && !(rec && rec.owner)) { await store.remove(id); return; }
+    const mark = tombstone(id, Math.max(Date.now(), ((rec && rec.updatedMs) || 0) + 1), rec && rec.owner);
+    await store.put(mark);
+    if (!o.call) return;
+    let d = null;
+    try { d = await o.call("delete", { id }); } catch (e) {}
+    if (!d || !d.ok || (o.syncBusy && o.syncBusy())) return;
+    const now = await store.get(id);
+    if (now && now.deleted && now.updatedMs === mark.updatedMs) await store.remove(id);
+  }
+
   /** Bring this browser and the account into step. `call(action, extra)` is the site's bridge, `accept(project)`
       returns a valid song or null, `isOpen(id)` protects the song being edited, `thumb(song)` draws its picture.
       Returns { ok, changed, email, inAccount: Map id -> updatedMs of the songs the account has, as they are here }. */
@@ -155,11 +192,18 @@
     const email = out.email = String(r.email || "").toLowerCase();
     const records = await store.list().catch(() => []);
     const recs = new Map(records.map((x) => [x.id, x]));
-    const mine = (id) => { const x = recs.get(id); return !x || !x.owner || !email || x.owner === email; };
     const remote = r.items.map(remoteMeta);
     const there = new Map(remote.map((m) => [m.id, m]));
-    const plan = syncPlan(records.map(metaOf), remote, { skip: (id) => isOpen(id) || !mine(id) });
-    const claim = async (rec) => { if (email && rec.owner !== email) { rec.owner = email; await store.put(rec); } };
+    const plan = syncPlan(records.map(metaOf), remote, { skip: (id) => isOpen(id) || !mine((recs.get(id) || {}).owner, email) });
+    /* The plan was made from a snapshot; the grown-up can open, change or delete a song while the sync runs. So each
+       step reads the song again and does nothing to one that is open or is no longer the copy it planned with. */
+    const unchanged = (now, rec) => !!now && !!rec && !!now.deleted === !!rec.deleted && (Number(now.updatedMs) || 0) === (Number(rec.updatedMs) || 0);
+    /** Mark a song as this account's, only if it is still exactly the copy that the account has. */
+    const claim = async (id, updatedMs) => {
+      if (!email) return;
+      const now = await store.get(id);
+      if (now && !now.deleted && now.updatedMs === updatedMs && now.owner !== email) { now.owner = email; await store.put(now); }
+    };
 
     for (const id of plan.download) {
       const m = there.get(id);
@@ -169,42 +213,49 @@
       const s = o.accept ? o.accept(g.project) : g.project;
       if (!s || s.id !== id) continue;                               // a copy that can't be read stays out
       const now = await store.get(id);                               // changed here while this was on its way
-      if (isOpen(id) || (now && newer(now, m))) continue;
+      if (isOpen(id) || (now ? !unchanged(now, recs.get(id)) || newer(now, m) : recs.has(id))) continue;
       s.updatedMs = m.updatedMs;
       await store.put(Object.assign(s, email ? { owner: email } : {}));
       out.changed = true;
     }
     for (const id of plan.removeLocal) {
-      const x = recs.get(id);
-      await store.remove(id);
+      const x = recs.get(id), now = await store.get(id);
+      if (isOpen(id) || (now && !unchanged(now, x))) continue;
+      if (now) await store.remove(id);
       if (x && !x.deleted) out.changed = true;
     }
     for (const id of plan.deleteRemote) {
       let d = null;
       try { d = await call("delete", { id }); } catch (e) {}
-      if (d && d.ok) await store.remove(id);
+      if (!d || !d.ok) continue;
+      const now = await store.get(id);
+      if (unchanged(now, recs.get(id))) await store.remove(id);
     }
     for (const id of plan.upload) {
-      const rec = recs.get(id);
+      if (o.gate && o.gate.delay(true) > 0) break;                  // the account asked to slow down: not now
+      const rec = recs.get(id), now = await store.get(id);
+      if (isOpen(id) || !unchanged(now, rec)) continue;              // deleted, changed or opened since the plan
       let p = null;
-      try { p = await call("put", { project: forCloud(rec, o.thumb ? o.thumb(rec) : undefined) }); } catch (e) {}
+      try { p = await call("put", { project: forCloud(now, o.thumb ? o.thumb(now) : undefined) }); } catch (e) {}
+      if (o.gate) { o.gate.sent(); o.gate.result(p); }
       if (p && p.error === "full") out.full = true;
-      if (p && p.ok && !p.stale) { await claim(rec); there.set(id, metaOf(rec)); }
+      if (p && p.ok && !p.stale) { await claim(id, now.updatedMs); there.set(id, metaOf(now)); }
     }
     /* the songs that are in the account as they are here, so opening one can say so */
     const after = await store.list().catch(() => []);
-    after.forEach((x) => {
+    for (const x of after) {
       const m = there.get(x.id);
       if (!x.deleted && m && !m.deleted && m.updatedMs === x.updatedMs) {
         out.inAccount.set(x.id, x.updatedMs);
-        if (!x.owner && email && mine(x.id)) claim(x).catch(() => {});
+        if (!x.owner && mine(x.owner, email)) await claim(x.id, x.updatedMs).catch(() => {});
       }
-    });
+    }
     return out;
   }
 
   SS.cloud = {
     DB_NAME, DB_STORE, AUTOSAVE_MS, PUSH_GAP_MS, RETRY_MS, MAX_THUMB, STATUS,
-    mergeSongLists, syncPlan, openStore, tombstone, songOf, host, forCloud, putStatus, syncSongs
+    mergeSongLists, syncPlan, openStore, tombstone, songOf, host, forCloud, putStatus, syncSongs,
+    mine, createPushGate, deleteSong
   };
 })(typeof window !== "undefined" ? window : globalThis);

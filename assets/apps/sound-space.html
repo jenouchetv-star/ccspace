@@ -1015,13 +1015,11 @@ async function loadRecord(id){ const st = await openDb(); return st.get(id); }
 async function loadSong(id){ return C.songOf(await loadRecord(id)); }
 /* a deleted song leaves a marker here until the account has the delete too, so it never comes back from there */
 async function deleteSong(id){
-  const st = await openDb(), rec = await st.get(id);
+  const st = await openDb();
   if (song && song.id === id){ clearTimeout(pushTimer); pushTimer = 0; }
-  await st.put(C.tombstone(id, Math.max(Date.now(), ((rec && rec.updatedMs) || 0) + 1), rec && rec.owner));
   accountHas.delete(id);
-  if (!cloud.on()) return;
-  const r = await cloud.call("delete", { id });
-  if (r && r.ok) await st.remove(id);
+  /* signed out: gone at once, unless an account has it; signed in: the account too (a running sync clears the marker) */
+  await C.deleteSong({ store: st, id, call: cloud.on() ? (a, x) => cloud.call(a, x) : null, syncBusy: () => !!syncing });
 }
 
 let saveTimer = 0;
@@ -2503,9 +2501,17 @@ document.addEventListener("visibilitychange", () => {
    (soundCloudCall, Sound Space's own bridge); opened on its own, the app just keeps songs in this browser.
    ============================================================ */
 const cloud = {
+  /* the signed-in account's email, as the server says it: known once the sign-in is checked, "" while unknown */
   email: "",
+  setEmail(e){ this.email = String(e || "").toLowerCase(); },
   host(){ return C.host(window); },
-  on(){ const w = this.host(); try { return !!(w && w.artCloudSignedIn()); } catch(e){ return false; } },
+  on(){
+    const w = this.host();
+    let yes = false;
+    try { yes = !!(w && w.artCloudSignedIn()); } catch(e){}
+    if (!yes) this.email = "";            // signed out: the next sign-in may be someone else
+    return yes;
+  },
   async call(action, extra){
     const w = this.host();
     if (!w) return { ok:false, error:"no_session" };
@@ -2526,31 +2532,41 @@ function cloudLost(){
   lostSignIn = true;
   clearTimeout(pushTimer); pushTimer = 0;
   accountHas.clear();
+  cloud.setEmail("");
   setStatus("You’re not signed in, so your song is saving on this device only.");
   (song && !$("#editor").hidden ? showHome() : paintHome()).catch(() => {}).finally(() => showSignIn(true));
 }
-/* the open song goes to the account a moment after it saved here: at most once every few seconds, never on every tap */
-let pushTimer = 0, pushing = null, lastPushAt = 0;
-const mineToPush = () => !songOwner || !cloud.email || songOwner === cloud.email;
+/* the open song goes to the account a moment after it saved here: at most once every 10 seconds, never on every tap,
+   and not at all while the account has asked to slow down (pushGate, shared with the sync's uploads) */
+let pushTimer = 0, pushing = null;
+const pushGate = C.createPushGate();
+/* a song that belongs to an account goes only to that account, and waits while the account isn't known yet */
+const mineToPush = () => C.mine(songOwner, cloud.email);
 function queuePush(){
   clearTimeout(pushTimer); pushTimer = 0;
   if (!song || !cloud.on() || !mineToPush()) return;
-  pushTimer = setTimeout(pushNow, Math.max(0, lastPushAt + C.PUSH_GAP_MS - Date.now()));
+  pushTimer = setTimeout(pushNow, pushGate.delay(false));
 }
 /* the account's small picture of a song: Recent's picture */
 function thumbOf(s){ try { return "data:image/svg+xml;base64," + btoa(miniPicture(s).replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ')); } catch(e){ return undefined; } }
 function pushNow(){
   clearTimeout(pushTimer); pushTimer = 0;
   if (!song || !cloud.on() || !mineToPush()) return pushing || Promise.resolve();
+  /* leaving the song may skip the 10 seconds, but nothing goes during a slow down: it waits for the end of it */
+  const wait = pushGate.delay(true);
+  if (wait > 0){ pushTimer = setTimeout(pushNow, wait); return pushing || Promise.resolve(); }
   const s = song, copy = clone(song);
-  lastPushAt = Date.now();
-  const run = (pushing || Promise.resolve()).then(() => cloud.call("put", { project:C.forCloud(copy, thumbOf(copy)) })).then(r => {
+  pushGate.sent();
+  const run = (pushing || Promise.resolve()).then(() => pushGate.delay(true) > 0 ? null
+    : cloud.call("put", { project:C.forCloud(copy, thumbOf(copy)) })).then(r => {
+    if (r === null){ if (song === s && !pushTimer) pushTimer = setTimeout(pushNow, pushGate.delay(true)); return; }   // held by the save before
+    pushGate.result(r);
     if (r && r.ok && !r.stale){
       accountHas.set(copy.id, copy.updatedMs);
       if (cloud.email && !songOwner && song === s) songOwner = cloud.email;
     }
     if (r && r.error === "full" && !fullWarned){ fullWarned = true; toast("Your account has 200 songs, the most it keeps. Delete some to save new ones there."); }
-    if (r && r.error === "slow_down" && song === s){ clearTimeout(pushTimer); pushTimer = setTimeout(pushNow, C.RETRY_MS); }
+    if (r && r.error === "slow_down" && song === s){ clearTimeout(pushTimer); pushTimer = setTimeout(pushNow, pushGate.delay(true)); }
     /* the status speaks for the song as it is now: a newer change waiting to save keeps the status it has */
     if (song === s && !saveTimer && song.updatedMs === copy.updatedMs && !(r && r.error === "no_session")){ const st = C.putStatus(r); setStatus(st.text, st.bad); }
   }, () => {});
@@ -2569,10 +2585,11 @@ function syncHome(){
     store, call: (a, x) => cloud.call(a, x),
     accept: p => { const v = M.validateSong(p, CATALOG_IDS); return v.ok ? v.song : null; },
     isOpen: id => !$("#editor").hidden && !!song && song.id === id,
-    thumb: thumbOf
+    thumb: thumbOf,
+    gate: pushGate
   })).then(r => {
     if (!r.ok) return false;
-    cloud.email = r.email;
+    cloud.setEmail(r.email);
     accountHas.clear(); r.inAccount.forEach((v, k) => accountHas.set(k, v));
     if (r.full && !fullWarned){ fullWarned = true; toast("Your account has 200 songs, the most it keeps. Delete some to save new ones there."); }
     if ($("#editor").hidden) paintHome(); else savedStatus();
@@ -2591,6 +2608,7 @@ async function paintSpace(){
   const r = await cloud.call("usage", {});
   if (ask !== spaceAsk) return;
   if (!r || !r.ok || !r.maxSongs || !r.maxBytes){ box.hidden = true; return; }
+  cloud.setEmail(r.email);
   const mb = v => (Math.round(v / 100000) / 10).toFixed(1);
   const pSongs = Math.min(100, r.songs / r.maxSongs * 100), pBytes = Math.min(100, r.bytes / r.maxBytes * 100);
   const top = Math.max(pSongs, pBytes);
@@ -2624,6 +2642,7 @@ async function signInGood(){
   if (cloud.on()){
     let r = null;
     try { r = await w.soundCloudCall("list"); } catch(e){}
+    cloud.setEmail(r && r.ok ? r.email : "");                    // whose songs these are, known from the start
     if (!r || r.ok || r.error !== "no_session") return true;   // signed in (or offline: keep working in this browser)
     signInEnded = true;
   }
@@ -2702,8 +2721,10 @@ async function checkCode(){
     inputs[0].focus();
     return;
   }
-  /* signed in: back to the loading card for a moment, then their songs (with the ones from their account) */
+  /* signed in: back to the loading card for a moment, then their songs (with the ones from their account). It may be
+     a different grown-up from before, so whose account it is stays unknown until the sync below says. */
   lostSignIn = false;
+  cloud.setEmail("");
   $("#signin").hidden = true; $("#splash").hidden = false;
   launchStep("Opening your songs…", 82);
   await paintHome();
