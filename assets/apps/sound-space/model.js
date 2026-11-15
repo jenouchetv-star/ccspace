@@ -15,10 +15,10 @@
   };
 
   const SONG_KEYS = ["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs"];
-  // reverb: 0 Off, 1 Room, 2 Hall, 3 Big hall. sustain: notes ring on after they end (pitched instruments only).
+  // reverb: 0 Off, 1 Room, 2 Hall, 3 Big hall, 4 Stadium. sustain: notes ring on after they end (pitched instruments only).
   // Songs saved before these two have neither; they open as reverb 0 and sustain false.
   const TRACK_KEYS = ["id", "instrumentId", "volume", "mute", "solo", "notes", "reverb", "sustain"];
-  const REVERB_MAX = 3;
+  const REVERB_MAX = 4;
   const NOTE_KEYS = ["step", "pitch", "len", "vel"];
 
   function makeId() {

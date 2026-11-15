@@ -114,6 +114,10 @@ describe("Sound Space saving (cloud.js)", () => {
       expect(C.putStatus(r).text, JSON.stringify(r)).toMatch(/^Saved on this device/);
     }
     expect(C.putStatus({ ok: false, error: "full" }).bad).toBe(true);
+    // an account that is full says so in maroon (full: true); other errors stay plain red
+    expect(C.putStatus({ ok: false, error: "full" }).full).toBe(true);
+    expect(C.putStatus({ ok: false, error: "storage_full" })).toMatchObject({ bad: true, full: true });
+    expect(C.putStatus({ ok: false, error: "too_big" })).toEqual({ text: "Saved on this device. It’s too big for your account.", bad: true });
     // what goes to the account: the song and a small picture, never who owns it here or a delete marker
     const sent = C.forCloud({ id: "x", title: "T", updatedMs: 3, owner: "a@example.test", deleted: false, tracks: [] }, "data:image/svg+xml;base64,PHN2Zy8+");
     expect(sent).toEqual({ id: "x", title: "T", updatedMs: 3, tracks: [], thumb: "data:image/svg+xml;base64,PHN2Zy8+" });

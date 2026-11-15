@@ -165,3 +165,18 @@ describe("Sound Space: no orange, no green, no rainbow in the space bar", () => 
     expect(warn.toUpperCase()).not.toContain("C98A12");
   });
 });
+
+/* From the account-space review: a full account's save status is maroon (as the full bar is), other errors stay red. */
+describe("Art Space: an account-full save status is maroon", () => {
+  const html = readFileSync(new URL("../assets/apps/art-studio.html", import.meta.url), "utf8");
+  const css = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(x => x[1]).join("\n");
+  it("full and storage_full say so in maroon; too_big stays red", () => {
+    expect(css).toMatch(/\.status\.bad\{ color:var\(--danger\); font-weight:600; \}/);
+    expect(css).toMatch(/\.status\.bad\.full\{ color:#A0185A; \}/);
+    expect(css).toMatch(/:root\[data-theme="dark"\] \.status\.bad\.full\{ color:#E46A9E; \}/);
+    expect(html).toMatch(/function setStatus\(text, bad, full\)\{[^\n]*classList\.toggle\("full", !!bad && !!full\)/);
+    expect(html).toContain('else if (r.error === "full") setStatus("Saved in this browser. Your account is full.", true, true);');
+    expect(html).toContain('else if (r.error === "storage_full") setStatus("Saved in this browser. Your account is out of space.", true, true);');
+    expect(html).toContain('else if (r.error === "too_big") setStatus("Saved in this browser. It’s too big for your account.", true);');
+  });
+});

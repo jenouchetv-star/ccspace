@@ -104,12 +104,14 @@
   // The convolver normalizes its impulse, and a shorter impulse comes out
   // quieter: measured with noise in Chrome, wet gains of 0.22/0.30/0.38 left
   // the wet sound 26/19/15 dB under the dry one, so Room was barely there.
-  // These put it about 18/14/11 dB under.
+  // These put it about 18/14/11 dB under. Stadium, the biggest, is a little
+  // wetter again, so each size sounds bigger than the one before.
   const REVERB_LEVELS = [
     null,
     { name: "Room", sec: 0.8, wet: 0.5 },
     { name: "Hall", sec: 1.8, wet: 0.55 },
     { name: "Big hall", sec: 3.2, wet: 0.6 },
+    { name: "Stadium", sec: 5.0, wet: 0.65 },
   ];
 
   function midiToFreq(m) {

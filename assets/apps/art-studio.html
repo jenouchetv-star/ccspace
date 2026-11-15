@@ -347,6 +347,9 @@ body.editing #editor{ display:flex; }
 .title input:focus{ border-color:var(--accent); outline:none; background:var(--surface); }
 .status{ font-size:11px; color:var(--mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .status.bad{ color:var(--danger); font-weight:600; }
+/* a full account is maroon, as its full bar is; other save errors stay red */
+.status.bad.full{ color:#A0185A; }
+:root[data-theme="dark"] .status.bad.full{ color:#E46A9E; }
 /* wide screens, left to right: tools, properties, canvas, layers */
 .work{ flex:1; min-height:0; display:grid; grid-template-columns:48px 256px minmax(0,1fr) 220px; grid-template-rows:auto minmax(0,1fr); position:relative; }
 @media (min-width:901px){
@@ -1191,9 +1194,9 @@ async function pushNow(){
     cloudFull(r);
     if (r && r.ok){ if (cloud.email && !cur.owner){ cur.owner = cloud.email; } setStatus("Saved to your account"); }
     else if (!r || r.error === "network") setStatus("Saved in this browser. It goes to your account when you’re back online.");
-    else if (r.error === "full") setStatus("Saved in this browser. Your account is full.", true);
+    else if (r.error === "full") setStatus("Saved in this browser. Your account is full.", true, true);
     else if (r.error === "too_big") setStatus("Saved in this browser. It’s too big for your account.", true);
-    else if (r.error === "storage_full") setStatus("Saved in this browser. Your account is out of space.", true);
+    else if (r.error === "storage_full") setStatus("Saved in this browser. Your account is out of space.", true, true);
     /* a very busy hour of saving: keep it here and send it to the account a few minutes later */
     else if (r.error === "slow_down"){ setStatus("Saved in this browser. It goes to your account in a few minutes."); clearTimeout(pushTimer); pushTimer = setTimeout(pushNow, 300000); }
     else if (r.error !== "no_session") setStatus("Saved in this browser. It goes to your account next time.");
@@ -1908,7 +1911,7 @@ function updateUndo(){
   document.querySelector('[data-act="undo"]').disabled = !undoStack.length;
   document.querySelector('[data-act="redo"]').disabled = !redoStack.length;
 }
-function setStatus(text, bad){ const s = $("#status"); s.textContent = text; s.classList.toggle("bad", !!bad); }
+function setStatus(text, bad, full){ const s = $("#status"); s.textContent = text; s.classList.toggle("bad", !!bad); s.classList.toggle("full", !!bad && !!full); }
 function queueSave(){ if (!cur) return; setStatus("Saving…"); clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 800); }
 async function saveNow(){
   if (!cur) return;

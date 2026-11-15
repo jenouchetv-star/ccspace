@@ -133,9 +133,9 @@
     if (r && r.ok && r.stale) return { text: d + ". Your account has a newer copy.", bad: false };
     const e = r && r.error;
     if (!r || e === "network") return { text: d + ". It goes to your account when you’re back online.", bad: false };
-    if (e === "full") return { text: d + ". Your account is full.", bad: true };
+    if (e === "full") return { text: d + ". Your account is full.", bad: true, full: true };
     if (e === "too_big") return { text: d + ". It’s too big for your account.", bad: true };
-    if (e === "storage_full") return { text: d + ". Your account is out of space.", bad: true };
+    if (e === "storage_full") return { text: d + ". Your account is out of space.", bad: true, full: true };
     if (e === "slow_down") return { text: d + ". It goes to your account in a few minutes.", bad: false };
     if (e === "no_session") return { text: d + ". You’re not signed in.", bad: false };
     return { text: d + ". It goes to your account next time.", bad: false };

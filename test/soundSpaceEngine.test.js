@@ -499,11 +499,28 @@ describe("Sound Space reverb and sustain", () => {
 
   it("names the levels and the tail the brief gives", () => {
     expect(E.SUSTAIN_TAIL).toBe(1.5);
-    expect(E.REVERB_LEVELS.map((l) => l && l.name)).toEqual([null, "Room", "Hall", "Big hall"]);
-    expect(E.REVERB_LEVELS.slice(1).map((l) => l.sec)).toEqual([0.8, 1.8, 3.2]);
+    expect(E.REVERB_LEVELS.map((l) => l && l.name)).toEqual([null, "Room", "Hall", "Big hall", "Stadium"]);
+    expect(E.REVERB_LEVELS.slice(1).map((l) => l.sec)).toEqual([0.8, 1.8, 3.2, 5.0]);
     const wets = E.REVERB_LEVELS.slice(1).map((l) => l.wet);
     expect(wets[0]).toBeLessThan(wets[1]);
     expect(wets[1]).toBeLessThan(wets[2]);
+    expect(wets[2]).toBeLessThan(wets[3]);
+    expect(wets[3]).toBeCloseTo(0.65, 2);
+  });
+
+  it("a Stadium track gets a 5.0 s convolver, shared on its master, with a longer tail than Big hall", () => {
+    const { ctx, player, bus, convolvers } = playFor(songWith([["ep", 4, false], ["organ", 4, false]]));
+    expect(convolvers.length).toBe(1);   // one per level, per master
+    expect(convolvers[0].buffer.length).toBe(Math.round(5.0 * 44100));
+    const wet = convolvers[0].connected[0];
+    expect(wet.gain.value).toBeCloseTo(E.REVERB_LEVELS[4].wet, 10);
+    expect(wet.connected).toContain(bus);
+    player.stop();
+    const big = songWith([["ep", 3, false]]), stadium = songWith([["ep", 4, false]]);
+    expect(E.songTail(stadium)).toBeGreaterThan(E.songTail(big));
+    expect(E.songTail(stadium)).toBeGreaterThanOrEqual(5.0);
+    expect(E.exportFrames(stadium, 1)).toBeGreaterThan(E.exportFrames(big, 1));
+    expect(E.songTail(songWith([["ep", 4, true]]))).toBeGreaterThanOrEqual(5.0 + 1.5);
   });
 
   it("events carry their track's reverb and sustain, and older tracks play dry", () => {
@@ -662,7 +679,9 @@ describe("Sound Space reverb and sustain", () => {
       };
       return { after: stopsAt(), tail: E.songTail(song) };
     };
-    const big = run(3), dry = run(0);
+    const big = run(3), dry = run(0), stadium = run(4);
+    expect(stadium.tail).toBeGreaterThan(big.tail);
+    expect(stadium.after).toBeGreaterThanOrEqual(stadium.tail - 0.05);
     expect(big.tail).toBeGreaterThan(3);
     expect(big.after).toBeGreaterThanOrEqual(big.tail - 0.05);
     expect(dry.after).toBeGreaterThanOrEqual(1.2 - 0.05);

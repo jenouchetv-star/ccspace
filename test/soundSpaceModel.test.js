@@ -344,14 +344,14 @@ describe("Sound Space model", () => {
 
     it("keeps good values and rejects bad ones", () => {
       const m = M();
-      for (const lv of [0, 1, 2, 3]) {
+      for (const lv of [0, 1, 2, 3, 4]) {   // 4 is Stadium
         const o = good(); o.tracks[0].reverb = lv; o.tracks[0].sustain = lv % 2 === 1;
         const r = m.validateSong(o, ids);
         expect(r.ok, "reverb " + lv).toBe(true);
         expect(r.song.tracks[0].reverb).toBe(lv);
         expect(r.song.tracks[0].sustain).toBe(lv % 2 === 1);
       }
-      for (const bad of [-1, 4, 1.5, "1", null, true]) {
+      for (const bad of [-1, 5, 1.5, "1", null, true]) {
         const o = good(); o.tracks[0].reverb = bad;
         expect(m.validateSong(o, ids), "reverb " + JSON.stringify(bad)).toEqual({ ok: false, error: "bad_field" });
       }

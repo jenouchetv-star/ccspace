@@ -461,12 +461,12 @@ describe("Sound Space app page", () => {
     const tag = (h, re) => (h.match(re) || [""])[0];
 
     it("a pitched track's card has the Reverb range and the Sustain button, as in the draft", () => {
-      expect(REVERB_NAMES).toEqual(["Off", "Room", "Hall", "Big hall"]);
+      expect(REVERB_NAMES).toEqual(["Off", "Room", "Hall", "Big hall", "Stadium"]);
       const h = trackFxRows(piano(), "Keys", true, esc);
       const range = tag(h, /<input[^>]*type="range"[^>]*>/);
-      for (const a of ['min="0"', 'max="3"', 'step="1"', 'value="0"', 'aria-label="Keys reverb"', 'aria-valuetext="Off"', 'data-id="t1"']) expect(range).toContain(a);
+      for (const a of ['min="0"', 'max="4"', 'step="1"', 'value="0"', 'aria-label="Keys reverb"', 'aria-valuetext="Off"', 'data-id="t1"']) expect(range).toContain(a);
       expect(h).toContain(">Reverb<");
-      expect(h).toMatch(/class="track__fxval"[^>]*>Off</);
+      expect(h).toMatch(/<option value="0" selected>Off<\/option>/);
       expect(h).toMatch(/<svg[^>]*>[\s\S]*?<path d="M2 6c3 0 3 2 6 2s3-2 6-2 3 2 6 2/);   // the draft's wave icon
       const btn = tag(h, /<button[^>]*data-act="sustain"[^>]*>[\s\S]*?<\/button>/);
       expect(btn).toContain('type="button"');
@@ -491,9 +491,9 @@ describe("Sound Space app page", () => {
       expect(t.reverb).toBe(2);
       const h = trackFxRows(t, "Keys", true, esc);
       expect(tag(h, /<input[^>]*type="range"[^>]*>/)).toContain('aria-valuetext="Hall"');
-      expect(h).toMatch(/class="track__fxval"[^>]*>Hall</);
-      expect(setTrackReverb(t, 9)).toBe("Big hall");
-      expect(t.reverb).toBe(3);
+      expect(h).toMatch(/<option value="2" selected>Hall<\/option>/);
+      expect(setTrackReverb(t, 9)).toBe("Stadium");
+      expect(t.reverb).toBe(4);
       expect(setTrackReverb(t, -2)).toBe("Off");
       expect(t.reverb).toBe(0);
     });
@@ -510,11 +510,13 @@ describe("Sound Space app page", () => {
 
     it("the card uses them, and a change goes the way a volume change goes", () => {
       const rt = section(/function renderTracks\(/, "\nfunction ");
-      expect(rt).toMatch(/trackFxRows\(t, label, kindOf\(t\) === "pitched", esc\)/);
-      expect(rt.indexOf("trackFxRows(")).toBeGreaterThan(rt.indexOf("track__vol"));
+      expect(rt).toMatch(/pitched:kindOf\(t\) === "pitched"/);
+      const card = section(/function trackCard\(/, "\nfunction ");
+      expect(card).toMatch(/trackFxRows\(t, o\.label, o\.pitched, esc\)/);
+      expect(card.indexOf("trackFxRows(")).toBeGreaterThan(card.indexOf("trackVolRow("));
       // input: the song and label change in place; change: one commit, like the volume slider
       expect(html).toMatch(/const r = e\.target\.closest\("\.trev"\);[^\n]*setTrackReverb\(/);
-      expect(html).toContain('$("#track-list").addEventListener("change", e => { if (e.target.closest(".tvol, .trev")) commit(); });');
+      expect(html).toContain('$("#track-list").addEventListener("change", e => {\n  if (e.target.closest(".tvol, .trev")) return commit();');
       expect(html).toMatch(/if \(act === "sustain"\)\{ const t = trackById\(id\); if \(!t\) return; toggleTrackSustain\(t\); commit\(\); renderTracks\(\); return; \}/);
     });
 
@@ -542,6 +544,247 @@ describe("Sound Space app page", () => {
     it("Help names both controls in plain words", () => {
       expect(html).toContain("Reverb makes a track sound like it's played in a bigger room.");
       expect(html).toContain("Sustain lets notes ring on after they end, like a piano pedal.");
+      expect(html).toContain("Pick Off, Room, Hall, Big hall or Stadium.");
+    });
+  });
+
+  /* Owner: the track volume as a number box (0-100%), the reverb size as a list, cards that open only when selected,
+     and mixer-board faders (docs/mockups/sound-space-volume-readout-draft.html, sound-space-track-expand-draft.html). */
+  describe("track cards: volume and reverb boxes, opening when selected, mixer faders", () => {
+    const block = html.split("/* ---- helpers the tests run on their own")[1].split("/* ---- end of helpers")[0];
+    let got = {};
+    try { got = new Function(block.slice(block.indexOf("*/") + 2) + "; return { REVERB_NAMES, trackFxRows, setTrackReverb, volPercent, parseVolText, applyVolText, volBoxKey, trackVolRow, trackCard, expandStep };")(); } catch (e) { /* each test below fails on its own */ }
+    const { setTrackReverb, volPercent, parseVolText, applyVolText, volBoxKey, trackVolRow, trackFxRows, trackCard, expandStep } = got;
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
+    const piano = (o) => Object.assign({ id: "t1", instrumentId: "grand-piano", volume: 0.8, mute: false, solo: false, notes: [], reverb: 3, sustain: false }, o);
+    const tag = (h, re) => (h.match(re) || [""])[0];
+    const card = (t, o) => trackCard(t, Object.assign({ label: "Keys", instName: "Grand piano", icon: '<span class="tile"></span>', sel: false, open: false, muted: false, pitched: true, note: "" }, o), esc);
+    const css = cssText();
+    const rule = (sel) => { const i = css.indexOf(sel + "{"); return i < 0 ? "" : css.slice(i, css.indexOf("}", i) + 1); };
+
+    it("the volume line says Volume and has a number box with the track's volume times 100", () => {
+      const h = trackVolRow(piano(), "Keys", esc);
+      expect(h).toContain('class="track__fx track__vol"');
+      expect(h).toContain('<span class="track__fxlab">Volume</span>');
+      const num = tag(h, /<input[^>]*type="number"[^>]*>/);
+      for (const a of ['class="tnum"', 'data-id="t1"', 'min="0"', 'max="100"', 'step="1"', 'inputmode="numeric"', 'aria-label="Keys volume, percent"', 'value="80"']) expect(num).toContain(a);
+      expect(h).toMatch(/<span class="track__unit" aria-hidden="true">%<\/span>/);
+      const range = tag(h, /<input[^>]*type="range"[^>]*>/);
+      for (const a of ['class="slider slider--sm tvol"', 'min="0"', 'max="100"', 'value="80"', 'aria-label="Keys volume"']) expect(range).toContain(a);
+      expect(trackVolRow(piano({ volume: 0.3 }), "Keys", esc)).toContain('value="30"');   // after an undo, the box shows the undone value
+      expect(volPercent(0.655)).toBe(66);
+    });
+
+    it("typing 65 and Enter sets the volume to 0.65; 150 clamps to 100, -5 to 0; nonsense keeps the old value", () => {
+      const t = piano();
+      expect(applyVolText(t, "65")).toEqual({ value: 65, changed: true });
+      expect(t.volume).toBe(0.65);
+      expect(applyVolText(t, "65")).toEqual({ value: 65, changed: false });   // the same value again is no new undo step
+      expect(applyVolText(t, "150").value).toBe(100);
+      expect(t.volume).toBe(1);
+      expect(applyVolText(t, "-5").value).toBe(0);
+      expect(t.volume).toBe(0);
+      expect(parseVolText("", 42)).toBe(42);
+      expect(parseVolText("abc", 42)).toBe(42);
+      expect(parseVolText("33.6", 42)).toBe(34);
+      expect(volBoxKey("Enter", false, "65", 80)).toEqual({ set: 65, blur: true });
+    });
+
+    it("Escape restores the value from before typing; the arrows step by 1, or 10 with Shift", () => {
+      expect(volBoxKey("Escape", false, "42", 80)).toEqual({ show: 80, blur: true });
+      expect(volBoxKey("ArrowUp", false, "80", 80)).toEqual({ set: 81 });
+      expect(volBoxKey("ArrowDown", true, "80", 80)).toEqual({ set: 70 });
+      expect(volBoxKey("ArrowUp", true, "95", 95)).toEqual({ set: 100 });
+      expect(volBoxKey("ArrowDown", false, "0", 0)).toEqual({ set: 0 });
+      expect(volBoxKey("a", false, "80", 80)).toBe(null);
+    });
+
+    it("the box and the slider stay in step, through the same commit as a slider change", () => {
+      // dragging: the input event on the range writes the number live
+      expect(html).toMatch(/const s = e\.target\.closest\("\.tvol"\);[^\n]*\n[^\n]*t\.volume = clamp\(\+s\.value \/ 100, 0, 1\);[^\n]*\.tnum[^\n]*\.value = s\.value/);
+      const typed = section(/function typedVolume\(/, "\nfunction ");
+      expect(typed).toContain("applyVolText(t, text)");
+      expect(typed).toMatch(/\.tvol"\);\s*if \(r\) r\.value = String\(res\.value\)/);
+      expect(typed).toContain("if (res.changed) commit();");
+      expect(html).toMatch(/const n = e\.target\.closest\("\.tnum"\); if \(n\) return typedVolume\(n, n\.value\);/);
+      expect(html).toMatch(/\$\("#track-list"\)\.addEventListener\("keydown", e => \{[\s\S]*?volBoxKey\(e\.key, e\.shiftKey, n\.value, volPercent\(t\.volume\)\)/);
+      expect(css).toMatch(/\.track__box input::-webkit-inner-spin-button, \.track__box input::-webkit-outer-spin-button\{ -webkit-appearance:none; margin:0; \}/);
+      expect(rule(".track__box:focus-within")).toContain("#5B8CFF");
+      expect(rule(".track__box")).toMatch(/height:28px/);
+      expect(rule(".track__box")).toMatch(/border-radius:6px/);
+      expect(rule(".track__box")).toMatch(/font-variant-numeric:tabular-nums/);
+      expect(css).toMatch(/:root\{[\s\S]*?--box:/);
+      expect(css).toMatch(/:root\[data-theme="dark"\]\{[^}]*--box:#26262C/);
+    });
+
+    it("the reverb box is a list of the five sizes, and picking one goes the slider's way", () => {
+      const h = trackFxRows(piano(), "Keys", true, esc);
+      const sel = tag(h, /<select[\s\S]*?<\/select>/);
+      expect(sel).toContain('class="tpick"');
+      expect(sel).toContain('aria-label="Keys reverb size"');
+      expect([...sel.matchAll(/<option value="(\d)"[^>]*>([^<]+)</g)].map((m) => [m[1], m[2]])).toEqual([["0", "Off"], ["1", "Room"], ["2", "Hall"], ["3", "Big hall"], ["4", "Stadium"]]);
+      expect(sel).toContain('<option value="3" selected>Big hall</option>');
+      const t = piano();
+      expect(setTrackReverb(t, "2")).toBe("Hall");
+      expect(t.reverb).toBe(2);
+      expect(setTrackReverb(t, "4")).toBe("Stadium");
+      expect(t.reverb).toBe(4);
+      expect(trackFxRows(t, "Keys", true, esc)).toContain('<option value="4" selected>Stadium</option>');   // after undo, the render shows the level
+      expect(html).toMatch(/const p = e\.target\.closest\("\.tpick"\); if \(p\)\{[^\n]*setTrackReverb\(t, p\.value\)[^\n]*\.trev[^\n]*commit\(\);/);
+      expect(html).toMatch(/const r = e\.target\.closest\("\.trev"\);[^\n]*\.tpick[^\n]*\.value = String\(t\.reverb\)/);
+      // the native arrow is hidden; the chevron sits 8px from the right edge, like the library's style list
+      expect(css).toMatch(/\.track__pick select\{[^}]*appearance:none[^}]*background:var\(--chev\) right 8px center \/ 12px no-repeat/);
+      expect(rule(".track__box")).toMatch(/width:var\(--boxw\)/);
+    });
+
+    it("only the selected card's lines are open; a closed card's lines are inert and its head says so", () => {
+      const open = card(piano(), { sel: true, open: true });
+      expect(open).toMatch(/^<div class="track sel open"/);
+      expect(open).toContain('data-id="t1"');
+      expect(tag(open, /<button[^>]*class="track__main"[^>]*>/)).toContain('aria-expanded="true"');
+      expect(tag(open, /<div class="track__more"[^>]*>/)).not.toContain("inert");
+      expect(open).toContain('aria-controls="tmore-t1"');
+      expect(open).toContain('id="tmore-t1"');
+      const closed = card(piano(), {});
+      expect(closed).toMatch(/^<div class="track"/);
+      expect(tag(closed, /<button[^>]*class="track__main"[^>]*>/)).toContain('aria-expanded="false"');
+      expect(tag(closed, /<div class="track__more"[^>]*>/)).toContain(" inert");
+      expect(closed).toContain('<span class="track__chev" aria-hidden="true">');
+      // the head selects (M and S sit in it but are their own buttons), and the card is never built mid-animation
+      expect(closed).toMatch(/<div class="track__head" data-act="select-track" data-id="t1">/);
+      expect(open + closed).not.toContain("animating");
+      expect(card(piano(), { note: '<div class="track__note">x</div>' })).toMatch(/<\/div><\/div><\/div><div class="track__note">x<\/div><\/div>$/);   // a sound note shows even when closed
+    });
+
+    it("selecting another card moves the open state; a re-render keeps the open card and never replays the animation", () => {
+      const ids = ["a", "b", "c"];
+      expect(expandStep("a", "b", ids, true)).toEqual({ build: "a", then: "b" });   // built as it was, then b opens while a closes
+      expect(expandStep("b", "b", ids, true)).toEqual({ build: "b", then: null });  // a re-render: no animation
+      expect(expandStep(null, "a", ids, true)).toEqual({ build: "a", then: null }); // the first build
+      expect(expandStep("x", "a", ids, true)).toEqual({ build: "a", then: null });  // the old card was removed
+      expect(expandStep("a", "b", ids, false)).toEqual({ build: "b", then: null }); // phones and reduced motion: at once
+      const rt = section(/function renderTracks\(/, "\nfunction ");
+      expect(rt).toMatch(/const plan = expandStep\(openTrack, sel, song\.tracks\.map\(t => t\.id\), motionOk\(\)\);/);
+      expect(rt).toMatch(/open:t\.id === plan\.build/);
+      expect(rt).toContain("openTrack = sel;");
+      expect(rt).toContain("if (plan.then) animateOpen(plan.build, plan.then);");
+      const an = section(/function animateOpen\(/, "\nfunction ");
+      expect(an).toContain("void list.offsetHeight;");
+      expect(an).toContain('classList.add("animating")');
+      const co = section(/function cardOpen\(/, "\nfunction ");
+      expect(co).toMatch(/toggleAttribute\("inert", !open\)/);
+      expect(co).toMatch(/setAttribute\("aria-expanded", String\(open\)\)/);
+    });
+
+    it("M and S never change the selection or the open state", () => {
+      const ms = html.match(/if \(act === "mute" \|\| act === "solo"\)\{[^\n]*/)[0];
+      expect(ms).not.toMatch(/sel =|select/);
+      const h = card(piano(), {});
+      const head = tag(h, /<div class="track__head"[\s\S]*?<span class="track__chev"/);
+      expect(head).toMatch(/<button type="button" class="msb msb--m" data-act="mute"/);   // its own data-act, found first by closest()
+    });
+
+    it("the card opens with the draft's grid-rows technique, decelerating, and its lines fade in staggered", () => {
+      expect(css).toContain("--ease:cubic-bezier(.2,.8,.2,1)");
+      expect(rule(".track__more")).toMatch(/display:grid; grid-template-rows:0fr; transition:grid-template-rows \.22s var\(--ease\)/);
+      expect(rule(".track.open .track__more")).toContain("grid-template-rows:1fr");
+      expect(rule(".track__rows > .track__fx")).toMatch(/opacity:0; transform:translateY\(-4px\)/);
+      expect(css).toMatch(/\.track\.open \.track__rows > \.track__fx:nth-child\(2\)\{ transition-delay:\.08s; \}/);
+      expect(rule(".track.open .track__chev")).toContain("rotate(180deg)");
+      expect(rule(".track:hover")).toContain("translateY(-1px)");
+      expect(rule(".track:hover .tile")).toContain("scale(1.04)");
+      expect(rule(".msb:hover")).toContain("brightness");
+      expect(rule(".msb:active")).toContain("translateY(1px)");
+      expect(rule(".track__sus:active")).toContain("translateY(1px)");
+      expect(rule(".track__box:hover")).toContain("border-color");
+      expect(css).toMatch(/\.fader \.slider:hover::-webkit-slider-thumb\{[^}]*translateY\(-1px\)/);
+      expect(css).toMatch(/\.fader \.slider:active::-webkit-slider-thumb\{[^}]*scale\(\.97\)/);
+      expect(css).not.toMatch(/cubic-bezier\([^)]*,\s*1\.[0-9]/);   // never bouncy
+    });
+
+    it("the track cards wear the draft's subtle surface: thin edge, 7px corners, small shadows", () => {
+      expect(css).toMatch(/:root\[data-theme="dark"\]\{[^}]*--tc-edge:#3A3A42/);
+      expect(css).toMatch(/:root\[data-theme="dark"\]\{[^}]*--tc-a:#2E2E35; --tc-b:#26262C/);
+      expect(css).toMatch(/:root\{[\s\S]*?--tc-edge:#[0-9A-F]{6}/);   // the light theme has its own subtle edge
+      const tr = rule(".track");
+      expect(tr).toContain("border:1px solid var(--tc-edge)");
+      expect(tr).toContain("border-radius:7px");
+      expect(tr).toContain("background:linear-gradient(var(--tc-a),var(--tc-b))");
+      expect(tr).toContain("box-shadow:inset 0 1px 0 var(--tc-hi), 0 2px 0 var(--tc-drop)");
+      expect(rule(".track:hover")).toContain("0 3px 0 var(--tc-drop), 0 6px 14px");
+      const sel = rule(".track.sel");
+      expect(sel).toContain("border-color:var(--tc)");
+      expect(sel).toContain("0 0 0 2px color-mix(in srgb, var(--tc) 28%, transparent)");
+      expect(sel).not.toMatch(/0 6px 16px/);   // the old heavy glow is gone
+      expect(rule(".track .tile")).toContain("border-radius:5px");
+      expect(rule(".msb")).toMatch(/width:24px; height:24px; border-radius:5px/);
+      expect(rule(".track__sus")).toContain("border-radius:5px");
+    });
+
+    it("every slider is a mixer fader: the main volume (teal) and each card's Volume and Reverb", () => {
+      expect(html).toMatch(/<span class="fader fader--main" style="--steps:10;--c:#14B8A6"><input type="range" class="slider" id="ss-volume" min="0" max="100" value="80" aria-label="Main volume"><\/span>/);
+      expect(trackVolRow(piano(), "Keys", esc)).toMatch(/<span class="fader" style="--steps:10"><input type="range" class="slider slider--sm tvol"/);
+      expect(trackFxRows(piano(), "Keys", true, esc)).toMatch(/<span class="fader" style="--steps:4"><input type="range" class="slider slider--sm trev"/);
+      expect(rule(".fader")).toContain("--c:var(--tc)");
+      expect(css).toMatch(/\.fader::before\{[^}]*var\(--steps\)/);
+      expect(css).toMatch(/\.fader \.slider::-webkit-slider-thumb\{[^}]*width:14px; height:24px/);
+      expect(css).toMatch(/\.fader \.slider::-moz-range-thumb\{[^}]*width:14px; height:24px/);
+      expect(css).toMatch(/\.fader \.slider::-webkit-slider-thumb\{[^}]*var\(--c\)/);
+      expect(css).toMatch(/:root\{[\s\S]*?--tick:rgba\(28,28,34/);   // dark ticks on the light theme
+      // a selector list with a -webkit- pseudo-element would drop the whole rule in Firefox
+      expect(css).not.toMatch(/::-webkit-slider-thumb[^{]*::-moz-range-thumb|::-moz-range-thumb[^{]*::-webkit-slider-thumb/);
+    });
+
+    it("reduced motion turns every new transition off, and the account bar's fill too", () => {
+      const rm = html.slice(html.lastIndexOf("@media (prefers-reduced-motion:reduce){"));
+      const block = rm.slice(0, rm.indexOf("\n}"));
+      for (const s of [".track", ".track .tile", ".track__chev", ".track__more", ".track__rows > .track__fx", ".track__box", ".track__sus", ".msb", ".space__bar i"]) expect(block, s).toContain(s);
+      expect(block).toMatch(/\.fader \.slider::-webkit-slider-thumb\{ transition:none !important; \}/);
+      expect(block).toMatch(/\.track:hover, \.track:hover \.tile\{ transform:none; \}/);
+    });
+
+    it("phones keep the compact row: only the open card shows its Sustain switch; no expand animation", () => {
+      const last = html.slice(html.lastIndexOf("@media (max-width:640px){"), html.indexOf("</style>"));
+      expect(last).toContain(".track__head{ display:contents; }");
+      expect(last).toContain(".track__chev{ display:none; }");
+      expect(last).toMatch(/\.track__more\{ display:none; \}/);
+      expect(last).toMatch(/\.track\.open \.track__more\{ display:block; \}/);
+      expect(last).toMatch(/\.fader--main\{ width:80px; \}/);
+      expect(html.indexOf("@media (max-width:640px)")).toBeLessThan(html.indexOf("@media (max-width:640px){\n  .main{"));   // the sheet block stays first
+    });
+
+    it("a lesson step whose control is inside a closed card opens that card first", () => {
+      const fn = section(/function revealLessonTarget\(/, "\nfunction ");
+      expect(fn).toMatch(/closest\("\.track"\)/);
+      expect(fn).toMatch(/!card\.classList\.contains\("open"\)/);
+      expect(fn).toContain("sel = card.dataset.id;");
+    });
+
+    it("the library's style list draws its chevron 8px from the right", () => {
+      const ls = rule(".lib__sel");
+      expect(ls).toMatch(/appearance:none; -webkit-appearance:none/);
+      expect(ls).toContain("background:var(--well) var(--chev) right 8px center / 12px no-repeat");
+      expect(ls).toContain("padding-right:28px");
+      expect(css).toMatch(/:root\{[\s\S]*?--chev:url\("data:image\/svg\+xml/);
+      expect(css).toMatch(/:root\[data-theme="dark"\]\{[^}]*--chev:url\("data:image\/svg\+xml/);
+    });
+
+    it("library pattern cards: a thin 2px color line inside, no thick edge, the track cards' surface", () => {
+      expect(css).not.toContain("inset 3px 0 0 var(--tc)");
+      const pat = rule(".pat");
+      expect(pat).toContain("position:relative");
+      expect(pat).toContain("border:1px solid var(--tc-edge)");
+      expect(pat).toContain("padding:9px 9px 9px 14px");
+      expect(pat).toContain("var(--raise)");
+      expect(rule(".pat::before")).toBe('.pat::before{ content:""; position:absolute; left:6px; top:10px; bottom:10px; width:2px; border-radius:1px; background:var(--tc); pointer-events:none; }');
+    });
+
+    it("an account-full save status is maroon; other errors stay red", () => {
+      expect(rule(".title small.bad")).toContain("var(--danger)");
+      expect(rule(".title small.bad.full")).toContain("#A0185A");
+      expect(css).toMatch(/:root\[data-theme="dark"\] \.title small\.bad\.full\{ color:#E46A9E; \}/);
+      expect(html).toMatch(/function setStatus\(t, bad, full\)\{[^\n]*classList\.toggle\("full", !!bad && !!full\)/);
+      expect(html).toContain("setStatus(st.text, st.bad, st.full)");
     });
   });
 
