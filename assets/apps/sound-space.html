@@ -2018,8 +2018,11 @@ function trackLabel(t){
   const base = SHORT[cat] || "Track";
   return same.length > 1 ? base + " " + (same.indexOf(t) + 1) : base;
 }
+/* A song's new save time: now, but always after the copy it replaces, so the account never takes the change for an
+   older one (an undo or redo puts back an older copy of the song, with that copy's old time). */
+function nextStamp(prev, now){ return Math.max(now, (Number(prev) || 0) + 1); }
 function commit(){
-  song.updatedMs = Date.now();
+  song.updatedMs = nextStamp(song.updatedMs, Date.now());
   hist.push(song);
   if (player) player.update(song);
   renderUndo();
@@ -2027,6 +2030,8 @@ function commit(){
   sheetChanged();
 }
 function replaceSong(s){
+  /* undo and redo bring back an older copy: it is saved as the newest, or the account's copy would win it back */
+  s.updatedMs = nextStamp(song && song.updatedMs, Date.now());
   if (song && (song.grid || 2) !== (s.grid || 2)) stash = {};
   song = s;
   openTrack = null;   /* a replaced song shows its open card as it is */

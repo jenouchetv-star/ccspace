@@ -422,3 +422,96 @@ describe("the site bridges Sound Space to its own function and counter, and keep
     expect(site).toContain('try { sb.rpc("art_studio_count", { ev: ev }).then(() => {}, () => {}); } catch(_e){ /* a lost count never matters */ }');
   });
 });
+
+/** The source of one top-level function in the page, from "function name(" to its closing brace. */
+function pageFn(name) {
+  const m = new RegExp("\\n(?:async )?function " + name + "\\(").exec(page);
+  if (!m) throw new Error("no function " + name);
+  const open = page.indexOf("{", page.indexOf(")", m.index));
+  let depth = 0;
+  for (let j = open; j < page.length; j++) {
+    const c = page[j];
+    if (c === '"' || c === "'" || c === "`") { for (j++; j < page.length && page[j] !== c; j++) if (page[j] === "\\") j++; continue; }
+    if (c === "/" && page[j + 1] === "*") { j = page.indexOf("*/", j) + 1; continue; }
+    if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return page.slice(m.index + 1, j + 1);
+  }
+  throw new Error("unclosed " + name);
+}
+
+describe("undo and redo after the song went to the account (the page's own commit, undo and redo)", () => {
+  /** The page's real commit, replaceSong, undo and redo, on a stub screen, with a clock the test moves. Every save
+      (queueSave) goes to this browser's store; push() sends the song as it is now to the account, like the page's
+      autosave does after its 10-second gap. */
+  async function editor() {
+    const S = SS(), M = S.model, C = S.cloud;
+    const store = await C.openStore();
+    const acct = fakeAccount();
+    const accept = (p) => { const v = M.validateSong(p, new Set(["piano"])); return v.ok ? v.song : null; };
+    const clock = { now: 1_000 };
+    const saves = [];
+    const body = "let song = null, hist = null, stash = {}, sel = null, openTrack = null, player = null, voices = null, lesson = null;\n"
+      + "const trackById = id => song && song.tracks.find(t => t.id === id) || null;\n"
+      + "const busy = () => false; const renderAll = () => {}, renderUndo = () => {}, sheetChanged = () => {}, ensureLoaded = () => {};\n"
+      + "const queueSave = () => saves.push(JSON.parse(JSON.stringify(song)));\n"
+      + ["nextStamp", "commit", "replaceSong", "undo", "redo"].map(pageFn).join("\n")
+      + "\nreturn { commit, undo, redo, open(s){ song = s; hist = M.createHistory(100); hist.push(song); }, get song(){ return song; } };";
+    const ed = new Function("M", "Date", "saves", body)(M, { now: () => clock.now }, saves);
+    const saveHere = async () => { await store.put(Object.assign({}, saves[saves.length - 1], { owner: "grownup@example.test" })); };
+    const push = async () => acct.call("put", { project: C.forCloud(await store.get(ed.song.id)) });
+    const sync = () => C.syncSongs({ store, call: acct.call, accept });
+    return { M, C, store, acct, ed, clock, saveHere, push, sync };
+  }
+
+  it("an undo made after the change reached the account wins: it is sent, and Home's sync keeps it", async () => {
+    const { M, store, acct, ed, clock, saveHere, push, sync } = await editor();
+    const s = Object.assign(M.newSong({ title: "Undo me" }), { id: "undo-song", updatedMs: 1_000 });
+    ed.open(s);
+    ed.commit(); await saveHere(); await push();                 // the song as it opened, in the account
+    clock.now = 20_000;
+    M.addTrack(ed.song, "piano"); ed.commit(); await saveHere();
+    expect((await push()).stale).toBe(undefined);                 // the new track reached the account (T2)
+    expect(acct.rows.get("undo-song").data.tracks).toHaveLength(1);
+    clock.now = 40_000;
+    ed.undo(); await saveHere();                                  // the kid presses Undo
+    expect(ed.song.tracks).toHaveLength(0);
+    expect(ed.song.updatedMs).toBe(40_000);                       // the undone song is the newest copy now
+    const sent = await push();
+    expect(sent.stale).toBe(undefined);                           // the account takes it, it doesn't say "newer copy"
+    expect(acct.rows.get("undo-song").data.tracks).toHaveLength(0);
+    await sync();                                                 // back to Home
+    expect((await store.get("undo-song")).tracks).toHaveLength(0); // the undone track stays gone
+    expect(acct.rows.get("undo-song").updated).toBe(40_000);
+  });
+
+  it("an undo that never reached the account is sent by the sync on Home, and redo wins the same way", async () => {
+    const { M, store, acct, ed, clock, saveHere, push, sync } = await editor();
+    ed.open(Object.assign(M.newSong({ title: "Redo me" }), { id: "redo-song", updatedMs: 1_000 }));
+    clock.now = 5_000;
+    M.addTrack(ed.song, "piano"); ed.commit(); await saveHere(); await push();
+    clock.now = 9_000;
+    ed.undo(); await saveHere();                                  // the 10-second gap: no push before Home
+    let plan = (await sync());
+    expect(plan.ok).toBe(true);
+    expect(acct.rows.get("redo-song").data.tracks).toHaveLength(0); // the sync sent the undo up, it didn't bring T2 back
+    expect((await store.get("redo-song")).tracks).toHaveLength(0);
+    clock.now = 12_000;
+    ed.redo(); await saveHere();
+    expect(ed.song.tracks).toHaveLength(1);
+    expect(ed.song.updatedMs).toBe(12_000);
+    await sync();
+    expect(acct.rows.get("redo-song").data.tracks).toHaveLength(1);
+    expect((await store.get("redo-song")).tracks).toHaveLength(1);
+  });
+
+  it("a restored copy is never older than the copy it replaces, even when the clock is behind", async () => {
+    const { M, ed, clock } = await editor();
+    ed.open(Object.assign(M.newSong(), { id: "clock-song", updatedMs: 1_000 }));
+    clock.now = 50_000; M.addTrack(ed.song, "piano"); ed.commit();
+    clock.now = 30_000;                                           // the computer's clock went back
+    ed.undo();
+    expect(ed.song.updatedMs).toBe(50_001);
+    ed.commit();
+    expect(ed.song.updatedMs).toBe(50_002);                       // and so is a change made after it
+  });
+});
