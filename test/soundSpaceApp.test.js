@@ -977,7 +977,7 @@ describe("Sound Space app page", () => {
       // dragging shows the signed value live; a double-click puts it back to 0 in one undo step; a drag is one step
       expect(html).toMatch(/const q = e\.target\.closest\("\.teq"\);[^\n]*setTrackFx\(t, "eq", q\.dataset\.band, q\.value\)[^\n]*eqText\(/);
       expect(html).toMatch(/\$\("#track-list"\)\.addEventListener\("dblclick", e => \{[^\n]*\.teq[^\n]*setTrackFx\(t, "eq", q\.dataset\.band, 0\)[^\n]*commit\(\)/);
-      expect(html).toMatch(/if \(e\.target\.closest\("\.tamt, \.teq"\)\) return commit\(\);/);
+      expect(html).toMatch(/if \(e\.target\.closest\("\.tamt, \.teq"\)\)\{[^\n]*return commit\(\); \}/);
       expect(html).toMatch(/if \(act === "lowcut"\)\{[^\n]*setTrackFx\(t, "eq", "lowcut", !t\.eq\.lowcut\)[^\n]*commit\(\); renderTracks\(\);/);
       // the upright fader is the same mixer fader turned on its side, with a mark at 0
       expect(rule(".fader--v")).toContain("rotate(-90deg)");
@@ -1108,6 +1108,67 @@ describe("Sound Space app page", () => {
       expect(html).toMatch(/Chorus[^<]*sound like a few playing together/);
       expect(html).toMatch(/Dynamics[^<]*loud and quiet/);
       expect(html).toMatch(/EQ[^<]*low, middle and high/);
+    });
+
+    /* Fix round 1 */
+    it("the live chains are all let go when a song opens or the editor closes, and swept on every live note", () => {
+      expect(section(/function openSong\(/, "\nfunction ")).toContain("if (liveChains) liveChains.disconnect();");
+      expect(section(/async function showHome\(/, "\nfunction ")).toContain("if (liveChains) liveChains.disconnect();");
+      expect(section(/function noteOn\(/, "function noteOff")).toContain("liveChains.sweep(c.currentTime);");
+    });
+
+    it("upright EQ faders take a finger drag instead of scrolling the panel, and say they are vertical", () => {
+      expect(rule(".fader--v")).toContain("touch-action:none");
+      expect(rule(".fader--v .slider")).toContain("touch-action:none");
+      const eq = group(trackFxMore(piano(), "Keys", "pitched", true, esc), "eq");
+      const inputs = [...eq.matchAll(/<input[^>]*class="slider teq"[^>]*>/g)].map((m) => m[0]);
+      expect(inputs.length).toBe(3);
+      for (const i of inputs) expect(i).toContain('aria-orientation="vertical"');
+    });
+
+    it("a double-click reset is one undo step: the first click's jump is taken back inside the reset", () => {
+      const { eqResetUndo } = (() => { try { return new Function(block.slice(block.indexOf("*/") + 2) + "; return { eqResetUndo };")(); } catch (e) { return {}; } })();
+      expect(eqResetUndo).toBeTypeOf("function");
+      const last = { id: "t1", band: "low", at: 1000 };
+      expect(eqResetUndo(last, "t1", "low", 1300)).toBe(true);     // the jump just before the double-click
+      expect(eqResetUndo(last, "t1", "mid", 1300)).toBe(false);    // another fader
+      expect(eqResetUndo(last, "t2", "low", 1300)).toBe(false);    // another track
+      expect(eqResetUndo(last, "t1", "low", 2000)).toBe(false);    // long ago: a change of its own
+      expect(eqResetUndo(null, "t1", "low", 1300)).toBe(false);
+      // a fader change notes itself; the double-click undoes that step, then makes the reset one commit
+      expect(html).toMatch(/if \(e\.target\.closest\("\.tamt, \.teq"\)\)\{ const q = e\.target\.closest\("\.teq"\); lastEq = q \? \{ id:q\.dataset\.id, band:q\.dataset\.band, at:performance\.now\(\) \} : null; return commit\(\); \}/);
+      const dbl = html.match(/\$\("#track-list"\)\.addEventListener\("dblclick"[^\n]*/)[0];
+      expect(dbl).toContain("eqResetUndo(lastEq, q.dataset.id, q.dataset.band, performance.now())");
+      expect(dbl).toMatch(/const s = hist\.undo\(\); if \(s\) replaceSong\(s\);/);
+      expect(dbl).toContain('setTrackFx(t, "eq", q.dataset.band, 0)');
+      expect(dbl).toContain("commit();");
+      expect(dbl.indexOf("hist.undo()")).toBeLessThan(dbl.indexOf("commit();"));
+    });
+
+    it("an effects track's Chorus and Dynamics are switched off when a song opens and when it becomes an effect", () => {
+      const { fxEqOnly } = (() => { try { return new Function(block.slice(block.indexOf("*/") + 2) + "; return { fxEqOnly };")(); } catch (e) { return {}; } })();
+      expect(fxEqOnly).toBeTypeOf("function");
+      const t = piano({ chorus: { kind: "phaser", amount: 70 }, dyn: { kind: "limit", amount: 30 } });
+      fxEqOnly(t, "pitched");
+      expect(t.chorus.kind).toBe("phaser");
+      fxEqOnly(t, "fx");
+      expect(t.chorus).toEqual({ kind: "off", amount: 70 });
+      expect(t.dyn).toEqual({ kind: "off", amount: 30 });
+      expect(section(/function openSong\(/, "\nfunction ")).toMatch(/M\.fillTrackDefaults\(s\);[^\n]*\n[^\n]*s\.tracks\.forEach\(t => fxEqOnly\(t, kindOf\(t\)\)\);/);
+      expect(section(/function setTrackInstrument\(/, "\nfunction ")).toContain("fxEqOnly(track, kindAfter);");
+    });
+
+    it("the dead track-panel hint rule is gone (the picker and lessons headers still use .hint)", () => {
+      expect(css).not.toContain(".left > .hint");
+      expect(html).toContain('<span class="hint">Pick an instrument</span>');
+    });
+
+    it("phones: More sound is tight enough that the selected card fits its row", () => {
+      const last = html.slice(html.lastIndexOf("@media (max-width:640px){"), html.indexOf("</style>"));
+      expect(last).toMatch(/\.fxmore\{ margin:0; height:22px; padding:0 4px; gap:4px;/);
+      expect(last).toMatch(/\.track\{ position:static; padding:5px 4px; gap:4px; \}/);
+      expect(last).toMatch(/\.track__rows\{ display:flex; align-items:center; gap:4px; \}/);
+      expect(last).toMatch(/\.fxmore__dots\{ gap:3px; \}/);
     });
 
     it("the pattern card's Use sits at the top right, beside the name; the preview and play stay below", () => {

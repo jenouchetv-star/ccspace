@@ -851,11 +851,15 @@
   const CHAIN_HOLD = SUSTAIN_TAIL + 1.5;
 
   const amountOf = (o) => Math.max(0, Math.min(1, (o && +o.amount) / 100 || 0));
-  // Which of a track's effects are on. EQ is on when a band is not 0 or Low cut is on.
+  // Which of a track's effects are on. EQ is on when a band is not 0 or Low cut is on. Effects tracks have EQ only, so
+  // their Chorus and Dynamics never sound, whatever a song says.
   function trackFxOn(t) {
     const c = t && t.chorus, d = t && t.dyn, e = t && t.eq;
-    const chorus = !!c && (c.kind === "chorus" || c.kind === "flanger" || c.kind === "phaser");
-    const dyn = !!d && (d.kind === "compress" || d.kind === "limit");
+    const byId = SS.instruments && SS.instruments.byId;
+    const rec = byId && t && t.instrumentId ? byId(t.instrumentId) : null;
+    const eqOnly = !!rec && rec.kind === "fx";
+    const chorus = !eqOnly && !!c && (c.kind === "chorus" || c.kind === "flanger" || c.kind === "phaser");
+    const dyn = !eqOnly && !!d && (d.kind === "compress" || d.kind === "limit");
     const eq = !!e && (!!e.low || !!e.mid || !!e.high || !!e.lowcut);
     return { chorus, dyn, eq, any: chorus || dyn || eq };
   }
@@ -944,7 +948,9 @@
           d.connect(wet);
         });
       } else if (kind === "flanger") {
-        // one very short delay sweeping about 1-5 ms, faster than the chorus, fed back into itself for the jet sound
+        // one very short delay swinging 3 ms +-1.8 ms (x amount), faster than the chorus, fed back into itself for the
+        // jet sound. A delay inside a feedback loop can't be shorter than one block of 128 samples (2.9 ms at
+        // 44.1 kHz), so what is heard sweeps about 2.9-4.8 ms.
         dry = gain(1 - 0.3 * a);
         wet = gain(0.6 * a);
         const d = delay(0.003, 0.02);
@@ -1009,7 +1015,8 @@
   // track t (an event or a track: trackId or id) plays into: its chain, built the first time and reused for every note
   // after, its output feeding each of dests. It gives null when every effect is off, so the caller plays straight into
   // dests as before. A changed setting (or reverb send) builds a new chain for the notes that follow; the old one stays
-  // until its notes have rung out (`until`, seconds on the audio clock), then sweep(now) takes it out of the graph.
+  // until its notes have rung out (`until`, seconds on the audio clock). sweep(now) takes out every chain whose notes
+  // have rung out, the ones in use too (a deleted track's, a closed song's): the next note simply builds it again.
   // disconnect() takes every chain out.
   function createTrackChains(ctx) {
     const byTrack = new Map();
@@ -1036,6 +1043,11 @@
         return e.chain.input;
       },
       sweep(now) {
+        byTrack.forEach((e, id) => {
+          if (e.until > now) return;
+          e.chain.disconnect();
+          byTrack.delete(id);
+        });
         if (!retired.length) return;
         retired = retired.filter((e) => {
           if (e.until > now) return true;

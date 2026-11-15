@@ -959,6 +959,60 @@ describe("Sound Space track effects", () => {
     expect(E.exportFrames(fl, 1)).toBeGreaterThan(E.exportFrames(base, 1));
   });
 
+  // Fix round 1: chains are never left running for a track that no longer plays.
+  it("an idle chain is let go once its notes have rung out (LFOs stopped), and the next note builds it again", () => {
+    const ctx = fakeCtx();
+    const bus = ctx.createGain();
+    const chains = E.createTrackChains(ctx);
+    const t = { trackId: "a", ...OFF(), chorus: { kind: "chorus", amount: 50 } };
+    const first = chains.input(t, [bus], 5);
+    const lfos = ctx.sources().filter((s) => s.kind === "osc");
+    expect(lfos.length).toBe(2);
+    chains.sweep(4.9);
+    expect(first.disconnected).toBe(false);
+    expect(chains.input(t, [bus], 5)).toBe(first);   // still in use: reused
+    chains.sweep(5.1);
+    expect(first.disconnected).toBe(true);
+    for (const o of lfos) expect(o.stoppedAt).not.toBe(null);
+    const again = chains.input(t, [bus], 9);
+    expect(again).not.toBe(first);
+    expect(kinds(ctx, "delay").length).toBe(4);
+  });
+
+  it("a track deleted mid-loop has its chain let go soon after, while the song keeps playing", () => {
+    const song = songWith({ chorus: { kind: "chorus", amount: 50 } }, { notes: 16 });
+    const t2 = SS.model.addTrack(song, "organ");
+    Object.assign(t2, OFF(), { chorus: { kind: "phaser", amount: 50 } });
+    for (let s = 0; s < 16; s++) SS.model.toggleNote(t2, s, 64, 1);
+    const { ctx, player, tick } = playFor(song, 20);
+    const phaser = kinds(ctx, "filter").filter((f) => f.type === "allpass");
+    const chorusDelays = kinds(ctx, "delay");
+    expect(phaser.length).toBe(4);
+    const without = JSON.parse(JSON.stringify(song));
+    without.tracks.pop();
+    player.update(without);
+    for (let i = 0; i < 240; i++) { ctx.currentTime += 0.025; tick(); }   // 6 s later, still playing
+    expect(player.playing).toBe(true);
+    for (const f of phaser) expect(f.disconnected).toBe(true);
+    for (const d of chorusDelays) expect(d.disconnected).toBe(false);   // the track still playing keeps its chain
+    player.stop();
+  });
+
+  it("an effects track never sounds Chorus or Dynamics, even when its song has them on; its EQ still works", () => {
+    const S2 = loadSS("model.js", "instruments.js", "engine.js");
+    const fxId = S2.instruments.LIST.find((i) => i.kind === "fx").id;
+    const on = { chorus: { kind: "flanger", amount: 80 }, dyn: { kind: "compress", amount: 80 }, eq: { low: 0, mid: 0, high: 0, lowcut: false } };
+    expect(S2.engine.trackFxOn({ instrumentId: fxId, ...on })).toEqual({ chorus: false, dyn: false, eq: false, any: false });
+    expect(S2.engine.buildTrackChain(fakeCtx(), { instrumentId: fxId, ...on })).toBe(null);
+    const ctx = fakeCtx();
+    const ch = S2.engine.buildTrackChain(ctx, { instrumentId: fxId, ...on, eq: { low: 0, mid: 5, high: 0, lowcut: false } });
+    expect(ch).not.toBe(null);
+    expect(kinds(ctx, "delay").length + comps(ctx).length).toBe(0);
+    expect(kinds(ctx, "filter").map((f) => f.type)).toEqual(["peaking"]);
+    // a piano with the same settings gets them all
+    expect(S2.engine.trackFxOn({ instrumentId: "grand-piano", ...on })).toMatchObject({ chorus: true, dyn: true });
+  });
+
   it("live: a track with every effect off adds nothing, so its notes keep today's compressor-free path", () => {
     const ctx = fakeCtx();
     const bus = E.createLiveBus(ctx);

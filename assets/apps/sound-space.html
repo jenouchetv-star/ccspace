@@ -485,7 +485,9 @@ body.kbd-collapsed #kbd{ display:none; }
 .vf{ display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10.5px; font-weight:700; color:var(--mute); }
 .vf__val{ min-width:26px; text-align:center; font-size:11px; color:var(--text); font-variant-numeric:tabular-nums; }
 .vf__slot{ position:relative; width:26px; height:80px; }
-.fader--v{ position:absolute; left:50%; top:50%; flex:none; width:80px; height:26px; margin:-13px 0 0 -40px; transform:rotate(-90deg); }
+.fader--v{ position:absolute; left:50%; top:50%; flex:none; width:80px; height:26px; margin:-13px 0 0 -40px; transform:rotate(-90deg); touch-action:none; }
+/* a finger dragging up or down moves the fader instead of scrolling the panel */
+.fader--v .slider{ touch-action:none; }
 .fxg__lowcut{ margin-left:auto; align-self:center; }
 
 /* middle */
@@ -863,7 +865,7 @@ body.kbd-collapsed #kbd{ display:none; }
   .vol{ margin-left:0; }
   .slider{ width:80px; }
   .left{ flex-direction:row; align-items:center; gap:8px; padding:8px 10px; overflow-x:auto; overflow-y:hidden; border-right:0; border-bottom:1px solid var(--line); flex:none; }
-  .left > h3, .left > .hint{ display:none; }
+  .left > h3{ display:none; }
   .tracklist{ flex-direction:row; gap:8px; }
   .track{ display:flex; align-items:center; padding:5px 6px; gap:6px; flex:none; }
   .track__main{ gap:6px; }
@@ -949,16 +951,17 @@ body.kbd-collapsed #kbd{ display:none; }
      full width under the whole row. The row scrolls on its own, so the groups are never clipped by it. */
   .left{ position:relative; overflow:visible; }
   .tracklist{ flex:1 1 auto; min-width:0; overflow-x:auto; overflow-y:hidden; padding:3px; margin:-3px; }
-  .track{ position:static; }
+  .track{ position:static; padding:5px 4px; gap:4px; }
   .left .panel__head{ display:flex; order:2; flex:none; min-height:0; }
   .left .panel__head h3, .tracks__count, .left .panel__head [data-act="toggle-tracks"]{ display:none; }
   /* just the plus on phones, so the row keeps room for the cards; its words stay for a screen reader */
   .addbtn{ margin-left:0; width:36px; height:36px; padding:0; justify-content:center; gap:0; font-size:0; }
   .addbtn svg.lucide{ width:18px; height:18px; }
   .tracks__empty{ padding:0; }
-  .track__rows{ display:flex; align-items:center; gap:6px; }
-  .fxmore{ margin:0; height:22px; padding:0 7px; gap:5px; font-size:10.5px; white-space:nowrap; }
+  .track__rows{ display:flex; align-items:center; gap:4px; }
+  .fxmore{ margin:0; height:22px; padding:0 4px; gap:4px; font-size:10.5px; white-space:nowrap; }
   .fxmore > svg:first-child, .fxmore__chev{ display:none; }
+  .fxmore__dots{ gap:3px; }
   .track__fxs{ position:absolute; left:0; right:0; top:100%; z-index:30; background:linear-gradient(var(--panel-a),var(--panel-b)); border-bottom:1px solid var(--line); box-shadow:0 14px 28px rgba(0,0,0,.28); }
   .track__fxs:not(.open){ border-bottom:0; box-shadow:none; }
   .track__fxs > div{ max-height:min(62vh,470px); overflow:auto; }
@@ -1534,8 +1537,7 @@ function setTrackInstrument(stash, track, newId, byId){
   const before = byId(track.instrumentId), after = byId(newId);
   const kindBefore = before ? before.kind : "pitched", kindAfter = after ? after.kind : "pitched";
   track.instrumentId = newId;
-  /* effects tracks have EQ only, so their Chorus and Dynamics go off (the amounts stay) */
-  if (kindAfter === "fx"){ if (track.chorus) track.chorus.kind = "off"; if (track.dyn) track.dyn.kind = "off"; }
+  fxEqOnly(track, kindAfter);   /* effects tracks have EQ only */
   if (kindBefore === kindAfter) return { cleared:false };
   const had = track.notes.length > 0;
   track.notes = [];
@@ -1746,7 +1748,7 @@ function fxEqGroup(t, label, esc){
     + EQ_BANDS.map(b => {
       const v = Math.max(-12, Math.min(12, Math.round(+e[b[0]]) || 0));
       return '<div class="vf"><b class="vf__val" aria-hidden="true">' + eqText(v) + '</b><span class="vf__slot"><span class="fader fader--v" style="--steps:8">'
-        + '<input type="range" class="slider teq" data-band="' + b[0] + '" data-id="' + id + '" min="-12" max="12" step="1" value="' + v + '" aria-label="' + esc(label) + ' ' + b[2] + '" aria-valuetext="' + eqText(v) + '" title="Double-click to set it back to 0">'
+        + '<input type="range" class="slider teq" data-band="' + b[0] + '" data-id="' + id + '" min="-12" max="12" step="1" value="' + v + '" aria-orientation="vertical" aria-label="' + esc(label) + ' ' + b[2] + '" aria-valuetext="' + eqText(v) + '" title="Double-click to set it back to 0">'
         + '</span></span><span class="vf__lab">' + b[1] + '</span></div>';
     }).join("")
     + '<button type="button" class="track__sus fxg__lowcut" data-act="lowcut" data-id="' + id + '" aria-pressed="' + !!e.lowcut + '" aria-label="' + esc(label) + ' low cut" title="Take away deep rumble"><span class="track__led"></span>Low cut</button>'
@@ -1764,6 +1766,11 @@ function trackFxMore(t, label, kind, open, esc){
       + fxKindGroup(t, "dyn", label, esc, DYN_KINDS, "Dynamics", ICON_DYN, "Evens out loud and quiet notes so the track sounds steady."))
     + fxEqGroup(t, label, esc) + '</div></div></div>';
 }
+/* the double-click on an EQ fader: its first click may have jumped the fader to the pointer (a change, one undo step)
+   just before. True when that was the last change, so the reset takes it back and the whole double-click is one step. */
+function eqResetUndo(last, id, band, nowMs){ return !!last && last.id === id && last.band === band && nowMs - last.at < 700; }
+/* effects tracks have EQ only: their Chorus and Dynamics are off (the amounts stay) */
+function fxEqOnly(t, kind){ if (kind === "fx"){ if (t.chorus) t.chorus.kind = "off"; if (t.dyn) t.dyn.kind = "off"; } return t; }
 /* Add track in the Tracks panel head: the count beside the title, the tip as its title, and off once a song is full */
 const ADD_TIP = "Add a track. Up to 8 tracks. M mutes a track, S plays it on its own.";
 function addTrackState(n, max){
@@ -1823,6 +1830,8 @@ function openSong(s, opts){
   stopAll();
   flushPush();
   M.fillTrackDefaults(s);   /* songs saved before Reverb and Sustain open with them off */
+  s.tracks.forEach(t => fxEqOnly(t, kindOf(t)));   /* effects tracks have EQ only */
+  if (liveChains) liveChains.disconnect();   /* the last song's live effect chains (and their LFOs) go */
   song = s; stash = {}; playedOnce = false;
   openTrack = null;   /* the editor appears with the selected card already open, never animating */
   pickedNote = finestNote(spc());   /* a new song starts on the sixteenth note, a song saved on eighths on the eighth */
@@ -1844,6 +1853,7 @@ function openSong(s, opts){
 async function showHome(){
   endLesson();
   stopAll();
+  if (liveChains) liveChains.disconnect();
   if (song){ await saveNow(); await flushPush(); }
   $("#editor").hidden = true; $("#home").hidden = false;
   startHomeFx();
@@ -2725,8 +2735,10 @@ function typedAmount(n, text){
   const r = n.closest(".fxg__row").querySelector(".tamt"); if (r) r.value = v;
   if (changed) commit();
 }
-/* a double-click on an EQ fader puts it back to 0, in one undo step */
-$("#track-list").addEventListener("dblclick", e => { const q = e.target.closest(".teq"); if (!q) return; const t = trackById(q.dataset.id); if (t && setTrackFx(t, "eq", q.dataset.band, 0)){ commit(); renderTracks(); } });
+/* a double-click on an EQ fader puts it back to 0, in one undo step: if its first click jumped the fader (a step of its
+   own), that step is taken back first */
+let lastEq = null;   // the last EQ fader change: { id, band, at }
+$("#track-list").addEventListener("dblclick", e => { const q = e.target.closest(".teq"); if (!q) return; if (eqResetUndo(lastEq, q.dataset.id, q.dataset.band, performance.now()) && !busy()){ lastEq = null; const s = hist.undo(); if (s) replaceSong(s); } const t = trackById(q.dataset.id); if (t && setTrackFx(t, "eq", q.dataset.band, 0)){ commit(); renderTracks(); } });
 /* a click on a card's head outside its buttons (the chevron, the padding) is a press of the head button */
 $("#track-list").addEventListener("click", e => {
   const h = e.target.closest("[data-head]"); if (h && !e.target.closest("[data-act]")){ const b = h.querySelector(".track__main"); if (b) b.click(); }
@@ -2740,7 +2752,7 @@ $("#track-list").addEventListener("input", e => {
 });
 $("#track-list").addEventListener("change", e => {
   if (e.target.closest(".tvol, .trev")) return commit();
-  if (e.target.closest(".tamt, .teq")) return commit();
+  if (e.target.closest(".tamt, .teq")){ const q = e.target.closest(".teq"); lastEq = q ? { id:q.dataset.id, band:q.dataset.band, at:performance.now() } : null; return commit(); }
   const n = e.target.closest(".tnum"); if (n) return typedVolume(n, n.value);
   const a = e.target.closest(".tamtnum"); if (a) return typedAmount(a, a.value);
   const k = e.target.closest(".tkind"); if (k){ const t = trackById(k.dataset.id); if (!t) return; if (setTrackFx(t, k.dataset.fx, "kind", k.value)){ commit(); renderTracks(); } return; }
