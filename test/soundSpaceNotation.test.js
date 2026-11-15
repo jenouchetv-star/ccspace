@@ -25,17 +25,30 @@ function track(instrumentId, notes, extra = {}) {
 function song(tracks, extra = {}) {
   return Object.assign({ schemaVersion: 1, id: "s1", title: "My song", counts: 4, tempo: 120, grid: 4, loop: true, countIn: true, volume: 0.8, tracks, updatedMs: 1 }, extra);
 }
-/* the music lines of one voice (the line after its V: line) */
+/* one voice's music and w: lines, in order (a 16-count song writes each voice in two parts, one per line of music) */
+function voiceParts(abc, voice = 0) {
+  const id = "T" + (voice + 1), music = [], words = [];
+  let cur = null;
+  abc.split("\n").forEach((l) => {
+    if (l.startsWith("V:")) { cur = l.slice(2).split(" ")[0]; return; }
+    if (cur !== id || !l || /^[A-Z]:/.test(l) && !l.startsWith("w:") || l.startsWith("%")) return;
+    if (l.startsWith("w:")) words.push(l); else music.push(l);
+  });
+  return { music, words };
+}
+/* all of one voice's music, its parts joined by a space */
 function body(abc, voice = 0) {
-  const lines = abc.split("\n");
-  const vs = lines.map((l, i) => (l.startsWith("V:") ? i : -1)).filter((i) => i >= 0);
-  return lines[vs[voice] + 1];
+  return voiceParts(abc, voice).music.join(" ");
 }
 function lyrics(abc, voice = 0) {
-  const lines = abc.split("\n");
-  const vs = lines.map((l, i) => (l.startsWith("V:") ? i : -1)).filter((i) => i >= 0);
-  const next = lines[vs[voice] + 2] || "";
-  return next.startsWith("w:") ? next : null;
+  const w = voiceParts(abc, voice).words;
+  return w.length ? "w: " + w.map((l) => l.slice(3)).join(" ") : null;
+}
+/* the notes abcjs read for one staff, line after line, and the letter under each */
+function staffNotes(tune, staff = 0) {
+  const out = [];
+  tune.lines.filter((l) => l.staff).forEach((l) => l.staff[staff].voices[0].forEach((e) => { if (e.el_type === "note") out.push(e); }));
+  return out;
 }
 
 const CDEF = () => song([track("grand-piano", [[0, 60, 4], [4, 62, 4], [8, 64, 4], [12, 65, 4]])]);
@@ -227,10 +240,70 @@ describe("SS.notation.toAbc", () => {
     expect(body(abc)).toBe("z8 z4 C4 |");
   });
 
-  it("keeps the title safe: no line breaks or comment marks", () => {
-    const abc = N.toAbc(song([], { title: "Fun 100% song\nX:2" }), { names: false });
-    expect(abc).toContain("T:Fun 100\\% song X:2\n");
+  it("keeps the title whole, as abcjs reads it: % shows as ％, \\ as /, a line break as a space", () => {
+    const title = (t) => parse(N.toAbc(song([track("grand-piano", [[0, 60, 4]])], { title: t }), { names: false })).tune.metaText.title;
+    expect(title("100% fun")).toBe("100％ fun");
+    expect(title("Fun 100% song")).toBe("Fun 100％ song");
+    expect(title("Rock \\")).toBe("Rock /");
+    expect(title("A\\'e and \\\\ two")).toBe("A/'e and // two");
+    expect(title("Line one\nX:2 Line two")).toBe("Line one X:2 Line two");
+    const abc = N.toAbc(song([], { title: "Line one\r\nX:2" }), { names: false });
     expect(abc.split("\n").filter((l) => l.startsWith("X:")).length).toBe(1);
+    expect(parse(abc).warnings).toEqual([]);
+  });
+
+  describe("16 counts: two lines of two bars, so a busy song stays readable", () => {
+    // piano: a C D E F run each bar, and a D from the end of bar 2 tied into bar 3; drums: kick and hat on every count
+    const piano = () => {
+      const n = [];
+      for (let b = 0; b < 4; b++) [60, 62, 64, 65].forEach((p, i) => { if (!(b === 1 && i === 3) && !(b === 2 && i === 0)) n.push([b * 16 + i * 4, p, 4]); });
+      n.push([28, 62, 8]);
+      return n;
+    };
+    const kit = () => Array.from({ length: 16 }, (_, i) => [i * 4, i % 2 ? 2 : 0, 1]);
+    const long = () => song([track("grand-piano", piano()), track("classic-kit", kit())], { counts: 16 });
+
+    it("writes each voice in two parts, bars 1-2 then bars 3-4, with %%score and the voice names given once", () => {
+      const abc = N.toAbc(long(), { names: true });
+      expect(abc).toContain("%%score (T1) (T2)\n");
+      const vlines = abc.split("\n").filter((l) => l.startsWith("V:"));
+      expect(vlines).toEqual(['V:T1 clef=treble name="Grand piano"', 'V:T2 clef=perc name="Classic kit"', "V:T1", "V:T2"]);
+      const p = voiceParts(abc, 0);
+      expect(p.music).toEqual(["C4 D4 E4 F4 | C4 D4 E4 D4- |", "D4 D4 E4 F4 | C4 D4 E4 F4 |"]);
+      expect(p.words).toEqual(["w: C D E F C D E D", "w: * D E F C D E F"]);
+      expect(voiceParts(abc, 1).music.length).toBe(2);
+    });
+
+    it("parses with no warnings into 2 lines of music, both staffs on each", () => {
+      for (const names of [true, false]) {
+        const t = parse(N.toAbc(long(), { names }));
+        expect(t.warnings).toEqual([]);
+        const lines = t.tune.lines.filter((l) => l.staff);
+        expect(lines.length).toBe(2);
+        lines.forEach((l) => expect(l.staff.length).toBe(2));
+      }
+    });
+
+    it("the letters still sit under their notes, and the D tied from bar 2 into bar 3 still ties", () => {
+      const t = parse(N.toAbc(long(), { names: true })).tune;
+      const notes = staffNotes(t, 0);
+      expect(notes.map((e) => (e.lyric ? e.lyric.map((l) => l.syllable).join("") : ""))).toEqual(
+        ["C", "D", "E", "F", "C", "D", "E", "D", "", "D", "E", "F", "C", "D", "E", "F"]);
+      const lineEnd = t.lines.filter((l) => l.staff)[0].staff[0].voices[0].filter((e) => e.el_type === "note");
+      const tiedOut = lineEnd[lineEnd.length - 1], tiedIn = notes[8];
+      expect(tiedOut.pitches[0].startTie).toBeTruthy();
+      expect(tiedIn.pitches[0].endTie).toBe(true);
+      expect(tiedIn.pitches[0].pitch).toBe(tiedOut.pitches[0].pitch);
+    });
+
+    it("keeps 4- and 8-count songs on one line", () => {
+      for (const counts of [4, 8]) {
+        const s = song([track("grand-piano", [[0, 60, 4]]), track("classic-kit", [[0, 0, 1]])], { counts });
+        const abc = N.toAbc(s, { names: true });
+        expect(abc.split("\n").filter((l) => l.startsWith("V:")).length).toBe(2);
+        expect(parse(abc).tune.lines.filter((l) => l.staff).length).toBe(1);
+      }
+    });
   });
 
   it("the same song always gives the same string", () => {

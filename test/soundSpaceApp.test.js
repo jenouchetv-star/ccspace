@@ -1350,6 +1350,7 @@ describe("Sound Space sheet music in the page", () => {
   it("changes to the song while it is open draw it again, a moment later", () => {
     expect(pageFn("commit")).toContain("sheetChanged();");
     expect(pageFn("replaceSong")).toContain("sheetChanged();");
+    expect(html).toContain("\nconst busy = () => recording || countingIn;\n");   // the line after replaceSong, as it was
     const env = setup(makeSong());
     env.api.sheetChanged();
     expect(env.timers.length).toBe(0);           // closed: nothing to do

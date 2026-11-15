@@ -13,6 +13,8 @@
   const LETTERS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   /* note lengths a single note can show (plain or dotted), in units, longest first */
   const SHOWABLE = [16, 12, 8, 6, 4, 3, 2, 1];
+  /* a song longer than 2 bars is drawn 2 bars to a line */
+  const BARS_PER_LINE = 2;
 
   /* drum kit slot role (instruments.js KIT_SLOTS) -> its place on the drum staff:
      0 kick F, 1 snare c, 2 closed hat ^g, 3 open hat ^a, 4 clap c, 5 low tom A, 6 high tom e, 7 cymbal ^b */
@@ -175,17 +177,17 @@
     });
 
     const bars = [];
-    const words = [];
-    let accs = null, curBar = -1, groups = null, curBeat = -1;
+    const words = [];   /* the letters, bar by bar */
+    let accs = null, curBar = -1, groups = null, curBeat = -1, barWords = null;
     pieces.forEach((p) => {
       const b = Math.floor(p.start / bar);
-      if (b !== curBar) { curBar = b; accs = new Map(); groups = []; bars.push(groups); curBeat = -1; }
+      if (b !== curBar) { curBar = b; accs = new Map(); groups = []; bars.push(groups); curBeat = -1; barWords = []; words.push(barWords); }
       const bt = Math.floor((p.start - b * bar) / beat);
       if (bt !== curBeat) { curBeat = bt; groups.push(""); }
       let tok;
       if (p.rest) {
         tok = "z" + lengthText(p.dur);
-        if (pitched) words.push("*");
+        if (pitched) barWords.push("*");
       } else if (p.places) {
         tok = (p.places.length > 1 ? "[" + p.places.join("") + "]" : p.places[0]) + lengthText(p.dur);
       } else {
@@ -199,12 +201,11 @@
         });
         tok = heads.length > 1 ? "[" + heads.join("") + "]" + lengthText(p.dur)
           : heads[0].replace(/-$/, "") + lengthText(p.dur) + (/-$/.test(heads[0]) ? "-" : "");
-        if (pitched) words.push(p.fresh ? LETTERS[pc(p.pitches[0])] : "*");
+        if (pitched) barWords.push(p.fresh ? LETTERS[pc(p.pitches[0])] : "*");
       }
       groups[groups.length - 1] += tok;
     });
-    const line = bars.map((g) => g.join(" ") + " |").join(" ");
-    return { line, words: names && pitched ? "w: " + words.join(" ") : null };
+    return { bars: bars.map((g) => g.join(" ") + " |"), words: names && pitched ? words : null };
   }
 
   function median(xs) {
@@ -238,12 +239,13 @@
         events = pitchedEvents(notes, total);
       }
       const v = writeVoice(events, total, grid, pitched, !!opts.names);
-      voices.push({ id, head: "V:" + id + " " + head + ' name="' + name + '"', line: v.line, words: v.words });
+      voices.push({ id, head: "V:" + id + " " + head + ' name="' + name + '"', bars: v.bars, words: v.words });
     });
 
     const out = [
       "X:1",
-      "T:" + clean(song.title || "My song").replace(/%/g, "\\%"),
+      /* abcjs reads % as a comment (even written \%) and \ as the start of an accent, so a title shows ％ and / instead */
+      "T:" + clean(song.title || "My song").replace(/\\/g, "/").replace(/%/g, "％"),
       "M:4/4",
       "L:" + (grid === 4 ? "1/16" : "1/8"),
       "Q:1/4=" + (Math.round(song.tempo) || 120),
@@ -252,10 +254,16 @@
     if (voices.length > 1) out.push("%%score " + voices.map((v) => "(" + v.id + ")").join(" "));
     if (drums) out.push(...PERCMAP);
     out.push("K:C");
-    voices.forEach((v) => {
-      out.push(v.head, v.line);
-      if (v.words) out.push(v.words);
-    });
+    /* 16 counts (4 bars) is two lines of two bars, so a busy song stays readable; shorter songs are one line. Each line
+       names every voice again (V:T1, V:T2 ...) with its bars and, under them, its own w: letters; ties carry across. */
+    const nBars = voices.length ? voices[0].bars.length : 0;
+    const perLine = nBars > BARS_PER_LINE ? BARS_PER_LINE : nBars;
+    for (let from = 0; from < nBars; from += perLine) {
+      voices.forEach((v) => {
+        out.push(from === 0 ? v.head : "V:" + v.id, v.bars.slice(from, from + perLine).join(" "));
+        if (v.words) out.push("w: " + [].concat(...v.words.slice(from, from + perLine)).join(" "));
+      });
+    }
     return out.join("\n") + "\n";
   }
 
