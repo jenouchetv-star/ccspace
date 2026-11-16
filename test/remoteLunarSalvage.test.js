@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS, BOARD_STEPS, FLIGHT, flightPhase, BRIEFS };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -66,10 +66,10 @@ describe("tool choice is a puzzle", () => {
 });
 
 describe("field notes and the quiz", () => {
-  it("has eleven notes on Pumice Moon, and every one can be found", () => {
-    expect(S.NOTES.filter((n) => n.world === "pumice")).toHaveLength(11);
+  it("has twelve notes on Pumice Moon, and every one can be found", () => {
+    expect(S.NOTES.filter((n) => n.world === "pumice")).toHaveLength(12);
     const fromParts = new Set(Object.values(S.PART_TYPES).map((t) => t.note).filter(Boolean));
-    for (const n of S.NOTES) expect(n.id === "gravity" || n.id === "laser" || fromParts.has(n.id)).toBe(true);
+    for (const n of S.NOTES) expect(n.id === "gravity" || n.id === "laser" || n.id === "rocket" || fromParts.has(n.id)).toBe(true);
     for (const n of S.NOTES) expect(n.hint.length).toBeGreaterThan(10);
   });
   it("says plainly that the sounds are pretend", () => {
@@ -587,5 +587,36 @@ describe("the satellite mission", () => {
     expect(S.SCANNABLE.dish).toBe("satellite");
     expect(S.NOTE_DOODLES.layers).toMatch(/^<svg/);
     expect(S.NOTE_DOODLES.satellite).toMatch(/^<svg/);
+  });
+});
+
+describe("the rocket", () => {
+  it("counts down, lifts off, flies, waits for the briefing, lands", () => {
+    expect(S.flightPhase(0).phase).toBe("count");
+    expect(S.flightPhase(3.5).phase).toBe("lift");
+    expect(S.flightPhase(7.5).phase).toBe("space");
+    expect(S.flightPhase(9.5).phase).toBe("brief");
+    expect(S.flightPhase(30).phase).toBe("brief");
+    expect(S.flightPhase(10, true).phase).toBe("land");
+    expect(S.flightPhase(9 + S.FLIGHT.land + 0.1, true).phase).toBe("done");
+  });
+  it("boards after the quiz", () => {
+    expect(S.MISSIONS.board.steps.map(s => s.flag)).toEqual(["quiz", "inRocket", "launched"]);
+  });
+  it("Zech's briefing names Glacia and Yuna, and the kid's picture exists", () => {
+    const b = S.BRIEFS.glacia;
+    expect(b.lines.join(" ")).toContain("Glacia");
+    expect(b.lines.join(" ")).toContain("Yuna");
+    expect(b.lines[b.lines.length - 1]).toMatch(/^Landing on Glacia/);
+    expect(existsSync(new URL("../assets/characters/" + b.kid + ".jpg", import.meta.url))).toBe(true);
+  });
+  it("teaches how rockets go up", () => {
+    const n = S.NOTES.find(n => n.id === "rocket");
+    expect(n.world).toBe("pumice");
+    expect(n.text).toMatch(/push/i);
+    expect(S.NOTE_DOODLES.rocket).toMatch(/^<svg/);
+  });
+  it("launch can only start once", () => {
+    expect(game).toMatch(/function launchRocket\(\)\{\s*if \(G\.launching\) return;/);
   });
 });
