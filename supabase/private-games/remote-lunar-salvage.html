@@ -77,6 +77,14 @@
   .modes button.on{color:#fff;background:var(--accent);box-shadow:0 0 0 2px #0a0d1c inset,0 0 12px var(--accent)}
   .dash.arm .modes button.on{color:#2a1a00}
   .modes kbd{position:absolute;top:3px;right:5px;font:700 9px system-ui;opacity:.5}
+  .modes button[hidden]{display:none}
+  /* the drill's depth gauge: the layers the bit goes through */
+  .drillg{position:relative;width:96px;height:150px;border-radius:14px;border:3px solid #0a0d1c;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 4px 0 #0a0d1c;margin:0 auto}
+  .drillg .ly{flex:1;display:flex;align-items:center;justify-content:center;font:800 11px system-ui;letter-spacing:.08em;text-transform:uppercase;color:#0a0d1c}
+  .drillg .dust{background:#b9b2a6} .drillg .rock{background:#7d766d;color:#eee} .drillg .find{background:#3b3f52;color:#9fb0d4;font-size:18px}
+  .drillg .find.energy{background:#5b3fb8;color:#fff;font-size:11px} .drillg .find.water{background:#2f7de1;color:#fff;font-size:11px}
+  .drillg i{position:absolute;left:0;right:0;top:0;height:4px;background:#ffd23f;box-shadow:0 0 0 2px #0a0d1c}
+  .dbtn.drill{background:#5b3fb8}
   /* something new to scan is in reach: the Scan button rings, like the tool hint */
   .dbtn.ready{position:relative;box-shadow:0 0 0 2px #ffd23f inset,0 4px 0 #0a0d1c;color:#fff}
   .dbtn.ready:after{content:"";position:absolute;inset:-4px;border-radius:14px;border:2px solid #ffd23f;animation:toolHint 1.6s cubic-bezier(.2,.7,.2,1) infinite;pointer-events:none}
@@ -397,6 +405,7 @@
       <button data-mode="arm" aria-pressed="false"><kbd>2</kbd><svg viewBox="0 0 24 24"><path d="M4 20h7"/><path d="M7 20v-5l5-6 5 3"/><path d="M17 12l2 3M17 12l-1 3.5"/><circle cx="12" cy="9" r="1.4"/></svg>Arm</button>
       <button data-mode="magnet" aria-pressed="false"><kbd>3</kbd><svg viewBox="0 0 24 24"><path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 8h4M14 8h4"/><path d="M10 4v8a2 2 0 0 0 4 0V4"/></svg>Magnet</button>
       <button data-mode="laser" aria-pressed="false"><kbd>4</kbd><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>Laser</button>
+      <button data-mode="drill" aria-pressed="false" hidden><kbd>5</kbd><svg viewBox="0 0 24 24"><path d="M8 3h8v6H8z"/><path d="M12 9v3l-2 2 4 2-4 2 2 3"/></svg>Drill</button>
     </div>
   </div>
   <div class="dr" id="dRight"></div>
@@ -577,7 +586,8 @@ const MATERIALS = {
   aluminum: { name: "Aluminum", magnetic: false },
   glass:    { name: "Glass", magnetic: false, brittle: true },
   plastic:  { name: "Plastic case", magnetic: false },
-  meteor:   { name: "Iron and nickel", magnetic: true }
+  meteor:   { name: "Iron and nickel", magnetic: true },
+  crystal:  { name: "Energy crystal", magnetic: false }
 };
 const PART_TYPES = {
   scrap: { name: "Steel scrap", mat: "steel", kg: 3, note: "steel" },
@@ -590,8 +600,21 @@ const PART_TYPES = {
   drill: { name: "Old drill rig", mat: "steel", kg: 4000, note: "weight" },
   lever: { name: "Bridge lever", mat: "plastic", kg: 0 },
   tower: { name: "Radio tower", mat: "aluminum", kg: 900, note: "radio" },
-  meteor: { name: "Meteorite", mat: "meteor", kg: 12 }
+  meteor: { name: "Meteorite", mat: "meteor", kg: 12 },
+  energy: { name: "Energy rock", mat: "crystal", kg: 8, r: 0.32 }
 };
+/* the Drill: hold it and the bit goes down; let go and it creeps back up */
+const DRILL = { secs: 3.2, spotR: 1.4, cool: 0.6 };
+function drillStep(depth, holding, dt){
+  if (holding) return clamp(depth + dt / DRILL.secs, 0, 1);
+  return depth >= 1 ? 1 : clamp(depth - DRILL.cool * dt, 0, 1);
+}
+function drillFind(spot){ return spot && spot.gives ? spot.gives : "rock"; }
+/* the tools on the dashboard: this world's, with Pumice Moon's drill arriving once the greenhouse works */
+function toolsFor(world, flags){
+  const t = world ? world.tools : ["drive", "arm", "magnet", "laser"];
+  return world && world.id === "pumice" && !(flags && flags.tested) ? t.filter(m => m !== "drill") : t.slice();
+}
 /* where a part can be set down so it fits, snaps and counts */
 const TARGET_ACCEPTS = {
   bay:    ["panel", "scrap"],
@@ -1486,6 +1509,13 @@ function partMesh(type){
     mesh(cyl(0.12, 0.12, 0.08, 14), MAT.dark, 0, 0.39, 0, g);
     return { g, half: 0.35, r: 0.35, sym: 0 };
   }
+  if (type === "energy"){
+    const mat = new THREE.MeshStandardMaterial({ color: 0x9d7bff, emissive: 0x5b3fb8, emissiveIntensity: 0.9, roughness: 0.35, metalness: 0.1 });
+    const c1 = mesh(new THREE.OctahedronGeometry(0.26, 0), mat, 0, 0.06, 0, g); c1.scale.set(0.8, 1.3, 0.8);
+    const c2 = mesh(new THREE.OctahedronGeometry(0.15, 0), mat, 0.18, -0.02, 0.08, g); c2.rotation.z = -0.5;
+    const c3 = mesh(new THREE.OctahedronGeometry(0.13, 0), mat, -0.16, -0.04, -0.06, g); c3.rotation.z = 0.6;
+    return { g, half: 0.26, r: 0.32, sym: 0 };
+  }
   if (type === "glass"){
     mesh(box(0.5, 0.18, 0.5), MAT.dark, 0, -0.16, 0, g);
     const dome = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), MAT.glass); dome.position.y = -0.07; g.add(dome);
@@ -1851,10 +1881,10 @@ function toggleNotes(){ if ($("ovNotes").classList.contains("open")) closeNotes(
 
 /* ---------- Chike's corner: the goal, his request with a picture of the exact part, and what he says ---------- */
 const HINTS = {
-  keys: { drive: "W A S D or the arrow keys drive.", arm: "A and D swing the arm, W and S lift it, Q and E reach. Space grabs. G aims at the part.", magnet: "Aim with W A S D, reach with Q and E, hold Space for the magnet. G aims.", laser: "Aim with W A S D, hold Space to fire. G aims at a boulder." },
-  touch: { drive: "Turn the wheel and hold GO.", arm: "Move the joystick and press GRAB. Or tap a part to aim at it.", magnet: "Move the joystick, then hold the magnet button. Or tap a part.", laser: "Tap a boulder or use the joystick, then hold FIRE." },
-  pad: { drive: "Left stick drives.", arm: "Left stick aims, right stick reaches, A grabs.", magnet: "Left stick aims, right stick reaches, hold A for the magnet.", laser: "Left stick aims, hold A to fire." },
-  phone: { drive: "Tilt your phone like a steering wheel and hold GO.", arm: "Use the joystick on your phone, then press GRAB.", magnet: "Use the joystick on your phone, then hold MAGNET.", laser: "Use the joystick on your phone, then hold FIRE." }
+  keys: { drive: "W A S D or the arrow keys drive.", arm: "A and D swing the arm, W and S lift it, Q and E reach. Space grabs. G aims at the part.", magnet: "Aim with W A S D, reach with Q and E, hold Space for the magnet. G aims.", laser: "Aim with W A S D, hold Space to fire. G aims at a boulder.", drill: "Park on a dashed ring and hold Space to drill." },
+  touch: { drive: "Turn the wheel and hold GO.", arm: "Move the joystick and press GRAB. Or tap a part to aim at it.", magnet: "Move the joystick, then hold the magnet button. Or tap a part.", laser: "Tap a boulder or use the joystick, then hold FIRE.", drill: "Park on a dashed ring and hold DRILL." },
+  pad: { drive: "Left stick drives.", arm: "Left stick aims, right stick reaches, A grabs.", magnet: "Left stick aims, right stick reaches, hold A for the magnet.", laser: "Left stick aims, hold A to fire.", drill: "Park on a dashed ring and hold A to drill." },
+  phone: { drive: "Tilt your phone like a steering wheel and hold GO.", arm: "Use the joystick on your phone, then press GRAB.", magnet: "Use the joystick on your phone, then hold MAGNET.", laser: "Use the joystick on your phone, then hold FIRE.", drill: "Park on a dashed ring and hold DRILL on your phone." }
 };
 /* pictures of the real 3D parts (made once at the start), and small drawings for places */
 const PICS = {
@@ -1923,7 +1953,7 @@ const STEP_TALK = {
 /* ---------- the rover dashboard: a steering wheel and pedals to drive; a joystick, a reach lever and one
    big button for the Arm, the Magnet and the Laser ---------- */
 const DASH = { steer: 0, wheelId: null, go: 0, back: 0, joyId: null, reachId: null, reachAbs: null, big: false, bigId: null };
-const MODE_STATUS = { drive: "Driving", arm: "Parked: arm ready", magnet: "Parked: magnet ready", laser: "Parked: laser ready" };
+const MODE_STATUS = { drive: "Driving", arm: "Parked: arm ready", magnet: "Parked: magnet ready", laser: "Parked: laser ready", drill: "Parked: drill ready" };
 const DI = {
   scan: '<svg viewBox="0 0 24 24"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3"/><path d="M7 12h10"/></svg>',
   grab: '<svg viewBox="0 0 24 24"><path d="M8 4v7l-3 4M16 4v7l3 4"/><path d="M8 11h8"/></svg>',
@@ -1931,7 +1961,8 @@ const DI = {
   mag: '<svg viewBox="0 0 24 24"><path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 8h4M14 8h4"/></svg>',
   fire: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>',
   up: '<svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
-  down: '<svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg>'
+  down: '<svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
+  drill: '<svg viewBox="0 0 24 24"><path d="M8 3h8v6H8z"/><path d="M12 9v3l-2 2 4 2-4 2 2 3"/></svg>'
 };
 const WHEEL_SVG = '<svg viewBox="0 0 120 120" aria-hidden="true"><g id="wheelRot"><circle cx="60" cy="60" r="50" fill="none" stroke="#0a0d1c" stroke-width="17"/><circle cx="60" cy="60" r="50" fill="none" stroke="#dfe6f4" stroke-width="11"/>'
   + '<path d="M17 52a44 44 0 0 1 6-14M97 38a44 44 0 0 1 6 14" stroke="#2f7de1" stroke-width="7" stroke-linecap="round" fill="none"/>'
@@ -1969,11 +2000,17 @@ function buildDash(){
     left = stick;
     right = '<div class="col">' + aim + scan + "</div>" + slider
       + '<button class="dbtn big mag" data-c="big" id="bigBtn">' + DI.mag + '<span id="bigLbl">HOLD</span></button>';
+  } else if (m === "drill"){
+    left = '<div><div class="drillg" id="drillG" aria-label="Drill depth"><span class="ly dust">dust</span><span class="ly rock">rock</span><span class="ly find" id="drillFind">?</span><i id="drillBar"></i></div><div class="under">Park on a dashed ring</div></div>';
+    right = '<div class="col">' + scan + "</div>"
+      + '<button class="dbtn big drill" data-c="big" id="bigBtn">' + DI.drill + '<span id="bigLbl">DRILL</span></button>';
   } else {
     left = stick;
     right = '<div class="col">' + aim + scan + "</div>"
       + '<button class="dbtn big fire" data-c="big" id="bigBtn">' + DI.fire + '<span id="bigLbl">FIRE</span></button>';
   }
+  const tools = modesNow();
+  document.querySelectorAll("#modes button").forEach(b => { b.hidden = !tools.includes(b.dataset.mode); const k = b.querySelector("kbd"); if (k) k.textContent = tools.indexOf(b.dataset.mode) + 1; });
   $("dLeft").innerHTML = left; $("dRight").innerHTML = right;
   DASH.steer = 0; DASH.go = DASH.back = 0; DASH.big = false; DASH.reachAbs = null; stickV.x = stickV.y = 0;
   renderDash();
@@ -1986,7 +2023,7 @@ function renderDash(){
   const ap = $("aimPic"); if (ap) ap.innerHTML = aimPic();
   const lbl = $("bigLbl"), big = $("bigBtn");
   if (lbl && G.mode === "arm") lbl.textContent = G.held.length ? "LET GO" : "GRAB";
-  if (big) big.classList.toggle("on", G.mode === "magnet" ? G.magOn : G.mode === "laser" ? laser.firing : false);
+  if (big) big.classList.toggle("on", G.mode === "magnet" ? G.magOn : G.mode === "laser" ? laser.firing : G.mode === "drill" ? G.drilling : false);
   if (lbl && G.mode === "magnet") lbl.textContent = G.magOn ? "ON" : "HOLD";
 }
 const renderActs = () => renderDash();
@@ -2003,6 +2040,8 @@ function drawDash(dt){
     if (DASH.wheelId == null) DASH.steer += (0 - DASH.steer) * ease(8, dt);
     const w = $("wheelRot"); if (w) w.setAttribute("transform", "rotate(" + (DASH.steer * 110).toFixed(1) + " 60 60)");
     const g = $("gauge"); if (g){ const v = Math.abs(rover.v); g.style.setProperty("--spd", Math.round(v / ROVER.maxF * 270) + "deg"); $("spd").firstChild.nodeValue = v.toFixed(1); }
+  } else if (G.mode === "drill"){
+    const b = $("drillBar"); if (b) b.style.top = (G.drillDepth * 100).toFixed(1) + "%";
   } else {
     const th = $("reachTh");
     if (th){ const k = (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin); th.style.top = (18 + (1 - k) * (th.parentNode.clientHeight - 36)) + "px"; }
@@ -2071,22 +2110,24 @@ function drawDash(dt){
 
 /* ---------- modes ---------- */
 function setMode(m, quiet){
-  if (m === G.mode) return;
+  if (m === G.mode || !modesNow().includes(m)) return;
   if (!quiet && (!G.started || G.paused)) return;
   /* control ownership: never drop or swap what the arm is holding */
   if (G.held.length){
     if (m === "drive"){ radio("Set it down, or put it in the cargo bed on the back, before you drive."); sfx("bad"); return; }
     if (m === "laser"){ radio("Put down what you're holding before you use the laser."); sfx("bad"); return; }
+    if (m === "drill"){ radio("Put it down first. The drill needs both hands of the rover."); sfx("bad"); return; }
     if (G.mode === "magnet" && m === "arm"){ radio("Drop what the magnet is holding first."); sfx("bad"); return; }
     if (G.mode === "arm" && m === "magnet"){ radio("Let go of the part first, then switch to the magnet."); sfx("bad"); return; }
   }
   G.mode = m;
   G.magOn = false; G.aim = null;
   R.magnet.visible = m === "magnet";
+  if (m !== "drill"){ G.drilling = false; }
   R.fingers.forEach(f => f.visible = m !== "magnet");
   buildDash();
   if (!quiet){
-    flash(m === "drive" ? "Drive" : m === "arm" ? "Arm" : m === "magnet" ? "Magnet" : "Laser");
+    flash(m === "drive" ? "Drive" : m === "arm" ? "Arm" : m === "magnet" ? "Magnet" : m === "drill" ? "Drill" : "Laser");
     sfx("flip");
     if (!G.seenMode) G.seenMode = {};
     if (!G.seenMode[m] && m !== "drive"){ G.seenMode[m] = true; radio("The rover parks. " + HINTS[G.lastDevice][m], 6500); }
@@ -2346,7 +2387,8 @@ addEventListener("keydown", (e) => {
   if (k === "Digit1") setMode("drive");
   else if (k === "Digit2") setMode("arm");
   else if (k === "Digit3") setMode("magnet");
-  else if (k === "Digit4") setMode("laser");
+  else if (k === "Digit4") setMode(modesNow()[3]);
+  else if (k === "Digit5") setMode(modesNow()[4]);
   else if (k === "Tab") setMode(nextMode(1));
   else if (k === "Space" && G.mode === "arm") act("grab");
   else if (k === "KeyG") act("aim");
@@ -2388,8 +2430,9 @@ function pollPad(){
   pad.prev = now;
 }
 
-const MODES = ["drive", "arm", "magnet", "laser"];
-function nextMode(k){ return MODES[(MODES.indexOf(G.mode) + k + MODES.length) % MODES.length]; }
+/* the tools this world has right now, in dashboard order */
+function modesNow(){ return toolsFor(G.world, G.flags); }
+function nextMode(k){ const M = modesNow(); return M[(M.indexOf(G.mode) + k + M.length) % M.length]; }
 
 /* the phone, when one is connected: tilt steers in Drive; its joystick (jx, jy) aims the arm and the laser */
 const phone = { lr: 0, jx: 0, jy: 0, go: 0, bk: 0, mag: 0, fire: 0, r: -1, at: 0 };
@@ -2405,7 +2448,7 @@ function readInput(){
   const pitch = clamp(y + ph.jy, -1, 1);
   const hold = keys.has("Space") || DASH.big || !!pad.held[0];
   const reachAbs = DASH.reachAbs != null ? DASH.reachAbs : fresh && ph.r >= 0 ? ph.r : null;
-  return { x, thr, pitch, reach, reachAbs, mag: hold || !!ph.mag, fire: G.mode === "laser" && (hold || !!ph.fire) };
+  return { x, thr, pitch, reach, reachAbs, mag: hold || !!ph.mag, fire: G.mode === "laser" && (hold || !!ph.fire), drill: G.mode === "drill" && (hold || !!ph.fire) };
 }
 
 /* camera: drag to look around, wheel or pinch to zoom */
@@ -3033,6 +3076,11 @@ function drawCamera(dt){
     want = new THREE.Vector3(rover.x + Math.sin(yaw) * 8.2 * z, rover.y + 3.4 * z, rover.z + Math.cos(yaw) * 8.2 * z);
     const ahead = innerWidth < innerHeight ? 0.5 : 2.2;   /* a tall phone screen keeps the rover in the middle */
     look = new THREE.Vector3(rover.x - Math.sin(rover.yaw) * ahead, rover.y + (innerWidth < innerHeight ? 0.3 : 0.9), rover.z - Math.cos(rover.yaw) * ahead);
+  } else if (G.mode === "drill"){
+    /* low and to the front-left, so the drill bit and the hole it makes both show */
+    const t = drillTip(), yaw = rover.yaw + Math.PI * 0.78 + camCtl.yaw;
+    want = new THREE.Vector3(t.x + Math.sin(yaw) * 4.6 * z, rover.y + 2.6 * z, t.z + Math.cos(yaw) * 4.6 * z);
+    look = new THREE.Vector3(t.x, rover.y + 0.4, t.z);
   } else if (G.mode === "laser"){
     /* over the rover's shoulder, looking down the laser, so the purple target sits in front of you */
     const o = laserOrigin(), d = laserDir(), h = Math.hypot(d.x, d.z) || 1;
@@ -3119,6 +3167,7 @@ function frame(now){
     stepArm(inp, dt);
     stepMagnet(inp, dt);
     stepLaser(inp, dt);
+    stepDrill(inp, dt);
     stepLever(dt);
     stepParts(dt);
     stepTest(dt);
@@ -3132,7 +3181,7 @@ function frame(now){
   if (flashT > 0){ flashT -= dt; if (flashT <= 0) $("flash").classList.remove("on"); }
   if (scanLine && scanLine.visible){ scanLine.material.opacity -= dt * 1.6; if (scanLine.material.opacity <= 0) scanLine.visible = false; }
   const tw = PLACES.tower.group.userData.beacon; tw.material.color.setHex(G.flags.lit && Math.sin(now / 300) > 0 ? 0x4fc3f7 : 0x2a3550);
-  drawRover(); drawDash(dt); drawMarkers(dt); drawHighlights(); drawBeam(dt); drawCamera(dt); drawTags(dt); drawScanMarks(dt);
+  drawRover(); drawDash(dt); drawMarkers(dt); drawHighlights(); drawBeam(dt); drawCamera(dt); drawTags(dt); drawScanMarks(dt); drawDrill(dt);
   renderer.render(scene, camera);
   /* keep it smooth on slower laptops: lower the resolution if frames drag */
   if (dt > 0.034) slowFrames++; else slowFrames = Math.max(0, slowFrames - 1);
@@ -3251,7 +3300,7 @@ function rmMsg(p){
 function sendPhoneState(){
   if (!RM.ch) return;
   if (CT.on) return cSendState();
-  rmSend({ t: "st", m: G.mode, held: G.held.length > 0, test: G.step === 9 && G.testT < 0, firing: laser.firing, mag: G.magOn, paused: G.paused, done: G.done, started: G.started, r: (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin), step: G.step < STEPS.length ? STEPS[G.step].text : "Mission complete" });
+  rmSend({ t: "st", tools: modesNow(), launch: !!G.canLaunch, m: G.mode, held: G.held.length > 0, test: G.step === 9 && G.testT < 0, firing: laser.firing, mag: G.magOn, paused: G.paused, done: G.done, started: G.started, r: (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin), step: G.step < STEPS.length ? STEPS[G.step].text : "Mission complete" });
 }
 addEventListener("pagehide", () => { if (RM.ch) rmSend({ t: "gone" }); });
 
@@ -3942,6 +3991,80 @@ function cSendState(){
   }
 }
 
+
+
+/* ---------- the Drill: a bit on the rover's nose, dashed rings on the ground where something useful is buried ---------- */
+const drillSpots = [];
+const RING_TEX = (function(){
+  const c = document.createElement("canvas"); c.width = c.height = 256;
+  const g = c.getContext("2d"); g.lineWidth = 12; g.strokeStyle = "#f4f1e8"; g.setLineDash([26, 18]); g.lineCap = "round";
+  g.beginPath(); g.arc(128, 128, 104, 0, Math.PI * 2); g.stroke();
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+})();
+function makeDrillSpot(x, z, gives){
+  const y = groundHeight(x, z) + 0.03;
+  const ring = new THREE.Mesh(new THREE.PlaneGeometry(DRILL.spotR * 2, DRILL.spotR * 2), new THREE.MeshBasicMaterial({ map: RING_TEX, transparent: true, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(x, y, z); scene.add(ring);
+  const hole = new THREE.Mesh(new THREE.CircleGeometry(0.42, 20), new THREE.MeshBasicMaterial({ color: 0x15161a }));
+  hole.rotation.x = -Math.PI / 2; hole.position.set(x, y + 0.01, z); hole.visible = false; scene.add(hole);
+  const sp = { x, z, gives, used: false, ring, hole };
+  drillSpots.push(sp);
+  return sp;
+}
+function resetDrillSpots(){ for (const sp of drillSpots){ sp.used = false; sp.ring.visible = true; sp.hole.visible = false; } }
+const DRILL_TIP = { x: -0.45, y: 0.05, z: -1.55 };
+function drillTip(){ return toWorld(rover, DRILL_TIP); }
+function spotUnderDrill(){
+  const t = drillTip();
+  let best = null, bd = DRILL.spotR;
+  for (const sp of drillSpots){ if (sp.used) continue; const d = Math.hypot(sp.x - t.x, sp.z - t.z); if (d < bd){ bd = d; best = sp; } }
+  return best;
+}
+function stepDrill(inp, dt){
+  const on = G.mode === "drill" && inp.drill;
+  if (on !== !!G.drilling){ G.drilling = on; renderDash(); sendPhoneState(); }
+  const was = G.drillDepth || 0;
+  G.drillDepth = G.mode === "drill" ? drillStep(was, on, dt) : drillStep(was, false, dt);
+  if (on){
+    const t = drillTip();
+    if (Math.random() < 0.5) kickDust(t.x + (Math.random() - 0.5) * 0.4, groundHeight(t.x, t.z) + 0.1, t.z + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 1.2, 0.8 + Math.random(), (Math.random() - 0.5) * 1.2);
+  }
+  if (G.mode === "drill" && was < 1 && G.drillDepth >= 1){
+    const sp = spotUnderDrill(), found = drillFind(sp);
+    const f = $("drillFind"); if (f){ f.textContent = found; f.className = "ly find " + found; }
+    G.drillShowT = 2.5;
+    if (found === "rock"){ radio("Only rock here. Park the drill on a dashed ring.", 5000); sfx("bad"); G.drillDepth = 0; return; }
+    sp.used = true; sp.ring.visible = false; sp.hole.visible = true;
+    if (found === "energy"){
+      const ang = rover.yaw, ex = sp.x + Math.cos(ang) * 1.3, ez = sp.z - Math.sin(ang) * 1.3;
+      const part = addPart("energy", ex, ez, Math.random() * 3);
+      part.g.position.y = groundHeight(ex, ez) + 1.4; part.vy = 2.2; part.state = "free";
+      sfx("good"); flash("Energy rock!");
+      if (typeof onDrilled === "function") onDrilled(sp, part);
+    }
+    G.drillDepth = 0;
+  }
+}
+/* the drill on the rover's nose: a housing and a bit that spins down while you drill */
+const DRILL_MESH = (function(){
+  const g = new THREE.Group(); g.position.set(DRILL_TIP.x, 0, DRILL_TIP.z); R.body.add(g);
+  mesh(box(0.34, 0.5, 0.34), MAT.dark, 0, 1.0, 0, g);
+  mesh(box(0.38, 0.08, 0.38), MAT.blue, 0, 1.27, 0, g);
+  const bit = new THREE.Group(); g.add(bit);
+  mesh(cyl(0.07, 0.07, 0.7, 10), MAT.steel, 0, 0, 0, bit);
+  const tip = mesh(new THREE.ConeGeometry(0.1, 0.22, 10), MAT.steel, 0, -0.45, 0, bit); tip.rotation.x = Math.PI;
+  for (let k = 0; k < 3; k++){ const fl = mesh(box(0.2, 0.03, 0.05), MAT.steel, 0, 0.2 - k * 0.2, 0, bit); fl.rotation.y = k * 1.1; }
+  bit.position.y = 0.55;
+  return { g, bit };
+})();
+function drawDrill(dt){
+  const d = G.drillDepth || 0;
+  DRILL_MESH.bit.position.y = 0.55 - d * 0.75;
+  if (G.drilling) DRILL_MESH.bit.rotation.y += dt * 22;
+  if (G.drillShowT > 0){ G.drillShowT -= dt; return; }
+  const f = $("drillFind");
+  if (f && f.textContent !== "?"){ f.textContent = "?"; f.className = "ly find"; }
+}
 
 /* ---------- saving, the grade picker and the worlds you've reached ---------- */
 const LOCAL_KEY = "ccs-remote-lunar-salvage-save";

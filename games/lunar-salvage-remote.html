@@ -61,6 +61,9 @@
   .big.grab{background:radial-gradient(circle at 40% 35%,#ffc566,#f2a93b 70%);color:#2a1a00}
   .big.mag{background:radial-gradient(circle at 40% 35%,#ff7a7e,#e5484d 70%)}
   .big.fire{background:radial-gradient(circle at 40% 35%,#c99bff,#a259ff 70%)}
+  .big.drill{background:radial-gradient(circle at 40% 35%,#9d7bff,#5b3fb8 70%);color:#fff}
+  #modes button[hidden]{display:none}
+  .b.launch{background:#2f7de1;color:#fff;font-weight:900}
   .big.on{box-shadow:0 1px 0 #0a0d1c,0 0 22px var(--accent);transform:translateY(4px)}
   .sm{width:70px;height:56px;border-radius:14px;background:#24305a;font-size:13px}
   .sm.aim{background:#fff;color:#14182a}
@@ -107,6 +110,7 @@
       <button data-m="arm">Arm</button>
       <button data-m="magnet">Magnet</button>
       <button data-m="laser">Laser</button>
+      <button data-m="drill" hidden>Drill</button>
     </div>
     <span class="stat" id="stat"><i></i><span id="statTxt">Connected</span></span>
   </div>
@@ -117,7 +121,9 @@
     <div class="acts" id="acts"></div>
   </div>
   <div class="bottom">
+    <button class="b launch" id="bLaunch" hidden>Launch</button>
     <button class="b" id="bScan">Scan</button>
+    <button class="b" id="bNotes">Notes</button>
     <button class="b" id="bTest" hidden>Test the power</button>
     <button class="b" id="bPause">Pause</button>
     <button class="b" id="bCal">Tilt setup</button>
@@ -162,7 +168,7 @@ const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch
 const SB_URL = "https://wdctkfhwygwwulipwnys.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
 const C = { sb: null, ch: null, code: "", id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"), hostSeen: 0, hb: 0, sendT: 0, kicked: false };
-const S = { m: "drive", held: false, test: false, paused: false, r: 0.2, step: "", mag: false, firing: false };
+const S = { m: "drive", held: false, test: false, paused: false, r: 0.2, step: "", mag: false, firing: false, tools: ["drive", "arm", "magnet", "laser"], launch: false };
 function loadOne(src){ return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error("load")); document.head.appendChild(s); }); }
 function loadSb(){ return window.supabase ? Promise.resolve() : loadOne("/assets/vendor/supabase.js").catch(() => loadOne("https://unpkg.com/@supabase/supabase-js@2.112.4/dist/umd/supabase.js")); }
 function send(p){ if (!C.ch) return; p.i = C.id; try { const r = C.ch.send({ type: "broadcast", event: "m", payload: p }); if (r && r.catch) r.catch(() => {}); } catch (_e) {} }
@@ -208,6 +214,9 @@ function onMsg(p){
     S.team = p.team || ""; S.score = p.score || 0;
     const modeChanged = p.m !== S.m, heldChanged = !!p.held !== S.held;
     S.m = p.m; S.held = !!p.held; S.test = !!p.test; S.paused = !!p.paused; S.step = p.step || ""; S.mag = !!p.mag; S.firing = !!p.firing;
+    /* the game says which tools this world has right now; an older game sends none, so keep the four */
+    if (Array.isArray(p.tools)) S.tools = p.tools.filter(t => typeof t === "string");
+    S.launch = !!p.launch;
     if (modeChanged && typeof p.r === "number") S.r = clampN(p.r, 0, 1);
     /* only a new tool rebuilds the buttons: rebuilding while a finger holds MAGNET would let go of the part */
     paintPad(modeChanged);
@@ -302,7 +311,8 @@ const K = { steer: 0, wheelId: null, jx: 0, jy: 0, joyId: null, reachId: null, g
 let built = "";
 function paintPad(rebuild){
   document.body.className = S.m;
-  document.querySelectorAll("#modes button").forEach(b => b.classList.toggle("on", b.dataset.m === S.m));
+  document.querySelectorAll("#modes button").forEach(b => { b.classList.toggle("on", b.dataset.m === S.m); b.hidden = !S.tools.includes(b.dataset.m); });
+  $("bLaunch").hidden = !S.launch;
   $("task").textContent = S.paused ? "Paused" : S.step;
   const tt = $("teamTag"); tt.hidden = !S.team;
   if (S.team){ tt.className = "teamtag " + S.team; tt.textContent = ""; tt.append(S.team === "blue" ? "BLUE ROVER" : "GOLD ROVER"); const sc = document.createElement("span"); sc.textContent = S.score; tt.append(sc); }
@@ -314,7 +324,9 @@ function paintPad(rebuild){
     built = key;
     const zone = $("zone"), acts = $("acts");
     K.jx = K.jy = 0; K.go = K.bk = K.big = 0; K.wheelId = K.joyId = K.reachId = null;
-    if (S.m === "drive"){
+    if (S.m === "drill"){
+      zone.innerHTML = '<div class="lbl" style="font-size:16px;line-height:1.4;max-width:16em;margin:auto">Park the rover on a dashed ring, then hold DRILL until it finds something.</div>';
+    } else if (S.m === "drive"){
       zone.innerHTML = '<div class="wheel" id="wheel" data-c="wheel">' + WHEEL + '</div><div class="lbl">' + (T.touch ? "Hold the wheel and slide to steer" : "Turn your phone to steer") + "</div>";
       acts.innerHTML = '<button class="b back" data-h="bk">BACK</button><button class="b go" data-h="go">GO</button>';
     } else {
@@ -322,6 +334,7 @@ function paintPad(rebuild){
       const slider = '<div class="slider" id="reach" data-c="reach"><span class="tl">FAR</span><span class="tk"></span><span class="th" id="reachTh"></span><span class="bl">NEAR</span></div>';
       if (S.m === "arm") acts.innerHTML = '<div class="col"><button class="b sm aim" data-a="aim">AIM</button><button class="b sm" data-a="rot">TURN</button></div>' + slider + '<button class="b big grab" data-a="grab" id="big">' + (S.held ? "LET GO" : "GRAB") + "</button>";
       else if (S.m === "magnet") acts.innerHTML = '<div class="col"><button class="b sm aim" data-a="aim">AIM</button></div>' + slider + '<button class="b big mag" data-h="mag" id="big">MAGNET</button>';
+      else if (S.m === "drill") acts.innerHTML = '<button class="b big drill" data-h="fire" id="big">DRILL</button>';
       else acts.innerHTML = '<div class="col"><button class="b sm aim" data-a="aim">AIM</button></div><button class="b big fire" data-h="fire" id="big">FIRE</button>';
     }
   }
@@ -368,6 +381,8 @@ document.querySelectorAll("#modes button").forEach(b => b.onclick = () => { send
   pad.addEventListener("pointerup", end); pad.addEventListener("pointercancel", end); pad.addEventListener("lostpointercapture", end);
 })();
 $("bScan").onclick = () => { send({ t: "b", b: "scan" }); buzz(20); };
+$("bNotes").onclick = () => { send({ t: "notes" }); buzz(15); };
+$("bLaunch").onclick = () => { send({ t: "launch" }); buzz([60, 40, 60]); };
 $("bTest").onclick = () => { send({ t: "b", b: "test" }); buzz([40, 40, 40]); };
 $("bPause").onclick = () => send({ t: "b", b: "pause" });
 
@@ -380,7 +395,7 @@ setInterval(() => {
     else if (T.cal && T.beta != null) lr = tiltAxes(T.cal, T.beta, T.gamma).lr;
     const w = $("wheelRot"); if (w) w.setAttribute("transform", "rotate(" + (lr * 110).toFixed(1) + " 60 60)");
   }
-  const msg = { t: "in", lr: +lr.toFixed(3), jx: +K.jx.toFixed(3), jy: +K.jy.toFixed(3), go: K.go, bk: K.bk, mag: S.m === "magnet" ? K.big : 0, fire: S.m === "laser" ? K.big : 0 };
+  const msg = { t: "in", lr: +lr.toFixed(3), jx: +K.jx.toFixed(3), jy: +K.jy.toFixed(3), go: K.go, bk: K.bk, mag: S.m === "magnet" ? K.big : 0, fire: S.m === "laser" || S.m === "drill" ? K.big : 0 };
   if (K.reachId != null) msg.r = +S.r.toFixed(3);   /* only while the lever is moving, so Aim can move the arm */
   send(msg);
 }, 60);

@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -524,5 +524,38 @@ describe("scan fills the notepad", () => {
   it("the drill rig and the radio tower can be scanned", () => {
     expect(S.SCANNABLE.drill).toBe("weight");
     expect(S.SCANNABLE.tower).toBe("radio");
+  });
+});
+
+describe("the drill", () => {
+  it("goes down while held and creeps back when let go", () => {
+    let d = 0;
+    for (let i = 0; i < 16; i++) d = S.drillStep(d, true, 0.1);
+    expect(d).toBeCloseTo(0.5, 1);
+    expect(S.drillStep(0.5, false, 0.5)).toBeCloseTo(0.2, 1);
+    expect(S.drillStep(0.99, true, 1)).toBe(1);
+  });
+  it("finds what the spot hides, and only rock off a spot", () => {
+    expect(S.drillFind({ gives: "energy" })).toBe("energy");
+    expect(S.drillFind(null)).toBe("rock");
+  });
+  it("energy rocks need the claw", () => {
+    expect(S.magnetCheck("energy").ok).toBe(false);
+    expect(S.clawCheck("energy").ok).toBe(true);
+  });
+  it("the drill unlocks on Pumice Moon after the greenhouse works", () => {
+    const w = S.worldById("pumice");
+    expect(S.toolsFor(w, {})).not.toContain("drill");
+    expect(S.toolsFor(w, { tested: true })).toContain("drill");
+    expect(S.toolsFor(w, {})[0]).toBe("drive");
+  });
+  it("the phone shows only the tools the game sends, and has Notes and Launch", () => {
+    expect(remote).toContain('data-m="drill"');
+    expect(remote).toMatch(/st\.tools|p\.tools/);
+    expect(remote).toContain('t: "notes"');
+    expect(remote).toContain('t: "launch"');
+  });
+  it("the game ignores a tool this world doesn't have yet", () => {
+    expect(game).toMatch(/function setMode\(m, quiet\)\{[\s\S]{0,200}modesNow\(\)\.includes\(m\)/);
   });
 });
