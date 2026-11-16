@@ -691,3 +691,20 @@ describe("whole-branch review fixes", () => {
     expect(game).toContain("Coming soon");
   });
 });
+
+describe("the old drill rig looks like a drill", () => {
+  it("has a spiral drill bit going into the ground and a sign that says what it is", () => {
+    expect(game).toContain("/* the auger: a spiral blade wound around the shaft, the part kids know as a drill bit */");
+    expect(game).toContain('drillSign("OLD DRILL RIG", "4,000 kg: too heavy for the rover")');
+  });
+});
+
+describe("holding the magnet never shoves the rover", () => {
+  it("the steel panel is only a wall while it rests on the ground, not while the magnet pulls it or it falls", () => {
+    expect(game).toMatch(/function colliderList\(\)\{\s*const all = COLLIDERS\.slice\(\);\s*if \(PANEL && PANEL\.state === "free" && panelIsWall\(\)\)/);
+    expect(game).toContain("p.pulledAt = G.t;");
+  });
+  it("a panel dropped onto the rover slides off instead of pushing the rover", () => {
+    expect(game).toContain("/* the panel landed on the rover: slide the panel off, never shove the rover */");
+  });
+});

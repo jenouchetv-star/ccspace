@@ -1194,6 +1194,23 @@ function colBox(x, z, hw, hd, yaw, top){ const c = { kind: "box", x, z, hw, hd, 
 const SURFACES = [];
 function surface(x, z, hw, hd, top){ const s = { x, z, hw, hd, top, on: true }; SURFACES.push(s); return s; }
 
+/* a painted sign on two posts, readable from the road */
+function drillSign(title, sub){
+  const c = document.createElement("canvas"); c.width = 512; c.height = 200;
+  const g = c.getContext("2d");
+  g.fillStyle = "#f4f1e8"; g.fillRect(0, 0, 512, 200);
+  g.strokeStyle = "#0a0d1c"; g.lineWidth = 14; g.strokeRect(7, 7, 498, 186);
+  g.fillStyle = "#ffd23f"; g.fillRect(20, 20, 472, 16); g.fillRect(20, 164, 472, 16);
+  g.fillStyle = "#0a0d1c"; g.textAlign = "center"; g.textBaseline = "middle";
+  g.font = "900 64px system-ui, -apple-system, 'Segoe UI', sans-serif"; g.fillText(title, 256, 88);
+  g.font = "700 28px system-ui, -apple-system, 'Segoe UI', sans-serif"; g.fillText(sub, 256, 140);
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4;
+  const grp = new THREE.Group();
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.0), new THREE.MeshStandardMaterial({ map: t, roughness: 0.8, side: THREE.DoubleSide }));
+  board.position.y = 1.55; grp.add(board);
+  for (const x of [-1.05, 1.05]) mesh(box(0.09, 1.6, 0.09), MAT.dark, x, 0.8, -0.03, grp);
+  return grp;
+}
 /* ---------- the outpost ---------- */
 const PLACES = {
   start: { x: 0, z: 12 },
@@ -1337,10 +1354,37 @@ const GH = { light: null, strips: [], sprout: null, leaves: [], water: null, soc
   /* a mining drill rig much too heavy for the rover */
   const d = PLACES.drill, dy = groundHeight(d.x, d.z);
   const dg = new THREE.Group(); dg.position.set(d.x, dy, d.z); dg.rotation.y = 0.5; scene.add(dg);
-  mesh(box(4.2, 1.2, 2.6), MAT.rust, 0, 0.7, 0, dg);
-  mesh(box(1.2, 5.5, 1.2), MAT.steel, 1.2, 3.4, 0, dg).rotation.z = -0.25;
-  mesh(cyl(0.35, 0.05, 2.2, 12), MAT.dark, 2.4, 0.9, 0, dg).rotation.z = 0.3;
-  for (let i = 0; i < 2; i++) mesh(box(4.6, 0.6, 0.6), MAT.dark, 0, 0.3, i ? 1.3 : -1.3, dg);
+  /* tracks and a deck, with the engine housing at the back */
+  for (let i = 0; i < 2; i++){ mesh(box(4.6, 0.7, 0.75), MAT.dark, 0, 0.35, i ? 1.25 : -1.25, dg); for (let k = 0; k < 7; k++) mesh(box(0.12, 0.74, 0.8), MAT.steel, -2.0 + k * 0.66, 0.35, i ? 1.25 : -1.25, dg); }
+  mesh(box(4.2, 0.5, 2.4), MAT.rust, 0, 0.95, 0, dg);
+  mesh(box(1.6, 1.3, 2.0), MAT.rust, -1.3, 1.85, 0, dg);
+  mesh(cyl(0.12, 0.12, 1.0, 8), MAT.dark, -1.8, 2.9, 0.6, dg);
+  /* the tall mast: four legs with cross braces, like a real drilling derrick */
+  const mx = 1.3, mh = 7.5;
+  for (const [ox, oz] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]]) mesh(box(0.14, mh, 0.14), MAT.steel, mx + ox, 1.2 + mh / 2, oz, dg);
+  for (let k = 0; k < 6; k++){
+    const y = 1.6 + k * 1.2;
+    for (const oz of [-0.45, 0.45]){ const br = mesh(box(0.06, 1.35, 0.06), MAT.steel, mx, y + 0.6, oz, dg); br.rotation.z = (k % 2 ? 1 : -1) * 0.64; }
+    for (const ox of [-0.45, 0.45]){ const br = mesh(box(0.06, 1.35, 0.06), MAT.steel, mx + ox, y + 0.6, 0, dg); br.rotation.x = (k % 2 ? -1 : 1) * 0.64; }
+  }
+  /* the motor at the top that spins the bit */
+  mesh(box(1.3, 0.9, 1.3), MAT.white, mx, 1.2 + mh + 0.3, 0, dg);
+  mesh(box(1.35, 0.18, 1.35), MAT.blue, mx, 1.2 + mh - 0.1, 0, dg);
+  /* the auger: a spiral blade wound around the shaft, the part kids know as a drill bit */
+  const auger = new THREE.Group(); auger.position.set(mx, 0, 0); dg.add(auger);
+  mesh(cyl(0.16, 0.16, mh + 1.5, 12), MAT.steel, 0, 0.9 + mh / 2 - 0.3, 0, auger);
+  for (let k = 0; k < 44; k++){
+    const a = k * 0.55, y = 0.2 + k * 0.16;
+    const fl = mesh(box(0.95, 0.06, 0.28), MAT.steel, Math.cos(a) * 0.3, y, -Math.sin(a) * 0.3, auger);
+    fl.rotation.y = a; fl.rotation.z = 0.28;
+  }
+  mesh(new THREE.ConeGeometry(0.42, 0.7, 14), MAT.steel, 0, -0.1, 0, auger).rotation.x = Math.PI;
+  /* a hole where the bit goes into the ground, with a little ring of dust */
+  const hole = mesh(new THREE.CircleGeometry(0.8, 20), new THREE.MeshBasicMaterial({ color: 0x1a1a1e }), mx, 0.03, 0, dg); hole.rotation.x = -Math.PI / 2;
+  PLACES.drill.auger = auger;
+  /* a sign, so kids know what it is */
+  const sign = drillSign("OLD DRILL RIG", "4,000 kg: too heavy for the rover");
+  sign.position.set(0.6, 0, 2.5); sign.rotation.y = 0.35; dg.add(sign);
   PLACES.drill.group = dg;
   colCircle(d.x, d.z, 3.0, dy + 6);
 
@@ -2469,7 +2513,7 @@ function dropPart(p){
   if (fit && fit.res === "ok") return snapTo(p, fit.t);
   if (fit && fit.res === "shape" && fit.t.id === "slot") radio("That piece doesn't match the outline. Look at the shape glowing on the pad.");
   if (fit && fit.res === "shape" && fit.t.id === "socket") radio("Only the power cell fits that socket.");
-  p.state = "free"; p.vx = p.vy = p.vz = 0; p.fallFrom = p.y;
+  p.state = "free"; p.vx = p.vy = p.vz = 0; p.fallFrom = p.y; p.droppedAt = G.t;
   sfx("whoosh", { volume: 0.4 });
 }
 function fitFor(p){
@@ -2822,9 +2866,26 @@ function resetGame(){
 const STAR = (on) => '<svg viewBox="0 0 24 24"><path d="M12 2.6l2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.3l-5.8 3.1 1.2-6.5L2.6 9.4l6.5-.8z" fill="' + (on ? "#ffd23f" : "none") + '" stroke="' + (on ? "#ffd23f" : "rgba(255,255,255,.35)") + '" stroke-width="1.6" stroke-linejoin="round"/></svg>';
 /* ---------- the simulation ---------- */
 let bridgeT = 0;
+/* the loose steel panel blocks the rover only while it lies on the ground: not while the magnet pulls it,
+   not while it falls, and not when it has landed on the rover itself (then it slides off instead) */
+function panelBox(){ return { kind: "box", x: PANEL.x, z: PANEL.z, hw: 1.3, hd: 0.8, yaw: PANEL.yaw }; }
+function panelIsWall(){
+  if (G.magOn && G.t - (PANEL.pulledAt == null ? -9 : PANEL.pulledAt) < 0.4) return false;
+  if (PANEL.y - PANEL.half > floorAt(PANEL.x, PANEL.z) + 0.3) return false;
+  const depth = boxDepth(panelBox(), rover.x, rover.z);
+  if (panelJustDropped() && depth > 0) return false;
+  return depth < 0.25;
+}
+function panelJustDropped(){ return G.t - (PANEL.droppedAt == null ? -9 : PANEL.droppedAt) < 2; }
+/* how deep the rover's middle sits inside a box, 0 when it is clear */
+function boxDepth(c, x, z){
+  const cs = Math.cos(c.yaw), sn = Math.sin(c.yaw);
+  const lx = (x - c.x) * cs - (z - c.z) * sn, lz = (x - c.x) * sn + (z - c.z) * cs;
+  return Math.max(0, ROVER.r * 0.85 - Math.hypot(lx - clamp(lx, -c.hw, c.hw), lz - clamp(lz, -c.hd, c.hd)));
+}
 function colliderList(){
   const all = COLLIDERS.slice();
-  if (PANEL && PANEL.state === "free") all.push({ kind: "box", x: PANEL.x, z: PANEL.z, hw: 1.3, hd: 0.8, yaw: PANEL.yaw });
+  if (PANEL && PANEL.state === "free" && panelIsWall()) all.push(panelBox());
   return all;
 }
 /* how far the rover would sink into the deepest thing at this spot */
@@ -2903,6 +2964,13 @@ function stepRover(inp, dt){
         kickDust(w.x, w.y, w.z, Math.sin(rover.yaw) * back * (0.4 + Math.random()) + (Math.random() - 0.5) * 0.6, 0.6 + Math.random() * 1.4 * k, Math.cos(rover.yaw) * back * (0.4 + Math.random()) + (Math.random() - 0.5) * 0.6);
       }
     }
+  }
+  /* the panel landed on the rover: slide the panel off, never shove the rover */
+  if (PANEL && PANEL.state === "free" && !(G.magOn && G.t - (PANEL.pulledAt == null ? -9 : PANEL.pulledAt) < 0.4) && (boxDepth(panelBox(), rover.x, rover.z) >= 0.25 || (panelJustDropped() && boxDepth(panelBox(), rover.x, rover.z) > 0))){
+    let dx = PANEL.x - rover.x, dz = PANEL.z - rover.z, d = Math.hypot(dx, dz);
+    if (d < 1e-3){ dx = Math.sin(rover.yaw + Math.PI / 2); dz = Math.cos(rover.yaw + Math.PI / 2); d = 1; }
+    PANEL.x += dx / d * 3.5 * dt; PANEL.z += dz / d * 3.5 * dt;
+    PANEL.y = Math.max(PANEL.y, restHeight(PANEL) + PANEL.half);
   }
   /* push small loose parts out of the way */
   for (const p of parts){
@@ -3008,6 +3076,7 @@ function stepMagnet(inp, dt){
       renderActs(); sendPhoneState();
     } else {
       const sp = 3.2 * dt / d;
+      p.pulledAt = G.t;
       p.x += tx * Math.min(1, sp); p.y += ty * Math.min(1, sp); p.z += tz * Math.min(1, sp); p.vy = 0;
       p.yaw += 0.6 * dt;
     }
@@ -3322,7 +3391,7 @@ const scanMarks = [];
 function scanProps(){
   const out = [];
   for (const p of parts){ if (p.state === "gone" || p.state === "fixed" || p.state === "trapped" || p.state === "snap") continue; const n = SCANNABLE[p.type]; if (n) out.push({ key: p, note: n, x: p.x, y: p.g.position.y + 0.95, z: p.z }); }
-  out.push({ key: "drill", note: SCANNABLE.drill, x: PLACES.drill.x, y: 7.2, z: PLACES.drill.z, r: 3 });
+  out.push({ key: "drill", note: SCANNABLE.drill, x: PLACES.drill.x, y: 10.6, z: PLACES.drill.z, r: 3 });
   out.push({ key: "tower", note: SCANNABLE.tower, x: PLACES.tower.x, y: 9.5, z: PLACES.tower.z, r: 1.5 });
   if (G.mission !== "repair") out.push({ key: "dish", note: SCANNABLE.dish, x: SAT.dishAt.x, y: 4.2, z: SAT.dishAt.z, r: 1.4 });
   return out;
