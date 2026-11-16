@@ -58,3 +58,28 @@ describe("how creativity grows problem solvers", () => {
     expect(site).toContain('pageVal("about/mission", "steammGrow"');
   });
 });
+
+describe("the calmer What we believe layout (owner, 2026-11-16)", () => {
+  const panel = site.split("function steammPanel(){")[1].split("\n}\n")[0];
+  const beliefs = site.split("function beliefsPanel(){")[1].split("\n}\n")[0];
+  it("keeps the six STEAMM tiles, with no colors, each with its own drawn icon", () => {
+    expect(panel).toContain('class="believe__tiles"');
+    expect(panel).not.toMatch(/background:#/);
+    for (const k of ["Science", "Technology", "Engineering", "Art", "Math", "Music"]) expect(site).toMatch(new RegExp("STEAMM_ICONS[\\s\\S]*?" + k + ":\\s*'<svg"));
+  });
+  it("drops the colored cards and check marks from the STEAMM sections and the beliefs", () => {
+    expect(panel).not.toContain("panel--flat");
+    expect(panel).not.toContain('ic("check")');
+    expect(beliefs).not.toContain('ic("check")');
+  });
+  it("breaks the sections up with photos of kids making things, each described", () => {
+    for (const src of ["assets/grownups/rubber-band-guitar.jpg", "assets/activities/cardboard-house.jpg", "assets/grownups/while-they-make-birdhouse.jpg"]) {
+      expect(panel + beliefs).toContain(src);
+    }
+    expect((panel + beliefs).match(/believePhoto\("assets\/[^"]+\.jpg", "[^"]{20,}"\)/g).length).toBe(3);
+    expect(panel + beliefs).not.toContain('alt=""');
+  });
+  it("gives every section room to breathe", () => {
+    expect(site).toMatch(/\.believe__sec\{[^}]*padding:\s*\d{2}px 0/);
+  });
+});
