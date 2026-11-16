@@ -425,7 +425,7 @@ describe("the Rover Contest on the page and the phones", () => {
     expect(game).toContain('if (!team){ rmSend({ t: "full", to: p.i }); return; }');
   });
   it("sends each phone only its own rover's state, and the phone ignores the other's", () => {
-    expect(game).toContain('rmSend({ t: "st", to: T.id, team,');
+    expect(game).toContain('rmSend({ t: "st", to: T.id, tools: C_MODES, launch: false, team,');
     expect(remote).toContain("if (p.to && p.to !== C.id) return;");
     expect(remote).toContain('id="teamTag"');
   });
@@ -648,5 +648,46 @@ describe("the picture quiz", () => {
   it("read-aloud never crashes when the voice is missing", () => {
     expect(game).toMatch(/function speak\(text\)\{\s*try \{/);
     expect(game).toContain('"speechSynthesis" in window');
+  });
+});
+
+describe("whole-branch review fixes", () => {
+  it("the Rover Contest keeps its own four tools (keys and controller bumpers work)", () => {
+    expect(game).toContain('const C_MODES = ["drive", "arm", "magnet", "laser"];');
+    expect(game).not.toMatch(/[^_A-Za-z.]MODES[\[.]/);
+    expect(game).toMatch(/function cSetMode\(r, m\)\{\s*if \(!CT\.playing \|\| r\.mode === m \|\| !C_MODES\.includes\(m\)\) return;/);
+    expect(game).toMatch(/rmSend\(\{ t: "st", to: T\.id, tools: C_MODES,/);
+  });
+  it("no way into the mission skips the grade picker", () => {
+    expect(game).toMatch(/function startGame\(\)\{\s*if \(G\.started\) return;\s*if \(!SAVE\.grade\) return askGrade\(\);/);
+  });
+  it("Pause and Launch wait while the quiz, the notepad, the landing or the flight is up", () => {
+    expect(game).toMatch(/function togglePause\(force\)\{\s*if \(!G\.started \|\| G\.done \|\| busyScreen\(\)\) return;/);
+    expect(game).toMatch(/function launchRocket\(\)\{\s*if \(G\.launching\) return;\s*if \(G\.paused\) return;/);
+  });
+  it("keeps the phone connected during the landing and the flight", () => {
+    expect(game).toMatch(/if \(G\.landing \|\| FL\.on\)\{ stepRocketShow\(dt\);[^\n]*phoneSendT/);
+  });
+  it("a Start over can't be followed by an old quiz popping up", () => {
+    expect(game).toContain('setTimeout(() => { if (G.mission === "board" && !G.flags.quiz && !G.done) openQuiz(); }, 2600);');
+  });
+  it("the Contest's pause menu has no campaign grade or quiz", () => {
+    expect(game).toMatch(/body\.contest #bQuizAgain, body\.contest #gradeRow2, body\.contest #gradeQ2\{display:none !important\}/);
+  });
+  it("a game controller can switch the dish on and press Launch", () => {
+    expect(game).toContain("if (edge(1) && testReady()) act(\"test\");");
+    expect(game).toContain("if (edge(0) && G.canLaunch) launchRocket();");
+  });
+  it("the help lists the new keys", () => {
+    const k = game.match(/id="helpKeys">([^<]+)</)[1];
+    expect(k).toMatch(/5 Drill/); expect(k).toMatch(/N opens the Field Notes/); expect(k).toMatch(/L launches/);
+  });
+  it("calls the ground station a satellite dish, and no answer says a jar lid won't stick", () => {
+    for (const st of S.SAT_STEPS) expect(st.text + " " + st.hint).not.toMatch(/the satellite(?! dish)/i);
+    expect(S.NOTES.find(n => n.id === "satellite").title).toMatch(/dish/i);
+    expect(JSON.stringify(S.QUIZ_BANKS)).not.toMatch(/jar/i);
+  });
+  it("worlds that aren't built yet say Coming soon on the start screen", () => {
+    expect(game).toContain("Coming soon");
   });
 });
