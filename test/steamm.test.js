@@ -99,3 +99,9 @@ describe("the STEAMM heading (owner, 2026-11-16)", () => {
     expect(site).toContain('<h2 id="steammHead">What is <span class="hl">STEAMM</span>?</h2>');
   });
 });
+
+describe("What we believe lines up with the banner (owner, 2026-11-16)", () => {
+  it("uses the page's own width, like the banner, instead of a narrower cap", () => {
+    expect(site).not.toMatch(/\.believe\{[^}]*max-width/);
+  });
+});
