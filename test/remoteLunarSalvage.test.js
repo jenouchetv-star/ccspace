@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -66,10 +66,10 @@ describe("tool choice is a puzzle", () => {
 });
 
 describe("field notes and the quiz", () => {
-  it("has eight notes, and every one can be found", () => {
-    expect(S.NOTES).toHaveLength(8);
+  it("has nine notes, and every one can be found", () => {
+    expect(S.NOTES).toHaveLength(9);
     const fromParts = new Set(Object.values(S.PART_TYPES).map((t) => t.note).filter(Boolean));
-    for (const n of S.NOTES) expect(n.id === "gravity" || fromParts.has(n.id)).toBe(true);
+    for (const n of S.NOTES) expect(n.id === "gravity" || n.id === "laser" || fromParts.has(n.id)).toBe(true);
     for (const n of S.NOTES) expect(n.hint.length).toBeGreaterThan(10);
   });
   it("says plainly that the sounds are pretend", () => {
@@ -170,22 +170,22 @@ describe("what fits where", () => {
 });
 
 describe("the mission", () => {
-  const all = { approach: 1, panel: 1, lever: 1, support: 1, crossed: 1, cellLoaded: 1, atGreenhouse: 1 };
-  it("walks through all nine steps in order", () => {
-    expect(S.STEPS).toHaveLength(9);
-    const keys = ["approach", "panel", "lever", "support", "crossed", "cellLoaded", "atGreenhouse"];
+  const all = { approach: 1, panel: 1, lever: 1, support: 1, crossed: 1, freed: 1, cellLoaded: 1, atGreenhouse: 1 };
+  it("walks through all ten steps in order", () => {
+    expect(S.STEPS).toHaveLength(10);
+    const keys = ["approach", "panel", "lever", "support", "crossed", "freed", "cellLoaded", "atGreenhouse"];
     const f = {};
     expect(S.currentStep(f)).toBe(0);
     keys.forEach((k, i) => { f[k] = true; expect(S.currentStep(f)).toBe(i + 1); });
-    f.installed = true; expect(S.currentStep(f)).toBe(8);
-    f.tested = true; expect(S.currentStep(f)).toBe(9);
+    f.installed = true; expect(S.currentStep(f)).toBe(9);
+    f.tested = true; expect(S.currentStep(f)).toBe(10);
   });
   it("goes back a step if the power cell falls out before it is home", () => {
-    expect(S.currentStep(Object.assign({}, all, { cellLoaded: false }))).toBe(5);
+    expect(S.currentStep(Object.assign({}, all, { cellLoaded: false }))).toBe(6);
   });
   it("gives a star for finishing, for every note and for all the scrap", () => {
     expect(S.starsFor({ done: true, notes: 2, scrap: 0 })).toBe(1);
-    expect(S.starsFor({ done: true, notes: 8, scrap: S.SCRAP_TOTAL })).toBe(3);
+    expect(S.starsFor({ done: true, notes: 9, scrap: S.SCRAP_TOTAL })).toBe(3);
   });
   it("shows the clock as minutes and seconds", () => {
     expect(S.formatTime(73)).toBe("1:13");
@@ -253,7 +253,11 @@ describe("the pages", () => {
   it("works with keys, touch, a game controller and a phone", () => {
     expect(game).toContain("navigator.getGamepads");
     expect(game).toContain('addEventListener("keydown"');
-    expect(game).toContain('id="stick"');
+    expect(game).toContain('data-c="wheel"');   /* the dashboard: a steering wheel and pedals to drive */
+    expect(game).toContain('data-c="go"');
+    expect(game).toContain('data-c="joy"');     /* a joystick, a reach lever and a big button for the tools */
+    expect(game).toContain('data-c="reach"');
+    expect(game).toContain('data-mode="laser"');
     expect(remote).toContain("DeviceOrientationEvent.requestPermission");
   });
 });
@@ -266,5 +270,102 @@ describe("the camera", () => {
     expect(off).toBeGreaterThan(Math.PI / 2);          /* past straight-beside, toward the front */
     expect(off).toBeLessThan(Math.PI * 0.75);          /* but still from the side, not head-on */
     expect(game).toContain("const yaw = rover.yaw + CAM_SIDE + camCtl.yaw;");
+  });
+});
+
+describe("aiming the arm and keeping things from passing through each other", () => {
+  it("aims the claw exactly at a spot in reach, in front, beside or behind the rover", () => {
+    for (const spot of [{ x: 0, y: 0.3, z: -3 }, { x: 2.2, y: 0.2, z: -1 }, { x: -1.5, y: 0.6, z: 1.2 }, { x: 0, y: 1.2, z: 0.95 }]){
+      const a = S.aimArm(spot);
+      expect(a.ok).toBe(true);
+      const tip = S.armLocal(a);
+      expect(tip.x).toBeCloseTo(spot.x, 5);
+      expect(tip.z).toBeCloseTo(spot.z, 5);
+      expect(tip.y - S.ARM.hang).toBeCloseTo(spot.y, 5);
+    }
+  });
+  it("says when a spot is too far for the arm", () => {
+    const a = S.aimArm({ x: 0, y: 0.2, z: -9 });
+    expect(a.ok).toBe(false);
+    expect(a.far).toBe(true);
+    expect(a.reach).toBe(S.ARM.reachMax);
+  });
+  it("can reach the cargo bed on its own back", () => {
+    const a = S.aimArm({ x: S.ROVER.bed.x, y: S.ROVER.bed.y + 0.9, z: S.ROVER.bed.z });
+    expect(a.ok).toBe(true);
+  });
+  it("finds the top of turned boxes and circles, and nothing outside them", () => {
+    const b = { x: 1, z: 2, hw: 1, hd: 0.25, yaw: Math.PI / 2, top: 0.7 };
+    expect(S.boxTopAt(b, 1, 2.9)).toBe(0.7);           /* turned a quarter: long along z now */
+    expect(S.boxTopAt(b, 1.9, 2)).toBe(-Infinity);
+    expect(S.circleTopAt({ x: 0, z: 0, r: 1, top: 2 }, 0.5, 0.5)).toBe(2);
+    expect(S.circleTopAt({ x: 0, z: 0, r: 1, top: 2 }, 1, 1)).toBe(-Infinity);
+  });
+  it("tests the corners of a wide panel and a ring around round parts", () => {
+    const flat = S.footprintPts({ w: 1.2, d: 0.75 }, 0, 0, 0);
+    expect(flat.length).toBe(9);
+    expect(flat).toContainEqual([1.2, 0.75]);
+    const turned = S.footprintPts({ w: 1.2, d: 0.75 }, 0, 0, Math.PI / 2);
+    expect(Math.max(...turned.map(p => Math.abs(p[1])))).toBeCloseTo(1.2, 5);
+    expect(S.footprintPts({ r: 0.3 }, 5, 5, 0).length).toBe(7);
+  });
+  it("keeps the claw on top of the rover's own body, wheels and cargo bed", () => {
+    const top = (x, z) => Math.max(...S.ROVER_SOLIDS.map(b => S.boxTopAt(b, x, z)));
+    expect(top(1.05, -0.95)).toBeGreaterThanOrEqual(0.78);   /* a front wheel */
+    expect(top(0, -0.9)).toBeGreaterThan(1.3);               /* the cab */
+    expect(top(0, 0.95)).toBe(1.0);                          /* inside the cargo bed: its floor */
+    expect(top(0.6, 0.95)).toBeGreaterThan(1.2);             /* the cargo bed wall */
+    expect(top(2, 0)).toBe(-Infinity);                       /* beside the rover */
+  });
+});
+
+describe("the laser", () => {
+  it("has a step of its own: free the power cell from the boulder before loading it", () => {
+    const f = { approach: 1, panel: 1, lever: 1, support: 1, crossed: 1 };
+    expect(S.STEPS[S.currentStep(f)].id).toBe("free");
+    expect(S.STEPS[S.currentStep(Object.assign(f, { freed: 1 }))].id).toBe("load");
+  });
+  it("finds where a beam meets a boulder, and misses one beside it", () => {
+    const o = { x: 0, y: 1, z: 0 }, d = { x: 0, y: 0, z: -1 };
+    expect(S.raySphere(o, d, { x: 0, y: 1, z: -10 }, 1)).toBeCloseTo(9, 5);
+    expect(S.raySphere(o, d, { x: 3, y: 1, z: -10 }, 1)).toBe(-1);
+    expect(S.raySphere(o, d, { x: 0, y: 1, z: 10 }, 1)).toBe(-1);   /* behind the rover */
+  });
+  it("is honest about what real rover lasers do", () => {
+    const n = S.NOTES.find((n) => n.id === "laser").text;
+    expect(n).toContain("ChemCam");
+    expect(n).toMatch(/real rover lasers don't do/);
+    expect(S.LASER.range).toBeGreaterThan(10);
+  });
+});
+
+describe("the dashboard and Chike's requests", () => {
+  it("gives every step a picture, and the picture is of the part Chike asks for", () => {
+    const pics = game.match(/const STEP_PIC = (\[[^\]]+\]);/);
+    expect(pics).toBeTruthy();
+    const list = JSON.parse(pics[1]);
+    expect(list).toHaveLength(S.STEPS.length);
+    const want = { panel: "panel", lever: "lever", support: "wedge", free: "boulder", load: "cell", install: "cell" };
+    S.STEPS.forEach((st, i) => { if (want[st.id]) expect(list[i]).toBe(want[st.id]); });
+  });
+  it("draws the part pictures from the real 3D parts", () => {
+    expect(game).toContain('for (const t of ["panel", "wedge", "cell", "scrap", "glass", "block", "tube"]) shot(t, partMesh(t).g');
+    expect(game).toContain("/assets/characters/chike-pose-point.png");
+  });
+});
+
+describe("easy enough for a 6-year-old", () => {
+  it("lights up the tool each step needs, and the step's hint names the same tool", () => {
+    const m = game.match(/const STEP_TOOL = (\[[^\]]+\]);/);
+    const tools = JSON.parse(m[1]);
+    expect(tools).toHaveLength(S.STEPS.length);
+    const name = { magnet: "Magnet", arm: "Arm", laser: "Laser" };
+    S.STEPS.forEach((st, i) => { if (name[tools[i]]) expect(st.hint).toContain(name[tools[i]]); });
+  });
+  it("turns the right piece to fit by itself, so the puzzle is picking the piece, not the angle", () => {
+    expect(game).toContain('if (fit && fit.res === "turn"){ radio("Right piece! It turns itself to fit the outline."); return snapTo(p, fit.t); }');
+  });
+  it("pulls the bridge lever with one press of Grab", () => {
+    expect(game).toContain("G.autoPull = true");
   });
 });
