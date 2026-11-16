@@ -18,7 +18,7 @@ describe("the What we believe page", () => {
     expect(site).toContain("body = steammPanel() + beliefsPanel();");
   });
   it("is no longer on the Mission page", () => {
-    expect(site).toContain("body = frameworkCards();");
+    expect(site).toContain("      + frameworkCards();");
     expect(site).not.toContain("body = steammPanel() + frameworkCards();");
   });
   it("is listed in the sitemap and the footer site map", () => {
