@@ -207,6 +207,32 @@
   .starrow div{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--soft)}
   .starrow svg{width:18px;height:18px;flex:none}
   .quiz{margin-top:6px}
+  /* Chike's picture questions */
+  .speak{all:unset;cursor:pointer;flex:none;width:34px;height:34px;border-radius:50%;background:rgba(47,125,225,.14);color:#2f7de1;display:flex;align-items:center;justify-content:center;align-self:flex-start}
+  .speak svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .speak:focus-visible{outline:3px solid var(--star)}
+  .speak[hidden]{display:none}
+  .quizcard .qtop{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+  .quizcard .qtop .kicker{margin:0}
+  .quizcard .speak{background:rgba(79,195,247,.14);color:var(--cyan);width:38px;height:38px}
+  .qpic{position:relative;border-radius:12px;padding:6px;background-color:var(--paper);background-image:repeating-linear-gradient(180deg,transparent 0 23px,var(--rule) 23px 24px);color:var(--pen)}
+  .qpic svg{display:block;width:100%;height:auto;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  .qpic .redpen{stroke:var(--redpen);stroke-width:3}
+  .qpic .penlab{fill:var(--redpen);stroke:none;font-family:"Patrick Hand",cursive;font-size:9px}
+  .qq{font-size:19px;font-weight:700;line-height:1.35;margin:12px 0 10px;text-wrap:balance}
+  .qopts{display:grid;gap:8px}
+  .qopts.two{grid-template-columns:1fr 1fr}
+  .qopt{all:unset;cursor:pointer;border-radius:14px;border:2px solid rgba(255,255,255,.22);padding:12px 14px;font-size:16px;font-weight:700;line-height:1.3;box-sizing:border-box}
+  .qopt:hover{border-color:#fff}
+  .qopt:focus-visible{outline:3px solid var(--star);outline-offset:2px}
+  .qopt.p{padding:6px;background-color:var(--paper);color:var(--pen);border-color:transparent;box-shadow:0 0 0 2px rgba(255,255,255,.22)}
+  .qopt.p svg{display:block;width:100%;height:auto;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+  .qopt.p span{display:block;text-align:center;font-family:"Patrick Hand",cursive;font-size:21px;font-weight:400}
+  .qopt.right{border-color:var(--cyan);background-color:rgba(79,195,247,.14)}
+  .qopt.p.right{box-shadow:0 0 0 4px var(--cyan)}
+  .qopt.wrong{opacity:.55;text-decoration:line-through}
+  .qwhy{margin-top:12px;font-size:15px;line-height:1.5;color:var(--soft);min-height:1.5em}
+  .qwhy b{color:#fff}
   .quiz .q{font-size:16px;font-weight:650;margin:6px 0 10px}
   .quiz .opts{display:grid;gap:8px}
   .quiz .opts button{all:unset;cursor:pointer;border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:11px 14px;font-size:15px}
@@ -427,7 +453,7 @@
   <div class="bubble">
     <div class="goal"><span id="stepNo">Goal: power up the greenhouse</span><span class="time" id="clock">0:00</span></div>
     <div class="prog" id="prog"></div>
-    <div class="ask"><span class="item" id="askItem"></span><div><div class="what" id="stepWhat"></div><div class="hint" id="stepHint"></div><div class="say" id="radioTxt"></div></div></div>
+    <div class="ask"><span class="item" id="askItem"></span><div><div class="what" id="stepWhat"></div><div class="hint" id="stepHint"></div><div class="say" id="radioTxt"></div></div><button class="speak" id="bSpeak" hidden aria-label="Read it to me"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button></div>
     <button class="cta blue" id="bTest" hidden><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Test the power</button>
   </div>
 </section>
@@ -532,7 +558,7 @@
     <p>The rover waits right where you left it.</p>
     <div class="ask" id="gradeQ2">Your grade</div>
     <div class="grades" id="gradeRow2" role="group" aria-labelledby="gradeQ2" style="justify-content:center"></div>
-    <div class="row2"><button class="cta blue" id="bResume">Keep going</button><button class="cta line" id="bRestart2">Start over</button></div>
+    <div class="row2"><button class="cta blue" id="bResume">Keep going</button><button class="cta line" id="bRestart2">Start over</button><button class="cta line" id="bQuizAgain" style="flex-basis:100%">Take Chike's questions again</button></div>
   </div>
 </div>
 
@@ -572,6 +598,10 @@
       </div>
     </div>
   </div>
+</div>
+
+<div class="ov" id="ovQuiz" role="dialog" aria-label="Chike's questions">
+  <div class="card quizcard" id="quizCard"></div>
 </div>
 
 <!-- end -->
@@ -718,11 +748,41 @@ const STEPS = [
   { id: "install", flag: "installed", text: "Put the power cell in the greenhouse socket.", hint: "Arm: lift it out of the cargo bed and over the socket." },
   { id: "test", flag: "tested", text: "Switch the power on!", hint: "Press Test the power." }
 ];
-const QUIZ = [
-  { q: "Which one could the rover's magnet lift?", opts: ["A steel bolt", "An aluminum can", "A glass jar"], a: 0, why: "Steel is mostly iron, and magnets pull on iron. Aluminum and glass do not stick." },
-  { q: "On Pumice Moon, a dropped wrench falls...", opts: ["faster than on Earth", "slower than on Earth", "at the same speed as on Earth"], a: 1, why: "Pumice Moon's gravity is about one-sixth of Earth's, so things fall more slowly." },
-  { q: "Which shape keeps a bridge from folding?", opts: ["A square", "A circle", "A triangle"], a: 2, why: "A triangle cannot change shape unless a side breaks. A square can lean into a flat diamond." }
-];
+/* ---------- Chike's three questions: one set per grade band, every question with a pen-drawn picture.
+   circle marks the right part of the question's picture (viewBox 0 0 100 46), drawn in red pen after a wrong answer ---------- */
+const QUIZ_BANKS = {
+  pumice: {
+    g1: [
+      { q: "Which one does the magnet pick up?", pic: "magnetPick", opts: [{ t: "bolt", pic: "bolt" }, { t: "can", pic: "can" }], a: 0, circle: { x: 24, y: 36, r: 11 }, why: "The bolt. It's made of steel, and steel has iron in it. Magnets pull on iron. The can is aluminum, so it doesn't stick." },
+      { q: "Where does a ball fall more slowly?", pic: "fall2", opts: [{ t: "Pumice Moon", pic: "moonBall" }, { t: "Earth", pic: "earthBall" }], a: 0, circle: { x: 30, y: 24, r: 18 }, why: "On Pumice Moon. It pulls much less than Earth does, so things fall slowly there." },
+      { q: "Which shape keeps the bridge strong?", pic: "shapes", opts: [{ t: "triangle", pic: "tri" }, { t: "square", pic: "sq" }], a: 0, circle: { x: 72, y: 26, r: 18 }, why: "The triangle. Its three sides lock it in shape. Push a square's corner and it leans over." }
+    ],
+    g23: [
+      { q: "Which one could the rover's magnet lift?", pic: "magnetPick3", opts: [{ t: "A steel bolt" }, { t: "An aluminum can" }, { t: "A glass jar" }], a: 0, circle: { x: 20, y: 36, r: 10 }, why: "Steel has iron in it, and magnets pull on iron. Aluminum and glass don't stick." },
+      { q: "On Pumice Moon, a dropped wrench falls...", pic: "fall2", opts: [{ t: "faster than on Earth" }, { t: "slower than on Earth" }, { t: "the same as on Earth" }], a: 1, circle: { x: 30, y: 24, r: 18 }, why: "Pumice Moon pulls about one-sixth as hard as Earth, so things fall more slowly." },
+      { q: "What did the Drill find under the dust?", pic: "layersPic", opts: [{ t: "Rock, and an energy rock deep down" }, { t: "Only more dust" }, { t: "A puddle of rain" }], a: 0, circle: { x: 74, y: 36, r: 9 }, why: "The ground is made in layers: dust on top, rock below, and sometimes something useful deep down." }
+    ],
+    g45: [
+      { q: "Steel and aluminum are both metals. Why does only steel stick to a magnet?", pic: "magnetPick", opts: [{ t: "Steel has iron in it" }, { t: "Aluminum is too heavy" }, { t: "Magnets only lift round things" }], a: 0, circle: { x: 24, y: 36, r: 11 }, why: "Magnets pull on iron, and steel is mostly iron. Aluminum has no iron, so a magnet hardly pulls on it." },
+      { q: "Pumice Moon pulls with 1.62 m/s². Earth pulls with 9.8 m/s². About how many times stronger is Earth's pull?", pic: "fall2", opts: [{ t: "About 2 times" }, { t: "About 6 times" }, { t: "About 60 times" }], a: 1, circle: { x: 72, y: 24, r: 18 }, why: "9.8 divided by 1.62 is about 6. Earth pulls about 6 times harder, so things fall faster there." },
+      { q: "Which frame keeps its shape when you push its corner?", pic: "shapes", opts: [{ t: "The square: it has 4 sides" }, { t: "The triangle: its 3 sides lock its angles" }, { t: "Neither one" }], a: 1, circle: { x: 72, y: 26, r: 18 }, why: "Push a square's corner and it leans into a diamond. A triangle can't change shape unless a side breaks." }
+    ]
+  }
+};
+/* the pictures, drawn like pen in the notepad */
+const QUIZ_PICS = {
+  magnetPick: '<svg viewBox="0 0 100 46"><path d="M38 4v14a12 12 0 0 0 24 0V4"/><path d="M38 4h7v14a5 5 0 0 0 10 0V4h7"/><path d="M38 10h7M55 10h7"/><path d="M20 30h8v4h-8zM23 34v8M25 34v8"/><path d="M70 28h12v14H70z"/><path d="M70 31h12"/><path d="M36 30l-4 2M64 30l4 2" stroke-dasharray="2 3"/></svg>',
+  magnetPick3: '<svg viewBox="0 0 100 46"><path d="M40 4v12a10 10 0 0 0 20 0V4"/><path d="M40 4h6v12a4 4 0 0 0 8 0V4h6"/><path d="M16 30h8v4h-8zM19 34v8M21 34v8"/><path d="M45 28h10v14H45z"/><path d="M45 31h10"/><path d="M74 30h12v12H74z"/><path d="M76 30v-4h8v4"/></svg>',
+  fall2: '<svg viewBox="0 0 100 46"><circle cx="30" cy="7" r="4"/><path d="M30 14v3M30 21v3M30 28v3"/><path d="M27 31l3 4 3-4"/><path d="M14 38h32"/><circle cx="72" cy="7" r="4"/><path d="M72 13v20"/><path d="M69 31l3 4 3-4"/><path d="M56 38h32"/><text x="30" y="45" font-size="5.5" fill="currentColor" stroke="none" text-anchor="middle" font-family="Patrick Hand, cursive">Pumice Moon</text><text x="72" y="45" font-size="5.5" fill="currentColor" stroke="none" text-anchor="middle" font-family="Patrick Hand, cursive">Earth</text></svg>',
+  shapes: '<svg viewBox="0 0 100 46"><path d="M14 38h28V12H14z"/><path d="M14 12l6 4 26-4-6 26" stroke-dasharray="3 3"/><path d="M58 38l14-26 14 26z"/><path d="M65 26h14"/></svg>',
+  layersPic: '<svg viewBox="0 0 100 46"><path d="M4 12c14-3 30 2 46-1s32 1 46-1"/><path d="M4 24c14-3 30 2 46-1s32 1 46-1"/><path d="M4 36c14-3 30 2 46-1s32 1 46-1"/><path d="M74 2v30"/><path d="M71 30l3 4 3-4"/><path d="M70 40l4-5 4 5-4 5z"/><text x="10" y="9" font-size="5" fill="currentColor" stroke="none" font-family="Patrick Hand, cursive">dust</text><text x="10" y="21" font-size="5" fill="currentColor" stroke="none" font-family="Patrick Hand, cursive">rock</text></svg>',
+  bolt: '<svg viewBox="0 0 60 44"><path d="M22 6h16v6H22z"/><path d="M27 12v26M33 12v26M27 18h6M27 24h6M27 30h6"/></svg>',
+  can: '<svg viewBox="0 0 60 44"><path d="M20 6h20v32H20z"/><path d="M20 10h20M20 34h20"/><path d="M26 4h8"/></svg>',
+  moonBall: '<svg viewBox="0 0 60 44"><circle cx="30" cy="8" r="5"/><path d="M30 16v4M30 24v4"/><path d="M27 28l3 4 3-4"/><path d="M12 38c10-3 26-3 36 0"/><circle cx="48" cy="8" r="3"/></svg>',
+  earthBall: '<svg viewBox="0 0 60 44"><circle cx="30" cy="8" r="5"/><path d="M30 15v16"/><path d="M27 29l3 4 3-4"/><path d="M8 38h44"/><path d="M14 38c2-6 6-6 8 0M38 38c2-5 6-5 8 0"/></svg>',
+  tri: '<svg viewBox="0 0 60 44"><path d="M14 38l16-30 16 30z"/><path d="M22 26h16"/></svg>',
+  sq: '<svg viewBox="0 0 60 44"><path d="M16 38h28V10H16z"/><path d="M16 10l28 28" stroke-dasharray="3 3"/></svg>'
+};
 
 function clamp(v, a, b){ return v < a ? a : v > b ? b : v; }
 function angDiff(a, b){ let d = (a - b) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; return d; }
@@ -929,7 +989,8 @@ function raySphere(o, d, c, r){
   const t = -b - Math.sqrt(h);
   return t >= 0 ? t : (-b + Math.sqrt(h) >= 0 ? 0 : -1);
 }
-function starsFor(r){ return (r.done ? 1 : 0) + (r.notes >= NOTES.length ? 1 : 0) + (r.scrap >= SCRAP_TOTAL ? 1 : 0); }
+/* a world's three stars: its missions done, every one of its field notes, and all of Chike's questions right */
+function starsForWorld(r){ return { mission: !!r.mission, notes: r.notesTotal > 0 && r.notesFound >= r.notesTotal, quiz: r.quizRight >= 3 }; }
 /* six digits, never a leading 0 (the same as the site's two-player rooms) */
 function makeCode(n){ return String(100000 + (Math.abs(Math.floor(n)) % 900000)); }
 function readCode(s){ const d = String(s || "").replace(/\D/g, ""); return /^[1-9]\d{5}$/.test(d) ? d : null; }
@@ -2656,7 +2717,9 @@ canvas.addEventListener("wheel", (e) => { e.preventDefault(); camCtl.zoom = clam
 function openOv(id){ $(id).classList.add("open"); }
 function closeOv(id){ $(id).classList.remove("open"); }
 function closeTopOverlay(){
-  for (const id of ["ovHelp", "ovNotes", "ovPhone"]) if ($(id).classList.contains("open")){ closeOv(id); return true; }
+  if ($("ovQuiz").classList.contains("open")) return true;
+  if ($("ovNotes").classList.contains("open")){ closeNotes(); return true; }
+  for (const id of ["ovHelp", "ovPhone"]) if ($(id).classList.contains("open")){ closeOv(id); return true; }
   return false;
 }
 document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => b.dataset.close === "ovNotes" ? closeNotes() : closeOv(b.dataset.close)));
@@ -2727,50 +2790,6 @@ function resetGame(){
 
 /* ---------- the end: stars, what you learned, a quick check ---------- */
 const STAR = (on) => '<svg viewBox="0 0 24 24"><path d="M12 2.6l2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.3l-5.8 3.1 1.2-6.5L2.6 9.4l6.5-.8z" fill="' + (on ? "#ffd23f" : "none") + '" stroke="' + (on ? "#ffd23f" : "rgba(255,255,255,.35)") + '" stroke-width="1.6" stroke-linejoin="round"/></svg>';
-function showEnd(){
-  G.done = true; G.clockOn = false;
-  const res = { done: true, notes: G.notes.size, scrap: G.scrap };
-  const n = starsFor(res);
-  const c = $("endCard");
-  c.innerHTML = '<div class="kicker">Mission complete</div><h2>The greenhouse is alive again</h2>'
-    + '<p>You fixed the bridge, brought back the power cell and switched on the lights. Time: <b>' + formatTime(G.t) + "</b></p>"
-    + '<div class="stars">' + STAR(n >= 1) + STAR(n >= 2) + STAR(n >= 3) + "</div>"
-    + '<div class="starrow">'
-    + "<div>" + STAR(true) + "Greenhouse restored</div>"
-    + "<div>" + STAR(res.notes >= NOTES.length) + "Field notes: " + res.notes + " of " + NOTES.length + "</div>"
-    + "<div>" + STAR(res.scrap >= SCRAP_TOTAL) + "Steel scrap saved: " + res.scrap + " of " + SCRAP_TOTAL + "</div></div>"
-    + '<div class="quiz" id="quiz"></div>'
-    + '<div class="row2"><button class="cta blue" id="bAgain">Play again</button><button class="cta line" id="bExplore">Keep exploring</button></div>';
-  $("bAgain").onclick = () => resetGame();
-  $("bExplore").onclick = () => { closeOv("ovEnd"); G.paused = false; };
-  quizAt(0, 0);
-  openOv("ovEnd");
-  sfx("win");
-}
-function quizAt(i, right){
-  const box = $("quiz");
-  if (i >= QUIZ.length){
-    box.innerHTML = '<div class="kicker">Quick check</div><div class="q">' + right + " of " + QUIZ.length + " right. " + (right === QUIZ.length ? "You think like a space engineer." : "Scan more parts next time to learn the rest.") + "</div>";
-    return;
-  }
-  const q = QUIZ[i];
-  box.innerHTML = '<div class="kicker">Quick check ' + (i + 1) + " of " + QUIZ.length + '</div><div class="q"></div><div class="opts"></div><div class="why"></div>';
-  box.querySelector(".q").textContent = q.q;
-  const opts = box.querySelector(".opts");
-  q.opts.forEach((o, k) => {
-    const b = document.createElement("button"); b.textContent = o;
-    b.onclick = () => {
-      if (opts.dataset.done) return; opts.dataset.done = "1";
-      const ok = k === q.a;
-      [...opts.children].forEach((el, j) => el.className = j === q.a ? "right" : "wrong");
-      box.querySelector(".why").textContent = (ok ? "Right. " : "Not quite. ") + q.why;
-      sfx(ok ? "good" : "bad");
-      setTimeout(() => quizAt(i + 1, right + (ok ? 1 : 0)), 2600);
-    };
-    opts.appendChild(b);
-  });
-}
-
 /* ---------- the simulation ---------- */
 let bridgeT = 0;
 function colliderList(){
@@ -4515,8 +4534,8 @@ function showComingSoon(){
   closeOv("ovFlight"); document.body.classList.remove("flying");
   G.done = true; G.clockOn = false;
   const mine = NOTES.filter(n => n.world === "pumice"), found = mine.filter(n => SAVE.notes.includes(n.id)).length;
-  const prev = SAVE.stars.pumice || {};
-  SAVE.stars.pumice = { mission: true, notes: prev.notes || found === mine.length, quiz: !!prev.quiz };
+  const prev = SAVE.stars.pumice || {}, now = starsForWorld({ mission: true, notesFound: found, notesTotal: mine.length, quizRight: prev.quiz ? 3 : 0 });
+  SAVE.stars.pumice = { mission: true, notes: !!prev.notes || now.notes, quiz: !!prev.quiz };
   if (!SAVE.reached.includes("glacia")) SAVE.reached.push("glacia");
   writeSave();
   const st = SAVE.stars.pumice, n = (st.mission ? 1 : 0) + (st.notes ? 1 : 0) + (st.quiz ? 1 : 0);
@@ -4532,8 +4551,89 @@ function showComingSoon(){
   openOv("ovEnd"); sfx("win");
   paintStart(); sendPhoneState();
 }
-/* Chike's three questions (Task 9 replaces this with the picture quiz) */
-function openQuiz(){ G.flags.quiz = true; updateStep(); }
+
+
+/* ---------- reading aloud with the device's own voice (it may not have one: then the speaker buttons hide) ---------- */
+const CAN_SPEAK = (function(){ try { return "speechSynthesis" in window && typeof SpeechSynthesisUtterance === "function"; } catch (_e) { return false; } })();
+function speak(text){
+  try {
+    if (!CAN_SPEAK || !text) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text); u.rate = 0.95; u.pitch = 1.05; u.lang = "en-US";
+    speechSynthesis.speak(u);
+  } catch (_e) { /* no voice here: the words stay on screen */ }
+}
+$("bSpeak").hidden = !CAN_SPEAK;
+$("bSpeak").addEventListener("click", (e) => { e.stopPropagation(); speak($("stepWhat").textContent + " " + ($("radioTxt").textContent || "")); });
+
+/* ---------- Chike's three questions ---------- */
+const QZ = { list: null, i: 0, right: 0, answered: false, forBoard: false };
+function openQuiz(retake){
+  const bank = QUIZ_BANKS[G.world.id] || QUIZ_BANKS.pumice;
+  Object.assign(QZ, { list: bank[gradeBand(SAVE.grade)], i: 0, right: 0, answered: false, forBoard: !retake });
+  if (G.started && !G.done && !G.paused){ G.paused = true; QZ.paused = true; keys.clear(); }
+  openOv("ovQuiz"); paintQuiz();
+}
+function quizPic(q, circled){
+  let svg = QUIZ_PICS[q.pic];
+  if (circled){ const c = q.circle; svg = svg.replace("</svg>", '<ellipse class="redpen" cx="' + c.x + '" cy="' + c.y + '" rx="' + (c.r * 1.1) + '" ry="' + c.r + '"/><text class="penlab" x="' + Math.min(c.x + c.r + 2, 80) + '" y="' + Math.max(c.y - c.r, 8) + '">this one!</text></svg>'); }
+  return svg;
+}
+function paintQuiz(){
+  const box = $("quizCard"), L = QZ.list;
+  if (QZ.i >= L.length){
+    const all = QZ.right === L.length;
+    box.innerHTML = '<div class="kicker">Chike\'s questions</div><h2>' + QZ.right + " of " + L.length + " right</h2>"
+      + '<div class="stars" style="justify-content:flex-start">' + STAR(all) + "</div>"
+      + "<p>" + (all ? "You think like a space engineer. That's a star!" : "Good try. You can take them again any time from Pause.") + "</p>"
+      + '<div class="row2"><button class="cta blue" id="qDone">' + (QZ.forBoard ? "Back to the rover" : "Back to the mission") + "</button></div>";
+    const prev = SAVE.stars[G.world.id] || {};
+    SAVE.stars[G.world.id] = { mission: !!prev.mission, notes: !!prev.notes, quiz: !!prev.quiz || all };
+    writeSave();
+    $("qDone").onclick = closeQuiz; $("qDone").focus();
+    sfx(all ? "win" : "good");
+    return;
+  }
+  const q = L[QZ.i], band = gradeBand(SAVE.grade), pics = band === "g1";
+  QZ.answered = false;
+  box.innerHTML = '<div class="qtop"><span class="kicker">Chike\'s question ' + (QZ.i + 1) + " of " + L.length + "</span>"
+    + (CAN_SPEAK ? '<button class="speak" id="qSay" aria-label="Read it to me"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button>' : "") + "</div>"
+    + '<div class="qpic" id="qPic">' + quizPic(q, false) + "</div>"
+    + '<div class="qq" id="qQ"></div><div class="qopts' + (pics ? " two" : "") + '" id="qOpts"></div><div class="qwhy" id="qWhy" aria-live="polite"></div>'
+    + '<div class="row2" id="qNextRow" hidden><button class="cta blue" id="qNext">Next</button></div>';
+  $("qQ").textContent = q.q;
+  q.opts.forEach((o, k) => {
+    const b = document.createElement("button");
+    b.className = "qopt" + (pics && o.pic ? " p" : "");
+    if (pics && o.pic){ b.innerHTML = QUIZ_PICS[o.pic] + "<span></span>"; b.querySelector("span").textContent = o.t; b.setAttribute("aria-label", o.t); }
+    else b.textContent = o.t;
+    b.onclick = () => answerQuiz(k);
+    $("qOpts").appendChild(b);
+  });
+  if ($("qSay")) $("qSay").onclick = () => speak(q.q + " " + q.opts.map(o => o.t).join(", or "));
+  if (pics) setTimeout(() => speak(q.q + " " + q.opts.map(o => o.t).join(", or ")), 250);
+  $("qNext").onclick = () => { QZ.i++; paintQuiz(); };
+}
+function answerQuiz(k){
+  if (QZ.answered) return;
+  QZ.answered = true;
+  const q = QZ.list[QZ.i], ok = k === q.a;
+  if (ok) QZ.right++;
+  [...$("qOpts").children].forEach((el, j) => { if (j === q.a) el.classList.add("right"); else if (j === k) el.classList.add("wrong"); });
+  if (!ok) $("qPic").innerHTML = quizPic(q, true);
+  const w = $("qWhy"); w.innerHTML = "<b></b> "; w.querySelector("b").textContent = ok ? "Right!" : "Not quite."; w.append(q.why);
+  if (gradeBand(SAVE.grade) === "g1") speak((ok ? "Right! " : "Not quite. ") + q.why);
+  $("qNextRow").hidden = false; $("qNext").textContent = QZ.i < QZ.list.length - 1 ? "Next" : "See how you did"; $("qNext").focus();
+  sfx(ok ? "good" : "bad");
+}
+function closeQuiz(){
+  closeOv("ovQuiz");
+  try { if (CAN_SPEAK) speechSynthesis.cancel(); } catch (_e) {}
+  if (QZ.paused){ QZ.paused = false; G.paused = false; }
+  if (QZ.forBoard && G.mission === "board"){ G.flags.quiz = true; updateStep(); }
+  sendPhoneState();
+}
+$("bQuizAgain").onclick = () => { togglePause(false); openQuiz(true); };
 
 /* ---------- saving, the grade picker and the worlds you've reached ---------- */
 const LOCAL_KEY = "ccs-remote-lunar-salvage-save";

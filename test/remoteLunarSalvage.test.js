@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS, BOARD_STEPS, FLIGHT, flightPhase, BRIEFS };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS, BOARD_STEPS, FLIGHT, flightPhase, BRIEFS, QUIZ_BANKS, QUIZ_PICS, starsForWorld };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -76,11 +76,12 @@ describe("field notes and the quiz", () => {
     expect(S.NOTES.find((n) => n.id === "radio").text).toMatch(/sounds in this game are pretend/);
   });
   it("each quiz question has one right answer that the notes teach", () => {
-    expect(S.QUIZ).toHaveLength(3);
-    for (const q of S.QUIZ){ expect(q.opts).toHaveLength(3); expect(q.a).toBeGreaterThanOrEqual(0); expect(q.a).toBeLessThan(3); }
-    expect(S.QUIZ[0].opts[S.QUIZ[0].a]).toMatch(/steel/i);
-    expect(S.QUIZ[1].opts[S.QUIZ[1].a]).toMatch(/slower/);
-    expect(S.QUIZ[2].opts[S.QUIZ[2].a]).toMatch(/triangle/);
+    const Q = S.QUIZ_BANKS.pumice.g23;
+    expect(Q).toHaveLength(3);
+    for (const q of Q){ expect(q.opts).toHaveLength(3); expect(q.a).toBeGreaterThanOrEqual(0); expect(q.a).toBeLessThan(3); }
+    expect(Q[0].opts[Q[0].a].t).toMatch(/steel/i);
+    expect(Q[1].opts[Q[1].a].t).toMatch(/slower/);
+    const T = S.QUIZ_BANKS.pumice.g45[2]; expect(T.opts[T.a].t).toMatch(/triangle/i);
   });
 });
 
@@ -184,8 +185,7 @@ describe("the mission", () => {
     expect(S.currentStep(Object.assign({}, all, { cellLoaded: false }))).toBe(6);
   });
   it("gives a star for finishing, for every note and for all the scrap", () => {
-    expect(S.starsFor({ done: true, notes: 2, scrap: 0 })).toBe(1);
-    expect(S.starsFor({ done: true, notes: S.NOTES.length, scrap: S.SCRAP_TOTAL })).toBe(3);
+    expect(S.starsForWorld({ mission: true, notesFound: 2, notesTotal: 12, quizRight: 1 })).toEqual({ mission: true, notes: false, quiz: false });
   });
   it("shows the clock as minutes and seconds", () => {
     expect(S.formatTime(73)).toBe("1:13");
@@ -618,5 +618,35 @@ describe("the rocket", () => {
   });
   it("launch can only start once", () => {
     expect(game).toMatch(/function launchRocket\(\)\{\s*if \(G\.launching\) return;/);
+  });
+});
+
+describe("the picture quiz", () => {
+  it("has three questions per grade band, each with a picture and the right number of answers", () => {
+    const b = S.QUIZ_BANKS.pumice;
+    for (const band of ["g1", "g23", "g45"]) {
+      expect(b[band]).toHaveLength(3);
+      for (const q of b[band]) {
+        expect(S.QUIZ_PICS[q.pic]).toMatch(/^<svg/);
+        expect(q.opts).toHaveLength(band === "g1" ? 2 : 3);
+        expect(q.a).toBeLessThan(q.opts.length);
+        expect(q.circle.r).toBeGreaterThan(0);
+        expect(q.why.length).toBeGreaterThan(20);
+        if (band === "g1") for (const o of q.opts) expect(S.QUIZ_PICS[o.pic]).toMatch(/^<svg/);
+      }
+    }
+  });
+  it("the 4th-5th grade gravity question does the real math", () => {
+    const q = S.QUIZ_BANKS.pumice.g45[1];
+    expect(q.opts[q.a].t).toMatch(/6/);
+    expect(9.8 / S.MOON_G).toBeCloseTo(6, 0);
+  });
+  it("the quiz star needs all three right", () => {
+    expect(S.starsForWorld({ mission: true, notesFound: 9, notesTotal: 9, quizRight: 3 })).toEqual({ mission: true, notes: true, quiz: true });
+    expect(S.starsForWorld({ mission: true, notesFound: 8, notesTotal: 9, quizRight: 2 })).toEqual({ mission: true, notes: false, quiz: false });
+  });
+  it("read-aloud never crashes when the voice is missing", () => {
+    expect(game).toMatch(/function speak\(text\)\{\s*try \{/);
+    expect(game).toContain('"speechSynthesis" in window');
   });
 });
