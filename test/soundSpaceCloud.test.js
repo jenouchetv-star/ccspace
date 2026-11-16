@@ -515,3 +515,91 @@ describe("undo and redo after the song went to the account (the page's own commi
     expect(ed.song.updatedMs).toBe(50_002);                       // and so is a change made after it
   });
 });
+
+describe("song locks in the app (owner, 2026-11-16)", () => {
+  const memStorage = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) }; };
+  it("keeps one lock id per browser tab, the same after a reload", () => {
+    const { cloud: C } = SS();
+    const st = memStorage();
+    const a = C.lockHolder(st), b = C.lockHolder(st);
+    expect(a).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+    expect(b).toBe(a);
+    expect(C.lockHolder(memStorage())).not.toBe(a);
+    expect(C.lockHolder(null)).toMatch(/^[A-Za-z0-9_-]{8,64}$/);   // no storage: still a lock id for this page
+  });
+  it("says plainly that the song is open somewhere else", () => {
+    const { cloud: C } = SS();
+    const m = C.lockedMessage("Moon Groove");
+    expect(m.title).toBe("This song is open on another device");
+    expect(m.text).toContain("“Moon Groove” is open right now on another device or browser tab.");
+    expect(m.text).toContain("unlocks by itself in about a minute");
+    expect(C.LOCK_RENEW_MS).toBe(25000);
+  });
+  /** a lock helper with a fake server, timers run by hand */
+  function rig(answers) {
+    const { cloud: C } = SS();
+    const calls = [], timers = [], lost = [];
+    const call = async (action, extra) => { calls.push({ action, ...extra }); const a = answers[action]; return typeof a === "function" ? a(extra) : a; };
+    const lock = C.createSongLock({ call, holder: "tab-one-12345678", every: (fn, ms) => { timers.push({ fn, ms, on: true }); return timers.length; }, stop: (n) => { if (timers[n - 1]) timers[n - 1].on = false; }, onLost: (id) => lost.push(id) });
+    return { lock, calls, timers, lost };
+  }
+  it("takes the lock before a song opens, renews it every 25 seconds and lets go when the song closes", async () => {
+    const { lock, calls, timers } = rig({ lock: { ok: true }, unlock: { ok: true } });
+    expect(await lock.take("song-a")).toBe("ok");
+    expect(lock.current).toBe("song-a");
+    expect(calls[0]).toEqual({ action: "lock", id: "song-a", holder: "tab-one-12345678" });
+    expect(timers[0].ms).toBe(25000);
+    await timers[0].fn();
+    expect(calls.filter((c) => c.action === "lock")).toHaveLength(2);
+    await lock.release();
+    expect(calls.at(-1)).toEqual({ action: "unlock", id: "song-a", holder: "tab-one-12345678" });
+    expect(timers[0].on).toBe(false);
+    expect(lock.current).toBe(null);
+  });
+  it("answers locked when another tab has the song, and holds nothing", async () => {
+    const { lock, timers } = rig({ lock: { ok: false, error: "locked" } });
+    expect(await lock.take("song-b")).toBe("locked");
+    expect(lock.current).toBe(null);
+    expect(timers).toHaveLength(0);
+  });
+  it("never keeps anyone out of their own song when the account can't answer", async () => {
+    for (const r of [{ ok: false, error: "network" }, { ok: false, error: "no_session" }, null]) {
+      const { lock } = rig({ lock: r });
+      expect(await lock.take("song-c")).toBe("ok");
+    }
+  });
+  it("tells the app when another tab took the song after this one's lock ran out", async () => {
+    let n = 0;
+    const { lock, timers, lost } = rig({ lock: () => (++n === 1 ? { ok: true } : { ok: false, error: "locked" }), unlock: { ok: true } });
+    await lock.take("song-d");
+    await timers[0].fn();
+    expect(lost).toEqual(["song-d"]);
+    expect(lock.current).toBe(null);
+    expect(timers[0].on).toBe(false);
+  });
+  it("lets go of a song when the page closes, in a way that still reaches the account", async () => {
+    const { lock, calls } = rig({ lock: { ok: true }, unlock: { ok: true } });
+    await lock.take("song-e");
+    lock.release({ keepalive: true });
+    expect(calls.at(-1)).toEqual({ action: "unlock", id: "song-e", holder: "tab-one-12345678", keepalive: true });
+  });
+});
+
+describe("the app and the site use the song lock (owner, 2026-11-16)", () => {
+  it("locks a song from Recent before opening it, and shows the message when it's open elsewhere", () => {
+    const fn = page.split("async function openStored(id){")[1].split("\n}\n")[0];
+    expect(fn).toContain("await songLock.take(id)");
+    expect(fn).toContain("C.lockedMessage(");
+    expect(fn).toContain('"Try again"');
+  });
+  it("locks any song it opens, lets go on Home, and on leaving the page", () => {
+    expect(page).toContain("songLock.release()");
+    expect(page).toMatch(/addEventListener\("pagehide"[^\n]*songLock\.release\(\{ keepalive: true \}\)/);
+    expect(page.split("async function showHome(){")[1].split("\n}\n")[0]).toContain("songLock.release()");
+  });
+  it("the site's bridge can send a last unlock as the page closes", () => {
+    const fn = site.split("async function soundCloudCall(action, extra){")[1].split("\n}\n")[0];
+    expect(fn).toContain("keepalive: true");
+    expect(fn).toContain("/functions/v1/sound-cloud");
+  });
+});

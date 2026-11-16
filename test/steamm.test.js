@@ -29,7 +29,7 @@ describe("the What we believe page", () => {
 
 describe("the STEAMM section", () => {
   it("names all six subjects, music included", () => {
-    expect(site).toContain("we believe in early childhood development through STEAMM: Science, Technology, Engineering, Art, Math, and Music.");
+    expect(site).toContain("we believe in early childhood development through <b>STEAMM: Science, Technology, Engineering, Art, Math, and Music.</b>");
     for (const word of ["Science", "Technology", "Engineering", "Art", "Math", "Music"]) expect(site).toContain('["' + word.charAt(0) + '","' + word + '"');
   });
   it("says how STEAMM is different from STEM, and why we believe in it", () => {
@@ -143,5 +143,11 @@ describe("taped photos (owner, 2026-11-16)", () => {
   it("gives every What we believe photo the site's yellow tape", () => {
     const fn = site.split("function believePhoto(src, alt){")[1].split("\n}\n")[0];
     expect(fn).toContain('class="believe__photo taped"');
+  });
+});
+
+describe("the STEAMM line is bold (owner, 2026-11-16)", () => {
+  it("bolds STEAMM and its six subjects in the opening line", () => {
+    expect(site).toContain("we believe in early childhood development through <b>STEAMM: Science, Technology, Engineering, Art, Math, and Music.</b>");
   });
 });

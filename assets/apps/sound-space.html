@@ -1475,10 +1475,12 @@ function toast(msg, ms){   /* a longer notice can stay up longer */
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), ms || 3200);
 }
-function ask(title, text, yesLabel){
-  const box = $("#ask"), back = document.activeElement;
+function ask(title, text, yesLabel, opts){
+  const box = $("#ask"), back = document.activeElement, o = opts || {};
   $("#ask-title").textContent = title; $("#ask-text").textContent = text;
   box.querySelector('[data-ask="yes"]').textContent = yesLabel || "OK";
+  box.querySelector('[data-ask="no"]').textContent = o.noLabel || "Cancel";
+  box.querySelector('[data-ask="yes"]').className = "btn " + (o.calm ? "btn--primary" : "btn--danger");
   box.hidden = false;
   box.querySelector('[data-ask="no"]').focus();
   return new Promise(done => {
@@ -2138,6 +2140,8 @@ function previewHeadAt(sec, stepSec, total, reduced){
    The song, undo and the selected track
    ============================================================ */
 let song = null, hist = null, stash = {}, sel = null, playedOnce = false;
+/* the open song's lock, so a song is open in one place at a time (owner, 2026-11-16); set up after `cloud` below */
+var songLock = null;
 const kbBase = new Map();   // trackId -> lowest C on the piano keys
 let gridFocus = { r:0, c:0 };
 const trackById = id => song && song.tracks.find(t => t.id === id) || null;
@@ -2179,6 +2183,7 @@ function undo(){ if (!hist || busy()) return; const s = hist.undo(); if (s){ rep
 function redo(){ if (!hist || busy()) return; const s = hist.redo(); if (s){ replaceSong(s); renderUndo(); } }
 
 function openSong(s, opts){
+  if (songLock && songLock.current !== s.id){ songLock.release(); if (cloud.on()) songLock.take(s.id); }
   endLesson();
   stopAll();
   flushPush();
@@ -2204,6 +2209,7 @@ function openSong(s, opts){
   if (opts && opts.missing && opts.missing.length) toast("Some instruments in this song aren’t in Sound Space: " + opts.missing.map(id => String(id).replace(/[-_]+/g, " ")).join(", ") + ". Those tracks stay silent.", 8000);
 }
 async function showHome(){
+  if (songLock) songLock.release();
   endLesson();
   closeMore(false); closeSongSheet(false);   /* phones: nothing of the editor stays open over Home */
   stopAll();
@@ -4097,6 +4103,12 @@ async function openStored(id){
   if (!raw){ toast("That song couldn’t be opened."); return paintHome(); }
   const v = M.validateSong(raw, CATALOG_IDS);
   if (!v.ok){ toast("That song couldn’t be opened."); return; }
+  /* open somewhere else (another device or browser tab): say so, and offer to try again */
+  if (songLock && cloud.on() && (await songLock.take(id)) === "locked"){
+    const m = C.lockedMessage(v.song.title);
+    if (await ask(m.title, m.text, "Try again", { noLabel:"OK", calm:true })) return openStored(id);
+    return;
+  }
   openSong(v.song, { missing:v.missing, owner:rec.owner || "" });
 }
 $("#gallery").addEventListener("click", async e => {
@@ -4197,6 +4209,8 @@ document.addEventListener("click", async e => {
   if (act === "more-sound") return toggleFx(id);
   if (act === "lowcut"){ const t = trackById(id); if (!t) return; setTrackFx(t, "eq", "lowcut", !t.eq.lowcut); commit(); renderTracks(); return; }
 });
+window.addEventListener("pagehide", () => { if (songLock) songLock.release({ keepalive: true }); });
+window.addEventListener("pageshow", e => { if (e.persisted && songLock && song && !$("#editor").hidden && cloud.on()) songLock.take(song.id); });
 window.addEventListener("pagehide", () => { SS.midi.disconnect(); setPedal(false); if (midiState === "connected") midiState = "idle"; if (song) saveNow().then(flushPush); });
 /* back from the browser's page cache: the keyboard connects again if the browser still allows it */
 window.addEventListener("pageshow", e => { if (e.persisted){ renderMidi(); midiConnect(true); } });
@@ -4234,6 +4248,17 @@ const cloud = {
     return r;
   }
 };
+/* the open song's lock for this browser tab: renewed while the song is open; if another tab got the song after this
+   tab's lock ran out (a laptop that slept, say), this tab saves and goes back to Home */
+songLock = C.createSongLock({
+  call: (action, extra) => cloud.call(action, extra),
+  holder: C.lockHolder((() => { try { return window.sessionStorage; } catch(e){ return null; } })()),
+  onLost: id => {
+    if (!song || song.id !== id || $("#editor").hidden) return;
+    toast("“" + (song.title || "My song") + "” was opened on another device, so it closed here. It’s saved.", 7000);
+    showHome();
+  }
+});
 /* songId -> the updatedMs the account has, from the last sync or save that reached it */
 const accountHas = new Map();
 /* The sign-in ended (after 30 days, or the grown-up left the mailing list), found on a save or a sync. Keep the song

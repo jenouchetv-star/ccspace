@@ -104,3 +104,39 @@ describe("song table is closed to the public key, follows its member on delete, 
     expect(ex[0]).toEqual({ a: true, b: true });
   });
 });
+
+describe("song locks: a song is open in one place at a time (owner, 2026-11-16)", () => {
+  const take = async (sub, id, holder, secs = 75) => (await q("select sound_lock_take($1, $2, $3, $4) as v", [sub, id, holder, secs]))[0].v;
+  beforeAll(async () => {
+    await db.exec(`insert into subscribers (id, data) values ('lock-a', '{}'), ('lock-b', '{}') on conflict do nothing`);
+  });
+  it("keeps locks in a table closed to the browser roles", async () => {
+    const rls = await q("select relrowsecurity from pg_class where relname = 'sound_locks'");
+    expect(rls[0].relrowsecurity).toBe(true);
+    for (const role of ["anon", "authenticated"]) for (const p of ["select", "insert", "update", "delete"]) expect(await can(role, "sound_locks", p)).toBe(false);
+  });
+  it("gives the lock to the first holder, refuses a second holder, and lets the first renew it", async () => {
+    expect(await take("lock-a", "song-1", "tab-one-1234")).toBe(true);
+    expect(await take("lock-a", "song-1", "tab-two-5678")).toBe(false);
+    expect(await take("lock-a", "song-1", "tab-one-1234")).toBe(true);
+    expect(await take("lock-b", "song-1", "tab-two-5678")).toBe(true);     // another member's song of the same id
+  });
+  it("lets someone else take a lock that has run out", async () => {
+    expect(await take("lock-a", "song-2", "tab-one-1234")).toBe(true);
+    await db.exec("update sound_locks set expires_at = now() - interval '1 second' where project_id = 'song-2'");
+    expect(await take("lock-a", "song-2", "tab-two-5678")).toBe(true);
+    expect(await take("lock-a", "song-2", "tab-one-1234")).toBe(false);
+  });
+  it("can only be called with the service role, never the public key", async () => {
+    const ex = await q("select has_function_privilege('anon', 'sound_lock_take(text,text,text,integer)', 'execute') as a, has_function_privilege('authenticated', 'sound_lock_take(text,text,text,integer)', 'execute') as b");
+    expect(ex[0]).toEqual({ a: false, b: false });
+    const fn = (await q(`select prosecdef, proconfig from pg_proc where proname = 'sound_lock_take'`))[0];
+    expect(fn.prosecdef).toBe(true);
+    expect((fn.proconfig || []).join(",")).toMatch(/^search_path=/);
+  });
+  it("a member's locks go when the member goes", async () => {
+    await take("lock-b", "song-9", "tab-three-999");
+    await db.exec("delete from subscribers where id = 'lock-b'");
+    expect(await q("select * from sound_locks where subscriber_id = 'lock-b'")).toEqual([]);
+  });
+});

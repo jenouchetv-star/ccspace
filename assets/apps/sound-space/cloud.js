@@ -17,6 +17,8 @@
   const RETRY_MS = 300000;           // after "slow down", try the account again this much later
   const MAX_THUMB = 60000;           // the account's small picture limit (the server checks it too)
   const STATUS = { DEVICE: "Saved on this device", ACCOUNT: "Saved to your account" };
+  const LOCK_RENEW_MS = 25000;       // an open song renews its lock this often (the account lets a lock run out after 75 s)
+  const LOCK_KEY = "ccs-sound-lock-holder";
 
   const clone = (o) => JSON.parse(JSON.stringify(o));
 
@@ -253,9 +255,74 @@
     return out;
   }
 
+  /* ---------- song locks (owner, 2026-11-16): a song is open in one place at a time ---------- */
+  /** This browser tab's lock id: kept for the tab (sessionStorage), so reloading the same tab is still "this tab",
+      while another tab or device gets its own. Without storage, an id for this page only. */
+  function lockHolder(storage) {
+    try {
+      const had = storage && storage.getItem(LOCK_KEY);
+      if (had && /^[A-Za-z0-9_-]{8,64}$/.test(had)) return had;
+    } catch (e) {}
+    let id = "t";
+    for (let i = 0; i < 20; i++) id += "abcdefghijklmnopqrstuvwxyz0123456789".charAt(Math.floor(Math.random() * 36));
+    try { if (storage) storage.setItem(LOCK_KEY, id); } catch (e) {}
+    return id;
+  }
+  /** What someone sees when the song they picked is open somewhere else. */
+  function lockedMessage(title) {
+    return {
+      title: "This song is open on another device",
+      text: "“" + (title || "My song") + "” is open right now on another device or browser tab. A song can only be open in one place at a time, so your changes don’t overwrite each other. Close it there, then try again. If nobody is using it, it unlocks by itself in about a minute."
+    };
+  }
+  /** One song's lock for this tab. `take(id)` asks the account: "ok" (this tab has it, or the account couldn't say:
+      nobody is ever kept out of their own song by a lost connection) or "locked" (open somewhere else). While held,
+      it renews every LOCK_RENEW_MS; if another tab got the song after this tab's lock ran out (a sleeping laptop,
+      say), `onLost(id)` is told. `release()` lets go; `release({ keepalive: true })` is the last word as a page closes. */
+  function createSongLock(o) {
+    const every = o.every || ((fn, ms) => setInterval(fn, ms)), stop = o.stop || ((t) => clearInterval(t));
+    let timer = 0;
+    const lock = {
+      current: null,
+      async take(id) {
+        if (lock.current && lock.current !== id) lock.release();
+        let r = null;
+        try { r = await o.call("lock", { id, holder: o.holder }); } catch (e) {}
+        if (r && r.ok === false && r.error === "locked") return "locked";
+        if (lock.current !== id) {
+          lock.current = id;
+          if (timer) stop(timer);
+          timer = every(() => lock.renew(), LOCK_RENEW_MS);
+        }
+        return "ok";
+      },
+      async renew() {
+        const id = lock.current;
+        if (!id) return;
+        let r = null;
+        try { r = await o.call("lock", { id, holder: o.holder }); } catch (e) {}
+        if (lock.current === id && r && r.ok === false && r.error === "locked") {
+          lock.current = null;
+          if (timer) { stop(timer); timer = 0; }
+          if (o.onLost) o.onLost(id);
+        }
+      },
+      release(opts) {
+        const id = lock.current;
+        if (timer) { stop(timer); timer = 0; }
+        lock.current = null;
+        if (!id) return Promise.resolve();
+        const extra = Object.assign({ id, holder: o.holder }, opts && opts.keepalive ? { keepalive: true } : {});
+        try { return Promise.resolve(o.call("unlock", extra)).catch(() => {}); } catch (e) { return Promise.resolve(); }
+      }
+    };
+    return lock;
+  }
+
   SS.cloud = {
     DB_NAME, DB_STORE, AUTOSAVE_MS, PUSH_GAP_MS, RETRY_MS, MAX_THUMB, STATUS,
     mergeSongLists, syncPlan, openStore, tombstone, songOf, host, forCloud, putStatus, syncSongs,
-    mine, createPushGate, deleteSong
+    mine, createPushGate, deleteSong,
+    LOCK_RENEW_MS, lockHolder, lockedMessage, createSongLock
   };
 })(typeof window !== "undefined" ? window : globalThis);

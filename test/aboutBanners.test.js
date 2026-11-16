@@ -42,3 +42,11 @@ describe("Mission and Vision continue below the banner", () => {
     expect(vision.split("head = cmsHeader")[1].split("});")[0]).not.toContain("vision-extra");
   });
 });
+
+describe("workshops are STEAMM workshops (owner, 2026-11-16)", () => {
+  it("says STEAMM workshops, never STEM workshops", () => {
+    expect(site).not.toMatch(/STEM workshops/);
+    expect(site).toContain("through pop-up STEAMM workshops");
+    expect(site).toContain("future pop-up STEAMM workshops");
+  });
+});
