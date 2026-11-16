@@ -708,3 +708,30 @@ describe("holding the magnet never shoves the rover", () => {
     expect(game).toContain("/* the panel landed on the rover: slide the panel off, never shove the rover */");
   });
 });
+
+describe("the scan marker", () => {
+  it("is a ? with a digital SCAN IT label under it, not a paper circle", () => {
+    const q = game.slice(game.indexOf("const QMARK = "), game.indexOf("const scanMarks = []"));
+    expect(q).toContain('"SCAN IT"');
+    expect(q).not.toContain("g.arc(");
+  });
+});
+
+describe("the drill gauge", () => {
+  it("each world has its own three layers, top to bottom", () => {
+    expect(S.worldById("pumice").layers).toEqual(["dust", "rock", "crystals"]);
+    expect(S.worldById("glacia").layers).toEqual(["ice", "rock", "water"]);
+    expect(S.worldById("ember").layers).toEqual(["dust", "rock", "lava"]);
+    expect(S.worldById("gusto").layers).toEqual(["dust", "rock", "metal"]);
+  });
+  it("draws every kind of layer with a texture, not a flat color", () => {
+    for (const kind of ["dust", "rock", "ice", "water", "lava", "metal", "crystals", "find"]) {
+      const rule = game.match(new RegExp("\\.drillg \\.L-" + kind + "\\{([^}]*)\\}"));
+      expect(rule, kind).toBeTruthy();
+      expect(rule[1], kind).toMatch(/background-image:url\("data:image\/svg\+xml/);
+    }
+  });
+  it("builds the gauge from the world's layers", () => {
+    expect(game).toContain("G.world.layers.map(");
+  });
+});

@@ -103,6 +103,8 @@ Each mission is an ordered list of steps like today's `STEPS` (`{ id, text, hint
 
 **Drill.** The rover parks over a marked spot (a pencil-dashed ring on the ground). Hold DRILL; a depth gauge on the dashboard fills while the drill bit spins and dust sprays. Layers show on the gauge (dust, rock, then ice or energy rock). At the bottom, the drill brings up what it found: an energy rock (a part to pick up, non-magnetic, claw only) or water (fills the rover's tank). Drilling off a marked spot finds only rock, and Chike/the corner kid says so.
 
+**Drill layers per world (owner, 2026-11-16).** The drill gauge shows each world's three layers, top to bottom, each with its own texture; the deepest stays a "?" until the bit reaches it: Pumice Moon dust, rock, crystals (the energy rocks); Glacia ice, rock, water; Ember dust, rock, lava; Gusto Canyon dust, rock, metal. Open for part 3: Ember's mission drills for water, but its deep layer is lava. Proposal: the drill stops at the lava ("too hot"), and the marked ring sits on an ice pocket.
+
 **Hose.** Joystick aims the nozzle, hold SPRAY. Water arcs out (gravity bends the arc, more on high-gravity worlds), the tank gauge drains, fire patches in the stream shrink and go out. Empty tank: "Drill for more water."
 
 **Laser heat (world 2).** Same laser; metal heat blocks glow from dull red to orange as they heat. A block cools slowly after the laser stops (metal holds heat), so kids learn to carry it while it's hot.
