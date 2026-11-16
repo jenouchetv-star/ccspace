@@ -781,7 +781,7 @@ describe("Glacia: the heat mission", () => {
   });
   it("runs heat, rack, fill, switch on in order", () => {
     expect(S.MISSIONS.heat.steps.map(st => st.flag)).toEqual(["heat1", "rack1", "rack3", "warm"]);
-    expect(S.MISSIONS.heat.tool).toEqual(["laser", "magnet", "laser", "drive"]);
+    expect(S.MISSIONS.heat.tool).toEqual(["laser", "arm", "laser", "drive"]);
   });
   it("Glacia has five true notes of its own", () => {
     const g = S.NOTES.filter(n => n.world === "glacia");
@@ -847,8 +847,8 @@ describe("each mission says its own done line", () => {
 
 describe("the supply rocket's hatch can be reached", () => {
   it("the arm only bumps the rocket's real body, so the handle on its side is in reach", () => {
-    expect(game).toContain("colCircle(sp.x, sp.z, 1.6, y + 6).arm = false;");
-    expect(game).toContain("colCircle(sp.x, sp.z, 0.8, y + 6);");
+    expect(game).toContain("SUPPLY.solid[0].arm = false;");
+    expect(game).toContain("SUPPLY.solid = [colCircle(sp.x, sp.z, 1.6, y + 6), colCircle(sp.x, sp.z, 0.8, y + 6)];");
   });
 });
 
@@ -871,5 +871,33 @@ describe("each world's own machinery only runs on that world", () => {
     expect(game).toMatch(/function stepSat\(dt\)\{\s*if \(SAT\.t < 0 \|\| G\.world\.id !== "pumice"\) return;/);
     expect(game).toMatch(/function stepTest\(dt\)\{\s*if \(G\.testT < 0 \|\| G\.world\.id !== "pumice"\) return;/);
     expect(game).toMatch(/function stepLever\(dt\)\{\s*if \(G\.world\.id !== "pumice"\) return;/);
+  });
+});
+
+describe("Glacia review fixes", () => {
+  it("Yuna's 'it's glowing' comes when the block is truly hot, leaving 40 seconds before the heater refuses it", () => {
+    expect(S.HEAT.glow).toBe(0.9);
+    let h = S.HEAT.glow, t = 0;
+    while (S.heaterTakes(h) && t < 120){ h = S.heatStep(h, false, 0.5); t += 0.5; }
+    expect(t).toBeGreaterThanOrEqual(40);
+    expect(game).toContain("f.heat1 = f.heat1 || parts.some(p => p.type === \"heat\" && p.heat >= HEAT.glow) || GLACIA.n >= 1;");
+  });
+  it("hot steel isn't magnetic, so the magnet won't lift a glowing block and the Arm carries it", () => {
+    expect(S.HEAT.curie).toBeGreaterThan(0);
+    expect(game).toContain("if (p.type === \"heat\" && (p.heat || 0) >= HEAT.curie){");
+    expect(S.MISSIONS.heat.steps[1].hint).toMatch(/^Arm:/);
+    expect(S.MISSIONS.heat.steps[1].hint).toMatch(/too hot for the magnet/i);
+  });
+  it("the supply rocket only lands after the heater is on, even after a Start over", () => {
+    expect(game).toContain('setTimeout(() => { if (G.world.id === "glacia" && G.mission === "heat" && GLACIA.heated) startSupply(); }, 3500);');
+  });
+  it("Pumice Moon's steel panel and bridge lever never reach into Glacia", () => {
+    expect(game).toMatch(/function panelIsWall\(\)\{\s*if \(G\.world\.id !== "pumice"\) return false;/);
+    expect(game).toContain('if (G.world.id === "pumice" && !lever.pulled && bridge.state === "folded"){');
+  });
+  it("Glacia's rocket is solid, and the supply rocket is only solid once it has landed", () => {
+    expect(game).toContain("colCircle(PLACES.rocket.x, PLACES.rocket.z, 2.1, groundHeight(PLACES.rocket.x, PLACES.rocket.z) + 12);");
+    expect(game).toContain("SUPPLY.solid = [colCircle(sp.x, sp.z, 1.6, y + 6), colCircle(sp.x, sp.z, 0.8, y + 6)];");
+    expect(game).toContain("/* take away the landed rocket's solids and the open hatch's ledge, so a new run starts clean */");
   });
 });

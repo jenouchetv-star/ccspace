@@ -726,7 +726,8 @@ const PART_TYPES = {
   package: { name: "Supply package", mat: "plastic", kg: 18 }
 };
 /* Glacia's heat blocks: the laser warms them, the cold air cools them, and the heater only takes a hot one */
-const HEAT = { secs: 2.4, cool: 0.012, hot: 0.5 };
+/* glow: when Yuna says it's glowing; hot: the least the heater takes; curie: hotter than this, steel stops being magnetic */
+const HEAT = { secs: 2.4, cool: 0.012, hot: 0.4, glow: 0.9, curie: 0.35 };
 function heatStep(h, heating, dt){ return clamp(heating ? h + dt / HEAT.secs : h - HEAT.cool * dt, 0, 1); }
 function heaterTakes(h){ return h >= HEAT.hot; }
 /* the Drill: hold it and the bit goes down; let go and it creeps back up */
@@ -1073,8 +1074,8 @@ const BRIEFS = {
 /* Glacia: warm Yuna's base with three hot metal blocks */
 const HEAT_STEPS = [
   { id: "heat1", flag: "heat1", text: "Heat a metal block with the Laser until it glows.", hint: "Laser: put the purple target on a grey metal block and hold FIRE." },
-  { id: "rack1", flag: "rack1", text: "Put the hot block in the base's heater rack.", hint: "Magnet: steel sticks to it. Press AIM, hold the magnet, then AIM again to swing it over the rack." },
-  { id: "rack3", flag: "rack3", text: "Heat two more and fill the rack.", hint: "Laser: heat the next block, then use the Magnet. Hot blocks cool down, so be quick." },
+  { id: "rack1", flag: "rack1", text: "Put the hot block in the base's heater rack.", hint: "Arm: it's too hot for the magnet. Press AIM, GRAB, then AIM again to swing it over the rack." },
+  { id: "rack3", flag: "rack3", text: "Heat two more and fill the rack.", hint: "Laser: heat the next block, then carry it with the Arm. Hot blocks cool down, so be quick." },
   { id: "warm", flag: "warm", text: "Switch on the heater!", hint: "Press Switch on the heater." }
 ];
 /* Glacia: bring in the package from Earth's supply rocket */
@@ -1088,7 +1089,7 @@ const SUPPLY_STEPS = [
 const MISSIONS = {
   repair: { goal: "Goal: power up the greenhouse", steps: STEPS, tool: ["drive", "magnet", "arm", "arm", "drive", "laser", "arm", "drive", "arm", "drive"], pic: ["beam", "panel", "lever", "wedge", "bridge", "boulder", "cell", "cell", "cell", "bolt"] },
   satellite: { goal: "Goal: power the satellite dish", steps: SAT_STEPS, tool: ["drill", "arm", "drill", "drive"], pic: ["ring", "rack", "energy", "dish"] },
-  heat: { goal: "Goal: warm up Yuna's base", steps: HEAT_STEPS, tool: ["laser", "magnet", "laser", "drive"], pic: ["heatCold", "heater", "heatHot", "thermo"] },
+  heat: { goal: "Goal: warm up Yuna's base", steps: HEAT_STEPS, tool: ["laser", "arm", "laser", "drive"], pic: ["heatCold", "heater", "heatHot", "thermo"] },
   supply: { goal: "Goal: bring in the supplies", steps: SUPPLY_STEPS, tool: ["arm", "arm", "drive", "arm"], pic: ["hatch", "package", "dome", "drop"] },
   board: { goal: "Goal: fly to the next world", steps: BOARD_STEPS, tool: ["drive", "drive", "drive"], pic: ["star", "rocket", "rocket"] }
 };
@@ -2057,6 +2058,7 @@ function laserTap(x, y){
   const r = rayFrom(x, y);
   let pt = null, bd = 1e9;
   for (const b of BOULDERS){ if (b.broken) continue; const t = raySphere(r.ray.origin, r.ray.direction, { x: b.x, y: b.y, z: b.z }, b.r * 1.3); if (t >= 0 && t < bd){ bd = t; pt = new THREE.Vector3(b.x, b.y, b.z); } }
+  for (const q of parts){ if (q.type !== "heat" || q.state !== "free") continue; const t = raySphere(r.ray.origin, r.ray.direction, { x: q.x, y: q.y, z: q.z }, 0.7); if (t >= 0 && t < bd){ bd = t; pt = new THREE.Vector3(q.x, q.y, q.z); } }
   if (!pt) pt = groundHit(r);
   if (pt){ laserAimAt(pt); sfx("tick"); }
 }
@@ -2328,7 +2330,7 @@ const WHEEL_SVG = '<svg viewBox="0 0 120 120" aria-hidden="true"><g id="wheelRot
   + '<path d="M14 66h30M76 66h30M60 76v32" stroke="#0a0d1c" stroke-width="15" stroke-linecap="round"/><path d="M14 66h30M76 66h30M60 76v32" stroke="#dfe6f4" stroke-width="9" stroke-linecap="round"/>'
   + '<circle cx="60" cy="64" r="17" fill="#2f7de1" stroke="#0a0d1c" stroke-width="4"/><circle cx="60" cy="64" r="6" fill="#5fd2ff"/><rect x="55" y="5" width="10" height="13" rx="3" fill="#5fd2ff" stroke="#0a0d1c" stroke-width="2.5"/></g></svg>';
 function aimPic(){
-  if (G.mode === "laser") return picHTML("boulder");
+  if (G.mode === "laser") return picHTML(G.world.id === "glacia" ? "heatCold" : "boulder");
   const w = wantedThing();
   if (!w) return DI.grab;
   if (w.lever) return picHTML("lever");
@@ -2611,7 +2613,7 @@ function grabCandidates(cp){
     }
   }
   /* the lever handle */
-  if (!lever.pulled && bridge.state === "folded"){
+  if (G.world.id === "pumice" && !lever.pulled && bridge.state === "folded"){
     const k = leverKnobWorld();
     const d = k.distanceTo(cp);
     if (d < 0.7 && d < bd) best = "lever";
@@ -3006,7 +3008,7 @@ function startGame(){
   G.started = true; G.clockOn = true;
   closeOv("ovStart");
   sfx("start");
-  landRocket(() => radio(G.world.id === "glacia" ? GLACIA_HELLO : "Rover, this is Chike. The greenhouse lost power. Drive to the broken bridge. Follow the blue beam.", 6500));
+  landRocket(() => { radio(G.world.id === "glacia" ? GLACIA_HELLO : "Rover, this is Chike. The greenhouse lost power. Drive to the broken bridge. Follow the blue beam.", 6500); if (G.world.id === "glacia") setTimeout(() => { if (G.world.id === "glacia") learn("thinAir", [{ text: "Thin air", tone: "yes" }, { text: "Freezing cold", tone: "warn" }]); }, 7000); });
   sendPhoneState();
 }
 function resetGame(){
@@ -3027,6 +3029,7 @@ let bridgeT = 0;
    not while it falls, and not when it has landed on the rover itself (then it slides off instead) */
 function panelBox(){ return { kind: "box", x: PANEL.x, z: PANEL.z, hw: 1.3, hd: 0.8, yaw: PANEL.yaw }; }
 function panelIsWall(){
+  if (G.world.id !== "pumice") return false;
   if (G.magOn && G.t - (PANEL.pulledAt == null ? -9 : PANEL.pulledAt) < 0.4) return false;
   if (PANEL.y - PANEL.half > floorAt(PANEL.x, PANEL.z) + 0.3) return false;
   const depth = boxDepth(panelBox(), rover.x, rover.z);
@@ -3123,7 +3126,7 @@ function stepRover(inp, dt){
     }
   }
   /* the panel landed on the rover: slide the panel off, never shove the rover */
-  if (PANEL && PANEL.state === "free" && !(G.magOn && G.t - (PANEL.pulledAt == null ? -9 : PANEL.pulledAt) < 0.4) && (boxDepth(panelBox(), rover.x, rover.z) >= 0.25 || (panelJustDropped() && boxDepth(panelBox(), rover.x, rover.z) > 0))){
+  if (G.world.id === "pumice" && PANEL && PANEL.state === "free" && !(G.magOn && G.t - (PANEL.pulledAt == null ? -9 : PANEL.pulledAt) < 0.4) && (boxDepth(panelBox(), rover.x, rover.z) >= 0.25 || (panelJustDropped() && boxDepth(panelBox(), rover.x, rover.z) > 0))){
     let dx = PANEL.x - rover.x, dz = PANEL.z - rover.z, d = Math.hypot(dx, dz);
     if (d < 1e-3){ dx = Math.sin(rover.yaw + Math.PI / 2); dz = Math.cos(rover.yaw + Math.PI / 2); d = 1; }
     PANEL.x += dx / d * 3.5 * dt; PANEL.z += dz / d * 3.5 * dt;
@@ -3211,6 +3214,11 @@ function stepMagnet(inp, dt){
     if (p.state === "snap" && p.target !== "bay") continue;
     const dh = Math.hypot(p.x - cp.x, p.z - cp.z), dv = cp.y - (p.y + p.half);
     if (dh > ARM.magR || dv < -0.3 || dv > ARM.magDepth) continue;
+    if (p.type === "heat" && (p.heat || 0) >= HEAT.curie){
+      /* real steel stops being magnetic when it gets this hot */
+      if (!p.tooHotSaid){ p.tooHotSaid = true; tagAt(p, "Too hot!", [{ text: "Hot steel isn't magnetic", tone: "warn" }], 4); radio("Too hot for the magnet! Steel stops being magnetic when it's this hot. Use the Arm.", 6000); }
+      continue;
+    }
     const chk = magnetCheck(p.type);
     if (!chk.ok){
       if (!G.magTried.has(p.id)){
@@ -4858,8 +4866,9 @@ function showComingSoon(){
     + '<div class="starrow"><div>' + STAR(st.mission) + here.name + " missions done</div>"
     + "<div>" + STAR(st.notes) + "Field notes: " + r.found + " of " + r.total + "</div>"
     + "<div>" + STAR(st.quiz) + kid + "'s questions: all right</div></div>"
-    + '<div class="row2"><button class="cta blue" id="bAgain">Play ' + here.name + " again</button></div>";
+    + '<div class="row2"><button class="cta blue" id="bAgain">Play ' + here.name + ' again</button><button class="cta line" id="bWorlds">Choose a world</button></div>';
   $("bAgain").onclick = () => resetGame();
+  $("bWorlds").onclick = () => { closeOv("ovEnd"); resetCurrentWorld(); G.started = false; G.done = false; G.pickWorld = null; paintStart(); openOv("ovStart"); sendPhoneState(); };
   openOv("ovEnd"); sfx("win");
   paintStart(); sendPhoneState();
 }
@@ -5119,6 +5128,7 @@ BUILD_WORLD.glacia = function(sc){
   const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(sp3, 3));
   const snow = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 0.13, transparent: true, opacity: 0.9, depthWrite: false }));
   snow.frustumCulled = false; sc.add(snow); GLACIA.snow = snow;
+  colCircle(PLACES.rocket.x, PLACES.rocket.z, 2.1, groundHeight(PLACES.rocket.x, PLACES.rocket.z) + 12);
   buildSupplyRocket(sc);
   setupGlaciaParts();
 };
@@ -5142,6 +5152,8 @@ function setupGlaciaParts(){}
 function resetGlacia(){
   if (G.world.id !== "glacia") enterWorld("glacia");
   G.mission = "heat"; G.flags = {}; G.step = 0; G.done = false; G.held = []; G.bedItem = null; G.aim = null; G.t = 0; G.notes = new Set();
+  G.laserHint = false; G.autoPull = false; G.magTried = new Set(); G.boardWarn = false; G.drillDepth = 0;
+  Object.assign(arm, { yaw: 0, pitch: 0.15, reach: 2.0 }); Object.assign(laser, { yaw: 0, pitch: -0.12, firing: false, aimTo: null });
   Object.assign(rover, { x: GPLACES.start.x, z: GPLACES.start.z, yaw: 0, v: 0 });
   resetRocket();
   for (const p of parts) activeScene.remove(p.g);
@@ -5170,10 +5182,10 @@ function glaciaTargets(){
   if (G.mission === "supply" && GLACIA.drop){ const d = GPLACES.drop; out.push({ id: "drop", x: d.x, z: d.z, y: groundHeight(d.x, d.z) + 0.12, r: 1.3 }); }
   return out;
 }
-const HEAT_TALK = { 1: "It's glowing! Quick, use the Magnet to put it in the heater rack.", 2: "One in! Heat the next block with the Laser.", 3: "The rack is full. Press Switch on the heater!" };
+const HEAT_TALK = { 1: "It's glowing! It's too hot for the magnet, so carry it to the heater rack with the Arm.", 2: "One in! Heat the next block with the Laser.", 3: "The rack is full. Press Switch on the heater!" };
 function updateHeatStep(){
   const f = G.flags;
-  f.heat1 = f.heat1 || parts.some(p => p.type === "heat" && p.heat >= HEAT.hot) || GLACIA.n >= 1;
+  f.heat1 = f.heat1 || parts.some(p => p.type === "heat" && p.heat >= HEAT.glow) || GLACIA.n >= 1;
   f.rack1 = GLACIA.n >= 1; f.rack3 = GLACIA.n >= 3; f.warm = !!GLACIA.heated;
   const ns = stepIndex(HEAT_STEPS, f);
   if (ns !== G.step){
@@ -5195,7 +5207,8 @@ function stepGlacia(dt){
     if (p.state === "fixed"){ p.heat = 1; }
     else p.heat = heatStep(p.heat || 0, !!(tr && tr.part === p), dt);
     const m = p.g.userData.heatMat; m.emissive.copy(heatColor(p.heat)); m.emissiveIntensity = 0.4 + p.heat * 1.4;
-    if (p.heat >= HEAT.hot && !p.wasHot){ p.wasHot = true; if (!SAVE.notes.includes("heatStore")) learn("heatStore", [{ text: "Steel holds heat", tone: "yes" }, { text: "Glows when hot", tone: "yes" }]); }
+    if (p.heat >= HEAT.glow && !p.wasHot){ p.wasHot = true; if (!SAVE.notes.includes("heatStore")) learn("heatStore", [{ text: "Steel holds heat", tone: "yes" }, { text: "Glows when hot", tone: "yes" }]); }
+    if (p.heat < HEAT.curie) p.tooHotSaid = false;
     if (p.wasHot && p.state !== "fixed" && p.heat < 0.2 && !SAVE.notes.includes("heatFlow")){ learn("heatFlow", [{ text: "Hot to cold", tone: "yes" }, { text: "It cooled down", tone: "warn" }]); }
   }
   if (GLACIA.warmT >= 0 && !GLACIA.heated){
@@ -5208,7 +5221,7 @@ function stepGlacia(dt){
       GLACIA.heated = true; updateStep();
       sfx("level"); learn("melt", [{ text: "Ice turns to water", tone: "yes" }]);
       radio("It's warm in here again! Thank you, rover. And look: the supply rocket from Earth is coming in to land.", 8000);
-      setTimeout(() => startSupply(), 3500);
+      setTimeout(() => { if (G.world.id === "glacia" && G.mission === "heat" && GLACIA.heated) startSupply(); }, 3500);
     }
   }
 }
@@ -5231,14 +5244,21 @@ function buildSupplyRocket(sc){
   mesh(box(1.0, 0.08, 0.8), MAT.dark, 0, 0.95, 0.62, g);          /* the shelf inside, behind the hatch */
   const flame = mesh(new THREE.ConeGeometry(0.45, 2.2, 14, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff1b8, transparent: true, opacity: 0.85 }), 0, -0.6, 0, g); flame.rotation.x = Math.PI; flame.visible = false; SUPPLY.flame = flame;
   g.visible = false;
-  /* the rover keeps its distance; the arm only bumps the real body, so it can reach the handle on the side */
-  colCircle(sp.x, sp.z, 1.6, y + 6).arm = false;
-  colCircle(sp.x, sp.z, 0.8, y + 6);
+}
+/* once it has landed: the rover keeps its distance; the arm only bumps the real body, so it can reach the handle */
+function supplySolids(){
+  const sp = GPLACES.supply, y = groundHeight(sp.x, sp.z);
+  SUPPLY.solid = [colCircle(sp.x, sp.z, 1.6, y + 6), colCircle(sp.x, sp.z, 0.8, y + 6)];
+  SUPPLY.solid[0].arm = false;
 }
 function handleWorld(){ const v = new THREE.Vector3(); SUPPLY.handle.getWorldPosition(v); return v; }
 function hatchReach(){ return G.world.id === "glacia" && G.mission === "supply" && SUPPLY.landed && !SUPPLY.open && clawPoint().distanceTo(handleWorld()) < 0.9; }
 function openHatch(){ SUPPLY.open = true; SUPPLY.openT = 0; sfx("place"); flash("Hatch open"); updateStep(); sendPhoneState(); }
 function setupSupplyParts(){
+  /* take away the landed rocket's solids and the open hatch's ledge, so a new run starts clean */
+  for (const c of SUPPLY.solid || []){ const i = COLLIDERS.indexOf(c); if (i >= 0) COLLIDERS.splice(i, 1); }
+  if (SUPPLY.ledge){ const i = SURFACES.indexOf(SUPPLY.ledge); if (i >= 0) SURFACES.splice(i, 1); }
+  SUPPLY.solid = null; SUPPLY.ledge = null;
   Object.assign(SUPPLY, { open: false, landed: false, landT: -1, delivered: false, openT: -1 });
   if (SUPPLY.g){ SUPPLY.g.visible = false; SUPPLY.hatch.rotation.x = 0; }
 }
@@ -5258,7 +5278,7 @@ function stepSupply(dt){
     SUPPLY.flame.visible = k < 1; SUPPLY.flame.scale.set(1, 0.8 + Math.random() * 0.4, 1);
     if (k > 0.85 && Math.random() < 0.6) kickDust(GPLACES.supply.x + (Math.random() - 0.5) * 3, base + 0.1, GPLACES.supply.z + (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 5, 0.6 + Math.random(), (Math.random() - 0.5) * 5);
     if (k >= 1){
-      SUPPLY.landed = true; sfx("thud"); updateStep(); sendPhoneState();
+      SUPPLY.landed = true; supplySolids(); sfx("thud"); updateStep(); sendPhoneState();
       fixColors(SUPPLY.g);
     }
   }
@@ -5268,7 +5288,7 @@ function stepSupply(dt){
       /* the open hatch is a little platform, and the package slides out onto it, within the arm's reach */
       const at = new THREE.Vector3(0, 1.0, 1.75).applyMatrix4(SUPPLY.g.matrixWorld);
       const pk = addPart("package", at.x, at.z, -0.6); pk.y = at.y + pk.half; pk.state = "free"; pk.fallFrom = pk.y;
-      surface(at.x, at.z, 0.55, 0.55, at.y); fixColors(pk.g); sfx("place");
+      SUPPLY.ledge = surface(at.x, at.z, 0.55, 0.55, at.y); fixColors(pk.g); sfx("place");
     }
   }
 }
