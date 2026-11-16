@@ -83,3 +83,19 @@ describe("the calmer What we believe layout (owner, 2026-11-16)", () => {
     expect(site).toMatch(/\.believe__sec\{[^}]*padding:\s*\d{2}px 0/);
   });
 });
+
+describe("the guitar photo (owner, 2026-11-16)", () => {
+  const panel = site.split("function steammPanel(){")[1].split("\n}\n")[0];
+  it("sits to the right of the last three habits, not up by the STEAMM intro", () => {
+    const rest = panel.indexOf("habitsHTML.slice(2)"), guitar = panel.indexOf('believePhoto("assets/grownups/rubber-band-guitar.jpg"');
+    expect(rest).toBeGreaterThan(-1);
+    expect(guitar).toBeGreaterThan(rest);
+    expect(guitar).toBeGreaterThan(panel.indexOf('id="growHead"'));
+  });
+});
+
+describe("the STEAMM heading (owner, 2026-11-16)", () => {
+  it("asks What is STEAMM?", () => {
+    expect(site).toContain('<h2 id="steammHead">What is <span class="hl">STEAMM</span>?</h2>');
+  });
+});
