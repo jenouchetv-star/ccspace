@@ -138,3 +138,10 @@ describe("containers and check marks (owner, 2026-11-16)", () => {
     expect(beliefs).toContain('ic("check")');
   });
 });
+
+describe("taped photos (owner, 2026-11-16)", () => {
+  it("gives every What we believe photo the site's yellow tape", () => {
+    const fn = site.split("function believePhoto(src, alt){")[1].split("\n}\n")[0];
+    expect(fn).toContain('class="believe__photo taped"');
+  });
+});
