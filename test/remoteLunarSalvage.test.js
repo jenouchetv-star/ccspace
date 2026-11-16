@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -496,5 +496,19 @@ describe("saving", () => {
     expect(S.SAVE_NAME).toMatch(/^[a-z0-9][a-z0-9-]{0,39}$/);
     expect(game).toContain('ccsSave: "get"');
     expect(game).toContain('ccsSave: "set"');
+  });
+});
+
+describe("the notepad", () => {
+  it("has a pen doodle for every note", () => {
+    for (const n of S.NOTES) expect(S.NOTE_DOODLES[n.id]).toMatch(/^<svg/);
+  });
+  it("uses handwriting fonts and no emojis in the notepad", () => {
+    expect(game).toContain("family=Kalam:wght@700&family=Patrick+Hand");
+    expect(game).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+  });
+  it("the Field Notes button is a notepad, not a small bar button", () => {
+    expect(game).toMatch(/<button[^>]*id="bNotes"[^>]*class="padbtn"|<button[^>]*class="padbtn"[^>]*id="bNotes"/);
+    expect(game).toMatch(/\.padbtn\.fresh:after\{[^}]*animation:[^}]*3\}/);
   });
 });
