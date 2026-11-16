@@ -84,13 +84,15 @@ describe("the calmer What we believe layout (owner, 2026-11-16)", () => {
   });
 });
 
-describe("the guitar photo (owner, 2026-11-16)", () => {
+describe("the creativity photos (owner, 2026-11-16)", () => {
   const panel = site.split("function steammPanel(){")[1].split("\n}\n")[0];
-  it("sits to the right of the last three habits, not up by the STEAMM intro", () => {
-    const rest = panel.indexOf("habitsHTML.slice(2)"), guitar = panel.indexOf('believePhoto("assets/grownups/rubber-band-guitar.jpg"');
-    expect(rest).toBeGreaterThan(-1);
-    expect(guitar).toBeGreaterThan(rest);
-    expect(guitar).toBeGreaterThan(panel.indexOf('id="growHead"'));
+  it("puts the cardboard house on the right of the intro and the guitar on the left of the other four habits", () => {
+    const head = panel.indexOf('id="growHead"'), first = panel.indexOf("habitsHTML.slice(0, 1)"), house = panel.indexOf('believePhoto("assets/activities/cardboard-house.jpg"');
+    const guitar = panel.indexOf('believePhoto("assets/grownups/rubber-band-guitar.jpg"'), rest = panel.indexOf("habitsHTML.slice(1)");
+    expect(head).toBeGreaterThan(-1);
+    expect(house).toBeGreaterThan(first);
+    expect(guitar).toBeGreaterThan(house);
+    expect(guitar).toBeLessThan(rest);
   });
 });
 
@@ -116,5 +118,12 @@ describe("learning from other people's creative process, backed by research (own
     for (const doi of ["10.1080/10400410409534549", "10.1016/0010-0285(80)90013-4", "10.1016/j.tics.2015.08.005"]) expect(block).toContain("https://doi.org/" + doi);
     expect(block).toContain("70 studies");
     expect(site).toContain('<h2 id="researchHead">What the research says</h2>');
+  });
+});
+
+describe("Open to new approaches sits above Using feedback (owner, 2026-11-16)", () => {
+  it("keeps only the first habit beside the cardboard house, the other four beside the guitar", () => {
+    expect(site).toContain('habitsHTML.slice(0, 1).join("")');
+    expect(site).toContain('habitsHTML.slice(1).join("")');
   });
 });
