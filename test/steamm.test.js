@@ -105,3 +105,16 @@ describe("What we believe lines up with the banner (owner, 2026-11-16)", () => {
     expect(site).not.toMatch(/\.believe\{[^}]*max-width/);
   });
 });
+
+describe("learning from other people's creative process, backed by research (owner, 2026-11-16)", () => {
+  it("says children grow as thinkers by seeing how others create", () => {
+    expect(site).toContain('pageVal("about/mission", "steammOthers"');
+    expect(site).toContain("they add a new move to their own toolbox");
+  });
+  it("cites three real studies, each with a link to the paper", () => {
+    const block = site.split("const STEAMM_RESEARCH = [")[1].split("];")[0];
+    for (const doi of ["10.1080/10400410409534549", "10.1016/0010-0285(80)90013-4", "10.1016/j.tics.2015.08.005"]) expect(block).toContain("https://doi.org/" + doi);
+    expect(block).toContain("70 studies");
+    expect(site).toContain('<h2 id="researchHead">What the research says</h2>');
+  });
+});
