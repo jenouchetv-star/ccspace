@@ -12,20 +12,20 @@ describe("About banners", () => {
     expect(branch("team", 'else if (sub === "business"){')).toContain("fill: true, gradient: true");
   });
   it("Mission, Vision, What we believe and Business Inquiries use the gradient band", () => {
-    for (const [sub, next] of [["mission", 'else if (sub === "beliefs"){'], ["beliefs", 'else if (sub === "vision"){'], ["vision", 'const confidenceText'], ["business", "const businessLedeLead"]]) {
+    for (const [sub, next] of [["mission", 'else if (sub === "steamm"){'], ["steamm", 'else if (sub === "vision"){'], ["vision", 'const confidenceText'], ["business", "const businessLedeLead"]]) {
       expect(branch(sub, next)).toMatch(/gradient: true/);
     }
   });
   it("Mission, Vision and What we believe have a small banner photo", () => {
-    for (const [sub, next] of [["mission", 'else if (sub === "beliefs"){'], ["beliefs", 'else if (sub === "vision"){'], ["vision", 'const confidenceText']]) {
+    for (const [sub, next] of [["mission", 'else if (sub === "steamm"){'], ["steamm", 'else if (sub === "vision"){'], ["vision", 'const confidenceText']]) {
       expect(branch(sub, next)).toContain("asideSmall: true");
     }
-    expect(branch("beliefs", 'else if (sub === "vision"){')).toContain("assets/grownups/in-class-stem.jpg");
+    expect(branch("steamm", 'else if (sub === "vision"){')).toContain("assets/grownups/in-class-stem.jpg");
   });
 });
 
 describe("Mission and Vision continue below the banner", () => {
-  const mission = branch("mission", 'else if (sub === "beliefs"){');
+  const mission = branch("mission", 'else if (sub === "steamm"){');
   it("keeps only the first paragraph of the mission in the banner", () => {
     expect(mission).toContain('extra: copyPara("mission-extra-1", missionId, missionExtra1),');
     expect(mission.split("head = cmsHeader")[1].split("body =")[0]).not.toContain("mission-extra-2");
@@ -46,14 +46,14 @@ describe("Mission and Vision continue below the banner", () => {
 describe("workshops are STEAMM workshops (owner, 2026-11-16)", () => {
   it("says STEAMM workshops, never STEM workshops", () => {
     expect(site).not.toMatch(/STEM workshops/);
-    expect(site).toContain('through pop-up <a href=\\"/about/beliefs\\"><b>STEAMM workshops</b></a>');
+    expect(site).toContain('through pop-up <a href=\\"/about/steamm\\"><b>STEAMM workshops</b></a>');
     expect(site).toContain("future pop-up STEAMM workshops");
   });
 });
 
 describe("STEAMM workshops links to What is STEAMM (owner, 2026-11-16)", () => {
   it("bolds STEAMM workshops and links it to the What we believe page, which opens on What is STEAMM?", () => {
-    expect(site).toContain('through pop-up <a href=\\"/about/beliefs\\"><b>STEAMM workshops</b></a>, so kids and families');
+    expect(site).toContain('through pop-up <a href=\\"/about/steamm\\"><b>STEAMM workshops</b></a>, so kids and families');
   });
 });
 

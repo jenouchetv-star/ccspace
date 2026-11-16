@@ -34,7 +34,7 @@ const STATIC = [
   ["/donate", "0.5", "monthly"],
   ["/about/mission", "0.5", "monthly"],
   ["/about/vision", "0.4", "monthly"],
-  ["/about/beliefs", "0.5", "monthly"],
+  ["/about/steamm", "0.5", "monthly"],
   ["/about/business", "0.4", "monthly"],
   ["/about/team", "0.5", "monthly"],
   ["/grown-ups", "0.7", "weekly"],

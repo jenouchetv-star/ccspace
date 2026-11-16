@@ -11,8 +11,8 @@ const nav = site.split("const ABOUT_NAV = [")[1].split("];")[0];
 describe("the What we believe page", () => {
   it("comes right after Our Vision in the About menu", () => {
     const subs = [...nav.matchAll(/sub:"([a-z]+)"/g)].map(m => m[1]);
-    expect(subs.indexOf("beliefs")).toBe(subs.indexOf("vision") + 1);
-    expect(nav).toContain('{ hash:"#/about/beliefs",  sub:"beliefs",  label:"What we believe" }');
+    expect(subs.indexOf("steamm")).toBe(subs.indexOf("vision") + 1);
+    expect(nav).toContain('{ hash:"#/about/steamm",   sub:"steamm",   label:"STEAMM Methodology" }');
   });
   it("holds the STEAMM section, then the beliefs list", () => {
     expect(site).toContain("body = steammPanel() + beliefsPanel();");
@@ -22,8 +22,8 @@ describe("the What we believe page", () => {
     expect(site).not.toContain("body = steammPanel() + frameworkCards();");
   });
   it("is listed in the sitemap and the footer site map", () => {
-    expect(site).toContain('leaf("/about/beliefs", "What we believe")');
-    expect(readFileSync(new URL("../sitemap.xml", import.meta.url), "utf8")).toContain("/about/beliefs</loc>");
+    expect(site).toContain('leaf("/about/steamm", "STEAMM Methodology")');
+    expect(readFileSync(new URL("../sitemap.xml", import.meta.url), "utf8")).toContain("/about/steamm</loc>");
   });
 });
 
@@ -149,5 +149,21 @@ describe("taped photos (owner, 2026-11-16)", () => {
 describe("the STEAMM line is bold (owner, 2026-11-16)", () => {
   it("bolds STEAMM and its six subjects in the opening line", () => {
     expect(site).toContain("we believe in early childhood development through <b>STEAMM: Science, Technology, Engineering, Art, Math, and Music.</b>");
+  });
+});
+
+describe("the What we believe banner reads clearly (owner, 2026-11-16)", () => {
+  it("opens with a plain sentence about what we believe, then says what the page covers", () => {
+    expect(site).toContain('"We believe children learn best by making things. This page explains why we teach STEAMM, how creativity grows problem solvers, and the promises we make to every family."');
+    expect(site).not.toContain("The ideas that shape everything we make: how children learn");
+  });
+});
+
+describe("the page is called STEAMM Methodology (owner, 2026-11-16)", () => {
+  it("is headed Our STEAMM methodology, at /about/steamm", () => {
+    expect(site).toContain(`head = cmsHeader("about/steamm", "About", 'Our STEAMM <span class="hl">methodology</span>.'`);
+  });
+  it("still opens from the old What we believe address", () => {
+    expect(site).toContain('if (sub === "beliefs") sub = "steamm";');
   });
 });
