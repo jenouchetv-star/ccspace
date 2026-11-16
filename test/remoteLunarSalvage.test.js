@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS, BOARD_STEPS, FLIGHT, flightPhase, BRIEFS, QUIZ_BANKS, QUIZ_PICS, starsForWorld, setTerrain, HEAT, heatStep, heaterTakes, nextWorldId };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS, BOARD_STEPS, FLIGHT, flightPhase, BRIEFS, QUIZ_BANKS, QUIZ_PICS, starsForWorld, setTerrain, HEAT, heatStep, heaterTakes, nextWorldId, HOSE, hoseArc, waterStep };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -69,7 +69,7 @@ describe("field notes and the quiz", () => {
   it("has twelve notes on Pumice Moon, and every one can be found", () => {
     expect(S.NOTES.filter((n) => n.world === "pumice")).toHaveLength(12);
     const fromParts = new Set(Object.values(S.PART_TYPES).map((t) => t.note).filter(Boolean));
-    for (const n of S.NOTES) expect(["gravity", "laser", "rocket", "marsPull", "heatFlow", "melt", "thinAir"].includes(n.id) || fromParts.has(n.id)).toBe(true);
+    for (const n of S.NOTES) expect(["gravity", "laser", "rocket", "marsPull", "heatFlow", "melt", "thinAir", "fireTriangle", "waterCools", "meteorAir", "venusPull"].includes(n.id) || fromParts.has(n.id)).toBe(true);
     for (const n of S.NOTES) expect(n.hint.length).toBeGreaterThan(10);
   });
   it("says plainly that the sounds are pretend", () => {
@@ -841,7 +841,7 @@ describe("Glacia is fair to young players", () => {
 
 describe("each mission says its own done line", () => {
   it("Glacia's missions don't claim the greenhouse is alive", () => {
-    expect(game).toContain('const DONE_LINE = { repair: ["The greenhouse is alive again!", "sprout"], satellite: ["The dish is talking to Earth!", "dish"], heat: ["The base is warm again!", "thermo"], supply: ["The supplies are in!", "package"], board: ["Off you go!", "rocket"] };');
+    expect(game).toContain('const DONE_LINE = { repair: ["The greenhouse is alive again!", "sprout"], satellite: ["The dish is talking to Earth!", "dish"], heat: ["The base is warm again!", "thermo"], supply: ["The supplies are in!", "package"], meteor: ["Averi\'s base is safe!", "ebin"], board: ["Off you go!", "rocket"] };');
   });
 });
 
@@ -899,5 +899,83 @@ describe("Glacia review fixes", () => {
     expect(game).toContain("colCircle(PLACES.rocket.x, PLACES.rocket.z, 2.1, groundHeight(PLACES.rocket.x, PLACES.rocket.z) + 12);");
     expect(game).toContain("SUPPLY.solid = [colCircle(sp.x, sp.z, 1.6, y + 6), colCircle(sp.x, sp.z, 0.8, y + 6)];");
     expect(game).toContain("/* take away the landed rocket's solids and the open hatch's ledge, so a new run starts clean */");
+  });
+});
+
+describe("Ember: the Hose and the water", () => {
+  it("solves the arc that lands the water on a fire, and says when it's out of reach", () => {
+    const g = 8.87, v = S.HOSE.speed;
+    const a = S.hoseArc(6, v, g);
+    expect(a).toBeGreaterThan(0);
+    /* the jet really lands 6 m away at that angle */
+    expect(v * v * Math.sin(2 * a) / g).toBeCloseTo(6, 3);
+    expect(S.hoseArc(100, v, g)).toBe(null);
+    /* a heavier world needs a steeper aim for the same distance */
+    expect(S.hoseArc(6, v, 8.87)).toBeGreaterThan(S.hoseArc(6, v, 3.71));
+  });
+  it("the tank drains while spraying and stays put otherwise", () => {
+    expect(S.waterStep(1, true, 1)).toBeCloseTo(1 - S.HOSE.drain, 5);
+    expect(S.waterStep(0.05, true, 1)).toBe(0);
+    expect(S.waterStep(0.5, false, 3)).toBe(0.5);
+  });
+  it("Ember's mission is water, fire, then the meteorites", () => {
+    expect(S.MISSIONS.meteor.steps.map(st => st.flag)).toEqual(["water", "fire", "clean1", "clean3"]);
+    expect(S.MISSIONS.meteor.tool).toEqual(["drill", "hose", "magnet", "magnet"]);
+    expect(S.worldById("ember").missions).toEqual(["meteor", "board"]);
+    expect(S.TARGET_ACCEPTS.ebin).toEqual(["meteor"]);
+    expect(S.magnetCheck("meteor").ok).toBe(true);
+  });
+  it("Ember has five true notes of its own", () => {
+    const e = S.NOTES.filter(n => n.world === "ember");
+    expect(e.map(n => n.id)).toEqual(["fireTriangle", "waterCools", "meteorAir", "ironMeteor", "venusPull"]);
+    for (const n of e) expect(S.NOTE_DOODLES[n.id]).toMatch(/^<svg/);
+    expect(e.find(n => n.id === "fireTriangle").text).toMatch(/fuel/); expect(e.find(n => n.id === "fireTriangle").text).toMatch(/oxygen/);
+    expect(e.find(n => n.id === "venusPull").text).toContain("8.87");
+    expect(S.SCANNABLE.meteor).toBe("ironMeteor");
+  });
+  it("Kiyah briefs the flight to Gusto Canyon and names Mateo", () => {
+    const b = S.BRIEFS.gusto, all = b.lines.join(" ");
+    expect(b.kid).toBe("kylah"); expect(b.name).toBe("Kiyah");
+    expect(all).toContain("Gusto Canyon"); expect(all).toContain("Mateo");
+    expect(b.lines[b.lines.length - 1]).toMatch(/^Landing on Gusto Canyon/);
+  });
+  it("Ember has picture questions for every grade band", () => {
+    const b = S.QUIZ_BANKS.ember;
+    for (const band of ["g1", "g23", "g45"]) {
+      expect(b[band]).toHaveLength(3);
+      for (const q of b[band]) {
+        expect(S.QUIZ_PICS[q.pic]).toMatch(/^<svg/);
+        expect(q.opts).toHaveLength(band === "g1" ? 2 : 3);
+        if (band === "g1") for (const o of q.opts) expect(S.QUIZ_PICS[o.pic]).toMatch(/^<svg/);
+      }
+    }
+  });
+  it("the phone remote has a Hose with a joystick and SPRAY", () => {
+    expect(remote).toContain('data-m="hose"');
+    expect(remote).toContain(">SPRAY</button>");
+  });
+  it("Averi's requests all have pictures", () => {
+    for (const k of S.MISSIONS.meteor.pic) expect(game).toMatch(new RegExp("PICS\\." + k + " = '<svg"));
+  });
+});
+
+describe("Ember review fixes", () => {
+  it("Ember's ground has no Pumice bridge trench", () => {
+    S.setTerrain("ember");
+    try {
+      expect(S.groundHeight(0, S.TRENCH.z)).toBeGreaterThan(-0.6);
+      expect(S.groundHeight(5, S.TRENCH.z)).toBeGreaterThan(-0.6);
+      expect(S.canDriveTo(0, S.TRENCH.z, "folded")).toBe(true);
+    } finally { S.setTerrain("pumice"); }
+  });
+  it("the bridge deck only counts on Pumice Moon", () => {
+    expect(game).toContain('TERRAIN === "pumice" && onBridgeDeck(x, z, bridge.state)');
+  });
+  it("meteorite parts get a real rock model", () => {
+    expect(game).toMatch(/function addPart\(type, x, z, yaw, onSurface\)\{\s*const pm = type === "meteor" \? meteorMesh\(\) : partMesh\(type\);/);
+  });
+  it("Ember's hose and drill buttons follow the 4 then 5 key order", () => {
+    expect(game.indexOf('<button data-mode="drill"')).toBeLessThan(game.indexOf('<button data-mode="hose"'));
+    expect(remote.indexOf('data-m="drill"')).toBeLessThan(remote.indexOf('data-m="hose"'));
   });
 });

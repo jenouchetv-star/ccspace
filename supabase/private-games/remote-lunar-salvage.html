@@ -95,6 +95,10 @@
   .drillg .ly + .ly{box-shadow:inset 0 3px 0 rgba(10,13,28,.35)}
   .drillg i{position:absolute;left:0;right:0;top:0;height:4px;background:#ffd23f;box-shadow:0 0 0 2px #0a0d1c}
   .dbtn.drill{background:#5b3fb8}
+  .dbtn.spray{background:#2f7de1}
+  .tank{position:relative;width:52px;height:74px;border-radius:12px;border:3px solid #0a0d1c;background:#0a1128;overflow:hidden;box-shadow:0 4px 0 #0a0d1c}
+  .tank i{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(#7fd0ff,#2f7de1);transition:height .2s cubic-bezier(.2,.7,.2,1)}
+  .tank span{position:absolute;left:0;right:0;top:4px;text-align:center;font:800 8px system-ui;letter-spacing:.08em;color:#fff;text-shadow:0 1px 2px #0a0d1c}
   /* something new to scan is in reach: the Scan button rings, like the tool hint */
   .dbtn.ready{position:relative;box-shadow:0 0 0 2px #ffd23f inset,0 4px 0 #0a0d1c;color:#fff}
   .dbtn.ready:after{content:"";position:absolute;inset:-4px;border-radius:14px;border:2px solid #ffd23f;animation:toolHint 1.6s cubic-bezier(.2,.7,.2,1) infinite;pointer-events:none}
@@ -504,6 +508,7 @@
       <button data-mode="magnet" aria-pressed="false"><kbd>3</kbd><svg viewBox="0 0 24 24"><path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 8h4M14 8h4"/><path d="M10 4v8a2 2 0 0 0 4 0V4"/></svg>Magnet</button>
       <button data-mode="laser" aria-pressed="false"><kbd>4</kbd><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>Laser</button>
       <button data-mode="drill" aria-pressed="false" hidden><kbd>5</kbd><svg viewBox="0 0 24 24"><path d="M8 3h8v6H8z"/><path d="M12 9v3l-2 2 4 2-4 2 2 3"/></svg>Drill</button>
+      <button data-mode="hose" aria-pressed="false" hidden><kbd>5</kbd><svg viewBox="0 0 24 24"><path d="M4 18h6l3-3"/><path d="M13 15c3-7 7-9 8-9" stroke-dasharray="2 2"/><circle cx="4" cy="18" r="2"/></svg>Hose</button>
     </div>
   </div>
   <div class="dr" id="dRight"></div>
@@ -655,7 +660,7 @@ const LIFT_KG = 60;                            /* the most the rover's arm or ma
 const WORLDS = [
   { id: "pumice", name: "Pumice Moon", g: 1.62, air: false, tools: ["drive", "arm", "magnet", "laser", "drill"], corner: "chike", brief: null, missions: ["repair", "satellite", "board"], layers: ["dust", "rock", "crystals"] },
   { id: "glacia", name: "Glacia", g: 3.71, air: true, tools: ["drive", "arm", "magnet", "laser"], corner: "yuna", brief: "zech", missions: ["heat", "supply", "board"], layers: ["ice", "rock", "water"] },
-  { id: "ember", name: "Ember", g: 8.87, air: true, tools: ["drive", "arm", "magnet", "drill", "hose"], corner: "averi", brief: "corey", missions: [], layers: ["dust", "rock", "lava"] },
+  { id: "ember", name: "Ember", g: 8.87, air: true, tools: ["drive", "arm", "magnet", "drill", "hose"], corner: "averi", brief: "corey", missions: ["meteor", "board"], layers: ["dust", "rock", "lava"] },
   { id: "gusto", name: "Gusto Canyon", g: 5.0, air: true, tools: ["drive", "arm", "magnet", "laser", "drill", "hose"], corner: "mateo", brief: "kiyah", missions: [], layers: ["dust", "rock", "metal"] }
 ];
 function worldById(id){ return WORLDS.find(w => w.id === id) || null; }
@@ -719,7 +724,7 @@ const PART_TYPES = {
   drill: { name: "Old drill rig", mat: "steel", kg: 4000, note: "weight" },
   lever: { name: "Bridge lever", mat: "plastic", kg: 0 },
   tower: { name: "Radio tower", mat: "aluminum", kg: 900, note: "radio" },
-  meteor: { name: "Meteorite", mat: "meteor", kg: 12 },
+  meteor: { name: "Meteorite", mat: "meteor", kg: 12, note: "ironMeteor" },
   energy: { name: "Energy rock", mat: "crystal", kg: 8, r: 0.32, note: "layers" },
   dish: { name: "Satellite dish", mat: "aluminum", kg: 300, note: "satellite" },
   heat: { name: "Heat block", mat: "steel", kg: 15, note: "heatStore" },
@@ -730,6 +735,11 @@ const PART_TYPES = {
 const HEAT = { secs: 2.4, cool: 0.012, hot: 0.4, glow: 0.9, curie: 0.35 };
 function heatStep(h, heating, dt){ return clamp(heating ? h + dt / HEAT.secs : h - HEAT.cool * dt, 0, 1); }
 function heaterTakes(h){ return h >= HEAT.hot; }
+/* Ember's Hose: how fast the water leaves the nozzle, how fast the tank drains, how close a drop must land to a fire */
+const HOSE = { speed: 9, drain: 0.12, douse: 0.9, reach: 1.3 };
+/* the aim that lands a jet d metres away on level ground, or null if the water can't reach that far */
+function hoseArc(d, v, g){ const k = g * d / (v * v); return k > 1 ? null : 0.5 * Math.asin(k); }
+function waterStep(level, spraying, dt){ return spraying ? clamp(level - HOSE.drain * dt, 0, 1) : level; }
 /* the Drill: hold it and the bit goes down; let go and it creeps back up */
 const DRILL = { secs: 3.2, spotR: 1.4, cool: 0.6 };
 function drillStep(depth, holding, dt){
@@ -746,12 +756,13 @@ function toolsFor(world, flags){
 const TARGET_ACCEPTS = {
   bay:    ["panel", "scrap"],
   slot:   ["wedge"],
-  bed:    ["cell", "glass", "scrap", "wedge", "block", "tube", "energy", "heat", "package"],
+  bed:    ["cell", "glass", "scrap", "wedge", "block", "tube", "energy", "heat", "package", "meteor"],
   socket: ["cell"],
   shelf:  ["glass"],
   rack:   ["energy"],
   heater: ["heat"],
-  drop:   ["package"]
+  drop:   ["package"],
+  ebin:   ["meteor"]
 };
 const NOTES = [
   { id: "gravity", world: "pumice", title: "Moon gravity", text: "Things fall slowly here. Pumice Moon pulls just like Earth's Moon: about one-sixth of Earth's gravity (1.62 m/s² instead of 9.8). A part dropped from 1 meter takes about 1.1 seconds to land here, and under half a second on Earth.", hint: "Drop something and watch it fall." },
@@ -770,7 +781,12 @@ const NOTES = [
   { id: "heatStore", world: "glacia", title: "Metal holds heat", text: "The laser's light warms the steel block until it glows. Metal holds that heat for a while, so you can carry the block to the heater before it cools.", hint: "Heat a metal block with the laser." },
   { id: "heatFlow", world: "glacia", title: "Heat moves from hot to cold", text: "A glowing block in freezing air gives its heat away to the cold air around it, and slowly cools down. Heat always moves from hot things to colder things.", hint: "Watch a hot block cool down." },
   { id: "melt", world: "glacia", title: "Snow melts when it's warmed", text: "Snow is frozen water. When the heater warms the ground and the air around the base, the snow turns back into water.", hint: "Switch on the base heater." },
-  { id: "thinAir", world: "glacia", title: "Thin air is cold air", text: "Glacia has a thin layer of air, like Mars. Thin air can't trap much of the Sun's heat, so the ground stays freezing even on a sunny day.", hint: "Land on Glacia." }
+  { id: "thinAir", world: "glacia", title: "Thin air is cold air", text: "Glacia has a thin layer of air, like Mars. Thin air can't trap much of the Sun's heat, so the ground stays freezing even on a sunny day.", hint: "Land on Glacia." },
+  { id: "fireTriangle", world: "ember", title: "Fire needs three things", text: "A fire needs fuel to burn, heat to get going, and oxygen from the air. Take away any one of them and the fire goes out. Pumice Moon has no air, so nothing burns in the open there. A rocket can only burn its fuel because it carries its own oxygen.", hint: "See the fire on Ember." },
+  { id: "waterCools", world: "ember", title: "Water cools a fire", text: "Water puts out a fire by cooling it down. It soaks up the fire's heat as it turns to steam, until the fuel is too cool to keep burning.", hint: "Put out a fire with the Hose." },
+  { id: "meteorAir", world: "ember", title: "Why meteors glow", text: "A meteor rushes into the air so fast that the air in front of it gets squeezed and very hot, and that makes it glow. Most small ones burn up high in the sky. Big ones can reach the ground.", hint: "Watch the meteor land." },
+  { id: "ironMeteor", world: "ember", title: "Iron from space", text: "Some meteorites are made mostly of iron and nickel, so a magnet sticks to them. Scientists use magnets to help find them.", hint: "Scan a meteorite piece." },
+  { id: "venusPull", world: "ember", title: "Ember pulls like Venus", text: "Ember pulls with 8.87 m/s², like Venus, almost as hard as Earth (9.81). That's why the water from the Hose curves down so quickly here.", hint: "Spray the Hose and watch the water fall." }
 ];
 /* a pen doodle for each field note (stroke follows the ink color) */
 const NOTE_DOODLES = {
@@ -784,6 +800,11 @@ const NOTE_DOODLES = {
   laser: '<svg viewBox="0 0 64 56"><rect x="4" y="20" width="16" height="10" rx="2"/><path d="M20 25h22" stroke-dasharray="4 3"/><path d="M44 16c8-4 16 2 15 10s-6 16-14 13-10-19-1-23z"/><path d="M42 25l-3-5M42 25l-4 4M42 25h-5"/></svg>',
   radio: '<svg viewBox="0 0 64 56"><path d="M24 50l8-34 8 34"/><path d="M27 38h10M29 28h6"/><circle cx="32" cy="12" r="3"/><path d="M22 6a14 14 0 0 0 0 14M42 6a14 14 0 0 1 0 14M16 2a22 22 0 0 0 0 22M48 2a22 22 0 0 1 0 22"/></svg>',
   layers: '<svg viewBox="0 0 64 56"><path d="M4 14c10-3 20 2 30-1s20 1 26-1"/><path d="M4 28c10-3 20 2 30-1s20 1 26-1"/><path d="M4 42c10-3 20 2 30-1s20 1 26-1"/><path d="M30 2v38"/><path d="M26 40l4 8 4-8"/><path d="M44 46l4-6 4 6-4 6z"/></svg>',
+  fireTriangle: '<svg viewBox="0 0 64 56"><path d="M32 6l24 42H8z"/><path d="M32 22c-6 8-8 12-8 16a8 8 0 0 0 16 0c0-4-2-8-8-16z"/></svg>',
+  waterCools: '<svg viewBox="0 0 64 56"><path d="M8 44c3-8 8-10 8-18 5 4 8 10 8 16"/><path d="M30 20c8-8 18-8 26 0" stroke-dasharray="3 3"/><path d="M50 26c-3 5-5 8-5 10a5 5 0 0 0 10 0c0-2-2-5-5-10z"/><path d="M14 18c-1-4 2-6 1-10M22 16c-1-4 2-6 1-10"/></svg>',
+  meteorAir: '<svg viewBox="0 0 64 56"><circle cx="40" cy="36" r="8"/><path d="M34 30L8 8M38 28L16 4M30 34L4 16"/><path d="M50 42c4-2 6-6 6-10"/></svg>',
+  ironMeteor: '<svg viewBox="0 0 64 56"><path d="M8 10v14a10 10 0 0 0 20 0V10"/><path d="M8 10h6v14a4 4 0 0 0 8 0V10h6"/><path d="M36 40l8-12 12 4 2 12-10 6-12-2z"/><path d="M42 36l4 4M50 34l-2 6"/></svg>',
+  venusPull: '<svg viewBox="0 0 64 56"><path d="M6 40h14"/><path d="M20 38c10-24 26-24 34 0" stroke-dasharray="4 3"/><path d="M50 34l4 6 4-6"/><circle cx="54" cy="12" r="6"/></svg>',
   marsPull: '<svg viewBox="0 0 64 56"><circle cx="22" cy="10" r="6"/><path d="M22 19v4M22 27v5"/><path d="M18 31l4 5 4-5"/><path d="M6 46h32"/><circle cx="50" cy="20" r="9"/><path d="M43 17c4 2 9 1 13-1M44 24c4 1 8 1 12-1"/></svg>',
   heatStore: '<svg viewBox="0 0 64 56"><path d="M14 22h26v24H14z"/><path d="M14 22l8-8h26l-8 8M48 14v24l-8 8"/><path d="M22 8c-3 4 3 6 0 10M30 6c-3 4 3 6 0 10M38 8c-3 4 3 6 0 10"/></svg>',
   heatFlow: '<svg viewBox="0 0 64 56"><path d="M6 20h16v16H6z"/><path d="M26 28h18"/><path d="M38 22l7 6-7 6"/><path d="M52 20l3 5 5 1-4 3 1 5-5-3-4 3 1-5-4-3 5-1z"/></svg>',
@@ -840,6 +861,23 @@ const QUIZ_BANKS = {
       { q: "Glacia pulls with 3.71 m/s². Pumice Moon pulls with 1.62 m/s². About how many times stronger is Glacia's pull?", pic: "fall3", opts: [{ t: "About 2 times" }, { t: "About 4 times" }, { t: "About 10 times" }], a: 0, circle: { x: 30, y: 24, r: 18 }, why: "3.71 divided by 1.62 is about 2.3, so Glacia pulls a little more than 2 times as hard." },
       { q: "Why is Glacia freezing even on a sunny day?", pic: "thinAirPic", opts: [{ t: "Its thin air can't trap much heat" }, { t: "The Sun doesn't shine there" }, { t: "Snow makes its own cold" }], a: 0, circle: { x: 50, y: 14, r: 14 }, why: "Thin air, like on Mars, lets the Sun's heat escape back to space, so the ground stays cold." }
     ]
+  },
+  ember: {
+    g1: [
+      { q: "What does a fire need?", pic: "fireTri", opts: [{ t: "air", pic: "airPic" }, { t: "ice", pic: "icePic" }], a: 0, circle: { x: 50, y: 10, r: 9 }, why: "Air. A fire needs oxygen from the air, plus fuel and heat." },
+      { q: "Which one puts out a fire?", pic: "fireHose", opts: [{ t: "water", pic: "dropPic" }, { t: "wood", pic: "logPic" }], a: 0, circle: { x: 46, y: 22, r: 14 }, why: "Water. It cools the fire down until it can't burn. Wood is fuel, so it would make the fire bigger." },
+      { q: "What sticks to a magnet?", pic: "magnetRock", opts: [{ t: "iron meteorite", pic: "meteorPic" }, { t: "glass", pic: "glassPic" }], a: 0, circle: { x: 68, y: 34, r: 11 }, why: "The iron meteorite. Magnets pull on iron. Glass doesn't stick." }
+    ],
+    g23: [
+      { q: "A fire needs fuel, heat and...", pic: "fireTri", opts: [{ t: "oxygen from the air" }, { t: "snow" }, { t: "darkness" }], a: 0, circle: { x: 50, y: 10, r: 9 }, why: "Oxygen. Take away the air, the fuel or the heat, and the fire goes out." },
+      { q: "How does water put out a fire?", pic: "fireHose", opts: [{ t: "It cools the fire down" }, { t: "It makes the fire bigger" }, { t: "It turns into fuel" }], a: 0, circle: { x: 46, y: 22, r: 14 }, why: "Water soaks up the fire's heat as it turns to steam, until the fire is too cool to burn." },
+      { q: "Why could the magnet lift the meteorite?", pic: "magnetRock", opts: [{ t: "It's mostly iron and nickel" }, { t: "It was still glowing" }, { t: "Meteorites are made of glass" }], a: 0, circle: { x: 68, y: 34, r: 11 }, why: "Some meteorites are mostly iron and nickel, like this one, and magnets pull on iron." }
+    ],
+    g45: [
+      { q: "Pumice Moon has no air. Could a fire burn there?", pic: "fireTri", opts: [{ t: "No, there's no oxygen" }, { t: "Yes, if it's hot enough" }, { t: "Only at night" }], a: 0, circle: { x: 50, y: 10, r: 9 }, why: "No. Without oxygen, fuel can't burn, however hot it is. That's why rockets carry their own oxygen." },
+      { q: "Ember pulls with 8.87 m/s², Glacia with 3.71. Where does the Hose's water curve down faster?", pic: "arcs", opts: [{ t: "On Ember" }, { t: "On Glacia" }, { t: "The same on both" }], a: 0, circle: { x: 30, y: 26, r: 16 }, why: "Ember pulls more than twice as hard, so the water falls back down faster and its arc is shorter." },
+      { q: "Why does a meteor glow as it falls through air?", pic: "meteorFall", opts: [{ t: "The air in front of it gets squeezed and very hot" }, { t: "It has lights inside" }, { t: "It reflects the Moon" }], a: 0, circle: { x: 66, y: 30, r: 12 }, why: "It's moving so fast that the air in front of it is squeezed and heats up until it glows." }
+    ]
   }
 };
 /* the pictures, drawn like pen in the notepad */
@@ -865,6 +903,17 @@ const QUIZ_PICS = {
   glaciaBall: '<svg viewBox="0 0 60 44"><circle cx="30" cy="8" r="5"/><path d="M30 15v16"/><path d="M27 29l3 4 3-4"/><path d="M10 38h40"/><path d="M14 38l3-4 3 4M40 38l3-4 3 4"/></svg>',
   pumiceBall: '<svg viewBox="0 0 60 44"><circle cx="30" cy="8" r="5"/><path d="M30 16v4M30 24v4"/><path d="M27 28l3 4 3-4"/><path d="M12 38c10-3 26-3 36 0"/><circle cx="48" cy="8" r="3"/></svg>',
   heatAway: '<svg viewBox="0 0 100 46"><path d="M12 22h24v18H12z"/><path d="M16 16c-2 3 2 4 0 7M24 14c-2 3 2 4 0 7M32 16c-2 3 2 4 0 7"/><path d="M40 26h16"/><path d="M50 21l7 5-7 5"/><path d="M64 14v14M57 21h14M59 16l10 10M69 16L59 26"/><path d="M60 40h30"/></svg>',
+  fireTri: '<svg viewBox="0 0 100 46"><path d="M50 4l26 38H24z"/><path d="M50 22c-4 6-6 9-6 12a6 6 0 0 0 12 0c0-3-2-6-6-12z"/><text x="50" y="3" font-size="5" fill="currentColor" stroke="none" text-anchor="middle" font-family="Patrick Hand, cursive">air</text><text x="20" y="45" font-size="5" fill="currentColor" stroke="none" font-family="Patrick Hand, cursive">fuel</text><text x="74" y="45" font-size="5" fill="currentColor" stroke="none" font-family="Patrick Hand, cursive">heat</text></svg>',
+  airPic: '<svg viewBox="0 0 60 44"><path d="M8 16h30c6 0 6-8 0-8M8 24h40c6 0 6 8 0 8M8 32h20"/></svg>',
+  icePic: '<svg viewBox="0 0 60 44"><path d="M30 6v32M16 14l28 16M44 14L16 30"/></svg>',
+  fireHose: '<svg viewBox="0 0 100 46"><path d="M70 40c3-8 8-10 8-18 5 4 8 10 8 16"/><path d="M8 34h14l6-4"/><path d="M28 30c12-20 32-20 42-6" stroke-dasharray="3 3"/></svg>',
+  dropPic: '<svg viewBox="0 0 60 44"><path d="M30 6c-8 12-11 18-11 23a11 11 0 0 0 22 0c0-5-3-11-11-23z"/></svg>',
+  logPic: '<svg viewBox="0 0 60 44"><path d="M10 18h36v14H10z"/><ellipse cx="46" cy="25" rx="4" ry="7"/><path d="M18 22h14M20 28h16"/></svg>',
+  magnetRock: '<svg viewBox="0 0 100 46"><path d="M20 4v14a10 10 0 0 0 20 0V4"/><path d="M20 4h6v14a4 4 0 0 0 8 0V4h6"/><path d="M58 40l6-10 10 3 2 9-8 4-10-1z"/><path d="M84 34h8v8h-8z"/></svg>',
+  meteorPic: '<svg viewBox="0 0 60 44"><path d="M16 34l8-14 14 4 4 12-12 6-12-2z"/><path d="M24 28l4 4M34 26l-2 6"/></svg>',
+  glassPic: '<svg viewBox="0 0 60 44"><path d="M20 8h20l-3 30H23z"/><path d="M24 14l2 18" opacity=".5"/></svg>',
+  arcs: '<svg viewBox="0 0 100 46"><path d="M6 40c8-30 22-30 30 0"/><path d="M50 40c12-30 34-30 46 0" stroke-dasharray="3 3"/><text x="21" y="45" font-size="5" fill="currentColor" stroke="none" text-anchor="middle" font-family="Patrick Hand, cursive">Ember</text><text x="73" y="45" font-size="5" fill="currentColor" stroke="none" text-anchor="middle" font-family="Patrick Hand, cursive">Glacia</text></svg>',
+  meteorFall: '<svg viewBox="0 0 100 46"><circle cx="66" cy="30" r="7"/><path d="M60 25L30 4M62 22L40 2M58 28L24 12"/><path d="M74 26c3 2 4 5 4 8"/><path d="M4 42h92"/></svg>',
   thinAirPic: '<svg viewBox="0 0 100 46"><circle cx="50" cy="40" r="22"/><path d="M22 26c10-8 46-8 56 0" stroke-dasharray="3 4"/><circle cx="50" cy="8" r="5"/><path d="M50 15v6M44 18l-2 3M56 18l2 3"/><path d="M78 10l8-6M80 18l9-2" stroke-dasharray="2 3"/></svg>'
 };
 
@@ -910,7 +959,7 @@ function scanChips(type){
 /* Scan fills the notepad: how far the scanner reaches, and which props write which note */
 const SCAN = { drive: 7, tool: 4.5 };
 function scanRange(mode){ return mode === "drive" ? SCAN.drive : SCAN.tool; }
-const SCANNABLE = { scrap: "steel", panel: "steel", block: "aluminum", tube: "aluminum", wedge: "triangle", cell: "cell", glass: "glass", drill: "weight", tower: "radio", energy: "layers", dish: "satellite", heat: "heatStore" };
+const SCANNABLE = { scrap: "steel", panel: "steel", block: "aluminum", tube: "aluminum", wedge: "triangle", cell: "cell", glass: "glass", drill: "weight", tower: "radio", energy: "layers", dish: "satellite", heat: "heatStore", meteor: "ironMeteor" };
 function bestTool(type){
   const mag = magnetCheck(type).ok, claw = clawCheck(type).ok;
   if (mag && claw) return "either";
@@ -927,8 +976,13 @@ function rimHeight(x, z){ const r = Math.max(Math.abs(x) / 36, Math.abs(z) / 34)
 function glaciaHeight(x, z){
   return 0.24 * Math.sin(0.13 * x + 0.4) * Math.cos(0.11 * z - 0.2) + 0.09 * Math.sin(0.37 * x - 0.29 * z) + 0.05 * Math.cos(0.8 * x + 0.6 * z) + rimHeight(x, z);
 }
+/* Ember: low rolling red ground, no canyon */
+function emberHeight(x, z){
+  return 0.16 * Math.sin(0.17 * x - 0.3) * Math.cos(0.15 * z + 0.5) + 0.07 * Math.sin(0.43 * x + 0.31 * z) + rimHeight(x, z);
+}
 function groundHeight(x, z){
   if (TERRAIN === "glacia") return glaciaHeight(x, z);
+  if (TERRAIN === "ember") return emberHeight(x, z);
   let h = 0.10 * Math.sin(0.23 * x + 0.5) * Math.cos(0.19 * z - 0.3) + 0.06 * Math.sin(0.51 * x - 0.37 * z);
   const r = Math.max(Math.abs(x) / 36, Math.abs(z) / 34);
   if (r > 0.92) h += Math.min(6, Math.pow((r - 0.92) * 10, 2) * 0.7);
@@ -1069,6 +1123,13 @@ const BRIEFS = {
     "Your next stop is Ember, a red world with real air you could feel on your face.",
     "A meteor is about to come down near Averi's base there. She'll need your help.",
     "Landing on Ember..."
+  ] },
+  gusto: { kid: "kylah", name: "Kiyah", lines: [
+    "Hi! It's Kiyah, live from Earth.",
+    "Averi says the fire is out and her base is safe. Great job!",
+    "Your last stop is Gusto Canyon, a windy world with tall striped cliffs.",
+    "A storm knocked over Mateo and Stacey's landing beacon there, so no ship can find their base.",
+    "Landing on Gusto Canyon..."
   ] }
 };
 /* Glacia: warm Yuna's base with three hot metal blocks */
@@ -1085,12 +1146,20 @@ const SUPPLY_STEPS = [
   { id: "home", flag: "home", text: "Bring the package to the base.", hint: "The cargo bed holds it while you drive. Follow the blue beam." },
   { id: "drop", flag: "drop", text: "Set the package on the drop pad.", hint: "Arm: lift it out of the cargo bed and over the pad." }
 ];
+/* Ember: put out the meteor fire and clear the meteorite */
+const METEOR_STEPS = [
+  { id: "water", flag: "water", text: "Drill the ice ring to fill your water tank.", hint: "Drill: park on the dashed ring and hold DRILL. Anywhere else, there's hot lava down deep." },
+  { id: "fire", flag: "fire", text: "Put out the fire with the Hose.", hint: "Hose: press AIM to point it at a fire, then hold SPRAY. Drill again if the tank runs dry." },
+  { id: "clean1", flag: "clean1", text: "Put a meteorite piece in the salvage bin.", hint: "Magnet: iron sticks to it. Press AIM, hold the magnet, then AIM again to swing it over the bin." },
+  { id: "clean3", flag: "clean3", text: "Clear all three meteorite pieces.", hint: "Magnet: the other pieces are in the crater." }
+];
 /* each mission's steps, the tool each step needs, and the picture Chike shows for it */
 const MISSIONS = {
   repair: { goal: "Goal: power up the greenhouse", steps: STEPS, tool: ["drive", "magnet", "arm", "arm", "drive", "laser", "arm", "drive", "arm", "drive"], pic: ["beam", "panel", "lever", "wedge", "bridge", "boulder", "cell", "cell", "cell", "bolt"] },
   satellite: { goal: "Goal: power the satellite dish", steps: SAT_STEPS, tool: ["drill", "arm", "drill", "drive"], pic: ["ring", "rack", "energy", "dish"] },
   heat: { goal: "Goal: warm up Yuna's base", steps: HEAT_STEPS, tool: ["laser", "arm", "laser", "drive"], pic: ["heatCold", "heater", "heatHot", "thermo"] },
   supply: { goal: "Goal: bring in the supplies", steps: SUPPLY_STEPS, tool: ["arm", "arm", "drive", "arm"], pic: ["hatch", "package", "dome", "drop"] },
+  meteor: { goal: "Goal: save Averi's base", steps: METEOR_STEPS, tool: ["drill", "hose", "magnet", "magnet"], pic: ["iceRing", "fire", "meteorPiece", "ebin"] },
   board: { goal: "Goal: fly to the next world", steps: BOARD_STEPS, tool: ["drive", "drive", "drive"], pic: ["star", "rocket", "rocket"] }
 };
 /* the laser: how long a boulder must be hit before it cracks open, and how far the beam reaches */
@@ -1299,8 +1368,12 @@ function drillSign(title, sub){
   g.font = "700 28px system-ui, -apple-system, 'Segoe UI', sans-serif"; g.fillText(sub, 256, 140);
   const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4;
   const grp = new THREE.Group();
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.0), new THREE.MeshStandardMaterial({ map: t, roughness: 0.8, side: THREE.DoubleSide }));
+  /* a front and a back face, so the words read the right way from either side */
+  const signMat = new THREE.MeshStandardMaterial({ map: t, roughness: 0.8 });
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.0), signMat);
   board.position.y = 1.55; grp.add(board);
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.0), signMat);
+  back.position.set(0, 1.55, -0.01); back.rotation.y = Math.PI; grp.add(back);
   for (const x of [-1.05, 1.05]) mesh(box(0.09, 1.6, 0.09), MAT.dark, x, 0.8, -0.03, grp);
   return grp;
 }
@@ -1865,7 +1938,7 @@ function partMesh(type){
   return { g, half: 0.2, r: 0.3, sym: 0 };
 }
 function addPart(type, x, z, yaw, onSurface){
-  const pm = partMesh(type);
+  const pm = type === "meteor" ? meteorMesh() : partMesh(type);
   activeScene.add(pm.g);
   const y = floorAt(x, z) + pm.half;
   const p = { type, g: pm.g, half: pm.half, r: pm.r, sym: pm.sym, x, y, z, yaw: yaw || 0, vx: 0, vy: 0, vz: 0, state: "free", home: { x, z, yaw: yaw || 0 }, fallFrom: y, snapAnim: null, id: parts.length };
@@ -1873,7 +1946,7 @@ function addPart(type, x, z, yaw, onSurface){
   return p;
 }
 function floorAt(x, z){
-  let f = onBridgeDeck(x, z, bridge.state) ? BRIDGE.deck : groundHeight(x, z);
+  let f = TERRAIN === "pumice" && onBridgeDeck(x, z, bridge.state) ? BRIDGE.deck : groundHeight(x, z);
   for (const s of SURFACES) if (s.on && Math.abs(x - s.x) <= s.hw && Math.abs(z - s.z) <= s.hd) f = Math.max(f, s.top);
   return f;
 }
@@ -2123,6 +2196,7 @@ function stepLaser(inp, dt){
 /* where a part can be dropped to fit */
 function targets(){
   if (G.world.id === "glacia") return glaciaTargets();
+  if (G.world.id === "ember") return emberTargets();
   const out = [];
   const b = PLACES.bay; out.push({ id: "bay", x: b.x, z: b.z, y: groundHeight(b.x, b.z) + 0.12, r: 1.35 });
   if (bridge.state === "sag") { const s = PLACES.slot; out.push({ id: "slot", x: s.x, z: s.z, y: groundHeight(s.x, s.z) + 0.12, r: SNAP.r, yaw: slotPad.yaw }); }
@@ -2234,10 +2308,10 @@ function toggleNotes(){ if ($("ovNotes").classList.contains("open")) closeNotes(
 
 /* ---------- Chike's corner: the goal, his request with a picture of the exact part, and what he says ---------- */
 const HINTS = {
-  keys: { drive: "W A S D or the arrow keys drive.", arm: "A and D swing the arm, W and S lift it, Q and E reach. Space grabs. G aims at the part.", magnet: "Aim with W A S D, reach with Q and E, hold Space for the magnet. G aims.", laser: "Aim with W A S D, hold Space to fire. G aims at a boulder.", drill: "Park on a dashed ring and hold Space to drill." },
-  touch: { drive: "Turn the wheel and hold GO.", arm: "Move the joystick and press GRAB. Or tap a part to aim at it.", magnet: "Move the joystick, then hold the magnet button. Or tap a part.", laser: "Tap a boulder or use the joystick, then hold FIRE.", drill: "Park on a dashed ring and hold DRILL." },
-  pad: { drive: "Left stick drives.", arm: "Left stick aims, right stick reaches, A grabs.", magnet: "Left stick aims, right stick reaches, hold A for the magnet.", laser: "Left stick aims, hold A to fire.", drill: "Park on a dashed ring and hold A to drill." },
-  phone: { drive: "Tilt your phone like a steering wheel and hold GO.", arm: "Use the joystick on your phone, then press GRAB.", magnet: "Use the joystick on your phone, then hold MAGNET.", laser: "Use the joystick on your phone, then hold FIRE.", drill: "Park on a dashed ring and hold DRILL on your phone." }
+  keys: { drive: "W A S D or the arrow keys drive.", arm: "A and D swing the arm, W and S lift it, Q and E reach. Space grabs. G aims at the part.", magnet: "Aim with W A S D, reach with Q and E, hold Space for the magnet. G aims.", laser: "Aim with W A S D, hold Space to fire. G aims at a boulder.", drill: "Park on a dashed ring and hold Space to drill.", hose: "Aim with W A S D, hold Space to spray. G aims at a fire." },
+  touch: { drive: "Turn the wheel and hold GO.", arm: "Move the joystick and press GRAB. Or tap a part to aim at it.", magnet: "Move the joystick, then hold the magnet button. Or tap a part.", laser: "Tap a boulder or use the joystick, then hold FIRE.", drill: "Park on a dashed ring and hold DRILL.", hose: "Press AIM or use the joystick, then hold SPRAY." },
+  pad: { drive: "Left stick drives.", arm: "Left stick aims, right stick reaches, A grabs.", magnet: "Left stick aims, right stick reaches, hold A for the magnet.", laser: "Left stick aims, hold A to fire.", drill: "Park on a dashed ring and hold A to drill.", hose: "Left stick aims, hold A to spray." },
+  phone: { drive: "Tilt your phone like a steering wheel and hold GO.", arm: "Use the joystick on your phone, then press GRAB.", magnet: "Use the joystick on your phone, then hold MAGNET.", laser: "Use the joystick on your phone, then hold FIRE.", drill: "Park on a dashed ring and hold DRILL on your phone.", hose: "Use the joystick on your phone, then hold SPRAY." }
 };
 /* pictures of the real 3D parts (made once at the start), and small drawings for places */
 const PICS = {
@@ -2247,7 +2321,7 @@ const PICS = {
   sprout: '<svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#e3f4dc"/><path d="M28 48V26" stroke="#3f7d35" stroke-width="3"/><path d="M28 30c-10 0-14-6-14-12 8 0 14 4 14 12zM28 26c0-8 6-12 14-12 0 6-4 12-14 12z" fill="#74b85a" stroke="#0a0d1c" stroke-width="2"/><path d="M16 48h24l-3 6H19z" fill="#b5651d" stroke="#0a0d1c" stroke-width="2"/></svg>'
 };
 function picHTML(k){ const p = PICS[k]; return !p ? "" : p.charAt(0) === "<" ? p : '<img alt="" src="' + p + '">'; }
-const DONE_LINE = { repair: ["The greenhouse is alive again!", "sprout"], satellite: ["The dish is talking to Earth!", "dish"], heat: ["The base is warm again!", "thermo"], supply: ["The supplies are in!", "package"], board: ["Off you go!", "rocket"] };
+const DONE_LINE = { repair: ["The greenhouse is alive again!", "sprout"], satellite: ["The dish is talking to Earth!", "dish"], heat: ["The base is warm again!", "thermo"], supply: ["The supplies are in!", "package"], meteor: ["Averi's base is safe!", "ebin"], board: ["Off you go!", "rocket"] };
 function renderObjective(){
   const s = G.step, prog = $("prog");
   const M = MISSIONS[G.mission], ST = M.steps;
@@ -2277,6 +2351,7 @@ function updateStep(){
   if (G.mission === "board") return updateBoardStep();
   if (G.mission === "heat") return updateHeatStep();
   if (G.mission === "supply") return updateSupplyStep();
+  if (G.mission === "meteor") return updateMeteorStep();
   if (G.mission !== "repair") return;
   const f = G.flags;
   const r = rover;
@@ -2314,7 +2389,7 @@ const STEP_TALK = {
 /* ---------- the rover dashboard: a steering wheel and pedals to drive; a joystick, a reach lever and one
    big button for the Arm, the Magnet and the Laser ---------- */
 const DASH = { steer: 0, wheelId: null, go: 0, back: 0, joyId: null, reachId: null, reachAbs: null, big: false, bigId: null };
-const MODE_STATUS = { drive: "Driving", arm: "Parked: arm ready", magnet: "Parked: magnet ready", laser: "Parked: laser ready", drill: "Parked: drill ready" };
+const MODE_STATUS = { drive: "Driving", arm: "Parked: arm ready", magnet: "Parked: magnet ready", laser: "Parked: laser ready", drill: "Parked: drill ready", hose: "Parked: hose ready" };
 const DI = {
   scan: '<svg viewBox="0 0 24 24"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3"/><path d="M7 12h10"/></svg>',
   grab: '<svg viewBox="0 0 24 24"><path d="M8 4v7l-3 4M16 4v7l3 4"/><path d="M8 11h8"/></svg>',
@@ -2323,7 +2398,8 @@ const DI = {
   fire: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>',
   up: '<svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
-  drill: '<svg viewBox="0 0 24 24"><path d="M8 3h8v6H8z"/><path d="M12 9v3l-2 2 4 2-4 2 2 3"/></svg>'
+  drill: '<svg viewBox="0 0 24 24"><path d="M8 3h8v6H8z"/><path d="M12 9v3l-2 2 4 2-4 2 2 3"/></svg>',
+  hose: '<svg viewBox="0 0 24 24"><path d="M4 18h6l3-3"/><path d="M13 15c3-7 7-9 8-9" stroke-dasharray="2 2"/></svg>'
 };
 const WHEEL_SVG = '<svg viewBox="0 0 120 120" aria-hidden="true"><g id="wheelRot"><circle cx="60" cy="60" r="50" fill="none" stroke="#0a0d1c" stroke-width="17"/><circle cx="60" cy="60" r="50" fill="none" stroke="#dfe6f4" stroke-width="11"/>'
   + '<path d="M17 52a44 44 0 0 1 6-14M97 38a44 44 0 0 1 6 14" stroke="#2f7de1" stroke-width="7" stroke-linecap="round" fill="none"/>'
@@ -2331,11 +2407,12 @@ const WHEEL_SVG = '<svg viewBox="0 0 120 120" aria-hidden="true"><g id="wheelRot
   + '<circle cx="60" cy="64" r="17" fill="#2f7de1" stroke="#0a0d1c" stroke-width="4"/><circle cx="60" cy="64" r="6" fill="#5fd2ff"/><rect x="55" y="5" width="10" height="13" rx="3" fill="#5fd2ff" stroke="#0a0d1c" stroke-width="2.5"/></g></svg>';
 function aimPic(){
   if (G.mode === "laser") return picHTML(G.world.id === "glacia" ? "heatCold" : "boulder");
+  if (G.mode === "hose") return picHTML("fire");
   const w = wantedThing();
   if (!w) return DI.grab;
   if (w.lever) return picHTML("lever");
   if (w.handle) return picHTML("hatch");
-  if (w.spot) return picHTML({ bay: "bin", slot: "wedge", bed: "bed", bedScrap: "bed", socket: "socket", shelf: "glass", rack: "rack", heater: "heater", drop: "drop" }[w.spot.id] || "beam");
+  if (w.spot) return picHTML({ bay: "bin", slot: "wedge", bed: "bed", bedScrap: "bed", socket: "socket", shelf: "glass", rack: "rack", heater: "heater", drop: "drop", ebin: "ebin" }[w.spot.id] || "beam");
   return picHTML(w.part.type);
 }
 let dashMode = null;
@@ -2362,6 +2439,10 @@ function buildDash(){
     left = stick;
     right = '<div class="col">' + aim + scan + "</div>" + slider
       + '<button class="dbtn big mag" data-c="big" id="bigBtn">' + DI.mag + '<span id="bigLbl">HOLD</span></button>';
+  } else if (m === "hose"){
+    left = stick.replace("Swing and lift the arm", "Aim the hose");
+    right = '<div class="col">' + aim + '<div class="tank" aria-label="Water tank"><i id="tankFill"></i><span>WATER</span></div></div>'
+      + '<button class="dbtn big spray" data-c="big" id="bigBtn">' + DI.hose + '<span id="bigLbl">SPRAY</span></button>';
   } else if (m === "drill"){
 
     left = '<div><div class="drillg" id="drillG" aria-label="Drill depth">' + G.world.layers.map((k, i) => i < 2 ? '<span class="ly L-' + k + '">' + k + "</span>" : '<span class="ly L-find" id="drillFind" data-deep="' + k + '">?</span>').join("") + '<i id="drillBar"></i></div><div class="under">Park on a dashed ring</div></div>';
@@ -2386,7 +2467,7 @@ function renderDash(){
   const ap = $("aimPic"); if (ap) ap.innerHTML = aimPic();
   const lbl = $("bigLbl"), big = $("bigBtn");
   if (lbl && G.mode === "arm") lbl.textContent = G.held.length ? "LET GO" : "GRAB";
-  if (big) big.classList.toggle("on", G.mode === "magnet" ? G.magOn : G.mode === "laser" ? laser.firing : G.mode === "drill" ? G.drilling : false);
+  if (big) big.classList.toggle("on", G.mode === "magnet" ? G.magOn : G.mode === "laser" ? laser.firing : G.mode === "drill" ? G.drilling : G.mode === "hose" ? hose.spraying : false);
   if (lbl && G.mode === "magnet") lbl.textContent = G.magOn ? "ON" : "HOLD";
 }
 const renderActs = () => renderDash();
@@ -2402,6 +2483,8 @@ function drawDash(dt){
     if (DASH.wheelId == null) DASH.steer += (0 - DASH.steer) * ease(8, dt);
     const w = $("wheelRot"); if (w) w.setAttribute("transform", "rotate(" + (DASH.steer * 110).toFixed(1) + " 60 60)");
     const g = $("gauge"); if (g){ const v = Math.abs(rover.v); g.style.setProperty("--spd", Math.round(v / ROVER.maxF * 270) + "deg"); $("spd").firstChild.nodeValue = v.toFixed(1); }
+  } else if (G.mode === "hose"){
+    const t = $("tankFill"); if (t) t.style.height = Math.round((G.water || 0) * 100) + "%";
   } else if (G.mode === "drill"){
     const b = $("drillBar"); if (b) b.style.top = (G.drillDepth * 100).toFixed(1) + "%";
   } else {
@@ -2479,6 +2562,7 @@ function setMode(m, quiet){
     if (m === "drive"){ radio("Set it down, or put it in the cargo bed on the back, before you drive."); sfx("bad"); return; }
     if (m === "laser"){ radio("Put down what you're holding before you use the laser."); sfx("bad"); return; }
     if (m === "drill"){ radio("Put it down first. The drill needs both hands of the rover."); sfx("bad"); return; }
+    if (m === "hose"){ radio("Put it down first, then use the Hose."); sfx("bad"); return; }
     if (G.mode === "magnet" && m === "arm"){ radio("Drop what the magnet is holding first."); sfx("bad"); return; }
     if (G.mode === "arm" && m === "magnet"){ radio("Let go of the part first, then switch to the magnet."); sfx("bad"); return; }
   }
@@ -2489,7 +2573,7 @@ function setMode(m, quiet){
   R.fingers.forEach(f => f.visible = m !== "magnet");
   buildDash();
   if (!quiet){
-    flash(m === "drive" ? "Drive" : m === "arm" ? "Arm" : m === "magnet" ? "Magnet" : m === "drill" ? "Drill" : "Laser");
+    flash(m === "drive" ? "Drive" : m === "arm" ? "Arm" : m === "magnet" ? "Magnet" : m === "drill" ? "Drill" : m === "hose" ? "Hose" : "Laser");
     sfx("flip");
     if (!G.seenMode) G.seenMode = {};
     if (!G.seenMode[m] && m !== "drive"){ G.seenMode[m] = true; radio("The rover parks. " + HINTS[G.lastDevice][m], 6500); }
@@ -2504,7 +2588,7 @@ function act(what){
   if (what === "scan") return doScan();
   if (what === "test") return doTest();
   if (what === "grab"){ if (G.mode === "arm"){ if (!G.held.length && hatchReach()) return openHatch(); return G.held.length ? releaseAll() : tryGrab(); } return; }
-  if (what === "aim"){ if (G.mode === "laser") return laserAimNearest(); if (G.mode === "drive") return radio("Switch to the Arm or the Magnet first, then Aim."); return aimAt(wantedThing()); }
+  if (what === "aim"){ if (G.mode === "laser") return laserAimNearest(); if (G.mode === "hose") return hoseAimNearest(); if (G.mode === "drive") return radio("Switch to the Arm or the Magnet first, then Aim."); return aimAt(wantedThing()); }
   if (what === "rot"){
     if (G.held.length){ for (const p of G.held) p.rot = (p.rot || 0) + ROT_STEP; sfx("click"); }
     else radio("Pick up a part first, then Rotate turns it.");
@@ -2514,6 +2598,15 @@ function act(what){
 /* what Chike wants next, for the Aim button */
 function wantedThing(){
   const s = G.step, holding = G.held.length && G.held[0] !== "lever" ? G.held[0] : null;
+  if (G.mission === "meteor"){
+    const bin = targets().find(t => t.id === "ebin"), bed = targets().find(t => t.id === "bed");
+    const ok = bin && canReach({ x: bin.x, y: bin.y + 0.7, z: bin.z });
+    if (holding) return ok ? { spot: bin, part: holding } : bed ? { spot: bed, part: holding } : bin ? { spot: bin, part: holding } : null;
+    const inBed = parts.find(p => p.type === "meteor" && p.state === "bed");
+    if (inBed && ok) return { part: inBed };
+    const ms = parts.filter(p => p.type === "meteor" && p.state === "free").sort((a, b) => Math.hypot(a.x - rover.x, a.z - rover.z) - Math.hypot(b.x - rover.x, b.z - rover.z));
+    return ms.length ? { part: ms[0] } : inBed ? { part: inBed } : null;
+  }
   if (G.mission === "supply"){
     const drop = targets().find(t => t.id === "drop"), bed = targets().find(t => t.id === "bed");
     if (!SUPPLY.open) return SUPPLY.landed ? { handle: true } : null;
@@ -2672,6 +2765,7 @@ function fitFor(p){
     if (t.id === "rack" && res === "shape") continue;
     if (t.id === "heater" && res === "shape") continue;
     if (t.id === "drop" && res === "shape") continue;
+    if (t.id === "ebin" && res === "shape") continue;
     if (t.id === "heater" && res === "ok" && !heaterTakes(p.heat || 0)) res = "cold";
     if (res === "full") continue;
     if (!best || res === "ok" && best.res !== "ok") best = { t, res };
@@ -2703,6 +2797,10 @@ function finishSnap(p){
     if (!G.notes.has("triangle")) setTimeout(() => learn("triangle", scanChips("wedge")), 900);
   }
   if (t.id === "socket"){ p.state = "snap"; GH.socketRing.material.color.set(0xffffff); sfx("good"); }
+  if (t.id === "ebin"){
+    p.state = "fixed"; EMBER.binN++; p.x = EPLACES.bin.x + [-0.6, 0, 0.6][(EMBER.binN - 1) % 3]; p.z = EPLACES.bin.z; sfx("coin"); flash("Meteorite " + EMBER.binN + " of 3");
+    updateStep();
+  }
   if (t.id === "drop"){
     p.state = "fixed"; SUPPLY.delivered = true; sfx("win"); flash("Delivered!");
     radio("The supplies are in! There's food, seeds and a spare heater part. You're a hero, rover.", 7000);
@@ -2877,7 +2975,7 @@ function readInput(){
   const pitch = clamp(y + ph.jy, -1, 1);
   const hold = keys.has("Space") || DASH.big || !!pad.held[0];
   const reachAbs = DASH.reachAbs != null ? DASH.reachAbs : fresh && ph.r >= 0 ? ph.r : null;
-  return { x, thr, pitch, reach, reachAbs, mag: hold || !!ph.mag, fire: G.mode === "laser" && (hold || !!ph.fire), drill: G.mode === "drill" && (hold || !!ph.fire) };
+  return { x, thr, pitch, reach, reachAbs, mag: hold || !!ph.mag, fire: G.mode === "laser" && (hold || !!ph.fire), drill: G.mode === "drill" && (hold || !!ph.fire), spray: G.mode === "hose" && (hold || !!ph.fire) };
 }
 
 /* camera: drag to look around, wheel or pinch to zoom */
@@ -3008,7 +3106,7 @@ function startGame(){
   G.started = true; G.clockOn = true;
   closeOv("ovStart");
   sfx("start");
-  landRocket(() => { radio(G.world.id === "glacia" ? GLACIA_HELLO : "Rover, this is Chike. The greenhouse lost power. Drive to the broken bridge. Follow the blue beam.", 6500); if (G.world.id === "glacia") setTimeout(() => { if (G.world.id === "glacia") learn("thinAir", [{ text: "Thin air", tone: "yes" }, { text: "Freezing cold", tone: "warn" }]); }, 7000); });
+  landRocket(() => { if (G.world.id === "ember") return emberArrive(); radio(G.world.id === "glacia" ? GLACIA_HELLO : "Rover, this is Chike. The greenhouse lost power. Drive to the broken bridge. Follow the blue beam.", 6500); if (G.world.id === "glacia") setTimeout(() => { if (G.world.id === "glacia") learn("thinAir", [{ text: "Thin air", tone: "yes" }, { text: "Freezing cold", tone: "warn" }]); }, 7000); });
   sendPhoneState();
 }
 function resetGame(){
@@ -3016,7 +3114,7 @@ function resetGame(){
   resetCurrentWorld();
   G.started = true; G.paused = false; G.clockOn = true;
   $("ovPause").classList.remove("open");
-  radio(G.world.id === "glacia" ? "Fresh start on Glacia." : "Fresh start. Drive to the broken bridge.");
+  radio(G.world.id === "glacia" ? "Fresh start on Glacia." : G.world.id === "ember" ? "Fresh start on Ember. Drill the ice ring for water first." : "Fresh start. Drive to the broken bridge.");
   sfx("start");
   sendPhoneState();
 }
@@ -3482,6 +3580,7 @@ function beamTarget(){
     return parts.filter(p => p.type === "heat" && p.state === "free").sort((a, b) => Math.hypot(a.x - rover.x, a.z - rover.z) - Math.hypot(b.x - rover.x, b.z - rover.z))[0] || null;
   }
   if (G.mission === "supply") return supplyBeam();
+  if (G.mission === "meteor") return meteorBeam();
   if (s === 0) return PLACES.approach;
   if (s === 1) return PANEL.state === "held" ? PLACES.bay : PANEL;
   if (s === 2) return PLACES.lever;
@@ -3530,6 +3629,10 @@ function drawCamera(dt){
     const t = drillTip(), yaw = rover.yaw + Math.PI * 0.78 + camCtl.yaw;
     want = new THREE.Vector3(t.x + Math.sin(yaw) * 4.6 * z, rover.y + 2.6 * z, t.z + Math.cos(yaw) * 4.6 * z);
     look = new THREE.Vector3(t.x, rover.y + 0.4, t.z);
+  } else if (G.mode === "hose"){
+    const o = hoseOrigin(), yaw = rover.yaw + hose.yaw, hx = -Math.sin(yaw), hz = -Math.cos(yaw), lx = hz, lz = -hx;
+    want = new THREE.Vector3(o.x - hx * 4.2 * z + lx * 1.2, o.y + 2.2 * z, o.z - hz * 4.2 * z + lz * 1.2);
+    look = new THREE.Vector3(o.x + hx * 7, o.y - 1.2, o.z + hz * 7);
   } else if (G.mode === "laser"){
     /* over the rover's shoulder, looking down the laser, so the purple target sits in front of you */
     const o = laserOrigin(), d = laserDir(), h = Math.hypot(d.x, d.z) || 1;
@@ -3629,12 +3732,14 @@ function frame(now){
     stepMagnet(inp, dt);
     stepLaser(inp, dt);
     stepDrill(inp, dt);
+    stepHose(inp, dt);
     stepLever(dt);
     stepParts(dt);
     stepTest(dt);
     stepSat(dt);
     stepGlacia(dt);
     stepSupply(dt);
+    stepEmber(dt);
     stepBoarding(dt);
     if (G.started && !G.done) updateStep();
     $("clock").textContent = formatTime(G.t);
@@ -3766,7 +3871,7 @@ function rmMsg(p){
 function sendPhoneState(){
   if (!RM.ch) return;
   if (CT.on) return cSendState();
-  rmSend({ t: "st", tools: modesNow(), launch: !!G.canLaunch, m: G.mode, held: G.held.length > 0, test: testReady(), firing: laser.firing, mag: G.magOn, paused: G.paused, done: G.done, started: G.started, r: (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin), step: G.step < MISSIONS[G.mission].steps.length ? MISSIONS[G.mission].steps[G.step].text : "Mission complete" });
+  rmSend({ t: "st", tools: modesNow(), launch: !!G.canLaunch, m: G.mode, held: G.held.length > 0, test: testReady(), firing: laser.firing || !!G.drilling || hose.spraying, mag: G.magOn, paused: G.paused, done: G.done, started: G.started, r: (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin), step: G.step < MISSIONS[G.mission].steps.length ? MISSIONS[G.mission].steps[G.step].text : "Mission complete" });
 }
 addEventListener("pagehide", () => { if (RM.ch) rmSend({ t: "gone" }); });
 
@@ -4498,9 +4603,10 @@ function stepDrill(inp, dt){
   }
   if (G.mode === "drill" && was < 1 && G.drillDepth >= 1){
     const sp = spotUnderDrill(), found = drillFind(sp);
-    const f = $("drillFind"); if (f){ const k = found === "rock" ? "rock" : f.dataset.deep; f.textContent = k; f.className = "ly L-" + k; }
+    const f = $("drillFind"); if (f){ const k = found === "rock" ? (G.world.id === "ember" ? "lava" : "rock") : found === "water" ? "water" : f.dataset.deep; f.textContent = k; f.className = "ly L-" + k; }
     G.drillShowT = 2.5;
-    if (found === "rock"){ radio("Only rock here. Park the drill on a dashed ring.", 5000); sfx("bad"); G.drillDepth = 0; return; }
+    if (found === "rock"){ radio(G.world.id === "ember" ? "Too hot! There's lava down deep here. Drill on the dashed ring over the ice." : "Only rock here. Park the drill on a dashed ring.", 5000); sfx("bad"); G.drillDepth = 0; return; }
+    if (found === "water"){ G.water = 1; G.drillDepth = 0; sfx("good"); flash("Water tank full"); renderDash(); sendPhoneState(); if (G.mission === "meteor") updateStep(); return; }
     sp.used = true; sp.ring.visible = false; sp.hole.visible = true;
     if (found === "energy"){
       /* it pops out of the hole and lands on the far side, away from the rover */
@@ -4841,14 +4947,14 @@ function saveWorldStars(id){
   writeSave();
   return { st: SAVE.stars[id], found, total: mine.length };
 }
-const WORLD_DONE = { pumice: "You fixed the greenhouse, powered the satellite dish and flew off Pumice Moon.", glacia: "You warmed Yuna's base, brought in the supplies and flew off Glacia." };
+const WORLD_DONE = { ember: "You put out the meteor fire, cleared the meteorite and flew off Ember.", pumice: "You fixed the greenhouse, powered the satellite dish and flew off Pumice Moon.", glacia: "You warmed Yuna's base, brought in the supplies and flew off Glacia." };
 /* the rocket lands on the next world: the player carries on there */
 function arriveAt(id){
   saveWorldStars(G.world.id);
   closeOv("ovFlight"); document.body.classList.remove("flying");
   enterWorld(id); resetCurrentWorld();
   G.started = true; G.done = false; G.paused = false; G.clockOn = true;
-  landRocket(() => { radio(id === "glacia" ? GLACIA_HELLO : "Welcome!", 7000); if (id === "glacia") setTimeout(() => learn("thinAir", [{ text: "Thin air", tone: "yes" }, { text: "Freezing cold", tone: "warn" }]), 7500); });
+  landRocket(() => { if (id === "ember") return emberArrive(); radio(id === "glacia" ? GLACIA_HELLO : "Welcome!", 7000); if (id === "glacia") setTimeout(() => learn("thinAir", [{ text: "Thin air", tone: "yes" }, { text: "Freezing cold", tone: "warn" }]), 7500); });
   paintStart(); sendPhoneState();
 }
 /* the next world isn't built yet: stars for this one, and the next is coming in an update */
@@ -4967,7 +5073,7 @@ function loadLists(id){
 }
 /* the things that travel with the player from world to world */
 function sharedObjects(){
-  return [sunLight, sunLight.target, R.group, R.tool, marker, dropLine, ...field, beam, dustPts, laserBeam, laserGlow, reticle, ROCKET.g, ...scanMarks].concat(scanLine ? [scanLine] : []);
+  return [sunLight, sunLight.target, R.group, R.tool, marker, dropLine, ...field, beam, dustPts, waterPts, laserBeam, laserGlow, reticle, ROCKET.g, ...scanMarks].concat(scanLine ? [scanLine] : []);
 }
 function furthestWorld(){ let best = "pumice"; for (const w of WORLDS) if (SAVE.reached.includes(w.id) && w.missions.length) best = w.id; return best; }
 const KID_FACE = { chike: "/assets/characters/chike-pose-point.png", yuna: "yuna.jpg", zech: "zech.jpg", corey: "corey.jpg", kiyah: "kylah.jpg", averi: "averi.jpg", mateo: "mateo.jpg", stacey: "stacey.jpg" };
@@ -4993,14 +5099,14 @@ function enterWorld(id){
   for (const o of sharedObjects()) activeScene.add(o);
   G.world = worldById(id); G.g = G.world.g; setTerrain(id);
   setCornerKid(G.world.corner);
-  const L = { pumice: [0xfff3e2, 2.1, 0.82], glacia: [0xffe6dc, 1.35, 0.74] }[id] || [0xffffff, 1.8, 0.85];
+  const L = { pumice: [0xfff3e2, 2.1, 0.82], glacia: [0xffe6dc, 1.35, 0.74], ember: [0xffcfa0, 1.7, 0.8] }[id] || [0xffffff, 1.8, 0.85];
   sunLight.color.setHex(L[0]); sunLight.intensity = L[1]; renderer.toneMappingExposure = L[2];
   ROCKET.y = groundHeight(PLACES.rocket.x, PLACES.rocket.z); ROCKET.base.position.y = ROCKET.y;
   if (!SAVE.reached.includes(id)){ SAVE.reached.push(id); SAVE.reached = WORLDS.map(w => w.id).filter(w => SAVE.reached.includes(w)); writeSave(); }
   camInit = false; G.held = []; G.bedItem = null; G.aim = null;
   buildDash();
 }
-function resetCurrentWorld(){ if (G.world.id === "glacia") resetGlacia(); else resetWorld(); }
+function resetCurrentWorld(){ if (G.world.id === "glacia") resetGlacia(); else if (G.world.id === "ember") resetEmber(); else resetWorld(); }
 const BUILD_WORLD = {};
 
 
@@ -5315,6 +5421,283 @@ function supplyBeam(){
   return null;
 }
 
+
+/* ---------- the Hose: aim with the joystick, hold SPRAY; the water arcs under the world's gravity ---------- */
+const hose = { yaw: 0, pitch: 0.4, aimTo: null, spraying: false };
+const WATER_N = 300;
+const water = { geo: new THREE.BufferGeometry(), p: new Float32Array(WATER_N * 3), v: new Float32Array(WATER_N * 3), on: new Uint8Array(WATER_N), next: 0, acc: 0 };
+water.geo.setAttribute("position", new THREE.BufferAttribute(water.p, 3));
+for (let i = 0; i < WATER_N; i++) water.p[i * 3 + 1] = -50;
+/* a soft round drop, so the spray reads as water and not squares */
+function softDot(inner, outer){
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, inner); r.addColorStop(0.45, inner); r.addColorStop(1, outer);
+  g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+const waterPts = new THREE.Points(water.geo, new THREE.PointsMaterial({ map: softDot("rgba(225,244,255,1)", "rgba(120,190,255,0)"), size: 0.2, transparent: true, opacity: 0.95, depthWrite: false }));
+waterPts.frustumCulled = false; scene.add(waterPts);
+/* the nozzle: a mount that turns, and a tube that tilts up and down and sticks out forward from it */
+const NOZZLE = (function(){ const g = new THREE.Group(); g.position.set(-0.5, 1.55, -1.05); R.body.add(g); const tilt = new THREE.Group(); g.add(tilt); mesh(cyl(0.12, 0.14, 0.16, 12), MAT.dark, 0, -0.04, 0, g); mesh(cyl(0.06, 0.09, 0.55, 10), MAT.blue, 0, 0.27, 0, tilt); g.visible = false; return g; })();
+function hoseOrigin(){ return toWorld(rover, { x: -0.5, y: 1.9, z: -1.1 }); }
+function hoseDir(){ const yaw = rover.yaw + hose.yaw, c = Math.cos(hose.pitch); return { x: -Math.sin(yaw) * c, y: Math.sin(hose.pitch), z: -Math.cos(yaw) * c }; }
+/* the aim that lands the jet on a spot: a few test shots under this world's gravity, the closest wins */
+function hosePitchFor(tx, tz){
+  const o = hoseOrigin(), d = Math.hypot(tx - o.x, tz - o.z), ty = groundHeight(tx, tz) + 0.3;
+  let best = null, bd = 1e9;
+  for (let a = -0.3; a <= 1.25; a += 0.01){
+    const vx = Math.cos(a) * HOSE.speed, vy = Math.sin(a) * HOSE.speed, h = o.y - ty;
+    const t = (vy + Math.sqrt(vy * vy + 2 * G.g * h)) / G.g, land = vx * t;
+    if (Math.abs(land - d) < bd){ bd = Math.abs(land - d); best = a; }
+  }
+  return bd < 0.6 ? best : null;
+}
+function hoseAimNearest(){
+  const burning = EMBER.fires.filter(f => f.hp > 0);
+  if (!burning.length){ radio(EMBER.struck ? "All the fires are out!" : "Nothing is burning yet."); return; }
+  /* the nearest fire the hose can turn to and reach; if none, say why */
+  const o = hoseOrigin();
+  const shots = burning.map(f => ({ f, yaw: angDiff(Math.atan2(-(f.x - o.x), -(f.z - o.z)), rover.yaw), pitch: hosePitchFor(f.x, f.z), d: Math.hypot(f.x - o.x, f.z - o.z) })).sort((a, b) => a.d - b.d);
+  const ok = shots.find(q => q.pitch != null && Math.abs(q.yaw) <= 1.5);
+  if (!ok){ const near = shots[0]; radio(Math.abs(near.yaw) > 1.5 ? "Turn the rover toward a fire first." : "That fire is too far for the Hose. Drive closer."); sfx("bad"); return; }
+  hose.aimTo = { yaw: ok.yaw, pitch: ok.pitch }; sfx("whoosh", { volume: 0.3, pitch: 1.2 });
+}
+function stepHose(inp, dt){
+  NOZZLE.visible = G.mode === "hose";
+  const on = G.mode === "hose" && G.started && !G.done && !G.paused;
+  if (on){
+    if (Math.abs(inp.x) > 0.05 || Math.abs(inp.pitch) > 0.05) hose.aimTo = null;
+    if (hose.aimTo){
+      hose.yaw += clamp(angDiff(hose.aimTo.yaw, hose.yaw), -1.6 * dt, 1.6 * dt);
+      hose.pitch += clamp(hose.aimTo.pitch - hose.pitch, -1.2 * dt, 1.2 * dt);
+      if (Math.abs(angDiff(hose.aimTo.yaw, hose.yaw)) < 0.01 && Math.abs(hose.aimTo.pitch - hose.pitch) < 0.01) hose.aimTo = null;
+    } else { hose.yaw -= inp.x * 0.9 * dt; hose.pitch += inp.pitch * 0.5 * dt; }
+    hose.yaw = clamp(hose.yaw, -1.5, 1.5); hose.pitch = clamp(hose.pitch, -0.3, 1.25);
+    NOZZLE.rotation.set(0, hose.yaw, 0); NOZZLE.children[0].rotation.x = -(Math.PI / 2 - hose.pitch);
+  }
+  const want = on && !!inp.spray;
+  if (want && (G.water || 0) <= 0 && !G.tankSaid){ G.tankSaid = true; radio("The water tank is empty. Drill the ice ring to fill it again.", 5000); sfx("bad"); }
+  if (!want) G.tankSaid = false;
+  const spraying = want && (G.water || 0) > 0;
+  if (spraying !== hose.spraying){ hose.spraying = spraying; renderDash(); sendPhoneState(); if (spraying) sfx("whoosh", { volume: 0.4, pitch: 0.7 }); }
+  G.water = waterStep(G.water || 0, spraying, dt);
+  if (spraying){
+    if (!SAVE.notes.includes("venusPull") && G.world.id === "ember") learn("venusPull", [{ text: "Pulls like Venus", tone: "yes" }, { text: "Water curves down fast", tone: "yes" }]);
+    water.acc += dt * 70;
+    const o = hoseOrigin(), d = hoseDir();
+    while (water.acc >= 1){
+      water.acc -= 1; const i = water.next; water.next = (water.next + 1) % WATER_N;
+      water.on[i] = 1; water.p[i * 3] = o.x; water.p[i * 3 + 1] = o.y; water.p[i * 3 + 2] = o.z;
+      const sp = HOSE.speed * (0.96 + Math.random() * 0.08);
+      water.v[i * 3] = d.x * sp + (Math.random() - 0.5) * 0.4; water.v[i * 3 + 1] = d.y * sp + (Math.random() - 0.5) * 0.4; water.v[i * 3 + 2] = d.z * sp + (Math.random() - 0.5) * 0.4;
+    }
+  }
+  /* the drops fly in arcs and land; a drop near a fire cools it */
+  for (let i = 0; i < WATER_N; i++){
+    if (!water.on[i]) continue;
+    water.v[i * 3 + 1] -= G.g * dt;
+    water.p[i * 3] += water.v[i * 3] * dt; water.p[i * 3 + 1] += water.v[i * 3 + 1] * dt; water.p[i * 3 + 2] += water.v[i * 3 + 2] * dt;
+    const x = water.p[i * 3], y = water.p[i * 3 + 1], z = water.p[i * 3 + 2];
+    if (y <= groundHeight(x, z) + 0.05){
+      water.on[i] = 0; water.p[i * 3 + 1] = -50;
+      if (G.world.id === "ember") for (const f of EMBER.fires){ if (f.hp > 0 && Math.hypot(x - f.x, z - f.z) < HOSE.reach){ f.hp -= HOSE.douse / 40; if (f.hp <= 0) fireOut(f); } }
+    }
+  }
+  water.geo.attributes.position.needsUpdate = true;
+}
+
+/* ---------- Ember: a red world with air, a meteor strike and a fire ---------- */
+const EPLACES = { start: { x: 0, z: 12 }, base: { x: 7, z: 26 }, bin: { x: -1.5, z: 20 }, ice: { x: -9, z: 4 }, crater: { x: 9.5, z: 8.5 } };
+const EMBER = { fires: [], binN: 0, struck: false, strikeT: -1, rock: null, crater: null, light: null };
+const FIRE_SPOTS = [[6.4, 11.4], [12.4, 11.6], [13.2, 6.6], [7.2, 5.0]];
+function rockTex(){
+  const c = document.createElement("canvas"); c.width = c.height = 512;
+  const g = c.getContext("2d");
+  g.fillStyle = "#8a4632"; g.fillRect(0, 0, 512, 512);
+  const img = g.getImageData(0, 0, 512, 512), d = img.data;
+  for (let i = 0; i < d.length; i += 4){ const n = (Math.random() - 0.5) * 30; d[i] += n; d[i + 1] += n * 0.6; d[i + 2] += n * 0.4; }
+  g.putImageData(img, 0, 0);
+  g.strokeStyle = "rgba(60,22,14,.45)"; g.lineWidth = 2;
+  for (let k = 0; k < 30; k++){ let x = Math.random() * 512, y = Math.random() * 512; g.beginPath(); g.moveTo(x, y); for (let s2 = 0; s2 < 5; s2++){ x += (Math.random() - 0.5) * 40; y += (Math.random() - 0.5) * 40; g.lineTo(x, y); } g.stroke(); }
+  for (let k = 0; k < 220; k++){ g.fillStyle = "rgba(196,120,80," + (0.2 + Math.random() * 0.3) + ")"; g.beginPath(); g.arc(Math.random() * 512, Math.random() * 512, 1 + Math.random() * 3, 0, 7); g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(30, 30);
+  t.encoding = THREE.sRGBEncoding; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return t;
+}
+function emberSky(sc){
+  const c = document.createElement("canvas"); c.width = 16; c.height = 256;
+  const g = c.getContext("2d"), grd = g.createLinearGradient(0, 0, 0, 256);
+  grd.addColorStop(0, "#5a2f3a"); grd.addColorStop(0.45, "#b0573a"); grd.addColorStop(0.62, "#e39a5c"); grd.addColorStop(1, "#f2c48e");
+  g.fillStyle = grd; g.fillRect(0, 0, 16, 256);
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
+  sc.add(new THREE.Mesh(new THREE.SphereGeometry(1800, 32, 16), new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, fog: false })));
+  const sc2 = document.createElement("canvas"); sc2.width = sc2.height = 128;
+  const g2 = sc2.getContext("2d"), r = g2.createRadialGradient(64, 64, 0, 64, 64, 64);
+  r.addColorStop(0, "rgba(255,246,220,1)"); r.addColorStop(0.3, "rgba(255,200,140,.6)"); r.addColorStop(1, "rgba(255,200,140,0)");
+  g2.fillStyle = r; g2.fillRect(0, 0, 128, 128);
+  const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(sc2), depthWrite: false, fog: false }));
+  sun.position.copy(SUN_DIR).multiplyScalar(1500); sun.scale.set(340, 340, 1); sc.add(sun);
+}
+let FIRE_GLOW = null;
+function makeFire(sc, x, z){
+  if (!FIRE_GLOW) FIRE_GLOW = softDot("rgba(255,200,120,.9)", "rgba(255,120,40,0)");
+  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z); sc.add(g);
+  /* dry scrub that burns */
+  const scrubMat = new THREE.MeshStandardMaterial({ color: 0x9c7a3c, roughness: 1 });
+  for (let k = 0; k < 6; k++){ const b = mesh(new THREE.ConeGeometry(0.18, 0.7, 5), scrubMat, Math.cos(k) * 0.5, 0.35, Math.sin(k * 1.7) * 0.5, g); b.rotation.z = (k - 2.5) * 0.15; }
+  const flames = new THREE.Group(); g.add(flames);
+  const cols = [0xff5a1f, 0xff9a2f, 0xffd75a];
+  for (let k = 0; k < 5; k++){ const m = new THREE.Mesh(new THREE.ConeGeometry(0.32 - k * 0.04, 1.1 + k * 0.12, 7, 1, true), new THREE.MeshBasicMaterial({ color: cols[k % 3], transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); m.position.set(Math.cos(k * 2.1) * 0.25, 0.6 + k * 0.05, Math.sin(k * 2.1) * 0.25); flames.add(m); }
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: FIRE_GLOW, color: 0xff8a30, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }));
+  glow.position.y = 0.9; glow.scale.set(3.2, 3.2, 1); flames.add(glow);
+  const f = { x, z, hp: 0, g, flames };
+  flames.visible = false;
+  return f;
+}
+function fireOut(f){
+  f.hp = 0; f.flames.visible = false; sfx("whoosh", { volume: 0.3, pitch: 0.6 });
+  for (let k = 0; k < 14; k++) kickDust(f.x + (Math.random() - 0.5), groundHeight(f.x, f.z) + 0.4, f.z + (Math.random() - 0.5), (Math.random() - 0.5) * 0.6, 1.2 + Math.random(), (Math.random() - 0.5) * 0.6);
+  if (!SAVE.notes.includes("fireTriangle")) learn("fireTriangle", [{ text: "Fuel", tone: "yes" }, { text: "Heat", tone: "yes" }, { text: "Oxygen", tone: "yes" }]);
+  if (!SAVE.notes.includes("waterCools")) learn("waterCools", [{ text: "Water soaks up heat", tone: "yes" }, { text: "Fire out", tone: "yes" }]);
+  const left = EMBER.fires.filter(q => q.hp > 0).length;
+  flash(left ? left + (left === 1 ? " fire left" : " fires left") : "Fire's out!");
+  updateStep();
+}
+BUILD_WORLD.ember = function(sc){
+  sc.background = new THREE.Color(0xd9915e);
+  sc.fog = new THREE.Fog(0xdb9a68, 26, 140);
+  sc.add(new THREE.HemisphereLight(0xffd9b0, 0x5a2a20, 0.5));
+  sc.add(new THREE.AmbientLight(0xffffff, 0.05));
+  emberSky(sc);
+  const geo = new THREE.PlaneGeometry(150, 150, 220, 220); geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, cols = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++){ const x = pos.getX(i), z = pos.getZ(i); pos.setY(i, groundHeight(x, z)); const f = 0.85 + 0.1 * Math.sin(x * 0.11 - z * 0.07); cols[i * 3] = f; cols[i * 3 + 1] = f * 0.95; cols[i * 3 + 2] = f * 0.92; }
+  geo.setAttribute("color", new THREE.BufferAttribute(cols, 3)); geo.computeVertexNormals();
+  const gm = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: rockTex(), roughness: 0.95, vertexColors: true })); gm.receiveShadow = true; sc.add(gm);
+  /* Averi's base */
+  const b = EPLACES.base, by = groundHeight(b.x, b.z), bg = new THREE.Group(); bg.position.set(b.x, by, b.z); sc.add(bg);
+  mesh(cyl(4.0, 4.2, 2.6, 40), MAT.white, 0, 1.3, 0, bg);
+  const dome = mesh(new THREE.SphereGeometry(4.0, 40, 16, 0, Math.PI * 2, 0, Math.PI / 2), MAT.panel, 0, 2.6, 0, bg); dome.scale.y = 0.6;
+  mesh(cyl(4.05, 4.05, 0.3, 40), MAT.blue, 0, 2.2, 0, bg);
+  mesh(box(1.8, 2.2, 0.4), MAT.dark, 0, 1.1, -4.0, bg);
+  for (const s2 of [-1, 1]){ const pnl = mesh(box(2.4, 0.08, 1.4), new THREE.MeshStandardMaterial({ color: 0x1e3a6e, metalness: 0.4, roughness: 0.3 }), s2 * 6.2, 1.6, 0, bg); pnl.rotation.x = -0.5; mesh(box(0.1, 1.6, 0.1), MAT.dark, s2 * 6.2, 0.8, 0, bg); }
+  colCircle(b.x, b.z, 4.3, by + 4.4);
+  /* the salvage bin for the meteorite */
+  const bn = EPLACES.bin, bny = groundHeight(bn.x, bn.z), bin = new THREE.Group(); bin.position.set(bn.x, bny, bn.z); sc.add(bin);
+  mesh(box(2.2, 0.12, 1.6), MAT.dark, 0, 0.06, 0, bin);
+  for (const [x, z, w, d] of [[0, -0.8, 2.2, 0.1], [0, 0.8, 2.2, 0.1], [-1.1, 0, 0.1, 1.6], [1.1, 0, 0.1, 1.6]]) mesh(box(w, 0.8, d), MAT.panel, x, 0.45, z, bin);
+  mesh(box(2.24, 0.1, 0.12), MAT.blue, 0, 0.86, -0.8, bin);
+  surface(bn.x, bn.z, 1.0, 0.7, bny + 0.12);
+  const bs = drillSign("SALVAGE BIN", "Meteorite pieces go here"); bs.position.set(bn.x - 2.6, bny, bn.z + 0.4); bs.rotation.y = 0.4; sc.add(bs);
+  /* the ice pocket, under a dashed ring */
+  makeDrillSpot(EPLACES.ice.x, EPLACES.ice.z, "water");
+  const is = drillSign("ICE BELOW", "Drill here for water"); is.position.set(EPLACES.ice.x - 2.6, groundHeight(EPLACES.ice.x, EPLACES.ice.z), EPLACES.ice.z + 1.0); is.rotation.y = 0.5; sc.add(is);
+  /* the crater the meteor makes, hidden until it lands */
+  const c = EPLACES.crater, cy = groundHeight(c.x, c.z);
+  const crater = new THREE.Group(); crater.position.set(c.x, cy, c.z); sc.add(crater); crater.visible = false; EMBER.crater = crater;
+  const rim = mesh(new THREE.TorusGeometry(2.0, 0.45, 8, 32), new THREE.MeshStandardMaterial({ color: 0x5a2a1e, roughness: 1 }), 0, 0.05, 0, crater); rim.rotation.x = Math.PI / 2; rim.scale.z = 0.5;
+  const floor = mesh(new THREE.CircleGeometry(1.9, 28), new THREE.MeshStandardMaterial({ color: 0x2a1610, roughness: 1, emissive: 0x3a0e04, emissiveIntensity: 0.6 }), 0, 0.04, 0, crater); floor.rotation.x = -Math.PI / 2;
+  /* the meteor itself, for the strike */
+  const rock = mesh(new THREE.IcosahedronGeometry(0.7, 1), new THREE.MeshStandardMaterial({ color: 0x3a2a24, emissive: 0xff6a20, emissiveIntensity: 1.6 }), 0, -50, 0, sc); EMBER.rock = rock;
+  const trail = new THREE.Mesh(new THREE.ConeGeometry(0.6, 8, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0xffb060, transparent: true, opacity: 0.6, depthWrite: false })); rock.add(trail); trail.position.y = 4; EMBER.trail = trail;
+  const light = new THREE.PointLight(0xff8a3c, 0, 22); light.position.set(c.x, cy + 2, c.z); sc.add(light); EMBER.light = light;
+  EMBER.fires = FIRE_SPOTS.map(([x, z]) => makeFire(sc, x, z));
+  /* red boulders, kept off the paths */
+  let sd = 23; const rr = () => { sd = (sd * 16807) % 2147483647; return (sd - 1) / 2147483646; };
+  const rm = new THREE.MeshStandardMaterial({ color: 0x6a3426, roughness: 1 });
+  const keep = (x, z) => Math.hypot(x - b.x, z - b.z) < 9 || Math.hypot(x - bn.x, z - bn.z) < 4 || Math.hypot(x - EPLACES.ice.x, z - EPLACES.ice.z) < 5 || Math.hypot(x - c.x, z - c.z) < 7.5 || Math.hypot(x - PLACES.rocket.x - 2, z - PLACES.rocket.z) < 7 || Math.abs(x) < 4 && z > -30 && z < 16;
+  for (let i = 0; i < 60; i++){ const x = (rr() - 0.5) * 64, z = (rr() - 0.5) * 60; if (keep(x, z)) continue; const sz = 0.4 + rr() * rr() * 1.7; const m = mesh(new THREE.DodecahedronGeometry(sz, 0), rm, x, groundHeight(x, z) + sz * 0.4, z, sc); m.rotation.set(rr() * 3, rr() * 3, rr() * 3); if (sz > 0.8) colCircle(x, z, sz * 0.85, groundHeight(x, z) + sz); }
+  colCircle(PLACES.rocket.x, PLACES.rocket.z, 2.1, groundHeight(PLACES.rocket.x, PLACES.rocket.z) + 12);
+};
+function emberTargets(){
+  const out = [];
+  const bn = EPLACES.bin; out.push({ id: "ebin", x: bn.x, z: bn.z, y: groundHeight(bn.x, bn.z) + 0.15, r: 1.4 });
+  const w = toWorld(rover, { x: ROVER.bed.x, y: ROVER.bed.y, z: ROVER.bed.z });
+  out.push({ id: G.bedItem ? "bedScrap" : "bed", x: w.x, z: w.z, y: w.y, r: 0.95 });
+  return out;
+}
+/* the strike: lit fires and three iron pieces in a fresh crater */
+function emberAfterStrike(){
+  EMBER.struck = true; EMBER.crater.visible = true; EMBER.rock.position.y = -50;
+  EMBER.fires.forEach(f => { f.hp = 2; f.flames.visible = true; });
+  const c = EPLACES.crater;
+  for (const p of parts.filter(q => q.type === "meteor")){ activeScene.remove(p.g); parts.splice(parts.indexOf(p), 1); }
+  [[-0.6, 0.3], [0.7, 0.5], [0.1, -0.7]].forEach(([dx, dz], i) => { const p = addPart("meteor", c.x + dx, c.z + dz, i); fixColors(p.g); });
+}
+/* before the meteor lands: no crater, no fire, no meteorite yet */
+function emberCalm(){
+  EMBER.struck = false; EMBER.crater.visible = false; EMBER.light.intensity = 0;
+  EMBER.fires.forEach(f => { f.hp = 0; f.flames.visible = false; });
+  for (const p of parts.filter(q => q.type === "meteor")){ activeScene.remove(p.g); parts.splice(parts.indexOf(p), 1); }
+}
+function emberArrive(){
+  emberCalm();
+  radio("Rover, this is Averi on Ember! Welcome... wait, look up! Something's coming down!", 5000);
+  EMBER.strikeT = 0;
+}
+function stepEmber(dt){
+  if (G.world.id !== "ember") return;
+  if (EMBER.strikeT >= 0){
+    EMBER.strikeT += dt;
+    const c = EPLACES.crater, cy = groundHeight(c.x, c.z), k = clamp((EMBER.strikeT - 1.2) / 1.6, 0, 1);
+    if (EMBER.strikeT > 1.2 && k < 1){
+      const from = new THREE.Vector3(c.x + 40, cy + 60, c.z - 30), to = new THREE.Vector3(c.x, cy + 0.4, c.z);
+      EMBER.rock.position.copy(from.clone().lerp(to, k * k));
+      EMBER.trail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), from.clone().sub(to).normalize());
+    }
+    if (k >= 1 && !EMBER.struck){
+      emberAfterStrike(); sfx("thud", { volume: 1 }); flash("BOOM!");
+      for (let i = 0; i < 60; i++) kickDust(c.x + (Math.random() - 0.5) * 2, cy + 0.3, c.z + (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 8, 1 + Math.random() * 4, (Math.random() - 0.5) * 8);
+      learn("meteorAir", [{ text: "Squeezed air glows", tone: "yes" }]);
+      setTimeout(() => { if (G.world.id === "ember" && G.mission === "meteor"){ radio("A meteor! The dry plants are on fire! Drill our ice ring for water, then use the Hose.", 9000); setTimeout(() => { if (G.world.id === "ember") learn("fireTriangle", [{ text: "Fuel", tone: "yes" }, { text: "Heat", tone: "yes" }, { text: "Oxygen", tone: "yes" }]); }, 9500); } }, 1800);
+      EMBER.strikeT = -1;
+    }
+  }
+  /* flames flicker, and the crater's glow follows how much is still burning */
+  let burning = 0;
+  for (const f of EMBER.fires){ if (f.hp <= 0) continue; burning += f.hp; const s2 = 0.55 + f.hp * 0.25; f.flames.scale.set(s2, s2 * (0.85 + Math.random() * 0.3), s2); f.flames.rotation.y += dt * 2; }
+  EMBER.light.intensity = Math.min(3, burning * 0.6) * (0.85 + Math.random() * 0.3);
+}
+const METEOR_TALK = { 1: "The tank is full! Now switch to the Hose and spray the fires.", 2: "The fire's out! Thank you! Now clear the meteorite: iron sticks to the Magnet.", 3: "One down! The other pieces are in the crater." };
+function updateMeteorStep(){
+  const f = G.flags;
+  f.water = f.water || (G.water || 0) >= 0.95;
+  f.fire = EMBER.struck && EMBER.fires.every(q => q.hp <= 0);
+  if (f.fire) f.water = true;
+  f.clean1 = EMBER.binN >= 1; f.clean3 = EMBER.binN >= 3;
+  const ns = stepIndex(METEOR_STEPS, f);
+  if (ns !== G.step){
+    const was = G.step; G.step = ns; renderObjective();
+    if (ns > was && METEOR_TALK[ns]){ sfx("good"); radio(METEOR_TALK[ns]); }
+    if (ns >= 2 && !SAVE.notes.includes("meteorAir")) learn("meteorAir", [{ text: "Squeezed air glows", tone: "yes" }]);
+    if (ns >= METEOR_STEPS.length){ sfx("win"); radio("The base is safe, and the meteorite is cleared! You're amazing, rover.", 7000); setTimeout(() => { if (G.world.id === "ember" && G.mission === "meteor" && EMBER.binN >= 3) startBoard(); }, 3500); }
+    sendPhoneState();
+  }
+}
+function meteorBeam(){
+  const s = G.step;
+  if (s === 0) return EPLACES.ice;
+  if (s === 1){ const f = EMBER.fires.filter(q => q.hp > 0).sort((a, b) => Math.hypot(a.x - rover.x, a.z - rover.z) - Math.hypot(b.x - rover.x, b.z - rover.z))[0]; return (G.water || 0) <= 0 ? EPLACES.ice : f || null; }
+  const carried = parts.some(p => p.type === "meteor" && (p.state === "held" || p.state === "bed"));
+  if (carried) return EPLACES.bin;
+  return parts.filter(p => p.type === "meteor" && p.state === "free")[0] || null;
+}
+function resetEmber(){
+  if (G.world.id !== "ember") enterWorld("ember");
+  G.mission = "meteor"; G.flags = {}; G.step = 0; G.done = false; G.held = []; G.bedItem = null; G.aim = null; G.t = 0; G.notes = new Set();
+  G.laserHint = false; G.autoPull = false; G.magTried = new Set(); G.boardWarn = false; G.drillDepth = 0; G.water = 0; G.tankSaid = false;
+  Object.assign(arm, { yaw: 0, pitch: 0.15, reach: 2.0 }); Object.assign(hose, { yaw: 0, pitch: 0.4, aimTo: null, spraying: false });
+  Object.assign(rover, { x: EPLACES.start.x, z: EPLACES.start.z, yaw: 0, v: 0 });
+  resetRocket(); resetDrillSpots();
+  EMBER.binN = 0; EMBER.strikeT = -1; R.bedLight.material.emissiveIntensity = 0.15;
+  emberAfterStrike();
+  for (let i = 0; i < WATER_N; i++){ water.on[i] = 0; water.p[i * 3 + 1] = -50; }
+  fixColors(activeScene);
+  G.mode = "arm"; setMode("drive", true);
+  renderObjective();
+}
+
 /* ---------- saving, the grade picker and the worlds you've reached ---------- */
 const LOCAL_KEY = "ccs-remote-lunar-salvage-save";
 let SAVE = defaultSave();
@@ -5357,6 +5740,7 @@ function gradeButtons(row){
 }
 const START_TEXT = {
   pumice: null,
+  ember: ["Your rocket landed on Ember, a red world with real air. A meteor is about to come down near Averi's base.", "Drill the ice ring for water, put out the fire with the new Hose, then clear the iron meteorite. Averi will tell you what she needs."],
   glacia: ["Your rocket landed on Glacia, an icy world with thin, cold air. The base heater is broken, and a supply rocket is on its way.", "Heat metal blocks with the Laser and carry them to the heater, then bring in the package. Yuna will tell you what she needs. Scan things to collect Field Notes."]
 };
 function paintStart(){
@@ -5446,6 +5830,10 @@ PICS.hatch = '<svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#dbe7f
 PICS.package = '<svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#dbe7f3"/><path d="M10 22h36v24H10z" fill="#eef1f5" stroke="#0a0d1c" stroke-width="2.5"/><path d="M10 22l6-8h36l-6 8M52 14v24l-6 8" fill="#c8ced8" stroke="#0a0d1c" stroke-width="2.5" stroke-linejoin="round"/><path d="M26 22v24M10 30h36" stroke="#2f7de1" stroke-width="3.5"/></svg>';
 PICS.dome = '<svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#dbe7f3"/><path d="M0 44h56v12H0z" fill="#f3f7fb"/><path d="M8 44V34a20 14 0 0 1 40 0v10z" fill="#c8ced8" stroke="#0a0d1c" stroke-width="2.5"/><path d="M8 36h40" stroke="#2f7de1" stroke-width="3"/><path d="M24 44v-8h8v8" fill="#2b313d" stroke="#0a0d1c" stroke-width="2"/></svg>';
 PICS.drop = '<svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#dbe7f3"/><ellipse cx="28" cy="42" rx="20" ry="6" fill="#c8ced8" stroke="#0a0d1c" stroke-width="2.5"/><ellipse cx="28" cy="42" rx="14" ry="4" fill="none" stroke="#2f7de1" stroke-width="2.5"/><path d="M28 8v18M22 20l6 6 6-6" stroke="#0a0d1c" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>';
+PICS.iceRing = '<svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#f1d6c4"/><path d="M0 34h56v22H0z" fill="#8a4632"/><ellipse cx="28" cy="42" rx="18" ry="7" fill="none" stroke="#f4f1e8" stroke-width="3" stroke-dasharray="5 4"/><path d="M28 10v14M21 13l14 8M35 13l-14 8" stroke="#4fc3f7" stroke-width="2.5" stroke-linecap="round"/></svg>';
+PICS.fire = '<svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#ffe7d0"/><path d="M28 8c-8 10-12 16-12 24a12 12 0 0 0 24 0c0-8-4-14-12-24z" fill="#ff7a1a" stroke="#0a0d1c" stroke-width="2.5" stroke-linejoin="round"/><path d="M28 24c-4 5-6 8-6 11a6 6 0 0 0 12 0c0-3-2-6-6-11z" fill="#ffd75a"/><path d="M10 48h36" stroke="#9c7a3c" stroke-width="3"/></svg>';
+PICS.meteorPiece = '<svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#f1d6c4"/><path d="M14 36l8-16 16 4 4 14-14 6z" fill="#4a3a34" stroke="#0a0d1c" stroke-width="2.5" stroke-linejoin="round"/><path d="M22 30l4 4M32 28l-2 6" stroke="#8a7a74" stroke-width="2"/></svg>';
+PICS.ebin = '<svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#f1d6c4"/><path d="M8 26h40v18H8z" fill="#c8ced8" stroke="#0a0d1c" stroke-width="2.5"/><path d="M8 28h40" stroke="#2f7de1" stroke-width="3"/><path d="M28 6v12M23 13l5 5 5-5" stroke="#0a0d1c" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>';
 PICS.socket = '<svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#cfd8ea"/><path d="M18 26h20v22H18z" fill="#eef1f5" stroke="#0a0d1c" stroke-width="2.5"/><path d="M17 28h22v4H17z" fill="#2f7de1" stroke="#0a0d1c" stroke-width="2"/><ellipse cx="28" cy="24" rx="10" ry="4" fill="#2b313d" stroke="#5fd2ff" stroke-width="2.5"/><path d="M28 6v10M23 11l5 5 5-5" stroke="#0a0d1c" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>';
 
 resetWorld();
