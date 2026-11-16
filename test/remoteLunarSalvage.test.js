@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -66,8 +66,8 @@ describe("tool choice is a puzzle", () => {
 });
 
 describe("field notes and the quiz", () => {
-  it("has nine notes, and every one can be found", () => {
-    expect(S.NOTES).toHaveLength(9);
+  it("has eleven notes on Pumice Moon, and every one can be found", () => {
+    expect(S.NOTES.filter((n) => n.world === "pumice")).toHaveLength(11);
     const fromParts = new Set(Object.values(S.PART_TYPES).map((t) => t.note).filter(Boolean));
     for (const n of S.NOTES) expect(n.id === "gravity" || n.id === "laser" || fromParts.has(n.id)).toBe(true);
     for (const n of S.NOTES) expect(n.hint.length).toBeGreaterThan(10);
@@ -185,7 +185,7 @@ describe("the mission", () => {
   });
   it("gives a star for finishing, for every note and for all the scrap", () => {
     expect(S.starsFor({ done: true, notes: 2, scrap: 0 })).toBe(1);
-    expect(S.starsFor({ done: true, notes: 9, scrap: S.SCRAP_TOTAL })).toBe(3);
+    expect(S.starsFor({ done: true, notes: S.NOTES.length, scrap: S.SCRAP_TOTAL })).toBe(3);
   });
   it("shows the clock as minutes and seconds", () => {
     expect(S.formatTime(73)).toBe("1:13");
@@ -341,9 +341,7 @@ describe("the laser", () => {
 
 describe("the dashboard and Chike's requests", () => {
   it("gives every step a picture, and the picture is of the part Chike asks for", () => {
-    const pics = game.match(/const STEP_PIC = (\[[^\]]+\]);/);
-    expect(pics).toBeTruthy();
-    const list = JSON.parse(pics[1]);
+    const list = S.MISSIONS.repair.pic;
     expect(list).toHaveLength(S.STEPS.length);
     const want = { panel: "panel", lever: "lever", support: "wedge", free: "boulder", load: "cell", install: "cell" };
     S.STEPS.forEach((st, i) => { if (want[st.id]) expect(list[i]).toBe(want[st.id]); });
@@ -356,11 +354,11 @@ describe("the dashboard and Chike's requests", () => {
 
 describe("easy enough for a 6-year-old", () => {
   it("lights up the tool each step needs, and the step's hint names the same tool", () => {
-    const m = game.match(/const STEP_TOOL = (\[[^\]]+\]);/);
-    const tools = JSON.parse(m[1]);
-    expect(tools).toHaveLength(S.STEPS.length);
-    const name = { magnet: "Magnet", arm: "Arm", laser: "Laser" };
-    S.STEPS.forEach((st, i) => { if (name[tools[i]]) expect(st.hint).toContain(name[tools[i]]); });
+    const name = { magnet: "Magnet", arm: "Arm", laser: "Laser", drill: "Drill" };
+    for (const m of Object.values(S.MISSIONS)) {
+      expect(m.tool).toHaveLength(m.steps.length);
+      m.steps.forEach((st, i) => { if (name[m.tool[i]]) expect(st.hint).toContain(name[m.tool[i]]); });
+    }
   });
   it("turns the right piece to fit by itself, so the puzzle is picking the piece, not the angle", () => {
     expect(game).toContain('if (fit && fit.res === "turn"){ radio("Right piece! It turns itself to fit the outline."); return snapTo(p, fit.t); }');
@@ -557,5 +555,37 @@ describe("the drill", () => {
   });
   it("the game ignores a tool this world doesn't have yet", () => {
     expect(game).toMatch(/function setMode\(m, quiet\)\{[\s\S]{0,200}modesNow\(\)\.includes\(m\)/);
+  });
+});
+
+describe("the satellite mission", () => {
+  it("runs drill, rack, fill, test in order", () => {
+    const st = S.MISSIONS.satellite.steps;
+    expect(st.map(s => s.flag)).toEqual(["drill1", "rack1", "rack3", "satTest"]);
+    expect(S.MISSIONS.satellite.tool).toEqual(["drill", "arm", "drill", "drive"]);
+    expect(S.stepIndex(st, { drill1: true, rack1: true })).toBe(2);
+  });
+  it("the rack only takes energy rocks", () => {
+    expect(S.TARGET_ACCEPTS.rack).toEqual(["energy"]);
+    expect(S.fitCheck("rack", "energy", 0, 0)).toBe("ok");
+    expect(S.fitCheck("rack", "scrap", 0, 0)).toBe("shape");
+  });
+  it("every mission's tool and picture lists match its steps", () => {
+    for (const m of Object.values(S.MISSIONS)) {
+      expect(m.tool.length).toBe(m.steps.length);
+      expect(m.pic.length).toBe(m.steps.length);
+    }
+  });
+  it("the repair mission keeps today's tools and pictures", () => {
+    expect(S.MISSIONS.repair.steps).toBe(S.STEPS);
+    expect(S.MISSIONS.repair.tool).toEqual(["drive", "magnet", "arm", "arm", "drive", "laser", "arm", "drive", "arm", "drive"]);
+  });
+  it("teaches layers and satellites", () => {
+    expect(S.NOTES.find(n => n.id === "layers").world).toBe("pumice");
+    expect(S.NOTES.find(n => n.id === "satellite").world).toBe("pumice");
+    expect(S.SCANNABLE.energy).toBe("layers");
+    expect(S.SCANNABLE.dish).toBe("satellite");
+    expect(S.NOTE_DOODLES.layers).toMatch(/^<svg/);
+    expect(S.NOTE_DOODLES.satellite).toMatch(/^<svg/);
   });
 });
