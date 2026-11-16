@@ -77,6 +77,9 @@
   .modes button.on{color:#fff;background:var(--accent);box-shadow:0 0 0 2px #0a0d1c inset,0 0 12px var(--accent)}
   .dash.arm .modes button.on{color:#2a1a00}
   .modes kbd{position:absolute;top:3px;right:5px;font:700 9px system-ui;opacity:.5}
+  /* something new to scan is in reach: the Scan button rings, like the tool hint */
+  .dbtn.ready{position:relative;box-shadow:0 0 0 2px #ffd23f inset,0 4px 0 #0a0d1c;color:#fff}
+  .dbtn.ready:after{content:"";position:absolute;inset:-4px;border-radius:14px;border:2px solid #ffd23f;animation:toolHint 1.6s cubic-bezier(.2,.7,.2,1) infinite;pointer-events:none}
   /* the tool Chike's step needs: a ring that breathes in and settles, so kids know which button to press */
   .modes button.hint{color:#fff;box-shadow:0 0 0 2px #ffd23f inset}
   .modes button.hint:after{content:"";position:absolute;inset:-4px;border-radius:14px;border:2px solid #ffd23f;animation:toolHint 1.6s cubic-bezier(.2,.7,.2,1) infinite}
@@ -359,7 +362,7 @@
   .cres b{display:block;font-size:14px} .cres span{display:block;font-size:30px;font-weight:900;font-variant-numeric:tabular-nums}
   .cres small{display:block;font-size:12.5px;color:var(--soft);line-height:1.4}
   @media (max-width: 640px){ .slots{grid-template-columns:1fr} .cresults{grid-template-columns:1fr} .cscore{top:54px;padding:6px 9px} .cscore .pts{font-size:26px} .ctimer{top:100px;font-size:22px} }
-  @media (prefers-reduced-motion: reduce){ .flash{transition:none} .chike.talk .face{animation:none} .modes button.hint:after{animation:none} }
+  @media (prefers-reduced-motion: reduce){ .flash{transition:none} .chike.talk .face{animation:none} .modes button.hint:after{animation:none} .dbtn.ready:after{animation:none} }
 </style>
 </head>
 <body>
@@ -677,6 +680,10 @@ function scanChips(type){
   return out;
 }
 /* the best tool for a part, from the two checks: what a scan suggests */
+/* Scan fills the notepad: how far the scanner reaches, and which props write which note */
+const SCAN = { drive: 7, tool: 4.5 };
+function scanRange(mode){ return mode === "drive" ? SCAN.drive : SCAN.tool; }
+const SCANNABLE = { scrap: "steel", panel: "steel", block: "aluminum", tube: "aluminum", wedge: "triangle", cell: "cell", glass: "glass", drill: "weight", tower: "radio" };
 function bestTool(type){
   const mag = magnetCheck(type).ok, claw = clawCheck(type).ok;
   if (mag && claw) return "either";
@@ -2256,7 +2263,7 @@ function finishSnap(p){
 
 function doScan(){
   const from = G.mode === "drive" ? (() => { const f = toWorld(rover, { x: 0, y: 0.6, z: -2.2 }); return new THREE.Vector3(f.x, f.y, f.z); })() : clawPoint();
-  let best = null, bd = G.mode === "drive" ? 7 : 4.5;
+  let best = null, bd = scanRange(G.mode);
   for (const p of parts){
     if (p.state === "gone" || p.state === "fixed" || p.state === "trapped") continue;
     const d = Math.hypot(p.x - from.x, p.z - from.z);
@@ -3050,6 +3057,40 @@ function drawCamera(dt){
   sunLight.target.position.set(rover.x, 0, rover.z);
 }
 
+/* ---------- a pencil "?" over every prop whose note isn't in the notepad yet; Scan lights up when one is in reach ---------- */
+const QMARK = (function(){
+  const c = document.createElement("canvas"); c.width = 128; c.height = 128;
+  const g = c.getContext("2d");
+  g.fillStyle = "rgba(253,252,247,.92)"; g.beginPath(); g.arc(64, 64, 52, 0, Math.PI * 2); g.fill();
+  g.lineWidth = 5; g.strokeStyle = "#7d8492"; g.setLineDash([10, 7]); g.stroke(); g.setLineDash([]);
+  g.fillStyle = "#4f5562"; g.font = "bold 78px 'Patrick Hand', 'Comic Sans MS', cursive"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("?", 64, 70);
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+})();
+const scanMarks = [];
+function scanProps(){
+  const out = [];
+  for (const p of parts){ if (p.state === "gone" || p.state === "fixed" || p.state === "trapped" || p.state === "snap") continue; const n = SCANNABLE[p.type]; if (n) out.push({ key: p, note: n, x: p.x, y: p.g.position.y + 0.95, z: p.z }); }
+  out.push({ key: "drill", note: SCANNABLE.drill, x: PLACES.drill.x, y: 7.2, z: PLACES.drill.z, r: 3 });
+  out.push({ key: "tower", note: SCANNABLE.tower, x: PLACES.tower.x, y: 9.5, z: PLACES.tower.z, r: 1.5 });
+  return out;
+}
+let scanReadyT = 0;
+function drawScanMarks(dt){
+  const want = G.started && !CT.on ? scanProps().filter(o => !SAVE.notes.includes(o.note)) : [];
+  while (scanMarks.length < want.length){ const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: QMARK, depthTest: false, transparent: true })); sp.scale.setScalar(0.75); sp.renderOrder = 5; scene.add(sp); scanMarks.push(sp); }
+  scanMarks.forEach((sp, i) => {
+    const o = want[i];
+    sp.visible = !!o;
+    if (o) sp.position.set(o.x, o.y + Math.sin(performance.now() / 600 + i) * 0.08, o.z);
+  });
+  scanReadyT -= dt;
+  if (scanReadyT > 0) return;
+  scanReadyT = 0.2;
+  const from = G.mode === "drive" ? toWorld(rover, { x: 0, y: 0.6, z: -2.2 }) : clawPoint();
+  const range = scanRange(G.mode);
+  const ready = want.some(o => Math.hypot(o.x - from.x, o.z - from.z) - (o.r || 0) < range);
+  document.querySelectorAll('[data-c="scan"]').forEach(b => b.classList.toggle("ready", ready));
+}
 function drawTags(dt){
   const w = innerWidth, h = innerHeight;
   G.tags = G.tags.filter(t => {
@@ -3091,7 +3132,7 @@ function frame(now){
   if (flashT > 0){ flashT -= dt; if (flashT <= 0) $("flash").classList.remove("on"); }
   if (scanLine && scanLine.visible){ scanLine.material.opacity -= dt * 1.6; if (scanLine.material.opacity <= 0) scanLine.visible = false; }
   const tw = PLACES.tower.group.userData.beacon; tw.material.color.setHex(G.flags.lit && Math.sin(now / 300) > 0 ? 0x4fc3f7 : 0x2a3550);
-  drawRover(); drawDash(dt); drawMarkers(dt); drawHighlights(); drawBeam(dt); drawCamera(dt); drawTags(dt);
+  drawRover(); drawDash(dt); drawMarkers(dt); drawHighlights(); drawBeam(dt); drawCamera(dt); drawTags(dt); drawScanMarks(dt);
   renderer.render(scene, camera);
   /* keep it smooth on slower laptops: lower the resolution if frames drag */
   if (dt > 0.034) slowFrames++; else slowFrames = Math.max(0, slowFrames - 1);
