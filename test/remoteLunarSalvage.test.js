@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -434,5 +434,36 @@ describe("the Rover Contest on the page and the phones", () => {
   it("lets both players use one keyboard when there are no phones", () => {
     expect(game).toContain('blue: { l: "KeyA", r: "KeyD"');
     expect(game).toContain('gold: { l: "ArrowLeft", r: "ArrowRight"');
+  });
+});
+
+describe("worlds are data", () => {
+  it("lists four made-up worlds in campaign order with real-place gravity", () => {
+    expect(S.WORLDS.map(w => w.id)).toEqual(["pumice", "glacia", "ember", "gusto"]);
+    expect(S.worldById("pumice").g).toBe(S.MOON_G);
+    expect(S.worldById("glacia").g).toBeCloseTo(3.71, 2);
+    expect(S.worldById("ember").air).toBe(true);
+    expect(S.worldById("pumice").air).toBe(false);
+  });
+  it("Pumice Moon has the drill, and only worlds with air have the hose", () => {
+    expect(S.worldById("pumice").tools).toContain("drill");
+    for (const w of S.WORLDS) if (w.tools.includes("hose")) expect(w.air).toBe(true);
+  });
+  it("finds the step from the first flag not done", () => {
+    expect(S.stepIndex([{ flag: "a" }, { flag: "b" }], { a: true })).toBe(1);
+    expect(S.stepIndex([{ flag: "a" }], { a: true })).toBe(1);
+    expect(S.currentStep({ approach: true, panel: true })).toBe(2);
+    expect(S.currentStep({ tested: true, installed: true, approach: true, panel: true, lever: true, support: true, crossed: true, freed: true, cellLoaded: true, atGreenhouse: true })).toBe(10);
+  });
+  it("weight feels lighter on Pumice Moon than on Glacia", () => {
+    expect(S.earthFeelKg(60)).toBeCloseTo(9.9, 1);
+    expect(S.earthFeelKg(60, 3.71)).toBeGreaterThan(S.earthFeelKg(60));
+  });
+  it("calls world 1 Pumice Moon, and says it pulls like Earth's Moon", () => {
+    const g = S.NOTES.find(n => n.id === "gravity").text;
+    expect(g).toContain("Pumice Moon");
+    expect(g).toContain("Earth's Moon");
+    expect(g).toContain("1.62");
+    expect(S.NOTES.every(n => n.world)).toBe(true);
   });
 });
