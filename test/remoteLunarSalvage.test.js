@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -465,5 +465,36 @@ describe("worlds are data", () => {
     expect(g).toContain("Earth's Moon");
     expect(g).toContain("1.62");
     expect(S.NOTES.every(n => n.world)).toBe(true);
+  });
+});
+
+describe("saving", () => {
+  it("starts fresh from junk", () => {
+    for (const junk of [null, "x", 5, { grade: "7", reached: ["mars"], notes: ["nope"] }]) {
+      expect(S.mergeSave(junk)).toEqual(S.defaultSave());
+    }
+  });
+  it("keeps the good parts of a save", () => {
+    const s = S.mergeSave({ grade: 3, reached: ["glacia", "pumice", "pumice"], notes: ["steel", "steel", "gravity"], stars: { pumice: { mission: true, notes: false, quiz: true } } });
+    expect(s.grade).toBe(3);
+    expect(s.reached).toEqual(["pumice", "glacia"]);
+    expect(s.notes.sort()).toEqual(["gravity", "steel"]);
+    expect(s.stars.pumice).toEqual({ mission: true, notes: false, quiz: true });
+  });
+  it("puts grades in three bands", () => {
+    expect([1, 2, 3, 4, 5, null].map(S.gradeBand)).toEqual(["g1", "g23", "g23", "g45", "g45", "g23"]);
+  });
+  it("combines this device's save with the site's, keeping everything earned", () => {
+    const c = S.combineSaves({ grade: null, reached: ["pumice"], notes: ["steel"], stars: { pumice: { mission: true, notes: false, quiz: false } } },
+                             { grade: 4, reached: ["pumice", "glacia"], notes: ["gravity"], stars: { pumice: { mission: false, notes: false, quiz: true } } });
+    expect(c.grade).toBe(4);
+    expect(c.reached).toEqual(["pumice", "glacia"]);
+    expect(c.notes.sort()).toEqual(["gravity", "steel"]);
+    expect(c.stars.pumice).toEqual({ mission: true, notes: false, quiz: true });
+  });
+  it("uses a save name the site accepts, and asks the site for it", () => {
+    expect(S.SAVE_NAME).toMatch(/^[a-z0-9][a-z0-9-]{0,39}$/);
+    expect(game).toContain('ccsSave: "get"');
+    expect(game).toContain('ccsSave: "set"');
   });
 });
