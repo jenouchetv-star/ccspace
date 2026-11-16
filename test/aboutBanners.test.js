@@ -46,7 +46,21 @@ describe("Mission and Vision continue below the banner", () => {
 describe("workshops are STEAMM workshops (owner, 2026-11-16)", () => {
   it("says STEAMM workshops, never STEM workshops", () => {
     expect(site).not.toMatch(/STEM workshops/);
-    expect(site).toContain("through pop-up STEAMM workshops");
+    expect(site).toContain('through pop-up <a href=\\"/about/beliefs\\"><b>STEAMM workshops</b></a>');
     expect(site).toContain("future pop-up STEAMM workshops");
+  });
+});
+
+describe("STEAMM workshops links to What is STEAMM (owner, 2026-11-16)", () => {
+  it("bolds STEAMM workshops and links it to the What we believe page, which opens on What is STEAMM?", () => {
+    expect(site).toContain('through pop-up <a href=\\"/about/beliefs\\"><b>STEAMM workshops</b></a>, so kids and families');
+  });
+});
+
+describe("the site's scripts still parse (a guard after a quoting slip, 2026-11-16)", () => {
+  it("every inline classic script in index.html is valid JavaScript", () => {
+    const scripts = [...site.matchAll(/<script(?![^>]*(?:src|type="(?:module|application\/ld\+json|importmap)"))[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).filter((t) => t.trim());
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const code of scripts) expect(() => new Function(code)).not.toThrow();
   });
 });
