@@ -369,3 +369,14 @@ describe("easy enough for a 6-year-old", () => {
     expect(game).toContain("G.autoPull = true");
   });
 });
+
+describe("held buttons stay held", () => {
+  it("the phone never rebuilds its buttons while the magnet picks something up", () => {
+    expect(remote).not.toContain("paintPad(modeChanged || heldChanged)");
+    expect(remote).toContain("paintPad(modeChanged);");
+  });
+  it("a long press never opens the phone's menu on either page", () => {
+    expect(remote).toContain('addEventListener("contextmenu"');
+    expect(game).toContain('d.addEventListener("contextmenu", (e) => e.preventDefault());');
+  });
+});
