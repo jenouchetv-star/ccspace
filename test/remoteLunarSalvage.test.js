@@ -735,3 +735,11 @@ describe("the drill gauge", () => {
     expect(game).toContain("G.world.layers.map(");
   });
 });
+
+describe("the drill gauge's size", () => {
+  it("is as tall as the joystick at every screen size", () => {
+    expect(game).toMatch(/\.drillg\{[^}]*box-sizing:border-box;[^}]*height:124px/);          /* the joystick is 124 tall, border included */
+    expect(game).toMatch(/\.joy\{width:116px;height:116px\} \.drillg\{height:116px\}/);      /* an upright phone */
+    expect(game).toMatch(/\.joy\{width:100px;height:100px\}[^\n]*\.drillg\{height:100px;width:86px\}/);  /* a phone held sideways */
+  });
+});
