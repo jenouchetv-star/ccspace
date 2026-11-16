@@ -70,7 +70,6 @@ describe("the calmer What we believe layout (owner, 2026-11-16)", () => {
   it("drops the colored cards and check marks from the STEAMM sections and the beliefs", () => {
     expect(panel).not.toContain("panel--flat");
     expect(panel).not.toContain('ic("check")');
-    expect(beliefs).not.toContain('ic("check")');
   });
   it("breaks the sections up with photos of kids making things, each described", () => {
     for (const src of ["assets/grownups/rubber-band-guitar.jpg", "assets/activities/cardboard-house.jpg", "assets/grownups/while-they-make-birdhouse.jpg"]) {
@@ -125,5 +124,17 @@ describe("Open to new approaches sits above Using feedback (owner, 2026-11-16)",
   it("keeps only the first habit beside the cardboard house, the other four beside the guitar", () => {
     expect(site).toContain('habitsHTML.slice(0, 1).join("")');
     expect(site).toContain('habitsHTML.slice(1).join("")');
+  });
+});
+
+describe("containers and check marks (owner, 2026-11-16)", () => {
+  const panel = site.split("function steammPanel(){")[1].split("\n}\n")[0];
+  const beliefs = site.split("function beliefsPanel(){")[1].split("\n}\n")[0];
+  it("puts How creativity grows problem solvers inside a container", () => {
+    expect(panel).toContain('<section class="believe__sec" aria-labelledby="growHead"><div class="panel believe__box">');
+  });
+  it("puts What we believe inside a container, with a check mark on every belief", () => {
+    expect(beliefs).toContain('<div class="panel believe__box">');
+    expect(beliefs).toContain('ic("check")');
   });
 });
