@@ -38,6 +38,9 @@
   .stat{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap}
   .stat i{width:9px;height:9px;border-radius:50%;background:#8a94a8}
   .stat.ok i{background:var(--cyan)}
+  .teamtag{display:flex;justify-content:space-between;align-items:center;margin-top:10px;border-radius:12px;padding:8px 12px;font-weight:900;letter-spacing:.06em;font-size:14px;color:#fff;border:3px solid #0a0d1c}
+  .teamtag.blue{background:#2f7de1} .teamtag.gold{background:#f2a93b;color:#2a1a00}
+  .teamtag span{font-variant-numeric:tabular-nums;font-size:18px}
   .task{font-size:14px;font-weight:700;color:#fff;margin:10px 2px 0;line-height:1.35;min-height:1.35em}
   .pad{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;min-height:0;background:linear-gradient(180deg,#1e2b56,#0b1228);border:3px solid #3a4c86;border-radius:24px;padding:14px;position:relative}
   .pad:before{content:"";position:absolute;left:22%;right:22%;top:5px;height:3px;border-radius:2px;background:var(--accent);box-shadow:0 0 12px var(--accent)}
@@ -107,6 +110,7 @@
     </div>
     <span class="stat" id="stat"><i></i><span id="statTxt">Connected</span></span>
   </div>
+  <div class="teamtag" id="teamTag" hidden></div>
   <div class="task" id="task"></div>
   <div class="pad">
     <div class="zone" id="zone"></div>
@@ -198,7 +202,10 @@ function onMsg(p){
   }
   if (p.t === "gone"){ $("statTxt").textContent = "The game closed"; $("stat").classList.remove("ok"); return; }
   if (p.t === "st"){
+    /* in the Rover Contest each phone gets its own messages */
+    if (p.to && p.to !== C.id) return;
     C.hostSeen = performance.now();
+    S.team = p.team || ""; S.score = p.score || 0;
     const modeChanged = p.m !== S.m, heldChanged = !!p.held !== S.held;
     S.m = p.m; S.held = !!p.held; S.test = !!p.test; S.paused = !!p.paused; S.step = p.step || ""; S.mag = !!p.mag; S.firing = !!p.firing;
     if (modeChanged && typeof p.r === "number") S.r = clampN(p.r, 0, 1);
@@ -297,6 +304,8 @@ function paintPad(rebuild){
   document.body.className = S.m;
   document.querySelectorAll("#modes button").forEach(b => b.classList.toggle("on", b.dataset.m === S.m));
   $("task").textContent = S.paused ? "Paused" : S.step;
+  const tt = $("teamTag"); tt.hidden = !S.team;
+  if (S.team){ tt.className = "teamtag " + S.team; tt.textContent = ""; tt.append(S.team === "blue" ? "BLUE ROVER" : "GOLD ROVER"); const sc = document.createElement("span"); sc.textContent = S.score; tt.append(sc); }
   $("bTest").hidden = !S.test;
   $("bPause").textContent = S.paused ? "Resume" : "Pause";
   $("bCal").hidden = S.m !== "drive";

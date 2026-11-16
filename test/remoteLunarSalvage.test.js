@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, QUIZ, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, starsFor, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -378,5 +378,61 @@ describe("held buttons stay held", () => {
   it("a long press never opens the phone's menu on either page", () => {
     expect(remote).toContain('addEventListener("contextmenu"');
     expect(game).toContain('d.addEventListener("contextmenu", (e) => e.preventDefault());');
+  });
+});
+
+describe("the Rover Contest", () => {
+  it("scores the right tool's parts higher, and doubles Chike's bonus part", () => {
+    expect(S.contestPoints("scrap", null)).toBe(1);
+    expect(S.contestPoints("block", null)).toBe(2);
+    expect(S.contestPoints("glass", null)).toBe(3);
+    expect(S.contestPoints("meteor", null)).toBe(5);
+    expect(S.contestPoints("glass", "glass")).toBe(6);
+    expect(S.contestPoints("scrap", "glass")).toBe(1);
+  });
+  it("tells a real fact: meteorites are magnetic, they are mostly iron and nickel", () => {
+    expect(S.magnetCheck("meteor").ok).toBe(true);
+    expect(S.clawCheck("meteor").ok).toBe(true);
+    expect(S.MATERIALS.meteor.name).toMatch(/iron/i);
+  });
+  it("picks the winner, or a tie", () => {
+    expect(S.contestWinner({ blue: 9, gold: 4 })).toBe("blue");
+    expect(S.contestWinner({ blue: 2, gold: 7 })).toBe("gold");
+    expect(S.contestWinner({ blue: 5, gold: 5 })).toBe("tie");
+  });
+  it("knows each team's base, and the two bases are far apart", () => {
+    expect(S.inBase(-17, 1, "blue")).toBe(true);
+    expect(S.inBase(-17, 1, "gold")).toBe(false);
+    expect(S.inBase(0, 0, "blue")).toBe(false);
+    expect(Math.abs(S.CONTEST.bases.blue.x - S.CONTEST.bases.gold.x)).toBeGreaterThan(20);
+  });
+  it("asks for a part that is on the field, and not the same one twice in a row", () => {
+    expect(S.pickBonus(["scrap", "glass"], null)).toBe("glass");
+    expect(S.pickBonus(["scrap", "glass"], "glass")).toBe("scrap");
+    expect(S.pickBonus(["glass"], "glass")).toBe("glass");
+    expect(S.pickBonus([], null)).toBe(null);
+  });
+  it("lasts three minutes", () => { expect(S.CONTEST.secs).toBe(180); });
+});
+
+describe("the Rover Contest on the page and the phones", () => {
+  it("has a Contest button, a lobby with one code for both phones, and a scoreboard", () => {
+    expect(game).toContain('id="bContest"');
+    expect(game).toContain('id="ovLobby"');
+    expect(game).toContain('id="ctBlue"');
+    expect(game).toContain('id="ctGold"');
+  });
+  it("gives the first phone Blue and the next Gold, and turns a third away", () => {
+    expect(game).toContain('return stale(CT.teams.blue) ? "blue" : stale(CT.teams.gold) ? "gold" : null;');
+    expect(game).toContain('if (!team){ rmSend({ t: "full", to: p.i }); return; }');
+  });
+  it("sends each phone only its own rover's state, and the phone ignores the other's", () => {
+    expect(game).toContain('rmSend({ t: "st", to: T.id, team,');
+    expect(remote).toContain("if (p.to && p.to !== C.id) return;");
+    expect(remote).toContain('id="teamTag"');
+  });
+  it("lets both players use one keyboard when there are no phones", () => {
+    expect(game).toContain('blue: { l: "KeyA", r: "KeyD"');
+    expect(game).toContain('gold: { l: "ArrowLeft", r: "ArrowRight"');
   });
 });
