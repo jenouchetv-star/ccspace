@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS, BOARD_STEPS, FLIGHT, flightPhase, BRIEFS, QUIZ_BANKS, QUIZ_PICS, starsForWorld };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS, BOARD_STEPS, FLIGHT, flightPhase, BRIEFS, QUIZ_BANKS, QUIZ_PICS, starsForWorld, setTerrain, HEAT, heatStep, heaterTakes, nextWorldId };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -69,7 +69,7 @@ describe("field notes and the quiz", () => {
   it("has twelve notes on Pumice Moon, and every one can be found", () => {
     expect(S.NOTES.filter((n) => n.world === "pumice")).toHaveLength(12);
     const fromParts = new Set(Object.values(S.PART_TYPES).map((t) => t.note).filter(Boolean));
-    for (const n of S.NOTES) expect(n.id === "gravity" || n.id === "laser" || n.id === "rocket" || fromParts.has(n.id)).toBe(true);
+    for (const n of S.NOTES) expect(["gravity", "laser", "rocket", "marsPull", "heatFlow", "melt", "thinAir"].includes(n.id) || fromParts.has(n.id)).toBe(true);
     for (const n of S.NOTES) expect(n.hint.length).toBeGreaterThan(10);
   });
   it("says plainly that the sounds are pretend", () => {
@@ -741,5 +741,135 @@ describe("the drill gauge's size", () => {
     expect(game).toMatch(/\.drillg\{[^}]*box-sizing:border-box;[^}]*height:124px/);          /* the joystick is 124 tall, border included */
     expect(game).toMatch(/\.joy\{width:116px;height:116px\} \.drillg\{height:116px\}/);      /* an upright phone */
     expect(game).toMatch(/\.joy\{width:100px;height:100px\}[^\n]*\.drillg\{height:100px;width:86px\}/);  /* a phone held sideways */
+  });
+});
+
+describe("Glacia: worlds as scenes", () => {
+  it("Glacia's ground has no trench, and the rover can drive across where Pumice Moon's trench is", () => {
+    S.setTerrain("glacia");
+    const h = S.groundHeight(0, S.TRENCH.z);
+    const ok = S.canDriveTo(3, S.TRENCH.z, "folded");
+    S.setTerrain("pumice");
+    expect(h).toBeGreaterThan(-0.5);
+    expect(ok).toBe(true);
+    expect(S.groundHeight(0, S.TRENCH.z)).toBeLessThan(-3);
+    expect(S.canDriveTo(3, S.TRENCH.z, "folded")).toBe(false);
+  });
+  it("Glacia has its own missions", () => {
+    expect(S.worldById("glacia").missions).toEqual(["heat", "supply", "board"]);
+  });
+  it("the game builds each world in its own scene and moves the shared things across", () => {
+    expect(game).toContain("function enterWorld(id){");
+    expect(game).toContain("renderer.render(activeScene, camera)");
+  });
+});
+
+describe("Glacia: the heat mission", () => {
+  it("a block heats while the laser is on it and cools slowly in the cold air", () => {
+    let h = 0;
+    for (let i = 0; i < 10; i++) h = S.heatStep(h, true, 0.12);
+    expect(h).toBeCloseTo(0.5, 1);
+    expect(S.heatStep(0.99, true, 1)).toBe(1);
+    expect(S.heatStep(1, false, 10)).toBeCloseTo(1 - S.HEAT.cool * 10, 5);
+    expect(S.heatStep(0.01, false, 5)).toBe(0);
+  });
+  it("the heater only takes a block that is still hot", () => {
+    expect(S.heaterTakes(0.6)).toBe(true);
+    expect(S.heaterTakes(0.3)).toBe(false);
+    expect(S.TARGET_ACCEPTS.heater).toEqual(["heat"]);
+    expect(S.magnetCheck("heat").ok).toBe(true);
+  });
+  it("runs heat, rack, fill, switch on in order", () => {
+    expect(S.MISSIONS.heat.steps.map(st => st.flag)).toEqual(["heat1", "rack1", "rack3", "warm"]);
+    expect(S.MISSIONS.heat.tool).toEqual(["laser", "magnet", "laser", "drive"]);
+  });
+  it("Glacia has five true notes of its own", () => {
+    const g = S.NOTES.filter(n => n.world === "glacia");
+    expect(g.map(n => n.id)).toEqual(["marsPull", "heatStore", "heatFlow", "melt", "thinAir"]);
+    for (const n of g) expect(S.NOTE_DOODLES[n.id]).toMatch(/^<svg/);
+    expect(g[0].text).toContain("3.71");
+    expect(S.fallTime(1, 3.71)).toBeCloseTo(0.73, 2);
+    expect(g[0].text).toContain("0.7 seconds");
+  });
+});
+
+describe("Glacia: arriving, leaving and the questions", () => {
+  it("the next world after Pumice Moon is Glacia, and after Glacia is Ember", () => {
+    expect(S.nextWorldId("pumice")).toBe("glacia");
+    expect(S.nextWorldId("glacia")).toBe("ember");
+    expect(S.nextWorldId("gusto")).toBe(null);
+  });
+  it("Corey briefs the flight to Ember and names Averi", () => {
+    const b = S.BRIEFS.ember, all = b.lines.join(" ");
+    expect(b.kid).toBe("corey"); expect(all).toContain("Ember"); expect(all).toContain("Averi");
+    expect(b.lines[b.lines.length - 1]).toMatch(/^Landing on Ember/);
+    expect(existsSync(new URL("../assets/characters/corey.jpg", import.meta.url))).toBe(true);
+  });
+  it("Glacia has three picture questions for each grade band, with true answers", () => {
+    const b = S.QUIZ_BANKS.glacia;
+    for (const band of ["g1", "g23", "g45"]) {
+      expect(b[band]).toHaveLength(3);
+      for (const q of b[band]) {
+        expect(S.QUIZ_PICS[q.pic]).toMatch(/^<svg/);
+        expect(q.opts).toHaveLength(band === "g1" ? 2 : 3);
+        if (band === "g1") for (const o of q.opts) expect(S.QUIZ_PICS[o.pic]).toMatch(/^<svg/);
+        expect(q.circle.r).toBeGreaterThan(0);
+      }
+    }
+    const g = b.g45[1]; expect(g.opts[g.a].t).toMatch(/2/); expect(3.71 / 1.62).toBeCloseTo(2.3, 1);
+    expect(b.g23[1].opts[b.g23[1].a].t).toMatch(/cools/);
+  });
+  it("Yuna's requests all have pictures", () => {
+    for (const m of ["heat", "supply"]) for (const k of S.MISSIONS[m].pic) expect(game).toMatch(new RegExp("PICS\." + k + " = '<svg"));
+  });
+});
+
+describe("the magnet can lift a part out of the cargo bed", () => {
+  it("the rover doesn't push away a part the magnet is pulling", () => {
+    const at = game.indexOf("/* push small loose parts out of the way"), loop = game.slice(at, at + 400);
+    expect(loop).toContain("G.t - (p.pulledAt == null ? -9 : p.pulledAt) < 0.3");
+  });
+});
+
+describe("Glacia is fair to young players", () => {
+  it("a glowing block stays hot enough for the heater for at least 40 seconds", () => {
+    let h = 1, t = 0;
+    while (S.heaterTakes(h) && t < 120){ h = S.heatStep(h, false, 0.5); t += 0.5; }
+    expect(t).toBeGreaterThanOrEqual(40);
+  });
+});
+
+describe("each mission says its own done line", () => {
+  it("Glacia's missions don't claim the greenhouse is alive", () => {
+    expect(game).toContain('const DONE_LINE = { repair: ["The greenhouse is alive again!", "sprout"], satellite: ["The dish is talking to Earth!", "dish"], heat: ["The base is warm again!", "thermo"], supply: ["The supplies are in!", "package"], board: ["Off you go!", "rocket"] };');
+  });
+});
+
+describe("the supply rocket's hatch can be reached", () => {
+  it("the arm only bumps the rocket's real body, so the handle on its side is in reach", () => {
+    expect(game).toContain("colCircle(sp.x, sp.z, 1.6, y + 6).arm = false;");
+    expect(game).toContain("colCircle(sp.x, sp.z, 0.8, y + 6);");
+  });
+});
+
+describe("the questions come from the world's own kid", () => {
+  it("names the corner kid, not always Chike", () => {
+    expect(game).toMatch(/<span class="kicker">' \+ kidName\(\) \+ '\\'s question '/);
+    expect(game).not.toMatch(/kicker">Chike\\'s question/);
+  });
+});
+
+describe("the satellite dish looks solid", () => {
+  it("is a two-sided bowl sitting on its mast, with struts holding the receiver", () => {
+    expect(game).toContain("const dishMat = new THREE.MeshStandardMaterial({ color: 0xe9edf3, roughness: 0.45, metalness: 0.2, side: THREE.DoubleSide });");
+    expect(game).toContain("/* three struts hold the receiver over the middle of the bowl */");
+  });
+});
+
+describe("each world's own machinery only runs on that world", () => {
+  it("Pumice Moon's dish, greenhouse test and bridge lever stay quiet on Glacia", () => {
+    expect(game).toMatch(/function stepSat\(dt\)\{\s*if \(SAT\.t < 0 \|\| G\.world\.id !== "pumice"\) return;/);
+    expect(game).toMatch(/function stepTest\(dt\)\{\s*if \(G\.testT < 0 \|\| G\.world\.id !== "pumice"\) return;/);
+    expect(game).toMatch(/function stepLever\(dt\)\{\s*if \(G\.world\.id !== "pumice"\) return;/);
   });
 });
