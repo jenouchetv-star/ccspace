@@ -433,17 +433,13 @@
   .cabin .cframe{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 72% 64% at 50% 40%,transparent 98%,#151b2e 99%)}
   .cabin .console{position:absolute;left:0;right:0;bottom:0;min-height:44%;background:linear-gradient(#1a2238,#0e1324);border-top:2px solid #2b3656;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px;padding:16px 18px calc(16px + env(safe-area-inset-bottom));box-sizing:border-box}
   .cabin .planet.earth{background:radial-gradient(ellipse 22% 16% at 38% 34%,#5fae5a 60%,transparent 62%),radial-gradient(ellipse 14% 22% at 62% 58%,#5fae5a 60%,transparent 62%),radial-gradient(ellipse 18% 10% at 30% 70%,#6fbf63 60%,transparent 62%),radial-gradient(circle at 35% 35%,#8fd0ff,#2a6fcf 55%,#1d3f86);box-shadow:0 0 60px rgba(120,190,255,.4)}
-  .flgrid{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:3px;background:#0a0d1c}
-  .flgrid div{position:relative;overflow:hidden;opacity:.7;transition:opacity .35s cubic-bezier(.2,.7,.2,1)}
-  .flgrid div.on{opacity:1;box-shadow:inset 0 0 0 3px #ffd27a}
-  .flgrid img{width:100%;height:100%;object-fit:cover;object-position:50% 30%;display:block}
-  .flgrid span{position:absolute;left:6px;bottom:5px;font:800 11px system-ui;color:#fff;background:rgba(10,13,28,.72);padding:2px 7px;border-radius:6px}
   .homerows div{justify-content:space-between}
   .homerows span:last-child{display:flex;gap:4px}
   .hometotal{margin:4px 0 8px;font-size:17px}
   .hometip{font-size:13px;opacity:.8;margin-top:4px}
   .cabin .screen{position:relative;border-radius:14px;background:#06101f;border:3px solid #33447a;overflow:hidden;min-height:150px;box-shadow:inset 0 0 0 2px #0a0d1c,0 0 20px rgba(79,195,247,.15)}
-  .cabin .screen img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 22%}
+  .cabin .screen img,.cabin .screen > video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 22%}
+  .cabin .screen > video[hidden]{display:none}
   .cabin .scanl{position:absolute;inset:0;background:repeating-linear-gradient(180deg,rgba(255,255,255,.04) 0 1px,transparent 1px 4px);pointer-events:none}
   .cabin .live{position:absolute;left:8px;top:8px;background:#0a0d1c;color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.1em;padding:4px 8px;border-radius:999px;display:flex;align-items:center;gap:6px}
   .cabin .live b{width:7px;height:7px;border-radius:50%;background:#ff5a5a}
@@ -703,7 +699,7 @@
     <div class="space" id="flStars"><div class="planet" id="flPlanet"></div></div>
     <div class="cframe"></div>
     <div class="console">
-      <div class="screen"><img id="flKid" alt=""><div class="flgrid" id="flGrid" hidden></div><div class="scanl"></div><span class="live"><b></b><span id="flLive">LIVE FROM EARTH</span></span><span class="who" id="flWho"></span></div>
+      <div class="screen"><video id="flKid" muted loop playsinline preload="auto"></video><div class="scanl"></div><span class="live"><b></b><span id="flLive">LIVE FROM EARTH</span></span><span class="who" id="flWho"></span></div>
       <div class="talk">
         <div class="bubble" aria-live="polite"><span class="n" id="flName"></span><span id="flLine"></span></div>
         <div class="row"><span class="dots" id="flDots"></span><button class="cta blue" id="flNext">Next</button></div>
@@ -3264,7 +3260,7 @@ canvas.addEventListener("wheel", (e) => { e.preventDefault(); camCtl.zoom = clam
 
 /* ---------- overlays ---------- */
 function openOv(id){ $(id).classList.add("open"); }
-function closeOv(id){ $(id).classList.remove("open"); }
+function closeOv(id){ $(id).classList.remove("open"); if (id === "ovFlight") $(id).querySelectorAll("video").forEach(v => v.pause()); }
 function closeTopOverlay(){
   if ($("ovQuiz").classList.contains("open")) return true;
   if ($("ovNotes").classList.contains("open")){ closeNotes(); return true; }
@@ -5301,18 +5297,29 @@ function buildStars(){
   const s = $("flStars"); if (s.dataset.done) return; s.dataset.done = "1";
   for (let i = 0; i < 80; i++){ const d = document.createElement("i"); d.style.left = (Math.random() * 140) + "%"; d.style.top = (Math.random() * 56) + "%"; d.style.animationDelay = (-Math.random() * 2.6) + "s"; d.style.animationDuration = (1.6 + Math.random() * 2.4) + "s"; s.appendChild(d); }
 }
+/* the kids on the monitor are animated talking faces (owner, 2026-11-17): silent loops made from each kid's portrait,
+   with the portrait as the poster until the video is ready */
+const CALLS = "/assets/games/lunar-salvage/calls/";
+const KID_BY_NAME = { Chike: "chike", Zech: "zech", Corey: "corey", Kiyah: "kylah" };
+function playCall(v, kid){
+  if (v.dataset.kid !== kid || !v.getAttribute("src")){
+    v.dataset.kid = kid;
+    if (v.id === "flKid") v.poster = "/assets/characters/" + kid + ".jpg";
+    v.src = CALLS + kid + ".mp4";
+  }
+  v.muted = true;
+  const p = v.play(); if (p && p.catch) p.catch(() => {});
+}
 function showBriefLine(){
   const b = FL.brief, n = b.lines.length, line = b.lines[FL.line], text = typeof line === "string" ? line : line.text, who = (line && line.who) || b.name;
-  /* the flight home: all four mission kids on the screen, Earth out of the window */
-  const grid = $("flGrid"), home = !!b.kids;
-  if (grid) grid.hidden = !home;
-  $("flKid").hidden = home;
+  /* the flight home: Earth out of the window, and the mission kids take turns on the screen, one at a time: whoever is
+     talking fills it (owner, 2026-11-17: "only show 1 kid, not 4") */
+  const home = !!b.kids, kid = home ? (KID_BY_NAME[who] || b.kid) : b.kid;
   $("flPlanet").classList.toggle("earth", home);
   $("flLive").textContent = home ? "WELCOME HOME" : "LIVE FROM EARTH";
-  if (home && grid && !grid.dataset.kids){ grid.dataset.kids = "1"; grid.innerHTML = b.kids.map(k => '<div><img src="/assets/characters/' + k + '.jpg" alt=""><span>' + ({ chike: "Chike", zech: "Zech", corey: "Corey", kylah: "Kiyah" }[k] || k) + '</span></div>').join(""); }
-  if (grid) grid.querySelectorAll("div").forEach(d => d.classList.toggle("on", d.textContent === who));
-  $("flKid").src = "/assets/characters/" + b.kid + ".jpg"; $("flKid").alt = b.name;
-  $("flWho").textContent = home ? "" : b.name; $("flName").textContent = who.toUpperCase();
+  playCall($("flKid"), kid);
+  $("flKid").setAttribute("aria-label", who + " on a video call");
+  $("flWho").textContent = who; $("flName").textContent = who.toUpperCase();
   $("flLine").textContent = text;
   $("flDots").innerHTML = b.lines.map((_, i) => '<i class="' + (i <= FL.line ? "on" : "") + '"></i>').join("");
   $("flNext").textContent = FL.line < n - 1 ? "Next" : "Land";

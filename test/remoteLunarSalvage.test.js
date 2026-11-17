@@ -1022,7 +1022,7 @@ describe("Gusto Canyon: the beacon, the wind and the flight home", () => {
       }
     }
   });
-  it("flies home with all four mission kids on the screen, each saying a line", () => {
+  it("flies home with the four mission kids taking turns on the screen, each saying a line", () => {
     const h = S.BRIEFS.home;
     expect(h.kids).toEqual(["chike", "zech", "corey", "kylah"]);
     expect(h.lines.map((l) => l.who)).toEqual(["Chike", "Zech", "Corey", "Kiyah", "Chike"]);
