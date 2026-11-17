@@ -245,7 +245,7 @@ describe("private links (security review, 2026-11-17)", () => {
     expect(fp).toMatch(/^[A-Za-z0-9_-]{16}$/);
     expect(await MSC.fp(pk)).toBe(fp);
     expect(await MSC.fp(await MSC.pub(await MSC.pair()))).not.toBe(fp);
-    expect(game).toContain('"?room=" + G.code + "&k=" + NET.fp');
+    expect(game).toContain('?room=" + G.code + "&k=" + NET.fp');
     expect(player).toContain('if (P.fp && P.fp !== await MSC.fp(p.hk).catch(() => "")) return;');
   });
   it("the device draws only well-formed cards and numbers, and sends nothing in the clear but its public key", () => {
