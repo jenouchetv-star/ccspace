@@ -31,6 +31,23 @@ describe("the video calls on the rocket's monitor", () => {
     expect(game).toContain('const KID_BY_NAME = { Chike: "chike", Zech: "zech", Corey: "corey", Kiyah: "kylah" };');
     expect(game).not.toContain('id="flGrid"');
   });
+  it("the rocket's screen is a clean sci-fi video call: the caller with captions, the next world and its mission (draft: docs/mockups/lunar-call-hud-draft.jpg)", () => {
+    expect(game).toContain('<div class="console hud">');
+    expect(game).toContain('<div class="cc" aria-live="polite"><span class="n" id="flName"></span><p id="flLine"></p></div>');
+    expect(game).toContain('<div class="orb"><div class="radar"></div><div class="r2"></div><div class="r1"></div><img id="flOrb" alt=""></div>');
+    const h = fn("paintHud");
+    expect(h).toContain('$("flOrb").src = "/assets/games/lunar-salvage/planets/" + id + ".png";');
+    expect(h).toContain('(w.g).toFixed(2) + " m/s²</span>');
+    expect(h).toContain('m.goal.replace(/^Goal: /, "")');
+    expect(h).toContain("m.steps.slice(0, 3)");
+    expect(fn("showBriefLine")).toContain("paintHud(");
+    expect(fn("showBriefLine")).toContain("typeCaption(text);");
+  });
+  it("captions type out, but show at once for players who turn motion down", () => {
+    const t = fn("typeCaption");
+    expect(t).toContain('matchMedia("(prefers-reduced-motion: reduce)").matches');
+    expect(t).toContain("clearTimeout(FL.typeT);");
+  });
   it("stops the videos when the flight screen closes", () => {
     expect(game).toContain('function closeOv(id){ $(id).classList.remove("open"); if (id === "ovFlight") $(id).querySelectorAll("video").forEach(v => v.pause()); }');
   });

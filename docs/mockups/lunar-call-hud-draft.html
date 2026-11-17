@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lunar Call HUD Draft</title>
+<style>
+  :root{ --cy:#4fe3ff; --cy2:#1fb6e0; --cyd:rgba(79,227,255,.16); --ink:#e9f9ff; --mute:#7fa6bb; --bg:#020814; --red:#ff5a6a; --amber:#ffd27a; --mono:ui-monospace,Consolas,"Courier New",monospace; }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+  .note{position:fixed;left:12px;top:12px;z-index:9;max-width:380px;font-size:12px;line-height:1.45;background:rgba(0,0,0,.6);color:#cfe;padding:8px 10px;border-radius:8px}
+  .space{position:absolute;left:0;right:0;top:0;height:34%;background:radial-gradient(ellipse at 70% 40%,#0e2347,#030916 70%);overflow:hidden}
+  .space i{position:absolute;width:2px;height:2px;background:#fff;border-radius:50%}
+  .space .world{position:absolute;right:10%;top:12%;height:76%;aspect-ratio:1;background:url(/assets/games/lunar-salvage/planets/ember.png) center/cover;border-radius:50%;filter:drop-shadow(0 0 40px rgba(255,120,60,.35))}
+
+  /* the whole console is one sci-fi screen */
+  .screen{position:absolute;left:10px;right:10px;bottom:10px;top:calc(34% + 4px);box-sizing:border-box;padding:10px;border:1.5px solid var(--cy2);
+    background:linear-gradient(rgba(79,227,255,.05) 1px,transparent 1px) 0 0/20px 20px,linear-gradient(90deg,rgba(79,227,255,.05) 1px,transparent 1px) 0 0/20px 20px,radial-gradient(ellipse at 50% 40%,#0a2142,#020a18 75%);
+    clip-path:polygon(22px 0,calc(100% - 22px) 0,100% 22px,100% calc(100% - 22px),calc(100% - 22px) 100%,22px 100%,0 calc(100% - 22px),0 22px);
+    box-shadow:inset 0 0 40px rgba(79,227,255,.15);
+    display:grid;grid-template-columns:minmax(0,1.25fr) minmax(240px,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:8px}
+  .screen:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(180deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px);pointer-events:none}
+  .tag,.mono{font:800 10px/1.2 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--cy)}
+  .dim{color:var(--mute)}
+  .box{position:relative;border:1px solid rgba(79,227,255,.55);background:rgba(3,16,34,.7);padding:7px 9px;min-height:0;overflow:hidden}
+  .box:before,.box:after{content:"";position:absolute;width:10px;height:10px;border:2px solid var(--cy)}
+  .box:before{left:-1px;top:-1px;border-right:0;border-bottom:0}.box:after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+
+  /* top bar */
+  .top{grid-column:1/-1;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:1px solid rgba(79,227,255,.35);padding:0 6px 6px}
+  .rec{display:flex;align-items:center;gap:6px;color:var(--red)}
+  .rec b{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red);animation:blink 1.2s steps(2) infinite}
+  @keyframes blink{50%{opacity:.25}}
+  .top .sp{flex:1}
+  .bars{display:inline-flex;gap:2px;align-items:flex-end;height:12px;vertical-align:middle}.bars i{width:3px;background:var(--cy)}
+  .route{font:800 10px var(--mono);letter-spacing:.12em}
+  .route .on{color:var(--amber)}
+
+  /* left column: telemetry */
+  .tele{display:flex;flex-direction:column;gap:8px}
+  .meter{display:grid;gap:3px}
+  .meter .bar{height:5px;background:rgba(79,227,255,.15)}.meter .bar i{display:block;height:100%;background:var(--cy);transition:width .8s cubic-bezier(.2,.7,.2,1)}
+  .meter .row{display:flex;justify-content:space-between}
+  .graph{height:46px;width:100%}
+  .graph path{fill:none;stroke:var(--cy);stroke-width:1.5}
+  .hex{font:700 9.5px/1.45 var(--mono);color:var(--mute);white-space:pre;overflow:hidden;height:62px}
+
+  /* center: the caller */
+  .call{display:flex;flex-direction:column;gap:6px;padding:6px}
+  .video{position:relative;flex:1;min-height:0;overflow:hidden;border:1px solid rgba(79,227,255,.6);background:#000}
+  .video video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%}
+  .video .tint{position:absolute;inset:0;background:linear-gradient(rgba(79,227,255,.08),rgba(0,40,80,.12));mix-blend-mode:screen;pointer-events:none}
+  .video .scan{position:absolute;inset:0;background:repeating-linear-gradient(180deg,rgba(255,255,255,.05) 0 1px,transparent 1px 3px)}
+  .video .sweep{position:absolute;left:0;right:0;height:20%;background:linear-gradient(transparent,rgba(79,227,255,.12),transparent);animation:sweep 4.5s linear infinite}
+  @keyframes sweep{from{top:-20%}to{top:100%}}
+  .ret{position:absolute;inset:10px;pointer-events:none}
+  .ret i{position:absolute;width:18px;height:18px;border:2px solid rgba(79,227,255,.9)}
+  .ret i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0}.ret i:nth-child(2){right:0;top:0;border-left:0;border-bottom:0}
+  .ret i:nth-child(3){left:0;bottom:0;border-right:0;border-top:0}.ret i:nth-child(4){right:0;bottom:0;border-left:0;border-top:0}
+  .facebox{position:absolute;left:50%;top:40%;width:42%;height:62%;transform:translate(-50%,-50%);border:1px dashed rgba(79,227,255,.55)}
+  .facebox span{position:absolute;left:-1px;top:-16px;background:var(--cy);color:#021022;font:800 9px var(--mono);padding:2px 5px;letter-spacing:.1em}
+  .vtop{position:absolute;left:12px;top:10px;right:12px;display:flex;justify-content:space-between}
+  /* closed captions, inside the video */
+  .cc{position:absolute;left:10px;right:10px;bottom:10px;background:rgba(2,10,22,.86);border-left:3px solid var(--amber);padding:7px 10px}
+  .cc .who{font:800 10px var(--mono);letter-spacing:.14em;color:var(--amber)}
+  .cc p{margin:2px 0 0;font-size:clamp(15px,1.7vw,19px);line-height:1.3;font-weight:600}
+  .cc .caret{display:inline-block;width:8px;height:1em;background:var(--cy);vertical-align:-2px;margin-left:2px;animation:blink 1s steps(2) infinite}
+  .callfoot{display:flex;align-items:center;gap:10px}
+  .wave{display:flex;align-items:center;gap:2px;height:18px;flex:1}.wave i{flex:1;max-width:4px;background:var(--cy);border-radius:2px;animation:wv 1s ease-in-out infinite}
+  @keyframes wv{0%,100%{height:3px}50%{height:16px}}
+
+  /* right column: next world + mission */
+  .right{display:grid;grid-template-rows:minmax(0,1.2fr) auto;gap:8px;min-height:0}
+  .holo{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;justify-items:start;padding:12px 16px}
+  .orb{position:relative;width:clamp(110px,15vw,170px);aspect-ratio:1}
+  .orb img{position:absolute;inset:17%;width:66%;height:66%;border-radius:50%;box-shadow:0 0 24px rgba(255,120,60,.5)}
+  .orb .r1,.orb .r2{position:absolute;border-radius:50%}
+  .orb .r1{inset:6px;border:1.5px dashed rgba(79,227,255,.8);animation:spin 14s linear infinite}
+  .orb .r2{inset:0;border:1px solid rgba(79,227,255,.35);border-top-color:var(--cy);animation:spin 3.5s linear infinite reverse}
+  .orb .radar{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,rgba(79,227,255,.35),transparent 25%);animation:spin 3s linear infinite;mix-blend-mode:screen}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .holo h3{margin:4px 0 8px;font-size:clamp(24px,2.6vw,34px);letter-spacing:.08em}
+  .stats{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font:700 12px var(--mono)}
+  .stats b{color:var(--mute);font-weight:700}
+  .mis{padding:10px 14px}.mis h4{margin:4px 0 8px;font-size:18px;color:var(--amber)}
+  .mis ol{margin:0;padding:0;list-style:none;display:grid;gap:5px}
+  .mis li{display:flex;gap:8px;align-items:baseline;font-size:15px;line-height:1.35;color:#d8eef7}
+  .mis li b{font:800 10px var(--mono);color:#021022;background:var(--cy);padding:1px 4px;flex:none}
+  .mis .tools{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+  .mis .tools span{font:800 9.5px var(--mono);letter-spacing:.1em;border:1px solid rgba(79,227,255,.5);padding:2px 6px;color:var(--cy)}
+
+  /* bottom strip */
+  .bot{grid-column:1/-1;display:flex;align-items:center;gap:12px;border-top:1px solid rgba(79,227,255,.35);padding:7px 6px 0}
+  .ticker{flex:1;overflow:hidden;white-space:nowrap;font:700 10px var(--mono);letter-spacing:.12em;color:var(--mute)}
+  .ticker span{display:inline-block;padding-left:100%;animation:tick 26s linear infinite}
+  @keyframes tick{to{transform:translateX(-100%)}}
+  .dots{display:flex;gap:4px}.dots i{width:16px;height:4px;background:rgba(79,227,255,.25)}.dots i.on{background:var(--cy)}
+  .next{font:800 15px system-ui;color:#031020;background:var(--cy);border:0;padding:10px 26px;cursor:pointer;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);box-shadow:0 0 18px rgba(79,227,255,.45)}
+
+  @media (max-width:820px){
+    .space{height:22%} .screen{top:calc(22% + 4px);grid-template-columns:1fr;grid-template-rows:auto minmax(220px,1fr) auto auto;overflow:auto}
+    .right{grid-template-rows:auto auto}
+  }
+  @media (prefers-reduced-motion: reduce){ .video .sweep,.orb .r1,.orb .r2,.orb .radar,.wave i,.ticker span,.rec b,.cc .caret{animation:none} }
+</style>
+</head>
+<body>
+<div class="note"><b>Draft 3:</b> a clean, animated sci-fi screen. Left: the live call with captions (CC). Right: a spinning hologram of the next world and its mission. Example: the flight to Ember.</div>
+<div class="space" id="sp"><div class="world"></div></div>
+
+<div class="screen">
+  <div class="top">
+    <span class="tag rec"><b></b>Incoming transmission</span>
+    <span class="sp"></span>
+    <span class="route"><span class="dim">ROUTE:</span> PUMICE ▸ GLACIA ▸ <span class="on">EMBER</span> ▸ GUSTO</span>
+    <span class="bars"><i style="height:4px"></i><i style="height:7px"></i><i style="height:10px"></i><i style="height:12px"></i></span>
+    <span class="mono" id="clock">00:00:00</span>
+  </div>
+
+  <div class="box call">
+    <div class="video">
+      <video src="/assets/games/lunar-salvage/calls/corey.mp4" muted loop playsinline autoplay></video>
+      <div class="tint"></div><div class="scan"></div><div class="sweep"></div>
+      <div class="ret"><i></i><i></i><i></i><i></i></div>
+      <div class="vtop"><span class="mono">● LIVE FROM EARTH</span><span class="mono dim">CH-03</span></div>
+      <div class="cc"><span class="who">CC · COREY</span><p id="ccText"></p></div>
+    </div>
+    <div class="callfoot"><span class="wave" id="wave"></span></div>
+  </div>
+
+  <div class="right">
+    <div class="box holo">
+      <div class="orb"><div class="radar"></div><div class="r2"></div><div class="r1"></div><img src="/assets/games/lunar-salvage/planets/ember.png" alt=""></div>
+      <div>
+        <span class="tag">Next location</span>
+        <h3>EMBER</h3>
+        <div class="stats"><b>GRAVITY</b><span>8.87 m/s²</span><b>AIR</b><span>YES</span><b>WORLD</b><span>3 OF 4</span></div>
+      </div>
+    </div>
+    <div class="box mis">
+      <span class="tag">Mission brief</span>
+      <h4>Save Averi's base</h4>
+      <ol>
+        <li><b>01</b>Drill the ice ring to fill your water tank.</li>
+        <li><b>02</b>Put out the fire with the Hose.</li>
+        <li><b>03</b>Clear all three meteorite pieces.</li>
+      </ol>
+      <div class="tools"><span>DRILL</span><span>HOSE</span><span>MAGNET</span></div>
+    </div>
+  </div>
+
+  <div class="bot">
+    <span class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>
+    <span style="flex:1"></span>
+    <button class="next">Next</button>
+  </div>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  const sp = $("sp"); for (let i = 0; i < 90; i++){ const s = document.createElement("i"); s.style.left = Math.random() * 100 + "%"; s.style.top = Math.random() * 100 + "%"; s.style.opacity = .3 + Math.random() * .7; sp.appendChild(s); }
+  /* captions type out like a live call */
+  const line = "A meteor is about to come down near Averi's base there. She'll need your help.";
+  let n = 0; (function type(){ $("ccText").innerHTML = line.slice(0, n) + '<span class="caret"></span>'; if (n++ < line.length) setTimeout(type, 32); })();
+  /* audio wave bars */
+  $("wave").innerHTML = Array.from({ length: 40 }, (_, i) => '<i style="animation-delay:' + (-(i * 0.13) % 1).toFixed(2) + 's;animation-duration:' + (0.7 + (i % 5) * 0.12).toFixed(2) + 's"></i>').join("");
+  const t0 = Date.now(); setInterval(() => { $("clock").textContent = new Date(Date.now() - t0).toISOString().slice(14, 19); }, 500);
+</script>
+</body>
+</html>
