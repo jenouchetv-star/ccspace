@@ -641,6 +641,14 @@ const isHome = (r, c) => r === HOME_CELL.r && c === HOME_CELL.c;
 /* sound effects from the site's shared kit (game-sound.js; the game plays on silently without it). Each screen plays what it
    shows, a friend's road and car a little softer; nothing about sound is sent to a friend */
 const sfx = (name, opts) => { if (window.CCSSound) CCSSound.play(name, opts); };
+/* the car's own sounds (owner, 2026-11-16; Pixabay, see docs/image-credits.md): a motor while it drives, a vroom as it
+   sets out, a beep beep at home */
+if (window.CCSSound) CCSSound.samples({
+  motor: { src: "../assets/games/pathbuilder/sfx/motor-loop.mp3", loop: true },
+  driveOff: { src: "../assets/games/pathbuilder/sfx/drive-off.mp3" },
+  honk: { src: "../assets/games/pathbuilder/sfx/honk.mp3" }
+});
+const ENGINE = window.CCSSound ? CCSSound.loop('motor') : null;
 let badAt = 0;
 const sfxBad = () => { const now = performance.now(); if (now - badAt > 700){ badAt = now; sfx("bad", { volume:.5 }); } };   /* soft, and never twice in a row while a card is turned */
 const PLACE_PITCH = { BRIDGE:1.25, TUNNEL:.8, RAMP:1.45 };
@@ -1677,6 +1685,8 @@ function startDrive(p, path){
     else a.dur = Math.abs(a.to - a.from) / 3.3 + .12;
   });
   p.anim = { acts, i:0, t:0 };
+  p.speedNow = speed;
+  sfx("driveOff", { volume: p.id === me ? 0.35 : 0.15 });
   const end = path.tiles[path.tiles.length - 1];
   p.pos = { r:end.r, c:end.c }; p.heading = path.heading;
   driving++;
@@ -2269,6 +2279,7 @@ function arrive(p){
   if (winner) return;
   winner = p.id; phase = "won";
   if (!online() || p.id === me) sfx("win"); else sfx("lose", { volume:.55 });   /* home! (or, softly, my friend got there first) */
+  sfx("honk", { volume: 0.8 }); setTimeout(() => sfx("honk", { volume: 0.8, pitch: 1.05 }), 230);   /* beep beep! */
   houseLight = 1; warm.intensity = 0;
   const hg = homes.find(g => g.userData.id === p.id), hs = hg && hg.userData.sign; if (hs) hs.scale.set(.9, .36, 1);
   startConfetti();
@@ -2753,6 +2764,8 @@ function frame(){
   riverMat.uniforms.uTime.value = t; seaMat.uniforms.uTime.value = t; windU.uTime.value = t;
   placeCamera(dt); placePend();
   Object.values(players).forEach(p => { if (p.anim) stepCar(p, dt); });
+  /* the motor hums while my car drives */
+  if (ENGINE){ const mine = players[me] && players[me].anim; ENGINE.set(mine ? 0.45 : 0, mine ? 0.95 + Math.min(0.25, (players[me].speedNow || 0) * 0.1) : 1); }
   if (!REDUCED) swayers.forEach(s => { s.obj.rotation.z = Math.sin(t * 1.3 + s.ph) * s.amp; s.obj.rotation.x = Math.cos(t * 1.1 + s.ph) * s.amp * .7; });
   markers.forEach((m, i) => { const k = (Math.sin(t * 3.2 + i) + 1) / 2; m.scale.setScalar(.9 + k * .16); m.position.y = k * .015; m.children.forEach(ch => { ch.material.opacity = .55 + k * .4; }); });
   const bob = REDUCED ? 0 : Math.sin(t * 1.8) * .03;
