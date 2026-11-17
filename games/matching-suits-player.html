@@ -120,8 +120,31 @@ function cardHTML(c, cls, attrs){ const r = rankOf(c), s = suitOf(c); return '<d
 const sfx = (name, opts) => { if (window.CCSSound) CCSSound.play(name, opts); };
 if (window.CCSSound) $("soundSlot").appendChild(CCSSound.button({ compact: true, background: "rgba(0,0,0,.4)" }));
 
-/* who I am at this table: kept on this device, so reopening the link puts me back in my seat */
-const P = { code: "", pid: "", ch: null, sb: null, id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"), view: null, sel: null, heard: false, wasTurn: false };
+/* private links between the table and each device (security review, 2026-11-17): the room's channel is shared, so the
+   table and each device agree a key (ECDH P-256) and seal everything private with it (AES-GCM). Nobody else on the
+   channel can read a player's hand or make moves for them. */
+const MSC = {
+  b64: (buf) => btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(buf)))),
+  unb64: (s) => Uint8Array.from(atob(String(s)), c => c.charCodeAt(0)),
+  ALG: { name: "ECDH", namedCurve: "P-256" },
+  pair(){ return crypto.subtle.generateKey(MSC.ALG, true, ["deriveKey"]); },
+  async pub(kp){ return MSC.b64(await crypto.subtle.exportKey("raw", kp.publicKey)); },
+  async key(priv, pubB64){
+    const pk = await crypto.subtle.importKey("raw", MSC.unb64(pubB64), MSC.ALG, false, []);
+    return crypto.subtle.deriveKey({ name: "ECDH", public: pk }, priv, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  },
+  async seal(key, obj){
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
+    return { iv: MSC.b64(iv), d: MSC.b64(ct) };
+  },
+  async open(key, box){
+    try { const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: MSC.unb64(box.iv) }, key, MSC.unb64(box.d)); return JSON.parse(new TextDecoder().decode(pt)); }
+    catch (_e){ return null; }
+  }
+};
+/* who I am at this table: my key pair is kept on this device, so reopening the link puts me back in my seat */
+const P = { code: "", pk: "", kp: null, key: null, hk: "", hostWait: null, n: 0, lastV: 0, ch: null, sb: null, id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"), view: null, sel: null, heard: false, wasTurn: false };
 function store(k, v){ try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (_e) {} }
 function load(k){ try { return localStorage.getItem(k); } catch (_e){ return null; } }
 function show(v){ ["vJoin", "vWait", "vRace", "vPlay", "vOver"].forEach(id => $(id).hidden = id !== v); }
@@ -132,7 +155,24 @@ async function sb(){
   P.sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, realtime: { params: { eventsPerSecond: 20 } } });
   return P.sb;
 }
-function send(p){ if (!P.ch) return; p.i = P.id; p.pid = P.pid; try { const r = P.ch.send({ type: "broadcast", event: "m", payload: p }); if (r && r.catch) r.catch(() => {}); } catch (_e) {} }
+function post(p){ if (!P.ch) return; p.i = P.id; try { const r = P.ch.send({ type: "broadcast", event: "m", payload: p }); if (r && r.catch) r.catch(() => {}); } catch (_e) {} }
+/* everything I say to the table is sealed, with a number that only goes up */
+async function send(m){
+  if (!P.key) return;
+  P.n = Math.max(P.n + 1, Date.now() * 1000);
+  m.n = P.n;
+  post({ t: "s", pk: P.pk, box: await MSC.seal(P.key, m) });
+}
+async function myKeys(code){
+  try {
+    const saved = JSON.parse(load("ms-key-" + code) || "null");
+    if (saved && saved.jwk && saved.pk){ P.kp = { privateKey: await crypto.subtle.importKey("jwk", saved.jwk, MSC.ALG, true, ["deriveKey"]) }; P.pk = saved.pk; return; }
+  } catch (_e) {}
+  const kp = await MSC.pair(); P.kp = kp; P.pk = await MSC.pub(kp);
+  store("ms-key-" + code, JSON.stringify({ jwk: await crypto.subtle.exportKey("jwk", kp.privateKey), pk: P.pk }));
+}
+/* the table answers a ping with its public key; I keep the first one I hear for this visit */
+function hostKey(){ return new Promise((ok) => { if (P.hk) return ok(P.hk); P.hostWait = ok; post({ t: "ping" }); setTimeout(() => ok(P.hk || ""), 6000); }); }
 async function connect(code){
   const client = await sb();
   if (P.ch){ try { await client.removeChannel(P.ch); } catch (_e) {} P.ch = null; }
@@ -146,28 +186,58 @@ async function connect(code){
 async function join(rejoin){
   const code = $("code").value.replace(/[^a-z]/gi, "").toUpperCase();
   if (code.length !== 4){ $("joinErr").hidden = false; $("joinErr").textContent = "The room code is 4 letters. It's on the big screen."; return; }
-  P.code = code; P.pid = load("ms-pid-" + code) || Array.from(crypto.getRandomValues(new Uint32Array(3))).map(n => n.toString(36)).join("");
-  store("ms-pid-" + code, P.pid);
+  if (!window.crypto || !crypto.subtle){ $("joinErr").hidden = false; $("joinErr").textContent = "This browser can't join privately. Try another browser."; return; }
+  P.code = code; P.hk = ""; P.key = null; P.lastV = 0;
+  await myKeys(code);
   const name = $("name").value.trim(); store("ms-name", name || null);
   show("vWait"); $("waitMsg").textContent = "Joining the table...";
   try { await connect(code); }
   catch (_e){ show("vJoin"); $("joinErr").hidden = false; $("joinErr").textContent = "Couldn't reach the table. Check the internet and try again."; return; }
   P.heard = false;
-  send({ t: rejoin ? "hi" : "join", name });
-  if (rejoin) send({ t: "join", name });
+  const hk = await hostKey();
+  try { P.key = hk ? await MSC.key(P.kp.privateKey, hk) : null; } catch (_e){ P.key = null; }
+  if (!P.key){ show("vJoin"); $("joinErr").hidden = false; $("joinErr").textContent = "No table answered with code " + code + ". Check the letters on the big screen."; return; }
+  await send({ t: rejoin ? "hi" : "join", name });
+  if (rejoin) await send({ t: "join", name });
   setTimeout(() => { if (!P.heard){ show("vJoin"); $("joinErr").hidden = false; $("joinErr").textContent = "No table answered with code " + code + ". Check the letters on the big screen."; } }, 7000);
 }
 $("bJoin").onclick = () => { sfx("click"); join(false); };
 $("code").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/[^a-z]/gi, "").toUpperCase().slice(0, 4); });
 [$("code"), $("name")].forEach(el => el.addEventListener("keydown", (e) => { if (e.key === "Enter") $("bJoin").click(); }));
 
-function onMsg(p){
+async function onMsg(p){
+  if (p.t === "host"){ if (!P.hk && typeof p.hk === "string"){ P.hk = p.hk; if (P.hostWait){ const w = P.hostWait; P.hostWait = null; w(P.hk); } } return; }
   if (p.t === "closed"){ show("vWait"); $("waitMsg").textContent = "The table screen closed. Join again when it's back."; return; }
-  if (p.pid !== P.pid) return;
+  if (!P.pk || p.to !== P.pk) return;
   P.heard = true;
   if (p.t === "full"){ show("vJoin"); $("joinErr").hidden = false; $("joinErr").textContent = "That table is full (4 players). Ask for the next game!"; return; }
   if (p.t === "late"){ show("vWait"); $("waitMsg").textContent = "This game has already started. You can join the next one when they press New players."; return; }
-  if (p.t === "you") paint(p);
+  if (p.t === "you" && P.key && p.box){
+    const m = await MSC.open(P.key, p.box);
+    if (!m || !(Number(m.v) > P.lastV)) return;   /* only the table can seal these; skip any that arrive late */
+    P.lastV = Number(m.v);
+    const v = cleanView(m); if (v) paint(v);
+  }
+}
+/* anyone on the room's channel can send messages, so only well-formed ones are drawn: real cards, real ranks, plain
+   numbers and text (security review, 2026-11-17) */
+const CARD_RE = /^(A|[2-9]|10|J|Q|K)[hdcs]$/;
+const isCard = (c) => typeof c === "string" && CARD_RE.test(c);
+const isRank = (r) => RANKS.includes(r);
+const num = (n, max) => { n = Number(n); return Number.isFinite(n) && n >= 0 && n <= max ? Math.floor(n) : 0; };
+const txt = (t) => typeof t === "string" ? t.slice(0, 24) : "";
+function cleanView(p){
+  if (!["lobby", "race", "draw", "play", "over"].includes(p.phase)) return null;
+  const hand = Array.isArray(p.hand) ? p.hand : [];
+  if (hand.length > 52 || !hand.every(isCard)) return null;
+  if (p.heart != null && !isCard(p.heart)) return null;
+  if (p.active != null && !isRank(p.active)) return null;
+  const legal = Array.isArray(p.legal) ? p.legal : [];
+  if (!legal.every(isRank)) return null;
+  return { t: "you", phase: p.phase, name: txt(p.name), seat: num(p.seat, 3), turn: p.turn == null ? -1 : num(p.turn, 3), turnName: txt(p.turnName),
+    hand, legal, heart: p.heart || null, active: p.active || null, onTable: num(p.onTable, 4), pile: num(p.pile, 52),
+    canPass: p.canPass === true, canShuffle: p.canShuffle === true, shuffled: p.shuffled === true, revealed: p.revealed === true, busy: p.busy === true,
+    place: num(p.place, 4), winner: txt(p.winner) };
 }
 function paint(v){
   P.view = v;
@@ -224,12 +294,12 @@ $("bShuffle").onclick = () => { sfx("flip"); send({ t: "shuffle" }); $("bShuffle
 $("bReveal").onclick = () => { sfx("flip"); send({ t: "reveal" }); $("bReveal").disabled = true; };
 /* coming back to the page: say hello again so the table resends my cards */
 document.addEventListener("visibilitychange", () => { if (!document.hidden && P.ch) send({ t: "hi" }); });
-addEventListener("pagehide", () => send({ t: "bye" }));
+addEventListener("pagehide", () => { if (P.pk) post({ t: "bye", pk: P.pk }); });
 
 /* opened from the QR code: the room is in the link; if I sat at this table before, rejoin my seat */
 const qs = new URLSearchParams(location.search), qr = (qs.get("room") || "").replace(/[^a-z]/gi, "").toUpperCase().slice(0, 4);
 $("name").value = load("ms-name") || "";
-if (qr){ $("code").value = qr; if (load("ms-pid-" + qr)) join(true); else $("name").focus(); }
+if (qr){ $("code").value = qr; if (load("ms-key-" + qr)) join(true); else $("name").focus(); }
 else $("code").focus();
 </script>
 </body>

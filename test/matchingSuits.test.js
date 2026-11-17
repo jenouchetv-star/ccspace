@@ -208,10 +208,43 @@ describe("the table screen", () => {
     expect(game).toContain('if (p.t === "shuffle" && G.phase === "play") doShuffle(i);');
     expect(game).toContain("canShuffle: st ? canShuffle(st, i) && !G.busy : false");
   });
-  it("sends each player only their own hand", () => {
+  it("sends each player only their own hand, sealed so only their device can read it (security review)", () => {
     const tell = game.split("function tell(i){")[1].split("\n}\n")[0];
-    expect(tell).toContain("pid: s.pid");
+    expect(tell).toContain("sealTo(s, { v: ++s.out, seat: i,");
     expect(tell).toContain("hand: me ? me.hand.slice()");
+    expect(tell).not.toContain("send(");
+    expect(game).toContain('send({ t: "you", to: s.pk, box: await MSC.seal(key, view) })');
+  });
+  it("only acts on sealed moves it can open, and never the same one twice", () => {
+    const on = game.split("async function onMsg(p){")[1].split("\n}\n")[0];
+    expect(on).toContain('if (p.t !== "s" || !p.box) return;');
+    expect(on).toContain("const m = await MSC.open(key, p.box);");
+    expect(on).toContain("!(Number(m.n) > (NET.lastN[p.pk] || 0))");
+  });
+});
+
+describe("private links (security review, 2026-11-17)", () => {
+  const player = readFileSync(new URL("../games/matching-suits-player.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const mscOf = (src) => new Function(src.split("const MSC = {")[1].split("\n};\n")[0].replace(/^/, "const MSC = {") + "\n};\nreturn MSC;")();
+  it("the table and the device share the same sealing code", () => {
+    expect(game.split("const MSC = {")[1].split("\n};\n")[0]).toBe(player.split("const MSC = {")[1].split("\n};\n")[0]);
+  });
+  it("a sealed message opens with the shared key, and not with anyone else's", async () => {
+    const MSC = mscOf(game);
+    const table = await MSC.pair(), phone = await MSC.pair(), other = await MSC.pair();
+    const k1 = await MSC.key(table.privateKey, await MSC.pub(phone)), k2 = await MSC.key(phone.privateKey, await MSC.pub(table));
+    const box = await MSC.seal(k1, { hand: ["7h", "Ks"] });
+    expect(await MSC.open(k2, box)).toEqual({ hand: ["7h", "Ks"] });
+    const k3 = await MSC.key(other.privateKey, await MSC.pub(table));
+    expect(await MSC.open(k3, box)).toBe(null);
+    const bad = { iv: box.iv, d: box.d.slice(0, -4) + (box.d.slice(-4) === "AAAA" ? "BBBB" : "AAAA") };
+    expect(await MSC.open(k2, bad)).toBe(null);
+  });
+  it("the device draws only well-formed cards and numbers, and sends nothing in the clear but its public key", () => {
+    expect(player).toContain("const CARD_RE = /^(A|[2-9]|10|J|Q|K)[hdcs]$/;");
+    expect(player).toContain("const v = cleanView(m); if (v) paint(v);");
+    expect(player).not.toMatch(/\bpid\b/);
+    expect(player).toContain('post({ t: "s", pk: P.pk, box: await MSC.seal(P.key, m) });');
   });
 });
 
