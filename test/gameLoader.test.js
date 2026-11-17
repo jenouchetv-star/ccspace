@@ -49,6 +49,23 @@ describe("every game opens on the logo loading screen", () => {
       expect(h).toMatch(/setTimeout\(function\(\)\{ hide\(\); \}, 9000\)/);
     });
   }
+  /* the logo sound, the owner's pick 1A (2026-11-17): Pixabay "Effect for logo intro" at 1.5x; draft docs/mockups/game-loader-sound-draft.html */
+  for (const file of Object.keys(GAMES)) {
+    if (file.endsWith("pic-pop-puzzle.html")) continue;
+    it(file + " plays the logo sound, faster, and fades it with the screen", () => {
+      const h = read(file);
+      expect(h).toContain('snd = new Audio("/assets/games/loader/logo-intro.mp3"); snd.volume = 0.7; snd.playbackRate = 1.5;');
+      /* the site's sound-off setting is honored where the page can read it; a sealed frame can't, and must still play */
+      if (file.endsWith("chikes-gravity-four.html")) expect(h).toContain("var on = true; /* this sealed frame can't read the site's sound setting */");
+      else expect(h).toContain('var on = true; try { on = localStorage.getItem("ccs-sound") !== "off"; } catch (e) {');
+      expect(h).toContain("if (on){ try { snd = new Audio(");
+      expect(h).toContain("p.then(function(){ hold = 1600; }, function(){ snd = null; })");
+      expect(h).toContain('el.className = "ready gone"; fade();');
+    });
+  }
+  it("Pic-a-Puzzle loads nothing from the site, so its loader stays quiet", () => {
+    expect(read("supabase/private-games/pic-pop-puzzle.html")).not.toContain("logo-intro.mp3");
+  });
   it("the phone controller is a remote, not a game, so it has none", () => {
     expect(read("games/lunar-salvage-remote.html")).not.toContain('id="ccsLoad"');
   });
