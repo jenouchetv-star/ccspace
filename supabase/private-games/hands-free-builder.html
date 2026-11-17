@@ -282,7 +282,6 @@
     <div class="sep"></div>
     <button class="btn btn--icon" type="button" id="btn-undo" aria-label="Undo the last block" title="Undo the last block"></button>
     <button class="btn btn--icon" type="button" id="btn-restart" aria-label="Start over" title="Start over"></button>
-    <button class="btn btn--icon" type="button" id="btn-sound" aria-pressed="true" aria-label="Sound" title="Turn sound off"></button>
     <button class="btn btn--icon" type="button" id="btn-theme" aria-pressed="false" aria-label="Dark mode" title="Dark mode"></button>
     <button class="btn btn--icon" type="button" id="btn-xray" aria-pressed="false" aria-label="X-ray" title="X-ray"></button>
   </header>
@@ -396,9 +395,7 @@
     undo:'<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/>',
     restart:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
     medal:'<circle cx="12" cy="15" r="6"/><path d="M8.5 10.5L6 3h4l2 5 2-5h4l-2.5 7.5"/>',
-    check:'<path d="M20 6L9 17l-5-5"/>',
-    soundOn:'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>',
-    soundOff:'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>'
+    check:'<path d="M20 6L9 17l-5-5"/>'
   };
   function icon(name, cls){ return '<svg' + (cls ? ' class="' + cls + '"' : '') + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON[name] + '</svg>'; }
 
@@ -674,7 +671,7 @@
     heldPos.x = r.x; heldPos.y = r.y;
     b.state = "held"; b.anim = null;
     if (!run.started){ run.started = true; run.t0 = now(); }
-    fx("grab", 0.6, function(){ blip(520); });
+    blip(520);
   }
   function moveHeld(x, y){ if (held){ heldPos.x = x - grab.dx; heldPos.y = y - grab.dy; } }
   function sendHome(b, from, opts){
@@ -690,7 +687,7 @@
     b.x = plan.x; b.y = plan.y; b.state = "placed"; b.order = ++seq;
     var dist = Math.abs(sy(GY - b.y - b.h) - from.y);
     b.anim = { kind:"move", from:from, t0:now(), dur:120 + Math.min(340, Math.sqrt(dist) * 16), fall:true,
-      done:function(){ fx("place", 0.7, function(){ blip(300 + b.y * 60); }); settle(); } };
+      done:function(){ blip(300 + b.y * 60); settle(); } };
   }
   /* after a block lands: anything off balance tips over and goes back on the shelf; then check the picture */
   function settle(){
@@ -701,14 +698,14 @@
       t.set.forEach(function(c){ c.anim = { kind:"tip", t0:n, dir:t.dir, pivot:t.pivot, pivotRow:pivotRow, bx:c.x, by:c.y }; c.state = "tray"; });
       t = findTip(placed());
     }
-    if (tipped){ fx("tip", 0.7, thud); chikeOnTip(); return; }
+    if (tipped){ thud(); chikeOnTip(); return; }
     if (run.started && !run.done){ if (matches()) win(); else chikeOnPlace(); }
   }
   function undo(){
     if (run.done) return;
     var list = placed().filter(function(b){ return !b.anim && !restsOn(b); }).sort(function(p, q){ return q.order - p.order; });
     if (!list.length){ toast("Nothing to undo"); return; }
-    sendHome(list[0], rectOf(list[0])); toast("Undo"); fx("undo", 0.7, function(){ blip(420); });
+    sendHome(list[0], rectOf(list[0])); toast("Undo"); blip(420);
   }
   function restart(quiet){
     var was = held; held = null;
@@ -758,7 +755,7 @@
     $("win-best").textContent = (isBest && old ? "New best time! " : !isBest ? "Your best is " + fmt(old) + ". " : "") + nextUp;
     $("win-word").textContent = ch.word; $("win-fact").textContent = ch.fact;
     updateDots(); updateTime(); chikeOnWin(m);
-    fx("win", 0.8, function(){ [523, 659, 784].forEach(function(f, i){ setTimeout(function(){ blip(f); }, i * 110); }); });
+    [523, 659, 784].forEach(function(f, i){ setTimeout(function(){ blip(f); }, i * 110); });
     winHop = now();
     setTimeout(function(){ if (run.done){ $("win").classList.remove("hidden"); $("win-next").focus({ preventScroll:true }); } }, 650);
   }
@@ -926,9 +923,8 @@
   }
 
   /* ---------------- little sounds for feedback ---------------- */
-  var audio = null, soundOn = true;
+  var audio = null;
   function tone(freq, type, len, vol){
-    if (!soundOn) return;
     try {
       audio = audio || new (window.AudioContext || window.webkitAudioContext)();
       var t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
@@ -938,43 +934,6 @@
   }
   function blip(freq){ tone(freq, "sine", 0.12, 0.1); }
   function thud(){ tone(110, "triangle", 0.3, 0.18); setTimeout(function(){ tone(82, "triangle", 0.25, 0.14); }, 120); }
-
-  /* futuristic sounds (owner, 2026-11-16; Pixabay, see docs/image-credits.md), with the beeps above as a fallback until
-     each has loaded, and a soft spaceship hum underneath */
-  var SFX_DIR = "/assets/games/hands-free-builder/sfx/", SFX = {}, hum = null;
-  function loadSfx(){
-    if (!audio) return;
-    ["grab", "place", "tip", "next", "undo", "win", "hum-loop"].forEach(function(n){
-      if (SFX[n] !== undefined) return;
-      SFX[n] = null;
-      fetch(SFX_DIR + n + ".mp3").then(function(r){ return r.ok ? r.arrayBuffer() : null; })
-        .then(function(b){ return b ? new Promise(function(ok, no){ audio.decodeAudioData(b, ok, no); }) : null; })
-        .then(function(buf){ if (buf){ SFX[n] = buf; if (n === "hum-loop") startHum(); } }).catch(function(){});
-    });
-  }
-  function fx(name, vol, fallback){
-    if (!soundOn) return;
-    try {
-      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-      if (audio.state === "suspended") audio.resume();
-      loadSfx();
-      var buf = SFX[name];
-      if (!buf){ if (fallback) fallback(); return; }
-      var s = audio.createBufferSource(), g = audio.createGain();
-      s.buffer = buf; g.gain.value = vol; s.connect(g); g.connect(audio.destination); s.start();
-    } catch(e){ if (fallback) fallback(); }
-  }
-  function startHum(){
-    if (hum || !audio || !SFX["hum-loop"]) return;
-    var s = audio.createBufferSource(), g = audio.createGain();
-    s.buffer = SFX["hum-loop"]; s.loop = true; g.gain.value = 0; s.connect(g); g.connect(audio.destination); s.start();
-    hum = { s: s, g: g }; setHum();
-  }
-  function setHum(){ if (hum) hum.g.gain.setTargetAtTime(soundOn ? 0.09 : 0, audio.currentTime, 0.4); }
-  function paintSound(){
-    var b = $("btn-sound"); b.innerHTML = icon(soundOn ? "soundOn" : "soundOff");
-    b.setAttribute("aria-pressed", String(soundOn)); b.title = soundOn ? "Turn sound off" : "Turn sound on";
-  }
 
   /* ---------------- toast ---------------- */
   var toastTimer = 0;
@@ -1084,7 +1043,7 @@
     state.cooldown = performance.now() + 900; state.track = []; state.holdStart = performance.now(); state.holdDone = true;
     if (inPlay()){ toast("Finish this build first, or hold a thumbs up to start over"); return; }
     showGesture("swipe"); setRing(0);
-    loadChallenge(ci + (dir === "left" ? 1 : -1)); fx("next", 0.7, function(){ blip(640); });
+    loadChallenge(ci + (dir === "left" ? 1 : -1)); blip(640);
     setTimeout(function(){ if (state.gesture) showGesture(state.gesture); }, 600);
   }
 
@@ -1324,8 +1283,6 @@
   $("win-again").addEventListener("click", function(){ restart(true); });
   $("win-next").addEventListener("click", function(){ loadChallenge(ci + 1); });
   $("btn-theme").addEventListener("click", function(){ setTheme(!dark); });
-  paintSound();
-  $("btn-sound").addEventListener("click", function(){ soundOn = !soundOn; paintSound(); setHum(); if (soundOn) fx("undo", 0.5); });
   $("btn-xray").addEventListener("click", function(){ setXray(!xray); });
   $("btn-camera").addEventListener("click", function(){ if (state.mode === "camera") stopCamera(); else startCamera(); });
   $("start-camera").addEventListener("click", startCamera);

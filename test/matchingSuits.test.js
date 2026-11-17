@@ -5,7 +5,7 @@ import { readFileSync, existsSync } from "node:fs";
 
 const game = readFileSync(new URL("../supabase/private-games/matching-suits.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const pure = game.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const M = new Function(pure + "; return { RANKS, rankOf, suitOf, rankValue, newDeck, shuffle, seeded, deal, firstPlayer, placeHearts, startGame, legalRanks, canPass, canShuffle, reshuffle, drop, pass, botMove, standings, roomCode, playerName };")();
+const M = new Function(pure + "; return { RANKS, rankOf, suitOf, rankValue, newDeck, shuffle, seeded, deal, firstPlayer, placeHearts, startGame, legalRanks, onTable, startsNew, canPass, canShuffle, reshuffle, drop, pass, botMove, standings, roomCode, playerName };")();
 
 /* a game with chosen hands, for exact checks */
 function fixed(hands, pile){
@@ -67,53 +67,63 @@ describe("after the Heart Race (owner, 2026-11-17)", () => {
   });
 });
 
-describe("playing", () => {
-  it("free choice: any rank you hold; dropping takes ALL of that rank and draws just 1", () => {
+describe("playing: match the table (owner, 2026-11-17)", () => {
+  it("you may drop any rank you hold that's already on the table, not just the last one played", () => {
+    const s = fixed([["7h", "9s", "2c", "Kh"], ["3c"]], ["5s", "6s", "8s"]);
+    s.slots["7"] = 1; s.slots["9"] = 2; s.slots["Q"] = 1;
+    expect(M.legalRanks(s, 0)).toEqual(["7", "9"]);
+    expect(M.onTable(s)).toEqual(["7", "9", "Q"]);
+    expect(M.startsNew(s, 0)).toBe(false);
+  });
+  it("when nothing matches the table, you start a new rank with any card", () => {
+    const s = fixed([["2c", "Kh", "Kd"], ["3c"]], ["5s", "6s", "8s"]);
+    s.slots["7"] = 1;
+    expect(M.legalRanks(s, 0)).toEqual(["2", "K"]);
+    expect(M.startsNew(s, 0)).toBe(true);
+    const ev = M.drop(s, 0, "K");
+    expect(ev.started).toBe(true);
+    expect(s.slots["K"]).toBe(2);
+  });
+  it("you can't start a new rank while you hold a match", () => {
+    const s = fixed([["7h", "2c"], ["3c"]], ["5s"]);
+    s.slots["7"] = 1;
+    expect(M.drop(s, 0, "2")).toBe(false);
+    expect(M.drop(s, 0, "7")).toBeTruthy();
+  });
+  it("dropping takes ALL of that rank, draws just 1, and the turn moves on", () => {
     const s = fixed([["7h", "7s", "2c", "9d", "Kh"], ["3c"], ["4d"]], ["5s", "6s", "8s"]);
-    expect(M.legalRanks(s, 0).sort()).toEqual(["2", "7", "9", "K"].sort());
+    s.slots["7"] = 1;
     M.drop(s, 0, "7");
     expect(s.players[0].hand.filter(c => M.rankOf(c) === "7")).toHaveLength(0);
     expect(s.players[0].hand).toHaveLength(4);      /* 5 - 2 + 1 */
-    expect(s.slots["7"]).toBe(2);
+    expect(s.slots["7"]).toBe(3);
     expect(s.pile).toHaveLength(2);
-    expect(s.active).toBe("7");
     expect(s.turn).toBe(1);
   });
-  it("following: the next player must drop the active rank if they have it, or pass (and passing draws nothing)", () => {
-    const s = fixed([["7h", "2c", "Kh"], ["7s", "3c"], ["4d", "5d"]], ["5s", "6s", "8s"]);
-    M.drop(s, 0, "7");
-    expect(M.legalRanks(s, 1)).toEqual(["7"]);
-    expect(M.canPass(s, 1)).toBe(false);
-    M.drop(s, 1, "7");
-    expect(s.turn).toBe(2);
-    expect(M.legalRanks(s, 2)).toEqual([]);
-    expect(M.canPass(s, 2)).toBe(true);
-    M.pass(s, 2);
-    expect(s.players[2].hand).toHaveLength(2);
-    expect(s.turn).toBe(0);
+  it("nobody ever passes: there is always something to drop", () => {
+    const s = fixed([["7h", "2c"], ["3c"]], ["5s"]);
+    expect(M.canPass(s, 0)).toBe(false);
+    expect(M.pass(s, 0)).toBe(false);
+    for (let seed = 1; seed <= 30; seed++){
+      const g = M.startGame([0, 1, 2].map(i => ({ id: "b" + i, name: "R" + i, bot: true })), M.seeded(seed));
+      M.placeHearts(g); g.phase = "play";
+      while (g.phase === "play"){ expect(M.legalRanks(g, g.turn).length, "seed " + seed).toBeGreaterThan(0); M.drop(g, g.turn, M.botMove(g, g.turn).rank); }
+    }
   });
-  it("the 4th card flips the stack and gives a bonus turn with a free choice", () => {
+  it("the 4th card flips the stack and gives a bonus turn", () => {
     const s = fixed([["7h", "2c", "Kh"], ["7s", "7d", "7c", "3c"], ["4d"]], ["5s", "6s", "8s"]);
     M.drop(s, 0, "7");
     M.drop(s, 1, "7");
     expect(s.slots["7"]).toBe(4);
     expect(s.done["7"]).toBe(true);
     expect(s.turn).toBe(1);
-    expect(s.active).toBe(null);
-  });
-  it("when everyone else passes back to the last dropper, the chain breaks and they choose again", () => {
-    const s = fixed([["7h", "2c", "Kh"], ["3c"], ["4d"]], ["5s", "6s", "8s"]);
-    M.drop(s, 0, "7");
-    M.pass(s, 1); M.pass(s, 2);
-    expect(s.turn).toBe(0);
-    expect(s.active).toBe(null);
   });
   it("nobody can win while the pile lasts; once it's empty, the first with no cards wins and the rest rank by cards left", () => {
     const s = fixed([["7h"], ["3c", "4c"], ["4d", "5d", "6d"]], ["5s"]);
     M.drop(s, 0, "7");
     expect(s.players[0].hand).toEqual(["5s"]);
     expect(s.phase).toBe("play");
-    M.pass(s, 1); M.pass(s, 2);
+    M.drop(s, 1, "3"); M.drop(s, 2, "4");
     M.drop(s, 0, "5");
     expect(s.phase).toBe("over");
     expect(s.winner).toBe(0);
@@ -123,9 +133,25 @@ describe("playing", () => {
     const s = fixed([["7h", "2c"], ["7s", "3c"]], []);
     expect(M.drop(s, 1, "7")).toBe(false);     /* not their turn */
     expect(M.drop(s, 0, "Q")).toBe(false);     /* doesn't have it */
-    expect(M.pass(s, 0)).toBe(false);          /* free choice can't pass */
     M.drop(s, 0, "7");
-    expect(M.drop(s, 1, "3")).toBe(false);     /* must follow the 7s */
+    expect(M.drop(s, 1, "3")).toBe(false);     /* must match the 7s on the table */
+  });
+});
+
+describe("fair play under match the table (owner asked, 2026-11-17: will the first player win every time?)", () => {
+  it("the Heart Race winner wins about their fair share, not every time", () => {
+    for (const n of [2, 3, 4]){
+      let firstWins = 0, games = 0;
+      for (let seed = 1; seed <= 1500; seed++){
+        const g = M.startGame(Array.from({ length: n }, (_, i) => ({ id: "b" + i, name: "R" + i, bot: true })), M.seeded(seed * 7 + n));
+        M.placeHearts(g); g.phase = "play"; const first = g.turn;
+        while (g.phase === "play") M.drop(g, g.turn, M.botMove(g, g.turn).rank);
+        games++; if (g.winner === first) firstWins++;
+      }
+      const share = firstWins / games;
+      expect(share, n + " players").toBeGreaterThan(1 / n - .08);
+      expect(share, n + " players").toBeLessThan(1 / n + .08);
+    }
   });
 });
 
@@ -149,12 +175,12 @@ describe("reshuffling (owner, 2026-11-17: each player can reshuffle the draw dec
 });
 
 describe("robots", () => {
-  it("follow the active rank when they can, and pass when they can't", () => {
+  it("match the table when they can, and start a new rank when they can't; they never pass", () => {
     const s = fixed([["7h", "2c", "Kh"], ["7s", "3c"], ["4d"]], ["5s", "6s"]);
     M.drop(s, 0, "7");
     expect(M.botMove(s, 1)).toEqual({ t: "drop", rank: "7" });
     M.drop(s, 1, "7");
-    expect(M.botMove(s, 2)).toEqual({ t: "pass" });
+    expect(M.botMove(s, 2)).toEqual({ t: "drop", rank: "4" });
   });
   it("with a free choice, finish a stack if they can, or else drop their biggest group", () => {
     const s = fixed([["9h", "9s", "Kh", "Jc"], ["3c"]], ["5s"]);

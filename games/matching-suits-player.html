@@ -92,7 +92,7 @@
     <div class="hand" id="hand" aria-label="Your cards"></div>
     <div class="count" id="handHelp"></div>
     <button class="shuf" id="bShuffle" type="button" disabled>Shuffle the draw deck (once a game)</button>
-    <div class="acts"><button class="big" id="bDrop" type="button" disabled>Drop</button><button class="big ghost" id="bPass" type="button" disabled>Pass</button></div>
+    <div class="acts"><button class="big" id="bDrop" type="button" disabled>Drop</button></div>
   </section>
   <!-- the end -->
   <section id="vOver" hidden>
@@ -244,8 +244,10 @@ function cleanView(p){
   if (p.active != null && !isRank(p.active)) return null;
   const legal = Array.isArray(p.legal) ? p.legal : [];
   if (!legal.every(isRank)) return null;
+  const table = Array.isArray(p.table) ? p.table : [];
+  if (table.length > 13 || !table.every(isRank)) return null;
   return { t: "you", phase: p.phase, name: txt(p.name), seat: num(p.seat, 3), turn: p.turn == null ? -1 : num(p.turn, 3), turnName: txt(p.turnName),
-    hand, legal, heart: p.heart || null, active: p.active || null, onTable: num(p.onTable, 4), pile: num(p.pile, 52),
+    hand, legal, table, start: p.start === true, heart: p.heart || null, active: p.active || null, onTable: num(p.onTable, 4), pile: num(p.pile, 52),
     canPass: p.canPass === true, canShuffle: p.canShuffle === true, shuffled: p.shuffled === true, revealed: p.revealed === true, busy: p.busy === true,
     place: num(p.place, 4), winner: txt(p.winner) };
 }
@@ -274,9 +276,10 @@ function paint(v){
   if (mine && !P.wasTurn) sfx("start", { volume: .6 });
   P.wasTurn = mine;
   $("turnLine").className = "turn" + (mine ? "" : " wait");
-  $("turnLine").textContent = mine ? (v.active ? (v.legal.length ? "Your turn! Drop all your " + plural(v.active) : "Your turn! No " + plural(v.active) + ": tap Pass") : "Your turn! Pick any card to start a chain") : v.turnName + "'s turn";
-  $("tableLine").innerHTML = v.active ? '<span>On the table:</span><span>' + plural(v.active) + ', ' + v.onTable + ' of 4</span><span style="margin-left:auto">Pile: ' + v.pile + '</span>' : '<span>New chain: any rank can start it</span><span style="margin-left:auto">Pile: ' + v.pile + '</span>';
-  if (!v.legal.includes(P.sel)) P.sel = v.legal.length === 1 ? v.legal[0] : null;
+  /* match the table (owner, 2026-11-17): drop any rank already on the table, or start a new one when nothing matches */
+  $("turnLine").textContent = mine ? (v.start ? "Your turn! Nothing matches: start a new rank" : "Your turn! Match a rank on the table") : v.turnName + "'s turn";
+  $("tableLine").innerHTML = '<span>On the table:</span><span>' + (v.table.length ? esc(v.table.join(", ")) : "nothing yet") + '</span><span style="margin-left:auto">Pile: ' + v.pile + '</span>';
+  if (!v.legal.includes(P.sel)) P.sel = null;   /* nothing is picked for them: they always choose */
   paintHand();
 }
 function paintHand(){
@@ -285,11 +288,10 @@ function paintHand(){
   const n = P.sel ? v.hand.filter(c => rankOf(c) === P.sel).length : 0;
   $("bDrop").disabled = !can || !P.sel;
   $("bDrop").textContent = P.sel ? "Drop " + (n === 1 ? "my " + (ONE[P.sel] || P.sel) : n + " " + plural(P.sel)) : "Drop";
-  $("bPass").disabled = !can || !v.canPass;
   /* each player can reshuffle the draw deck once a game, on their turn (owner, 2026-11-17) */
   $("bShuffle").disabled = !can || !v.canShuffle;
   $("bShuffle").textContent = v.shuffled ? "Shuffle used" : "Shuffle the draw deck (once a game)";
-  $("handHelp").textContent = v.hand.length + (v.hand.length === 1 ? " card" : " cards") + (can && !v.canPass && !P.sel ? ". Tap a card: all your cards of that rank go together." : "");
+  $("handHelp").textContent = v.hand.length + (v.hand.length === 1 ? " card" : " cards") + (can && !P.sel ? ". Tap a card: all your cards of that rank go together." : "");
 }
 $("hand").addEventListener("click", (e) => {
   const el = e.target.closest(".card"); if (!el || !P.view) return;
@@ -298,8 +300,7 @@ $("hand").addEventListener("click", (e) => {
   P.sel = r; sfx("click"); paintHand();
 });
 $("hand").addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.closest(".card")){ e.preventDefault(); e.target.click(); } });
-$("bDrop").onclick = () => { if (!P.sel) return; sfx("place"); send({ t: "drop", rank: P.sel }); P.sel = null; $("bDrop").disabled = true; $("bPass").disabled = true; };
-$("bPass").onclick = () => { sfx("tick"); send({ t: "pass" }); $("bPass").disabled = true; };
+$("bDrop").onclick = () => { if (!P.sel) return; sfx("place"); send({ t: "drop", rank: P.sel }); P.sel = null; $("bDrop").disabled = true; };
 $("bShuffle").onclick = () => { sfx("flip"); send({ t: "shuffle" }); $("bShuffle").disabled = true; };
 $("bReveal").onclick = () => { sfx("flip"); send({ t: "reveal" }); $("bReveal").disabled = true; };
 /* coming back to the page: say hello again so the table resends my cards */
