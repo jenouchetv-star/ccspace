@@ -15077,8 +15077,8 @@ function portalWordHTML(e){
   return '<section class="panel panel--flat pword" aria-labelledby="pword-h"><span class="eyebrow pword__label">' + ic("book-open") + ' Word to know</span>'
     + '<div class="pword__head"><h3 id="pword-h" class="pword__word">' + E(word) + '</h3>'
     + (say ? '<p class="pword__say">' + E(say) + '</p>' : "")
-    /* spoken by the browser's own voice on this device, so nothing is sent anywhere; hidden where speech isn't supported */
-    + ("speechSynthesis" in window ? '<button type="button" class="btn btn--sm btn--paper pword__hear no-print" data-act="portal-say-word" data-word="' + E(word) + '" aria-label="Hear how to say ' + E(word) + '">' + ic("volume-2") + ' Hear it</button>' : "")
+    /* said in Heart's voice from the site's own recording (Kokoro, owner, 2026-11-16); nothing is sent anywhere */
+    + '<button type="button" class="btn btn--sm btn--paper pword__hear no-print" data-act="portal-say-word" data-word="' + E(word) + '" aria-label="Hear how to say ' + E(word) + '">' + ic("volume-2") + ' Hear it</button>'
     + '</div>'
     + '<p class="pword__meaning">' + E(meaning) + '</p>'
     + (example ? '<p class="pword__try"><b>Try it:</b> ' + E(example) + '</p>' : "")
@@ -27623,18 +27623,31 @@ const ACTIONS = {
   },
   "portal-say-word": (el) => {
     const word = el.getAttribute("data-word") || "";
-    if (!word || !("speechSynthesis" in window)) return;
+    if (!word) return;
+    /* a word with no recording yet: a voice that lives on this device */
+    const speakHere = () => {
+      if (!("speechSynthesis" in window)) return;
+      try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(word);
+        u.lang = "en-US"; u.rate = 0.8;
+        const v = speechSynthesis.getVoices().find(x => x.localService && /^en/i.test(x.lang));
+        if (v) u.voice = v;
+        el.setAttribute("aria-busy", "true");
+        u.onend = u.onerror = () => el.removeAttribute("aria-busy");
+        speechSynthesis.speak(u);
+      } catch(_e){ toast("Couldn\u2019t play the sound on this device.", "bad"); }
+    };
+    /* Heart's voice: the site's own recording, assets/words/<word>.mp3 (scripts/record-lines.mjs) */
+    const slug = word.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(word);
-      u.lang = "en-US"; u.rate = 0.8;
-      /* prefer a voice that lives on this device over one a browser fetches from a server */
-      const v = speechSynthesis.getVoices().find(x => x.localService && /^en/i.test(x.lang));
-      if (v) u.voice = v;
+      if (window.__wordClip) window.__wordClip.pause();
+      const a = window.__wordClip = new Audio("/assets/words/" + slug + ".mp3");
       el.setAttribute("aria-busy", "true");
-      u.onend = u.onerror = () => el.removeAttribute("aria-busy");
-      speechSynthesis.speak(u);
-    } catch(_e){ toast("Couldn\u2019t play the sound on this device.", "bad"); }
+      a.onended = () => el.removeAttribute("aria-busy");
+      a.onerror = () => { el.removeAttribute("aria-busy"); speakHere(); };
+      const p = a.play(); if (p && p.catch) p.catch(() => {});
+    } catch(_e){ speakHere(); }
   },
   "portal-copy-prompt": async (el) => {
     const box = document.getElementById("pprompt-text");

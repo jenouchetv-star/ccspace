@@ -328,11 +328,13 @@ describe("how the site wires the portal in", () => {
     for (const f of ["vocabWord", "vocabSay", "vocabMeaning", "vocabExample"]) expect(card).toContain(f);
     expect(card).toContain('ic("book-open")');                              /* the book icon */
     expect(card).toContain('data-act="portal-say-word"');                  /* the Hear it button */
-    expect(card).toContain('"speechSynthesis" in window');                 /* only where the browser can speak */
     const say = html.split('"portal-say-word": (el) => {')[1].split("\n  },")[0];
+    /* Heart's voice (Kokoro, owner, 2026-11-16): the site's own recording of the word; nothing is sent anywhere */
+    expect(say).toContain('new Audio("/assets/words/" + slug + ".mp3")');
+    /* a word with no recording yet falls back to a voice that lives on the device */
     expect(say).toContain("new SpeechSynthesisUtterance(word)");
-    expect(say).toContain("x.localService");                                /* a voice on the device, not one fetched from a server */
-    expect(say).not.toMatch(/fetch\(|XMLHttpRequest|sendBeacon|new Audio/);  /* nothing is sent or downloaded */
+    expect(say).toContain("x.localService");
+    expect(say).not.toMatch(/fetch\(|XMLHttpRequest|sendBeacon/);
     expect(html).toContain(".panel.pword{ margin:0 0 22px; padding:14px 18px 16px; background:#E3F3DC; }");   /* small and green */
     expect(card).toContain("E(word)");                                      /* text, never markup */
     expect(card).toContain("E(meaning)");
