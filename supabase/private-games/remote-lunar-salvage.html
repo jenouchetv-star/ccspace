@@ -5486,18 +5486,29 @@ function showComingSoon(){
 }
 
 
-/* ---------- reading aloud with the device's own voice (it may not have one: then the speaker buttons hide) ---------- */
-const CAN_SPEAK = (function(){ try { return "speechSynthesis" in window && typeof SpeechSynthesisUtterance === "function"; } catch (_e) { return false; } })();
+/* ---------- reading aloud in Heart's voice (Kokoro, owner's pick, 2026-11-17): every line the game reads is a
+   pre-recorded clip named by a hash of its text (scripts/lunar-lines.mjs lists them, scripts/record-lines.mjs records them).
+   A line with no clip stays quiet; the words are always on screen. ---------- */
+const CAN_SPEAK = true;
+const VOICE_DIR = "/assets/games/lunar-salvage/voice/";
+const voiceClip = new Audio();
+function lineKey(text){
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++){ h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(36);
+}
+function stopSpeaking(){ try { voiceClip.pause(); } catch (_e) {} }
 function speak(text){
   try {
-    if (!CAN_SPEAK || !text) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text); u.rate = 0.95; u.pitch = 1.05; u.lang = "en-US";
-    speechSynthesis.speak(u);
-  } catch (_e) { /* no voice here: the words stay on screen */ }
+    if (!text || (window.CCSSound && !CCSSound.isOn())) return;
+    voiceClip.pause();
+    voiceClip.src = VOICE_DIR + lineKey(text.trim()) + ".mp3";
+    voiceClip.currentTime = 0;
+    const p = voiceClip.play(); if (p && p.catch) p.catch(() => {});
+  } catch (_e) { /* no clip here: the words stay on screen */ }
 }
-$("bSpeak").hidden = !CAN_SPEAK;
-$("bSpeak").addEventListener("click", (e) => { e.stopPropagation(); speak($("stepWhat").textContent + " " + ($("radioTxt").textContent || "")); });
+$("bSpeak").hidden = false;
+$("bSpeak").addEventListener("click", (e) => { e.stopPropagation(); speak($("stepWhat").textContent); });
 
 /* ---------- Chike's three questions ---------- */
 const QZ = { list: null, i: 0, right: 0, answered: false, forBoard: false };
@@ -5562,7 +5573,7 @@ function answerQuiz(k){
 }
 function closeQuiz(){
   closeOv("ovQuiz");
-  try { if (CAN_SPEAK) speechSynthesis.cancel(); } catch (_e) {}
+  stopSpeaking();
   if (QZ.paused){ QZ.paused = false; G.paused = false; }
   if (QZ.forBoard && G.mission === "board"){ G.flags.quiz = true; updateStep(); }
   sendPhoneState();

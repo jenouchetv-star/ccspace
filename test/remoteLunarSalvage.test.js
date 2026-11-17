@@ -645,9 +645,19 @@ describe("the picture quiz", () => {
     expect(S.starsForWorld({ mission: true, notesFound: 9, notesTotal: 9, quizRight: 3 })).toEqual({ mission: true, notes: true, quiz: true });
     expect(S.starsForWorld({ mission: true, notesFound: 8, notesTotal: 9, quizRight: 2 })).toEqual({ mission: true, notes: false, quiz: false });
   });
-  it("read-aloud never crashes when the voice is missing", () => {
+  it("read-aloud never crashes when a clip is missing, and plays Heart's recordings instead of the browser's voice", () => {
     expect(game).toMatch(/function speak\(text\)\{\s*try \{/);
-    expect(game).toContain('"speechSynthesis" in window');
+    expect(game).not.toContain("speechSynthesis");
+    expect(game).toContain('voiceClip.src = VOICE_DIR + lineKey(text.trim()) + ".mp3";');
+  });
+  it("has a recording for every line it reads (steps, goal-reached lines, quiz questions and answers)", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const lines = JSON.parse(execFileSync("node", [new URL("../scripts/lunar-lines.mjs", import.meta.url).pathname.replace(/^\/(\w:)/, "$1")], { encoding: "utf8" }));
+    expect(lines.length).toBeGreaterThan(140);
+    for (const { key, text } of lines) expect(existsSync(new URL("../assets/games/lunar-salvage/voice/" + key + ".mp3", import.meta.url)), text).toBe(true);
+    /* the game and the list hash text the same way */
+    const h = new Function("return function(text){" + game.split("function lineKey(text){")[1].split("\n}\n")[0] + "\n}")();
+    for (const { key, text } of lines.slice(0, 5)) expect(h(text)).toBe(key);
   });
 });
 
