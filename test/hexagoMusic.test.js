@@ -34,6 +34,10 @@ describe("HexaGone! music", () => {
     expect(sound).toContain('name === "land" ? BOUNCE_VOL');
     expect(sound).toContain('case "land": this.osc("sine", 170 * v, 62, 0.16, 0.45 * BOUNCE_VOL / 0.55, t);');
   });
+  it("plays every sound effect at half its old level, under the player's Sound slider (owner, 2026-11-17: too loud)", () => {
+    expect(game).toContain("const SFX_LEVEL = 0.5;");
+    expect(sound).toContain("this.sfx.gain.setTargetAtTime(s.sfx / 100 * SFX_LEVEL, t, 0.02);");
+  });
   it("no longer makes its own tune", () => {
     expect(game).not.toContain("const MUSIC = {");
     expect(sound).not.toContain("schedule(){");
