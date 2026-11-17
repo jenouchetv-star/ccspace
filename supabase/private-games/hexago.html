@@ -321,9 +321,13 @@
 </head>
 <body>
 <div id="ccsLoad" role="status" aria-live="polite" data-name="HexaGone!"><img class="ccsl-lg" src="/assets/brand/logo.webp" alt="Chike's Creative Space"><div class="ccsl-bar"><i></i></div><div class="ccsl-gn"><small>Loading</small><b></b></div></div>
-<script id="ccsLoadJs">(function(){ var el = document.getElementById("ccsLoad"); if (!el) return; var t0 = Date.now(), gone = false; var b = el.querySelector(".ccsl-gn b"); if (b) b.textContent = el.getAttribute("data-name") || "";
-  function hide(){ if (gone) return; gone = true; el.className = "ready"; setTimeout(function(){ el.className = "ready gone"; setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 500); }, 320); }
-  function done(){ setTimeout(hide, Math.max(0, 1000 - (Date.now() - t0))); }
+<script id="ccsLoadJs">(function(){ var el = document.getElementById("ccsLoad"); if (!el) return; var t0 = Date.now(), gone = false, hold = 1000, snd = null; var b = el.querySelector(".ccsl-gn b"); if (b) b.textContent = el.getAttribute("data-name") || "";
+  /* the logo sound (owner's pick 1A, 2026-11-17): played a bit faster; quiet when sound is off on the site or the browser blocks it */
+  var on = true; try { on = localStorage.getItem("ccs-sound") !== "off"; } catch (e) { /* a sealed frame can't read the site's setting */ }
+  if (on){ try { snd = new Audio("/assets/games/loader/logo-intro.mp3"); snd.volume = 0.7; snd.playbackRate = 1.5; var p = snd.play(); if (p && p.then) p.then(function(){ hold = 1600; }, function(){ snd = null; }); } catch (e) { snd = null; } }
+  function fade(){ var a = snd; if (!a) return; var t = setInterval(function(){ a.volume = Math.max(0, a.volume - 0.07); if (a.volume <= 0){ clearInterval(t); a.pause(); } }, 90); }
+  function hide(){ if (gone) return; gone = true; el.className = "ready"; setTimeout(function(){ el.className = "ready gone"; fade(); setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 500); }, 320); }
+  function done(){ setTimeout(function(){ setTimeout(hide, Math.max(0, hold - (Date.now() - t0))); }, 60); }
   if (document.readyState === "complete") done(); else window.addEventListener("load", done);
   setTimeout(function(){ hide(); }, 9000); })();</script>
 
@@ -1373,15 +1377,11 @@ addEventListener("message", ev => {
   applySettings(); refreshMenus();
 });
 
-/* ---------------------------------------------------------------- sound: made on the spot, no files ---------------------------------------------------------------- */
-const MUSIC = {
-  city:    { root: 55,    prog: [0, -4, -2, -5], bass: { 0: 1, 3: 1, 6: 2, 10: 1, 12: 1.5 }, pad: "sawtooth" },
-  reactor: { root: 49,    prog: [0, 0, -2, -4],  bass: { 0: 1, 2: 1, 4: 1, 8: 1, 10: 2, 12: 1 }, pad: "square" },
-  sky:     { root: 65.41, prog: [0, 5, 3, -2],   bass: { 0: 1, 6: 1.5, 8: 1, 14: 2 }, pad: "triangle" },
-  cosmic:  { root: 46.25, prog: [0, 3, -2, 1],   bass: { 0: 1, 7: 1.5, 10: 2 }, pad: "sawtooth" }
-};
+/* ---------------------------------------------------------------- sound: effects made on the spot; the music is a file ---------------------------------------------------------------- */
+/* the owner's pick (2026-11-17): "Retro Arcade Synthwave Loop 90 BPM, Dark Neon Background" by chrysalyn on Pixabay, a 30 s loop */
+const MUSIC_URL = "/assets/games/hexago/music.mp3";
 const Sound = {
-  ctx: null, master: null, music: null, sfx: null, timer: null, step: 0, next: 0, theme: "city", wantMusic: false, duckGain: 1, noiseBuf: null,
+  ctx: null, master: null, music: null, sfx: null, src: null, track: null, loading: null, theme: "city", wantMusic: false, duckGain: 1, noiseBuf: null,
   unlock(){
     if (!this.ctx){
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -1396,7 +1396,7 @@ const Sound = {
       this.setVolumes(app.save.settings);
     }
     if (this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
-    if (this.wantMusic && !this.timer) this.startMusic(this.theme);
+    if (this.wantMusic && !this.src) this.startMusic(this.theme);
   },
   setVolumes(s){
     if (!this.ctx) return;
@@ -1446,29 +1446,34 @@ const Sound = {
       case "go": this.osc("triangle", 784, null, 0.2, 0.13, t); break;
     }
   },
+  /* fetch and decode the loop once; skip the decoder's bit of silence at the front so the loop has no gap */
+  loadTrack(){
+    if (!this.loading) this.loading = fetch(MUSIC_URL).then(r => r.arrayBuffer()).then(b => new Promise((ok, no) => this.ctx.decodeAudioData(b, ok, no))).then(buf => {
+      const d = buf.getChannelData(0); let a = 0;
+      while (a < d.length && Math.abs(d[a]) < 0.002) a++;
+      const start = a / buf.sampleRate;
+      this.track = { buf, start, end: Math.min(buf.duration, start + 30) };
+      return this.track;
+    }).catch(() => { this.loading = null; return null; });
+    return this.loading;
+  },
+  /* one track for every world: it keeps playing from level to level instead of starting over */
   startMusic(theme){
     this.theme = theme; this.wantMusic = true;
     if (!this.ctx) return;
-    this.stopMusic(true);
-    this.step = 0; this.next = this.ctx.currentTime + 0.1;
-    this.timer = setInterval(() => this.schedule(), 25);
+    if (this.src) return;
+    this.loadTrack().then(tr => {
+      if (!tr || !this.wantMusic || this.src || !this.ctx) return;
+      const src = this.ctx.createBufferSource();
+      src.buffer = tr.buf;
+      src.loop = true;
+      src.loopStart = tr.start; src.loopEnd = tr.end;
+      src.connect(this.music);
+      src.start(0, tr.start);
+      this.src = src;
+    });
   },
-  stopMusic(keepWant){ if (this.timer){ clearInterval(this.timer); this.timer = null; } if (!keepWant) this.wantMusic = false; },
-  schedule(){
-    const c = this.ctx;
-    if (!c || c.state !== "running") return;
-    if (app.state === "PAUSED"){ this.next = c.currentTime + 0.1; return; }
-    const spb = 60 / 104 / 4;
-    while (this.next < c.currentTime + 0.12){ this.note(this.step, this.next, spb); this.next += spb; this.step = (this.step + 1) % 64; }
-  },
-  note(i, t, spb){
-    const M = MUSIC[this.theme] || MUSIC.city, s16 = i % 16, bar = Math.floor(i / 16) % 4, root = M.root * Math.pow(2, M.prog[bar] / 12);
-    if (s16 % 8 === 0) this.osc("sine", 110, 42, 0.22, 0.3, t, this.music);
-    if (s16 % 8 === 4) this.noise(0.05, 0.05, 7000, "highpass", t, this.music);
-    if (M.bass[s16]) this.osc("triangle", root * M.bass[s16], null, 0.2, 0.13, t, this.music);
-    if (s16 === 0) [1, 1.19, 1.5].forEach(m => this.osc(M.pad, root * 4 * m, null, spb * 15, 0.02, t, this.music));
-    if (s16 % 4 === 2) this.osc("sine", root * 8 * [1, 1.5, 1.19, 2][(i >> 2) % 4], null, 0.12, 0.025, t, this.music);
-  }
+  stopMusic(keepWant){ if (this.src){ try { this.src.stop(); } catch (_e) { /* already stopped */ } this.src.disconnect(); this.src = null; } if (!keepWant) this.wantMusic = false; }
 };
 function rumble(strength, ms){
   if (!app.save.settings.vibration || !pad.gp) return;
