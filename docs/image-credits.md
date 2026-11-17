@@ -7,6 +7,21 @@ Photos from [Unsplash](https://unsplash.com), used under the [Unsplash License](
 | --- | --- | --- | --- |
 | `assets/about/teacher-reading-with-student.jpg` | Business inquiries page | [Woman and child reading in library](https://unsplash.com/photos/7fF0iei80AQ) | Adam Winger |
 | `assets/about/kids-makerspace.jpg` | Our mission page | Children designing and 3D printing in a makerspace (AI-generated with Gemini for this site) | Chike's Creative Space |
+| `assets/games/lunar-salvage/sfx/rocket-land.mp3` | Remote Lunar Salvage: Rocket landing (sound) | [Rocket Landing](https://freesound.org/s/536334/), Creative Commons 0, trimmed | Tetoszka |
+| `assets/games/lunar-salvage/sfx/rocket-launch.mp3` | Remote Lunar Salvage: Rocket lift-off (first 4.8 s) (sound) | [Rocket Launch Boost and Burning (Version A)](https://freesound.org/s/774245/), Creative Commons 0, trimmed | TheLittleCrow |
+| `assets/games/lunar-salvage/sfx/door-open.mp3` | Remote Lunar Salvage: Rocket door opening (sound) | [Sci-Fi Mechanical Door](https://freesound.org/s/739197/), Creative Commons 0, trimmed | CheatinSloth |
+| `assets/games/lunar-salvage/sfx/door-close.mp3` | Remote Lunar Salvage: Rocket door closing (sound) | [hydraulic office chair moving effect 03](https://freesound.org/s/678454/), Creative Commons 0, trimmed | rubberduck9999 |
+| `assets/games/lunar-salvage/sfx/ramp-down.mp3` | Remote Lunar Salvage: Bridge coming down (sound) | [UFO Ramp Lowering](https://freesound.org/s/389714/), Creative Commons 0, trimmed | suspensiondigital |
+| `assets/games/lunar-salvage/sfx/drill-start.mp3` | Remote Lunar Salvage: Drill spinning up (sound) | [Electric_Drill](https://freesound.org/s/634322/), Creative Commons 0, trimmed | uniuniversal |
+| `assets/games/lunar-salvage/sfx/drill-loop.mp3` | Remote Lunar Salvage: Drill (loop) (sound) | [Robot arm, drill machine](https://freesound.org/s/401968/), Creative Commons 0, trimmed | misjoc |
+| `assets/games/lunar-salvage/sfx/hose-loop.mp3` | Remote Lunar Salvage: Hose spraying (loop) (sound) | [Garden Hose Spraying](https://freesound.org/s/684884/), Creative Commons 0, trimmed | DrinkingPeter |
+| `assets/games/lunar-salvage/sfx/rocks-burst.mp3` | Remote Lunar Salvage: Meteor strike rocks (sound) | [Rocks falling over rocks, over a steep hill](https://freesound.org/s/190505/), Creative Commons 0, trimmed | gfrog |
+| `assets/games/lunar-salvage/sfx/rock-crack.mp3` | Remote Lunar Salvage: Laser cracking a boulder (sound) | [Rock Smash](https://freesound.org/s/512243/), Creative Commons 0, trimmed | NeoSpica |
+| `assets/games/lunar-salvage/sfx/magnet-hum.mp3` | Remote Lunar Salvage: Magnet hum (loop) (sound) | [Electric buzz](https://freesound.org/s/725126/), Creative Commons 0, trimmed | giddster |
+| `assets/games/lunar-salvage/sfx/power-up.mp3` | Remote Lunar Salvage: Power back on (sound) | [Power Up](https://freesound.org/s/683185/), Creative Commons 0, trimmed | NearTheAtmoshphere |
+| `assets/games/lunar-salvage/sfx/arm-1.mp3` | Remote Lunar Salvage: Arm servo (sound) | [MOTRSrvo_Robotic Servo Short Arm Movement](https://freesound.org/s/875419/), Creative Commons 0, trimmed | harrisonlace |
+| `assets/games/lunar-salvage/sfx/arm-2.mp3` | Remote Lunar Salvage: Arm servo (sound) | [Robot moves his arm](https://freesound.org/s/448375/), Creative Commons 0, trimmed | Audionauten |
+| `assets/games/lunar-salvage/sfx/countdown.mp3` | Remote Lunar Salvage: Launch countdown beep (sound) | [Countdown Start](https://freesound.org/s/680825/), Creative Commons 0, trimmed | stomachache |
 | `assets/books/page-turn.mp3` | Book reader page-turn sound (a sound, not a photo) | [page turn sound effect](https://freesound.org/s/431871/), Creative Commons 0 (public domain), Freesound preview file | stumpbutt |
 | `assets/about/paper-circuit-card.jpg` | Our mission page (From watching to creating) | A boy holds up the paper circuit rocket card he made (AI-generated with Higgsfield for this site) | Chike's Creative Space |
 | `assets/about/bridge-sketch.jpg` | STEAMM Methodology page (Beyond STEM) | A girl sketches a bridge before building it (AI-generated with Higgsfield for this site) | Chike's Creative Space |

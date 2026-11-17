@@ -38,7 +38,7 @@
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
   }
-  function unlock(){ unlocked = true; if (on) audio(); }
+  function unlock(){ unlocked = true; if (on){ audio(); decodeAll(); } }
   ["pointerdown", "keydown", "touchstart"].forEach(function(t){ window.addEventListener(t, unlock, { capture: true, passive: true }); });
 
   /* a single note: frequency, start (s from now), length (s), wave, volume, optional slide to another frequency */
@@ -88,13 +88,86 @@
   /* the least time between two plays of the same sound, so a burst (pegs, bounces, ticks) never turns into a buzz */
   var GAP = { tick: 35, click: 30, bounce: 45, place: 40, flip: 40, thud: 50, laser: 40, pop: 30 };
 
+  /* ---------- real recordings (owner, 2026-11-16) ----------
+     A game can hand the kit recordings (free CC0 sounds from Freesound):
+       CCSSound.samples({ laser: { src: "/assets/games/x/laser.mp3", start: 0.1, end: 0.9, volume: 0.5 } });
+     start/end trim the recording (seconds), volume is 0 to 1, vary (e.g. 0.05) nudges the speed
+     a little each time so repeats don't sound copy-pasted, loop: true makes it a loop for loop().
+     play(name) uses the recording once it has loaded, and the made-in-code sound of the same
+     name (if there is one) until then. loop(name) returns { set(volume, speed), stop() } for a
+     sound that keeps going, like a motor whose volume and speed follow the game every frame. */
+  var SAMPLES = {};
+  function decodeAll(){
+    var c = ctx; if (!c) return;
+    Object.keys(SAMPLES).forEach(function(n){
+      var s = SAMPLES[n];
+      if (s.buf || s.decoding || !s.bytes) return;
+      s.decoding = true;
+      s.bytes.then(function(b){ return b ? c.decodeAudioData(b.slice(0)) : null; })
+        .then(function(buf){ if (buf) s.buf = buf; })
+        .catch(function(){});
+    });
+  }
+  function samples(map){
+    Object.keys(map || {}).forEach(function(n){
+      var o = map[n] || {};
+      var s = SAMPLES[n] = { src: o.src, start: o.start || 0, end: o.end, volume: o.volume == null ? 1 : o.volume, loop: !!o.loop, vary: o.vary || 0, buf: null, decoding: false, bytes: null };
+      try { s.bytes = window.fetch(o.src).then(function(r){ return r.ok ? r.arrayBuffer() : null; }).catch(function(){ return null; }); } catch (e) {}
+    });
+    if (ctx && on) decodeAll();
+  }
+  function clipEnd(s){ return s.end != null ? Math.min(s.end, s.buf.duration) : s.buf.duration; }
+  function playSample(s, p, v){
+    var c = audio(); if (!c) return;
+    var src = c.createBufferSource(), g = c.createGain(), t = c.currentTime;
+    var rate = p * (s.vary ? 1 + (Math.random() * 2 - 1) * s.vary : 1);
+    var len = Math.max(0.01, clipEnd(s) - s.start), real = len / rate, fade = Math.min(0.08, real / 4), vol = s.volume * v;
+    src.buffer = s.buf; src.playbackRate.value = rate;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.setValueAtTime(vol, t + real - fade);
+    g.gain.linearRampToValueAtTime(0, t + real);            /* a quick fade, so a trimmed clip never ends in a click */
+    src.connect(g); g.connect(master);
+    src.start(t, s.start, len); src.stop(t + real + 0.05);
+  }
+  function loop(name){
+    var h = { src: null, g: null };
+    h.set = function(vol, rate){
+      try {
+        var s = SAMPLES[name]; if (!s) return;
+        var want = on && unlocked ? Math.max(0, vol || 0) * s.volume : 0;
+        if (!h.src){
+          if (want <= 0.0001 || !s.buf) return;
+          var c = audio(); if (!c) return;
+          var src = c.createBufferSource(), g = c.createGain();
+          src.buffer = s.buf; src.loop = true; src.loopStart = s.start; src.loopEnd = clipEnd(s);
+          g.gain.value = 0;
+          src.connect(g); g.connect(master);
+          src.start(c.currentTime, s.start);
+          h.src = src; h.g = g;
+        }
+        h.g.gain.setTargetAtTime(want, ctx.currentTime, 0.06);      /* glide, never jump */
+        if (rate) h.src.playbackRate.setTargetAtTime(rate, ctx.currentTime, 0.1);
+      } catch (e) {}
+    };
+    h.stop = function(){
+      if (!h.src) return;
+      try { h.g.gain.setTargetAtTime(0, ctx.currentTime, 0.05); h.src.stop(ctx.currentTime + 0.3); } catch (e) {}
+      h.src = null; h.g = null;
+    };
+    return h;
+  }
+
   function play(name, opts){
-    if (!on || !unlocked || !SOUNDS[name]) return;
+    var s = SAMPLES[name], ready = !!(s && s.buf);
+    if (!on || !unlocked || (!ready && !SOUNDS[name])) return;
     var now = (window.performance && performance.now()) || Date.now();
     if (GAP[name] && lastAt[name] && now - lastAt[name] < GAP[name]) return;
     lastAt[name] = now;
     opts = opts || {};
-    try { SOUNDS[name](opts.pitch || 1, opts.volume == null ? 1 : opts.volume); } catch (e) {}
+    try {
+      if (ready) playSample(s, opts.pitch || 1, opts.volume == null ? 1 : opts.volume);
+      else SOUNDS[name](opts.pitch || 1, opts.volume == null ? 1 : opts.volume);
+    } catch (e) {}
   }
 
   /* ---------- the standard on/off button ---------- */
@@ -137,5 +210,6 @@
     + ":where(.ccs-sound-btn[aria-pressed=false]){opacity:.85}";
   (document.head || document.documentElement).appendChild(css);
 
-  window.CCSSound = { play: play, isOn: function(){ return on; }, setOn: setOn, button: button, names: Object.keys(SOUNDS) };
+  window.CCSSound = { play: play, isOn: function(){ return on; }, setOn: setOn, button: button, names: Object.keys(SOUNDS),
+    samples: samples, loop: loop, ready: function(name){ return !!(SAMPLES[name] && SAMPLES[name].buf); } };
 })();
