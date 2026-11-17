@@ -192,7 +192,7 @@ describe("By member: the Limit column and the Change row", () => {
     // and the page's overall Storage figure uses the same units
     expect(L.studioBytesText(248_500_000)).toBe("248.5 MB");
     expect(L.studioBytesText(1_250_000_000)).toBe("1.25 GB");
-    expect(L.studioBytesText(0)).toBe("—");
+    expect(L.studioBytesText(0)).toBe("--");
     expect(index.split("function adminStudio(){")[1].split("\n}\n")[0]).toContain('stat(E(studioBytesText(d.bytes)), "Storage")');
     expect(index.split(".studio-bar i.studio-bar--full{")[1].split("}")[0]).toContain("#C0262D");
   });

@@ -1,5 +1,5 @@
 /* ============================================================
-   Chike's Creative Space — shared game sounds
+   Chike's Creative Space - shared game sounds
    One small sound kit every game can use, so they all sound like
    one family and share one on/off switch. Every sound is made in
    the browser with the Web Audio API: no audio files to load.
