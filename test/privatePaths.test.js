@@ -13,7 +13,7 @@ const topFolders = [...new Set(tracked.filter((f) => f.includes("/")).map((f) =>
 const topFiles = tracked.filter((f) => !f.includes("/"));
 
 // what the site itself serves
-const PUBLIC_FOLDERS = ["assets", "games", "books"];
+const PUBLIC_FOLDERS = ["assets", "games", "books", "join"];   // join/: the short /join address on Matching Suits' table screen
 const PUBLIC_FILES = ["index.html", "sw.js", "offline.html", "manifest.webmanifest", "art-space.webmanifest","favicon.ico", "robots.txt", "sitemap.xml", "llms.txt",
   "_headers", "_redirects"];   // Pages reads these two and never serves them
 // served but harmless (no secrets, nothing members-only); listed so a new root file has to be decided on
