@@ -17,6 +17,9 @@ import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 const ROOT = process.argv[2];
 const ONLY = process.argv.slice(3).filter(a => !a.startsWith("--"));
 const COVERS_ONLY = process.argv.includes("--covers-only");   /* add cover titles without re-recording the pages */
+/* re-record only the long pages (over LONG characters), keeping every other page's recording (owner, 2026-11-17: the
+   green pages' reading stopped partway, because Kokoro cuts a single take short) */
+const LONG_ONLY = process.argv.includes("--long-only"), LONG = 300;
 const READER = readFileSync(ROOT + "/books/reader.html", "utf8");
 const URL_ = READER.match(/const SUPABASE_URL = "([^"]+)"/)[1];
 const KEY = READER.match(/const SUPABASE_ANON_KEY = "([^"]+)"/)[1];
@@ -102,6 +105,22 @@ function mp3(f, sr){
   return Buffer.concat(parts);
 }
 
+/* Kokoro only reads so much in one take and quietly drops the rest, so a long page is read a few sentences at a time
+   and the pieces are joined with a short breath between them */
+function pieces(text){
+  const sentences = text.match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g) || [text], out = [];
+  for (const s of sentences){ const last = out[out.length - 1]; if (last && (last + s).length <= LONG) out[out.length - 1] = last + s; else out.push(s); }
+  return out.map(s => s.trim()).filter(Boolean);
+}
+async function readAloud(text){
+  const takes = [];
+  let sr = 24000;
+  for (const piece of pieces(text)){ const a = await tts.generate(piece, { voice: VOICE, speed: SPEED }); takes.push(a.audio); sr = a.sampling_rate; }
+  const gap = Math.floor(sr * 0.28), total = takes.reduce((n, t) => n + t.length, 0) + gap * (takes.length - 1), f = new Float32Array(total);
+  let at = 0; takes.forEach((t, i) => { f.set(t, at); at += t.length + (i < takes.length - 1 ? gap : 0); });
+  return { audio: f, sampling_rate: sr };
+}
+
 const res = await fetch(URL_ + "/rest/v1/stories?select=id,data", { headers: { apikey: KEY, Authorization: "Bearer " + KEY } });
 const stories = (await res.json()).filter(s => s.data && s.data.status === "published" && (s.data.pages || []).length && (!ONLY.length || ONLY.includes(s.id)));
 const tts = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", { dtype: "q8", device: "cpu" });
@@ -110,7 +129,7 @@ const asr = await pipeline("automatic-speech-recognition", "onnx-community/whisp
 for (const s of stories){
   const dir = ROOT + "/assets/books/narration/" + s.id; mkdirSync(dir, { recursive: true });
   const jsonPath = ROOT + "/assets/books/narration/" + s.id + ".json";
-  const out = COVERS_ONLY ? JSON.parse(readFileSync(jsonPath, "utf8")) : { voice: "kokoro " + VOICE, speed: SPEED, pages: {} };
+  const out = COVERS_ONLY || LONG_ONLY ? JSON.parse(readFileSync(jsonPath, "utf8")) : { voice: "kokoro " + VOICE, speed: SPEED, pages: {} };
   /* the pages the reader shows: the "The End" page becomes the green "What you learned" page (or it's added at the end) */
   const shown = pagesWithLearn(s.data.pages, s.data.learn);
   for (let p = 0; p < shown.length; p++){
@@ -119,7 +138,7 @@ for (const s of stories){
     const words = layers.flat();
     if (!words.length){
       /* a cover whose title is part of the picture: Heart reads the book's title (owner, 2026-11-16) */
-      if (p === 0 && s.data.title){
+      if (p === 0 && s.data.title && !LONG_ONLY){
         const a = await tts.generate(spoken([tokens(s.data.title)]), { voice: VOICE, speed: SPEED });
         writeFileSync(dir + "/p0.mp3", mp3(a.audio, a.sampling_rate));
         out.pages[0] = { title: s.data.title, text: "", src: "p0.mp3", dur: +(a.audio.length / a.sampling_rate).toFixed(2), t: [] };
@@ -129,17 +148,20 @@ for (const s of stories){
     }
     if (COVERS_ONLY) continue;
     const say = spoken(layers);
-    const audio = await tts.generate(say, { voice: VOICE, speed: SPEED });
+    if (LONG_ONLY && say.length <= LONG) continue;
+    const audio = await readAloud(say);
     const f = audio.audio, sr = audio.sampling_rate;
     const r = await asr(resample(f, sr, 16000), { return_timestamps: "word", chunk_length_s: 30 });
     const heard = r.chunks.map(c => [c.text.trim(), c.timestamp[0], c.timestamp[1] ?? c.timestamp[0] + 0.3]);
     const { times, matched } = align(words, heard);
+    /* Whisper reads long audio in 30 s windows; where two windows meet a time can step back a little, so keep them in order */
+    for (let i = 1; i < times.length; i++){ times[i][0] = Math.max(times[i][0], times[i - 1][0]); times[i][1] = Math.max(times[i][1], times[i][0]); }
     writeFileSync(dir + "/p" + p + ".mp3", mp3(f, sr));
     out.pages[p] = { text: words.join(" "), src: "p" + p + ".mp3", dur: +(f.length / sr).toFixed(2), t: times };
     console.log(s.id, "page", p, words.length, "words,", matched, "matched", (f.length / sr).toFixed(1) + "s");
   }
   /* "Hear it" on the green page: the word to know, on its own */
-  if (!COVERS_ONLY && s.data.learn && s.data.learn.word){
+  if (!COVERS_ONLY && !LONG_ONLY && s.data.learn && s.data.learn.word){
     const w = await tts.generate(spoken([tokens(s.data.learn.word)]).replace(/\.$/, ""), { voice: VOICE, speed: 0.85 });
     writeFileSync(dir + "/word.mp3", mp3(w.audio, w.sampling_rate));
   }
