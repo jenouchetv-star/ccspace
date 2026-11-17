@@ -268,6 +268,30 @@
 
         .clue-label svg { width: 16px; height: 16px; }
 
+        /* Hear the clue: Heart reads it aloud (owner, 2026-11-16) */
+        .clue-card .hear {
+            float: right;
+            margin: -2px -4px 0 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-family: inherit;
+            font-weight: 800;
+            font-size: .7rem;
+            line-height: 1;
+            color: var(--ink);
+            background: #B9E7F2;
+            border: 2px solid var(--ink);
+            border-radius: 999px;
+            box-shadow: 1.5px 1.5px 0 var(--ink);
+            padding: 2px 9px 2px 6px;
+            cursor: pointer;
+        }
+        .clue-card .hear svg { width: 15px; height: 15px; }
+        .clue-card .definition-display { clear: both; }
+        .clue-card .hear:focus-visible { outline: 3px solid var(--plum); outline-offset: 2px; }
+        @media (max-width: 520px) { .clue-card .hear span { display: none; } .clue-card .hear { padding: 5px 7px; } }
+
         .definition-display {
             font-weight: 800;
             line-height: 1.25;
@@ -886,6 +910,7 @@
 
             <section class="clue-card" aria-label="The clue">
                 <svg class="pin" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="13" r="9.5" fill="#BC3229" stroke="#1E2226" stroke-width="3"/><circle cx="11" cy="10" r="2.8" fill="#F8C0B9"/></svg>
+                <button type="button" class="hear" id="hear-clue" aria-label="Hear the clue"><svg viewBox="0 0 24 24" fill="none" stroke="#1E2226" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg><span>Hear the clue</span></button>
                 <p class="clue-label"><svg viewBox="0 0 24 24" fill="none" stroke="#7A4A86" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></svg>The clue</p>
                 <div id="definition-display" class="definition-display"></div>
             </section>
@@ -1209,6 +1234,20 @@
             const sound = (name, opts) => { if (window.CCSSound) window.CCSSound.play(name, opts); };
             if (window.CCSSound) document.getElementById('folder-top').appendChild(window.CCSSound.button({ compact: true }));
 
+            /* Heart's voice (Kokoro, pre-recorded): the clue when a case opens or on Hear the clue, the word when it closes */
+            const VOICE_DIR = '../assets/games/spelling-detective/';
+            const voice = new Audio();
+            let clueVoiceTimer = 0;
+            function sayClip(kind, word) {
+                if (!window.CCSSound || !window.CCSSound.isOn()) return;
+                voice.pause();
+                voice.src = VOICE_DIR + kind + '/' + word + '.mp3';
+                voice.currentTime = 0;
+                const p = voice.play(); if (p && p.catch) p.catch(() => {});
+            }
+            const hearClue = document.getElementById('hear-clue');
+            hearClue.addEventListener('click', () => sayClip('clues', currentWordData.word));
+
             // --- Saved on this device: the last grade, and cases solved per grade ---
             function loadSolved() {
                 try { return JSON.parse(localStorage.getItem(SOLVED_KEY) || '{}') || {}; } catch (e) { return {}; }
@@ -1347,6 +1386,10 @@
                 // Hide modal
                 messageModal.style.display = 'none';
                 sound('start');
+                // read the new clue aloud, just after the start sound
+                clearTimeout(clueVoiceTimer);
+                voice.pause();
+                clueVoiceTimer = setTimeout(() => sayClip('clues', currentWordData.word), 700);
 
                 if (caseNumber === 1) {
                     chike('wave', 'Hi, detective! Read the clue together, then pick the letters that spell the word.');
@@ -1563,6 +1606,7 @@
                         stampEl.classList.remove('slam');
                         if (!REDUCED) { void stampEl.offsetWidth; stampEl.classList.add('slam'); }
                         sound('win');
+                        setTimeout(() => sayClip('words', currentWordData.word), 500);
                         confetti();
                         nextWordButton.focus();
                     }, REDUCED ? 250 : 650);
@@ -1571,7 +1615,8 @@
                     loseContent.style.display = 'block';
                     modalChike.src = poseSrc('wave');
                     sound('lose');
-                    chike('wave', 'That one was tricky! The word was ' + currentWordData.word.toUpperCase() + '. A new case is coming!', 'oops');
+                    setTimeout(() => sayClip('words', currentWordData.word), 500);
+                    chike('wave','That one was tricky! The word was ' + currentWordData.word.toUpperCase() + '. A new case is coming!', 'oops');
                     messageModal.style.display = 'flex';
                     restartTimer = setTimeout(startGame, 3000); // Auto-restart on lose
                 }
