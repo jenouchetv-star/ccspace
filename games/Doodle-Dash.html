@@ -180,6 +180,7 @@ main{width:100%}
 #bEdit[hidden]{display:none!important}
 @media(max-width:560px){#bEdit{padding:5px 11px!important}}
 #bMute{padding:5px 12px!important}
+#bVol{padding:5px 10px!important;margin-right:0}
 #bMute .t{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}   /* words stay for screen readers, only the icon shows */
 #bMute .i{width:20px;height:20px;flex:none}
 .hud{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px;font-weight:800;font-size:.95rem}
@@ -663,7 +664,7 @@ function puff(x,y){for(let i=0;i<6;i++)parts.push({x:x+rnd(-4,4),y:y-1,vx:rnd(-3
 function pop(x,y,t){parts.push({x,y,vx:0,vy:-40,l:.8,m:.8,t,g:0})}
 function celebrate(){$('#winH').textContent='You made it, '+CH.n+'!';const cols=['#ff3b3b','#ffc400','#1fb85a','#2f6bff','#ff6fd8','#ff7a1a'];for(let i=0;i<140;i++)parts.push({x:rnd(0,W),y:rnd(-40,0),vx:rnd(-30,30),vy:rnd(20,80),l:rnd(2.5,4.5),m:4.5,c:cols[i%6],s:rnd(2,4),g:40,sq:1})}
 function stars(){const n=1+(score===L.coins.length?1:0)+(tries<=2?1:0);return '★'.repeat(n)+'☆'.repeat(3-n)}
-function music(){musOn=true;clearTimeout(musT);const sc=[262,330,392,440,523,440,392,330];let i=0;const t=()=>{if(!musOn)return;beep(sc[i%8]*(i%32<16?1:1.125),.2,'sine',0,.035);i++;musT=setTimeout(t,230)};t()}
+function music(){musOn=true;clearTimeout(musT);const sc=[262,330,392,440,523,440,392,330];let i=0;const t=()=>{if(!musOn)return;beep(sc[i%8]*(i%32<16?1:1.125),.2,'sine',0,.035,1);i++;musT=setTimeout(t,230)};t()}
 function upd(dt){T+=dt;
   if(!done&&pl.on&&Math.abs(pl.vx)>50&&Math.random()<.4)parts.push({x:pl.x+PW/2-pl.face*3,y:pl.y+PH-1,vx:-pl.face*rnd(5,20),vy:rnd(-12,-2),l:.3,m:.3,c:'rgba(255,255,255,.7)',s:rnd(1,2),g:0});
   pl.sy+=(1-pl.sy)*.18;if(pl.st>0&&!done)parts.push({x:pl.x+rnd(0,PW),y:pl.y+rnd(0,PH),vx:rnd(-15,15),vy:rnd(-20,5),l:.4,m:.4,c:'hsl('+(T*500%360)+',100%,65%)',s:rnd(1,2),g:0});
@@ -744,9 +745,10 @@ function draw(){
    is off. Sounds only ever play on this device: nothing about them is sent to a room. */
 function soundOn(){return window.CCSSound?CCSSound.isOn():!muted}
 function sfx(n,o){if(window.CCSSound)CCSSound.play(n,o)}
-function beep(f,d,t,sl,vol){if(!soundOn())return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();
+/* mus: part of the background tune, so it follows the Music level; everything else follows Game sounds (the volume panel) */
+function beep(f,d,t,sl,vol,mus){if(!soundOn())return;const lv=window.CCSSound&&CCSSound.volume?CCSSound.volume(mus?'music':'sfx'):1;if(lv<.02)return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();
   o.type=t||'square';o.frequency.setValueAtTime(f,AC.currentTime);if(sl)o.frequency.exponentialRampToValueAtTime(sl,AC.currentTime+d);
-  g.gain.setValueAtTime(vol||.08,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d)}catch(e){}}
+  g.gain.setValueAtTime((vol||.08)*lv,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d)}catch(e){}}
 
 /* ---------- Characters: the Chike's Creative Space cast ---------- */
 /* Each hero keeps the game's original little body (shirt, legs and shoes, in the original colors).
@@ -852,6 +854,8 @@ $('#bTheme').onclick=()=>{setTheme((TI+1)%THS.length);startGame();if(MP.ch&&MP.h
 const ICON_ON='<svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>',ICON_OFF='<svg class="i" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/></svg>';
 /* the speaker button flips the shared site-wide sound switch (localStorage "ccs-sound", kept by game-sound.js) */
 function paintMute(){const on=soundOn(),b=$('#bMute');b.innerHTML=(on?ICON_ON:ICON_OFF)+'<span class="t">'+(on?'Sound on':'Sound off')+'</span>';b.setAttribute('aria-pressed',on?'false':'true');b.setAttribute('aria-label',on?'Sound on':'Sound off');b.title=on?'Turn sound off':'Turn sound on'}
+/* the volume button (music and game sounds), just before the sound button */
+if(window.CCSSound&&CCSSound.mixer){CCSSound.hasMusic();const vb=CCSSound.mixer({background:'#FFFBF3'});vb.id='bVol';$('#bMute').before(vb)}
 $('#bMute').onclick=()=>{if(window.CCSSound)CCSSound.setOn(!CCSSound.isOn());else muted=!muted;paintMute()};
 addEventListener('storage',e=>{if(e.key==='ccs-sound')paintMute()});
 paintMute();

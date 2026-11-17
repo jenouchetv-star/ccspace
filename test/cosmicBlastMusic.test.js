@@ -8,7 +8,7 @@ const game = readFileSync(new URL("../games/ufo-target-practice.html", import.me
 
 describe("Cosmic Blast! music", () => {
   it("loops the Pixabay track through the site's sound kit, so the sound button turns it off too", () => {
-    expect(game).toContain("CCSSound.samples({ music: { src: '/assets/games/cosmic-blast/music.mp3', start: 0.02506, end: 21.02506, loop: true, volume: 1 } });");
+    expect(game).toContain("CCSSound.samples({ music: { src: '/assets/games/cosmic-blast/music.mp3', start: 0.02506, end: 21.02506, loop: true, volume: 1, music: true } });");
     expect(game).toContain("const music = window.CCSSound ? CCSSound.loop('music') : null;");
     expect(statSync(new URL("../assets/games/cosmic-blast/music.mp3", import.meta.url)).size).toBeGreaterThan(300000);
     expect(readFileSync(new URL("../docs/image-credits.md", import.meta.url), "utf8")).toContain("musical-ambient-science-634322");

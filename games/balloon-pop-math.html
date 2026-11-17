@@ -309,6 +309,7 @@
   @keyframes ccsLoadFill{0%{width:0}100%{width:86%}}
   @media (prefers-reduced-motion: reduce){ #ccsLoad .ccsl-lg,#ccsLoad .ccsl-gn{animation:none;opacity:1;transform:none} #ccsLoad .ccsl-bar i{animation:none;width:60%} #ccsLoad{transition:none} }
 </style>
+<script src="game-sound.js"></script>   <!-- for the shared volume panel and its remembered levels -->
 </head>
 <body class="ccs-game">
 <div id="ccsLoad" role="status" aria-live="polite" data-name="Balloon Pop Math"><img class="ccsl-lg" src="/assets/brand/logo.webp" alt="Chike's Creative Space"><div class="ccsl-bar"><i></i></div><div class="ccsl-gn"><small>Loading</small><b></b></div></div>
@@ -599,14 +600,18 @@ function digitChoices(d){ return [d, ...shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].f
    ===================================================================== */
 let ctx = null, soundOn = true;
 try { soundOn = localStorage.getItem("bpm-sound") !== "off"; } catch (e) {}
-function audio(){ if (!ctx){ const A = window.AudioContext || window.webkitAudioContext; if (A) ctx = new A(); } if (ctx && ctx.state === "suspended") ctx.resume(); return ctx; }
+/* every sound goes through one knob that follows the volume panel's level (the shared kit remembers it) */
+let out = null;
+const sfxLevel = () => window.CCSSound && CCSSound.volume ? CCSSound.volume("sfx") : 1;
+if (window.CCSSound && CCSSound.onVolume) CCSSound.onVolume(v => { if (out) out.gain.value = v.sfx; });
+function audio(){ if (!ctx){ const A = window.AudioContext || window.webkitAudioContext; if (A){ ctx = new A(); out = ctx.createGain(); out.gain.value = sfxLevel(); out.connect(ctx.destination); } } if (ctx && ctx.state === "suspended") ctx.resume(); return ctx; }
 function tone(freq, start, dur, type, vol, slideTo){
   const c = audio(); if (!c) return;
   const o = c.createOscillator(), g = c.createGain(), t = c.currentTime + start;
   o.type = type || "sine"; o.frequency.setValueAtTime(freq, t);
   if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || .18, t + .01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + .02);
+  o.connect(g).connect(out); o.start(t); o.stop(t + dur + .02);
 }
 function noise(start, dur, vol){
   const c = audio(); if (!c) return;
@@ -614,7 +619,7 @@ function noise(start, dur, vol){
   for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
   const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime + start;
   f.type = "highpass"; f.frequency.value = 900; g.gain.value = vol || .35;
-  s.buffer = buf; s.connect(f).connect(g).connect(c.destination); s.start(t);
+  s.buffer = buf; s.connect(f).connect(g).connect(out); s.start(t);
 }
 const SFX = {
   pop(){ noise(0, .09, .4); tone(700, 0, .12, "triangle", .14, 180); },
@@ -882,6 +887,7 @@ function drawSound(){
   $("soundBtn").innerHTML = SPEAKER + (soundOn ? '<path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg> Sound on' : '<path d="m22 9-6 6"/><path d="m16 9 6 6"/></svg> Sound off');
   $("soundBtn").setAttribute("aria-pressed", soundOn ? "true" : "false");
 }
+if (window.CCSSound && CCSSound.mixer) $("soundBtn").before(CCSSound.mixer({ background: "#fff" }));   /* the volume button */
 $("soundBtn").addEventListener("click", () => {
   soundOn = !soundOn; drawSound();
   try { localStorage.setItem("bpm-sound", soundOn ? "on" : "off"); } catch (e) {}

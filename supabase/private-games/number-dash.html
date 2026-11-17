@@ -130,6 +130,7 @@
   @keyframes ccsLoadFill{0%{width:0}100%{width:86%}}
   @media (prefers-reduced-motion: reduce){ #ccsLoad .ccsl-lg,#ccsLoad .ccsl-gn{animation:none;opacity:1;transform:none} #ccsLoad .ccsl-bar i{animation:none;width:60%} #ccsLoad{transition:none} }
 </style>
+<script src="/games/game-sound.js"></script>   <!-- for the shared volume panel and its remembered levels -->
 </head>
 <body>
 <div id="ccsLoad" role="status" aria-live="polite" data-name="Math Runner"><img class="ccsl-lg" src="/assets/brand/logo.webp" alt="Chike's Creative Space"><div class="ccsl-bar"><i></i></div><div class="ccsl-gn"><small>Loading</small><b></b></div></div>
@@ -329,6 +330,8 @@ function superCoin(meter){ return Math.min(SUPER.full, meter + SUPER.coin); }
 /* ======================= the world: drawn like the kids' cartoons, with flat shading and ink outlines ======================= */
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (id) => document.getElementById(id);
+/* the volume button (music and game sounds), beside the Sound button in the pause menu */
+if (window.CCSSound && CCSSound.mixer){ const vb = CCSSound.mixer({ className: "btn" }); vb.style.background = ""; $("sound-btn").after(vb); }
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
 renderer.setSize(innerWidth, innerHeight);
@@ -791,18 +794,21 @@ const Streaks = (() => {
 /* the soundtrack file: on the site (the game runs inside the site's page, so this path works there and in the preview) */
 const MUSIC_URL = "/assets/audio/number-dash-theme.mp3";
 const Sfx = (() => {
-  let ctx = null, master = null, music = null, on = true, loop = null;
+  let ctx = null, master = null, music = null, effects = null, on = true, loop = null;
+  /* the volume panel's two levels (the shared kit remembers them for every game) */
+  const level = (k) => window.CCSSound && CCSSound.volume ? CCSSound.volume(k) : 1;
   function wake(){
     if (ctx){ if (ctx.state === "suspended") ctx.resume(); return; }
     try { ctx = new (window.AudioContext || window.webkitAudioContext)(); master = ctx.createGain(); master.gain.value = 0.55; master.connect(ctx.destination);
-      music = ctx.createGain(); music.gain.value = 0.22; music.connect(master); } catch (_e) { ctx = null; }
+      music = ctx.createGain(); music.gain.value = 0.22 * level("music"); music.connect(master);
+      effects = ctx.createGain(); effects.gain.value = level("sfx"); effects.connect(master); } catch (_e) { ctx = null; }
   }
   function tone(f, dur, { type = "sine", vol = 0.2, to = null, delay = 0, out = null } = {}){
     if (!ctx || !on) return;
     const t = ctx.currentTime + delay, o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type; o.frequency.setValueAtTime(f, t); if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(out || master); o.start(t); o.stop(t + dur + 0.03);
+    o.connect(g); g.connect(out || effects); o.start(t); o.stop(t + dur + 0.03);
   }
   const S = {
     coin: () => { tone(1320, 0.08, { type: "square", vol: 0.06 }); tone(1760, 0.14, { type: "square", vol: 0.06, delay: 0.06 }); },
@@ -842,7 +848,11 @@ const Sfx = (() => {
   }
   function stopMusic(){ clearInterval(loop); loop = null; }
   /* the owner's own soundtrack, if it is on the site; otherwise the little tune above plays */
-  const track = new Audio(); track.src = MUSIC_URL; track.loop = true; track.preload = "auto"; track.volume = 0.5;
+  const track = new Audio(); track.src = MUSIC_URL; track.loop = true; track.preload = "auto"; track.volume = 0.5 * level("music");
+  if (window.CCSSound && CCSSound.onVolume){
+    CCSSound.hasMusic();
+    CCSSound.onVolume(v => { track.volume = 0.5 * v.music; if (ctx){ music.gain.setTargetAtTime(0.22 * v.music, ctx.currentTime, 0.05); effects.gain.setTargetAtTime(v.sfx, ctx.currentTime, 0.05); } });
+  }
   let usingTrack = false;
   function startSong(){
     if (usingTrack){ if (on) track.play().catch(() => {}); return; }

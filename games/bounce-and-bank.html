@@ -334,6 +334,11 @@
             color: #8C8698;
             box-shadow: 0 2px 0 #000, inset 0 1px 0 rgba(255,255,255,.08);
         }
+        /* the volume button beside it, in the same cabinet look */
+        #volToggle { flex: 0 0 auto; width: 32px; height: 24px; min-height: 0; min-width: 0; padding: 0; margin-right: 4px; display: flex; align-items: center; justify-content: center;
+            border: 2px solid var(--cabinet-edge); border-radius: 7px; color: var(--neon-cyan); cursor: pointer; box-shadow: 0 2px 0 #000, inset 0 1px 0 rgba(255,255,255,.14), 0 0 8px rgba(63,224,255,.35); }
+        #volToggle svg { width: 16px; height: 16px; display: block; }
+        #volToggle:focus-visible { outline: 3px solid #fff !important; outline-offset: 2px !important; }
         #soundToggle:hover { filter: brightness(1.2); }
         #soundToggle:active { transform: translateY(2px); box-shadow: 0 0 0 #000, inset 0 1px 0 rgba(255,255,255,.1); }
         #soundToggle:focus-visible { outline: 3px solid #fff !important; outline-offset: 2px !important; }
@@ -1329,6 +1334,7 @@
   @keyframes ccsLoadFill{0%{width:0}100%{width:86%}}
   @media (prefers-reduced-motion: reduce){ #ccsLoad .ccsl-lg,#ccsLoad .ccsl-gn{animation:none;opacity:1;transform:none} #ccsLoad .ccsl-bar i{animation:none;width:60%} #ccsLoad{transition:none} }
 </style>
+<script src="game-sound.js"></script>   <!-- for the shared volume panel and its remembered levels -->
 </head>
 <body class="ccs-game ccs-bounce">
 <div id="ccsLoad" role="status" aria-live="polite" data-name="Bounce &amp; Bank"><img class="ccsl-lg" src="/assets/brand/logo.webp" alt="Chike's Creative Space"><div class="ccsl-bar"><i></i></div><div class="ccsl-gn"><small>Loading</small><b></b></div></div>
@@ -2371,6 +2377,8 @@
         /** The shared AudioContext, made on first use and woken up if the
             browser has suspended it. Everything plays through one master
             gain and a gentle compressor, so stacked sounds never clip. */
+        let levelGain = null;
+        if (window.CCSSound && CCSSound.onVolume) CCSSound.onVolume(v => { if (levelGain && audioCtx) levelGain.gain.setTargetAtTime(v.sfx, audioCtx.currentTime, 0.04); });
         function audio() {
             if (!audioCtx) {
                 const AC = window.AudioContext || window.webkitAudioContext;
@@ -2381,7 +2389,10 @@
                 limiter.ratio.value = 6;
                 masterGain = audioCtx.createGain();
                 masterGain.gain.value = soundOn ? MASTER_VOLUME : 0;
-                masterGain.connect(limiter).connect(audioCtx.destination);
+                /* then the volume panel's level (the shared kit remembers it for every game) */
+                levelGain = audioCtx.createGain();
+                levelGain.gain.value = window.CCSSound && CCSSound.volume ? CCSSound.volume('sfx') : 1;
+                masterGain.connect(levelGain).connect(limiter).connect(audioCtx.destination);
             }
             if (audioCtx.state === 'suspended') audioCtx.resume();
             return audioCtx;
@@ -2558,6 +2569,10 @@
         }
         soundToggle.setAttribute('aria-pressed', soundOn ? 'true' : 'false');
         soundToggle.title = soundOn ? 'Sound on - click to turn it off' : 'Sound off - click to turn it on';
+        if (window.CCSSound && CCSSound.mixer) {
+            const vol = CCSSound.mixer({ background: 'linear-gradient(180deg, #2A3442 0%, #121820 100%)' });
+            vol.id = 'volToggle'; soundToggle.before(vol);
+        }
         soundToggle.addEventListener('click', () => {
             setSound(!soundOn);
             play('click'); // a click to confirm it's back on (silent when turning off)

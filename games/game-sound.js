@@ -8,12 +8,15 @@
      <script src="game-sound.js"></script>
      CCSSound.play("good");                 // a named sound (see SOUNDS)
      CCSSound.play("tick", { pitch: 1.5 }); // optional pitch (1 = normal) and volume (1 = normal)
-     el.appendChild(CCSSound.button());     // the standard on/off button
+     el.appendChild(CCSSound.button());     // the standard on/off button (a volume button appears beside it)
+     CCSSound.volume("music"), CCSSound.onVolume(fn)  // the player's volume levels, for a game's own sounds
 
    Sound is ON unless the player turned it off. The choice is kept
    in localStorage under "ccs-sound" ("on" / "off") and is shared by
    every game that uses this kit. Browsers only allow sound after the
    player's first click, tap or key press; the kit waits for that.
+   Two volume levels sit under the switch, music and game sounds, set
+   with the volume button and remembered for every game (see VOLUME).
    ============================================================ */
 (function(){
   "use strict";
@@ -21,6 +24,7 @@
   var on = true;
   try { on = localStorage.getItem(KEY) !== "off"; } catch (e) {}
   var ctx = null, master = null, unlocked = false;
+  var sfxBus = null, musicBus = null, mixers = [], volFns = [], hasMusicFlag = false;
   var lastAt = {};                       /* name -> time it last played, so fast repeats stay gentle */
   var buttons = [];
 
@@ -34,6 +38,9 @@
       comp.threshold.value = -14; comp.ratio.value = 8;
       master = ctx.createGain(); master.gain.value = 0.5;
       master.connect(comp); comp.connect(ctx.destination);
+      /* the two volume levels: background music, and every other sound */
+      sfxBus = ctx.createGain(); sfxBus.gain.value = VOL.sfx; sfxBus.connect(master);
+      musicBus = ctx.createGain(); musicBus.gain.value = VOL.music; musicBus.connect(master);
     }
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
@@ -51,7 +58,7 @@
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol || 0.15, t + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.03);
+    o.connect(g); g.connect(sfxBus); o.start(t); o.stop(t + dur + 0.03);
   }
   /* a short burst of noise (pops, whooshes, thuds) */
   function noise(start, dur, vol, freq, type){
@@ -60,7 +67,7 @@
     for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
     var s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime + start;
     f.type = type || "highpass"; f.frequency.value = freq || 900; g.gain.value = vol || 0.3;
-    s.buffer = buf; s.connect(f); f.connect(g); g.connect(master); s.start(t);
+    s.buffer = buf; s.connect(f); f.connect(g); g.connect(sfxBus); s.start(t);
   }
   var notes = function(list, gap, len, type, vol, p){ list.forEach(function(f, i){ tone(f * p, i * gap, len, type, vol); }); };
 
@@ -95,7 +102,8 @@
      a little each time so repeats don't sound copy-pasted, loop: true makes it a loop for loop().
      play(name) uses the recording once it has loaded, and the made-in-code sound of the same
      name (if there is one) until then. loop(name) returns { set(volume, speed), stop() } for a
-     sound that keeps going, like a motor whose volume and speed follow the game every frame. */
+     sound that keeps going, like a motor whose volume and speed follow the game every frame.
+     music: true marks a recording as background music, so it follows the music volume. */
   var SAMPLES = {};
   function decodeAll(){
     var c = ctx; if (!c) return;
@@ -111,7 +119,8 @@
   function samples(map){
     Object.keys(map || {}).forEach(function(n){
       var o = map[n] || {};
-      var s = SAMPLES[n] = { src: o.src, start: o.start || 0, end: o.end, volume: o.volume == null ? 1 : o.volume, loop: !!o.loop, vary: o.vary || 0, buf: null, decoding: false, bytes: null };
+      var s = SAMPLES[n] = { src: o.src, start: o.start || 0, end: o.end, volume: o.volume == null ? 1 : o.volume, loop: !!o.loop, music: !!o.music, vary: o.vary || 0, buf: null, decoding: false, bytes: null };
+      if (s.music) hasMusic(true);
       try { s.bytes = window.fetch(o.src).then(function(r){ return r.ok ? r.arrayBuffer() : null; }).catch(function(){ return null; }); } catch (e) {}
     });
     if (ctx && on) decodeAll();
@@ -126,7 +135,7 @@
     g.gain.setValueAtTime(vol, t);
     g.gain.setValueAtTime(vol, t + real - fade);
     g.gain.linearRampToValueAtTime(0, t + real);            /* a quick fade, so a trimmed clip never ends in a click */
-    src.connect(g); g.connect(master);
+    src.connect(g); g.connect(sfxBus);
     src.start(t, s.start, len); src.stop(t + real + 0.05);
   }
   function loop(name){
@@ -141,7 +150,7 @@
           var src = c.createBufferSource(), g = c.createGain();
           src.buffer = s.buf; src.loop = true; src.loopStart = s.start; src.loopEnd = clipEnd(s);
           g.gain.value = 0;
-          src.connect(g); g.connect(master);
+          src.connect(g); g.connect(s.music ? musicBus : sfxBus);
           src.start(c.currentTime, s.start);
           h.src = src; h.g = g;
         }
@@ -197,19 +206,150 @@
     b.style.background = opts.background || "#FFFBF3";
     b.addEventListener("click", function(){ setOn(!on); });
     buttons.push(b); paint(b);
+    /* the volume button goes just before it, in the same look, as soon as the game puts the sound button on the page */
+    if (opts.mixer !== false){
+      var m = mixer({ background: b.style.background, className: opts.className }), tries = 0;
+      (function attach(){ if (b.parentNode){ if (!m.parentNode) b.parentNode.insertBefore(m, b); return; } if (tries++ < 200) setTimeout(attach, 50); })();
+    }
     return b;
   }
-  /* another tab of the site switching sound keeps this one in step */
-  window.addEventListener("storage", function(e){ if (e.key === KEY){ on = e.newValue !== "off"; buttons.forEach(paint); } });
+
+  /* ---------- VOLUME (owner, 2026-11-17: "Add volume control to the music and remember the users preference", then
+     "Do this for all games with background music or sound"; draft docs/mockups/music-volume-draft.html) ----------
+     Two levels from 0 to 1: music (background music) and sfx (every other sound, voices too). It's one setting for
+     every game on this device, kept in localStorage under "ccs-game-save:volume". A private game runs sealed off in the
+     site's locked frame, where storage can't be reached, so it asks the site page, which keeps the very same key. */
+  var VKEY = "ccs-game-save:volume", VOL = { music: 1, sfx: 1 }, sealed = false, saveT = null;
+  function clampVol(v){ v = Number(v); return isFinite(v) ? Math.max(0, Math.min(1, v)) : 1; }
+  function takeVol(d){
+    if (!d || typeof d !== "object") return;
+    if ("music" in d) VOL.music = clampVol(d.music);
+    if ("sfx" in d) VOL.sfx = clampVol(d.sfx);
+    applyVol();
+  }
+  function applyVol(){
+    if (ctx && sfxBus){ sfxBus.gain.setTargetAtTime(VOL.sfx, ctx.currentTime, 0.04); musicBus.gain.setTargetAtTime(VOL.music, ctx.currentTime, 0.04); }
+    volFns.forEach(function(f){ try { f({ music: VOL.music, sfx: VOL.sfx }); } catch (e) {} });
+    if (panel) Array.prototype.forEach.call(panel.querySelectorAll("input"), function(inp){ var k = inp.getAttribute("data-kind"); if (document.activeElement !== inp){ inp.value = Math.round(VOL[k] * 100); } inp.parentNode.querySelector("b").textContent = Math.round(VOL[k] * 100) + "%"; });
+  }
+  function saveVol(){
+    clearTimeout(saveT);
+    saveT = setTimeout(function(){
+      var data = { music: VOL.music, sfx: VOL.sfx };
+      if (!sealed){ try { localStorage.setItem(VKEY, JSON.stringify(data)); return; } catch (e) { sealed = true; } }
+      try { if (window.parent && window.parent !== window) window.parent.postMessage({ ccsSave: "set", game: "volume", data: data }, "*"); } catch (e) {}
+    }, 250);
+  }
+  function setVolume(kind, v){ if (kind !== "music" && kind !== "sfx") return; VOL[kind] = clampVol(v); applyVol(); saveVol(); }
+  function volume(kind){ return kind === "music" ? VOL.music : VOL.sfx; }
+  function onVolume(fn){ if (typeof fn === "function"){ volFns.push(fn); try { fn({ music: VOL.music, sfx: VOL.sfx }); } catch (e) {} } }
+  /* a game with background music says so (recordings marked music: true do it for themselves), and the panel adds a Music slider */
+  function hasMusic(v){ hasMusicFlag = v !== false; mixers.forEach(paintMixer); }
+  var raw = null;
+  try { raw = localStorage.getItem(VKEY); } catch (e) { sealed = true; }
+  try { takeVol(JSON.parse(raw || "null")); } catch (e) {}
+  if (sealed && window.parent && window.parent !== window){
+    window.addEventListener("message", function(e){ var d = e.data; if (d && d.ccsSave === "data" && d.game === "volume") takeVol(d.data); });
+    try { window.parent.postMessage({ ccsSave: "get", game: "volume" }, "*"); } catch (e) {}
+  }
+
+  /* the volume button and its panel of sliders */
+  var ICON_MUSIC = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+  var ICON_LEVELS = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg>';
+  function paintMixer(b){
+    b.innerHTML = hasMusicFlag ? ICON_MUSIC : ICON_LEVELS;
+    var label = hasMusicFlag ? "Music and sound volume" : "Sound volume";
+    b.setAttribute("aria-label", label); b.title = label;
+  }
+  var panel = null, panelFor = null;
+  function stop(e){ e.stopPropagation(); }
+  function mixer(opts){
+    opts = opts || {};
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "ccs-sound-btn ccs-mix-btn" + (opts.className ? " " + opts.className : "");
+    b.dataset.compact = "1";
+    b.style.background = opts.background || "#FFFBF3";
+    b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("aria-expanded", "false");
+    b.addEventListener("click", function(e){ e.stopPropagation(); togglePanel(b); });
+    ["pointerdown", "mousedown", "touchstart"].forEach(function(t){ b.addEventListener(t, stop); });
+    mixers.push(b); paintMixer(b);
+    return b;
+  }
+  function closePanel(){
+    if (!panel) return;
+    if (panel.parentNode) panel.parentNode.removeChild(panel);
+    panel = null;
+    if (panelFor) panelFor.setAttribute("aria-expanded", "false");
+    panelFor = null;
+    document.removeEventListener("pointerdown", outside, true);
+    window.removeEventListener("keydown", onKey, true);
+  }
+  function outside(e){ if (panel && !panel.contains(e.target) && !(panelFor && panelFor.contains(e.target))) closePanel(); }
+  /* the panel's keys belong to the panel: arrows move a slider, never the game behind it */
+  function onKey(e){
+    if (!panel) return;
+    if (e.key === "Escape"){ var f = panelFor; closePanel(); if (f) f.focus(); e.stopPropagation(); return; }
+    if (panel.contains(document.activeElement)) e.stopPropagation();
+  }
+  function togglePanel(b){
+    if (panel && panelFor === b){ closePanel(); return; }
+    closePanel();
+    panel = document.createElement("div");
+    panel.className = "ccs-mix";
+    panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Volume");
+    ["pointerdown", "mousedown", "touchstart", "click", "wheel"].forEach(function(t){ panel.addEventListener(t, stop); });
+    var rows = (hasMusicFlag ? [["music", "Music"]] : []).concat([["sfx", hasMusicFlag ? "Game sounds" : "Sound volume"]]);
+    rows.forEach(function(r){
+      var w = document.createElement("label");
+      w.className = "ccs-mix-row";
+      w.innerHTML = '<span class="ccs-mix-top"><span>' + r[1] + '</span><b></b></span><input type="range" min="0" max="100" step="5" data-kind="' + r[0] + '"><span class="ccs-mix-ends"><span>Off</span><span>Loud</span></span>';
+      var inp = w.querySelector("input");
+      inp.value = Math.round(VOL[r[0]] * 100);
+      inp.setAttribute("aria-label", r[1]);
+      w.querySelector("b").textContent = inp.value + "%";
+      inp.addEventListener("input", function(){ setVolume(r[0], inp.value / 100); if (r[0] === "sfx") play("tick"); });
+      panel.appendChild(w);
+    });
+    var note = document.createElement("small");
+    note.textContent = "Remembered for every game on this device.";
+    panel.appendChild(note);
+    (document.body || document.documentElement).appendChild(panel);
+    var rc = b.getBoundingClientRect(), pw = panel.offsetWidth, ph = panel.offsetHeight;
+    var left = Math.min(window.innerWidth - pw - 8, Math.max(8, rc.right - pw)), top = rc.bottom + 8;
+    if (top + ph > window.innerHeight - 8) top = Math.max(8, rc.top - ph - 8);
+    panel.style.left = left + "px"; panel.style.top = top + "px";
+    panelFor = b; b.setAttribute("aria-expanded", "true");
+    document.addEventListener("pointerdown", outside, true);
+    window.addEventListener("keydown", onKey, true);
+    var first = panel.querySelector("input"); if (first) first.focus();
+  }
+
+  /* another tab of the site switching sound, or changing the volume, keeps this one in step */
+  window.addEventListener("storage", function(e){
+    if (e.key === KEY){ on = e.newValue !== "off"; buttons.forEach(paint); }
+    if (e.key === VKEY){ try { takeVol(JSON.parse(e.newValue || "null")); } catch (x) {} }
+  });
 
   /* a plain look for the button. :where() gives it no weight at all, so any rule a game writes for .ccs-sound-btn wins */
   var css = document.createElement("style");
   css.textContent = ":where(.ccs-sound-btn){display:inline-flex;align-items:center;gap:6px;font:inherit;font-weight:800;font-size:.9rem;color:#1E2226;"
     + "border:3px solid #1E2226;border-radius:999px;box-shadow:3px 3px 0 #1E2226;padding:6px 14px;min-height:40px;cursor:pointer;line-height:1}"
     + ":where(.ccs-sound-btn[data-compact]){padding:6px;min-width:40px;justify-content:center}"
-    + ":where(.ccs-sound-btn[aria-pressed=false]){opacity:.85}";
+    + ":where(.ccs-sound-btn[aria-pressed=false]){opacity:.85}"
+    + ":where(.ccs-mix-btn){margin-right:6px}"
+    + ".ccs-mix{position:fixed;z-index:2147483000;width:250px;box-sizing:border-box;background:#FFFBF3;color:#1E2226;border:3px solid #1E2226;border-radius:16px;"
+    + "box-shadow:5px 5px 0 #1E2226;padding:12px 14px;font-family:Nunito,system-ui,sans-serif;text-align:left}"
+    + ".ccs-mix-row{display:block;margin:0 0 10px;cursor:default}"
+    + ".ccs-mix-top{display:flex;justify-content:space-between;align-items:center;font-weight:900;font-size:15px;margin-bottom:4px}"
+    + ".ccs-mix-top b{font-size:17px;color:#7A4A86}"
+    + ".ccs-mix input[type=range]{display:block;width:100%;margin:0;height:28px;accent-color:#E8A800;cursor:pointer;background:transparent}"
+    + ".ccs-mix input[type=range]:focus-visible{outline:3px solid #7A4A86;outline-offset:2px;border-radius:8px}"
+    + ".ccs-mix-ends{display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:#55606e}"
+    + ".ccs-mix small{display:block;font-size:12px;font-weight:700;color:#55606e;line-height:1.35}";
   (document.head || document.documentElement).appendChild(css);
 
   window.CCSSound = { play: play, isOn: function(){ return on; }, setOn: setOn, button: button, names: Object.keys(SOUNDS),
-    samples: samples, loop: loop, ready: function(name){ return !!(SAMPLES[name] && SAMPLES[name].buf); } };
+    samples: samples, loop: loop, ready: function(name){ return !!(SAMPLES[name] && SAMPLES[name].buf); },
+    volume: volume, setVolume: setVolume, onVolume: onVolume, hasMusic: hasMusic, mixer: mixer };
 })();

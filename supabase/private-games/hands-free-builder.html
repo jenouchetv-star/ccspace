@@ -259,6 +259,7 @@
   @keyframes ccsLoadFill{0%{width:0}100%{width:86%}}
   @media (prefers-reduced-motion: reduce){ #ccsLoad .ccsl-lg,#ccsLoad .ccsl-gn{animation:none;opacity:1;transform:none} #ccsLoad .ccsl-bar i{animation:none;width:60%} #ccsLoad{transition:none} }
 </style>
+<script src="/games/game-sound.js"></script>   <!-- for the shared volume panel and its remembered level -->
 </head>
 <body>
 <div id="ccsLoad" role="status" aria-live="polite" data-name="Hands-Free Builder"><img class="ccsl-lg" src="/assets/brand/logo.webp" alt="Chike's Creative Space"><div class="ccsl-bar"><i></i></div><div class="ccsl-gn"><small>Loading</small><b></b></div></div>
@@ -924,11 +925,15 @@
 
   /* ---------------- little sounds for feedback ---------------- */
   var audio = null;
+  /* the volume button, after the top bar's other buttons */
+  if (window.CCSSound && CCSSound.mixer){ var vb = CCSSound.mixer({ className: "btn btn--icon" }); vb.style.background = ""; vb.style.marginRight = "0"; $("btn-xray").after(vb); }
   function tone(freq, type, len, vol){
     try {
       audio = audio || new (window.AudioContext || window.webkitAudioContext)();
       var t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
-      o.type = type; o.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      var lv = window.CCSSound && CCSSound.volume ? CCSSound.volume("sfx") : 1;   /* the volume panel's level */
+      if (lv < 0.02) return;
+      o.type = type; o.frequency.value = freq; g.gain.setValueAtTime(vol * lv, t); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
       o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t + len + 0.01);
     } catch(e) {}
   }
