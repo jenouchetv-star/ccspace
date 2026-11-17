@@ -180,3 +180,16 @@ describe("scoring", () => {
     expect(R.stars({ mode: "chill", hints: 5 })).toBe(1);
   });
 });
+
+describe("words are read in Heart's voice (owner, 2026-11-16: use Kokoro for Word Quest)", () => {
+  const src = readFileSync(new URL("../games/word-quest.html", import.meta.url), "utf8");
+  const bank = src.split("const BANKS = {")[1].split("};")[0];
+  const words = [...new Set([...bank.matchAll(/"([A-Z]{2,})"/g)].map(m => m[1]))];
+  it("has a recording of every word in every grade's list", () => {
+    for (const w of words) expect(existsSync(new URL("../assets/games/word-quest/words/" + w.toLowerCase() + ".mp3", import.meta.url)), w).toBe(true);
+  });
+  it("plays the recording, and only uses the browser's voice if one is missing", () => {
+    expect(src).toContain('new Audio("/assets/games/word-quest/words/" + name + ".mp3")');
+    expect(src).toContain("a.play().catch(() => sayWithBrowser(word));");
+  });
+});

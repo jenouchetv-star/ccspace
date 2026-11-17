@@ -976,8 +976,20 @@ function stars(o){
   }
 
   /* ---------- reading words aloud (only when sound is on) ---------- */
+  /* Heart's voice (Kokoro, the owner's pick, 2026-11-16): every word is pre-recorded in assets/games/word-quest/words;
+     the browser's own voice is only a backup if a recording is missing */
+  const WORD_CLIPS = {};
   function say(word){
     if (window.CCSSound && !CCSSound.isOn()) return;
+    const name = String(word).toLowerCase().replace(/[^a-z0-9-]/g, "");
+    try {
+      Object.values(WORD_CLIPS).forEach(a => { a.pause(); a.currentTime = 0; });
+      const a = WORD_CLIPS[name] || (WORD_CLIPS[name] = new Audio("/assets/games/word-quest/words/" + name + ".mp3"));
+      a.currentTime = 0;
+      a.play().catch(() => sayWithBrowser(word));
+    } catch (e){ sayWithBrowser(word); }
+  }
+  function sayWithBrowser(word){
     if (!("speechSynthesis" in window)) return;
     try {
       speechSynthesis.cancel();
