@@ -2773,6 +2773,29 @@
         ];
         function wizardLine(lines) { return lines[Math.floor(Math.random() * lines.length)]; }
 
+        /* The old wizard's voice (owner's pick, 2026-11-17: voice B, Kokoro bm_lewis, pre-recorded). Each fixed line
+           and each spelling clue has a clip named by a hash of its exact on-screen text; the math questions are made
+           up fresh every time, so they stay on screen only. It follows the sound button and the volume panel. */
+        const WIZ_DIR = '/assets/games/maze-quest/wizard/';
+        const wizVoice = new Audio();
+        let wizQueue = [];
+        function wizKey(text) { let h = 0x811c9dc5; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(36); }
+        function wizNext() {
+            const t = wizQueue.shift(); if (!t) return;
+            wizVoice.src = WIZ_DIR + wizKey(t) + '.mp3';
+            wizVoice.volume = window.CCSSound && CCSSound.volume ? CCSSound.volume('sfx') : 1;
+            const p = wizVoice.play(); if (p && p.catch) p.catch(() => {});
+        }
+        wizVoice.addEventListener('ended', wizNext);
+        wizVoice.addEventListener('error', wizNext);   /* a line with no clip is skipped; the words are on screen */
+        function wizardSay(texts) {
+            try { wizVoice.pause(); } catch (e) {}
+            wizQueue = (window.CCSSound && !CCSSound.isOn()) ? [] : texts.filter(Boolean);
+            wizNext();
+        }
+        function wizardQuiet() { wizQueue = []; try { wizVoice.pause(); } catch (e) {} }
+        function wizardTalking() { return wizQueue.length > 0 || (!wizVoice.paused && !wizVoice.ended); }
+
         // Milliseconds per word for the wizard's typewriter dialogue - slow
         // enough that a young reader can actually keep up, not a brisk
         // adult-reading-speed pace.
@@ -2832,7 +2855,9 @@
             const note = document.getElementById('quizNote');
             note.hidden = !(race && !raceNoteShown);
             if (race) raceNoteShown = true;
-            const introWords = wizardLine(young ? WIZARD_SHORT_LINES : WIZARD_QUESTION_LINES).split(' ');
+            const intro = wizardLine(young ? WIZARD_SHORT_LINES : WIZARD_QUESTION_LINES);
+            const introWords = intro.split(' ');
+            wizardSay([intro, picked.kind === 'spell' ? picked.q : null]);   /* he reads a spelling clue aloud too */
             const questionWords = picked.q.split(' ').map(w => ({ word: w, strong: true }));
             typewriterWords(document.getElementById('quizQuestion'), introWords.concat([{ br: true }], questionWords));
             const optsContainer = document.getElementById('quizOptions');
@@ -2866,7 +2891,9 @@
                 document.getElementById('quizWizardImg').src = '../assets/games/wizard_correct-answer-portal.png';
                 document.getElementById('quizTitle').textContent = 'The Wizard is Pleased!';
                 feedback.style.color = '#3A7A37';
-                lineWords = wizardLine(WIZARD_CORRECT_LINES).split(' ');
+                const said = wizardLine(WIZARD_CORRECT_LINES);
+                lineWords = said.split(' ');
+                wizardSay([said]);
                 typewriterWords(feedback, lineWords);
                 applyQuizBoost(tile);
                 sfx('good');
@@ -2878,7 +2905,9 @@
                 document.getElementById('quizWizardImg').src = '../assets/games/wizard_wrong-answer-no-portal.png';
                 document.getElementById('quizTitle').textContent = 'The Wizard Shakes His Head...';
                 feedback.style.color = '#C13B31';
-                lineWords = wizardLine(WIZARD_WRONG_LINES).split(' ');
+                const said = wizardLine(WIZARD_WRONG_LINES);
+                lineWords = said.split(' ');
+                wizardSay([said]);
                 typewriterWords(feedback, lineWords);
                 sfx('bad', { volume: 0.7 });
             }
@@ -2888,12 +2917,17 @@
             // not a flat delay, since the wizard's lines vary in length.
             const readDelay = lineWords.length * WIZARD_WORD_DELAY_MS + (race ? 1200 : 2200); // a race moves on a little sooner
             clearTimeout(quizCloseTimer);
-            quizCloseTimer = setTimeout(() => {
+            /* the card waits for the wizard to finish speaking (a few seconds at most) */
+            const latest = Date.now() + readDelay + 6000;
+            const closeQuiz = () => {
+                if (wizardTalking() && Date.now() < latest) { quizCloseTimer = setTimeout(closeQuiz, 200); return; }
+                wizardQuiet();
                 document.getElementById('quizModal').style.display = 'none';
                 quizActive = false;
                 resumeTimerAfterQuiz();
                 lastMoveTime = Date.now();
-            }, readDelay);
+            };
+            quizCloseTimer = setTimeout(closeQuiz, readDelay);
         }
 
         // Moves the ball up to ten cells along the shortest path to the
