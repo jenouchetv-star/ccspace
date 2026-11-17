@@ -53,4 +53,10 @@ describe("the voice in the game", () => {
     expect(html).toContain('robotSpeak(text, [mem.name, mem.botName].concat(skip || []));');
     expect(html).toContain('var talking = now < talkUntil || (state.voice && robotTalking());');
   });
+  it("has a volume button beside the Voice button, remembered like every game's (owner, 2026-11-17)", () => {
+    expect(html).toContain('<script src="/games/game-sound.js"></script>');
+    expect(html).toContain('var vb = CCSSound.mixer({ className: "voice-vol" });');
+    expect(html).toContain('$("voice").after(vb);');
+    expect(html).toContain('CCSSound.onVolume(function(v){ voiceNow.volume = v.sfx; });');
+  });
 });
