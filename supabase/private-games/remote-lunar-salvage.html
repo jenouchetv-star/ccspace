@@ -485,6 +485,19 @@
   .hud .orb .r2{inset:0;border:1px solid rgba(79,227,255,.35);border-top-color:var(--hc);animation:hudSpin 3.5s linear infinite reverse}
   .hud .orb .radar{inset:0;background:conic-gradient(from 0deg,rgba(79,227,255,.35),transparent 25%);animation:hudSpin 3s linear infinite;mix-blend-mode:screen}
   @keyframes hudSpin{to{transform:rotate(360deg)}}
+  /* the flight path: a digital rocket heading for the next world */
+  .hud .nav{grid-column:1/-1;position:relative;height:72px;margin-top:4px;--p:12%}
+  .hud .nav .path,.hud .nav .done{position:absolute;left:14px;top:50%;height:0;border-top:2px dashed rgba(79,227,255,.45)}
+  .hud .nav .path{right:60px}
+  .hud .nav .done{border-top:2px solid var(--hc);width:calc(var(--p) - 14px);transition:width 1.4s cubic-bezier(.2,.7,.2,1);box-shadow:0 0 8px rgba(79,227,255,.6)}
+  .hud .nav img{position:absolute;right:2px;top:50%;width:58px;height:58px;transform:translateY(-50%);border-radius:50%;box-shadow:0 0 16px rgba(79,227,255,.45)}
+  .hud .nav .ship{position:absolute;top:50%;left:var(--p);width:84px;height:42px;transform:translate(-50%,-50%);transition:left 1.4s cubic-bezier(.2,.7,.2,1);filter:drop-shadow(0 0 6px rgba(79,227,255,.9));animation:hudBob 2.4s ease-in-out infinite}
+  .hud .nav .ship .body{fill:rgba(79,227,255,.18);stroke:var(--hc);stroke-width:1.6}
+  .hud .nav .ship .fin{fill:none;stroke:var(--hc);stroke-width:1.6;stroke-linejoin:round}
+  .hud .nav .ship .win{fill:#e9f9ff}
+  .hud .nav .ship .flame{fill:#ffd27a;transform-origin:9px 12px;animation:hudFlame .25s ease-in-out infinite alternate}
+  @keyframes hudBob{50%{transform:translate(-50%,calc(-50% - 3px))}}
+  @keyframes hudFlame{to{transform:scaleX(.55)}}
   .hud .holo h3{margin:4px 0 8px;font-size:clamp(22px,2.6vw,34px);letter-spacing:.08em;text-transform:uppercase}
   .hud .stats{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font:700 12px var(--hmono)}
   .hud .stats b{color:#7fa6bb;font-weight:700}
@@ -508,7 +521,7 @@
   @media (max-width: 640px){
     .launchbtn{bottom:calc(300px + env(safe-area-inset-bottom));font-size:21px;padding:14px 26px}
   }
-  @media (prefers-reduced-motion: reduce){ .hud .rec b,.hud .sweep,.hud .wave i,.hud .orb .r1,.hud .orb .r2,.hud .orb .radar{animation:none} }
+  @media (prefers-reduced-motion: reduce){ .hud .rec b,.hud .sweep,.hud .wave i,.hud .orb .r1,.hud .orb .r2,.hud .orb .radar,.hud .nav .ship,.hud .nav .ship .flame{animation:none} .hud .nav .ship,.hud .nav .done{transition:none} }
   @media (prefers-reduced-motion: reduce){ .cabin .space i{animation:none} #ovFlight{transition:none} }
   @media (prefers-reduced-motion: reduce){ .padbtn.fresh:after{animation:none} .note.paper{transition:none} }
   .ct{position:fixed;inset:0;pointer-events:none;z-index:9}
@@ -757,7 +770,8 @@
         <div class="wave" id="flWave" aria-hidden="true"></div>
       </div>
       <div class="hright">
-        <div class="hbox holo"><div class="orb"><div class="radar"></div><div class="r2"></div><div class="r1"></div><img id="flOrb" alt=""></div><div><span class="htag" id="flLocTag">Next location</span><h3 id="flLocName"></h3><div class="stats" id="flStats"></div></div></div>
+        <div class="hbox holo"><div class="orb"><div class="radar"></div><div class="r2"></div><div class="r1"></div><img id="flOrb" alt=""></div><div><span class="htag" id="flLocTag">Next location</span><h3 id="flLocName"></h3><div class="stats" id="flStats"></div></div>
+          <div class="nav" id="flNav" aria-hidden="true"><div class="path"></div><div class="done"></div><svg class="ship" viewBox="0 0 48 24"><path class="flame" d="M9 9 L1 12 L9 15 Z"/><path class="body" d="M10 7 H30 Q42 7 46 12 Q42 17 30 17 H10 Z"/><path class="fin" d="M12 7 L8 2 H16 L19 7 M12 17 L8 22 H16 L19 17"/><circle class="win" cx="33" cy="12" r="2.6"/></svg><img id="flNavPlanet" alt=""></div></div>
         <div class="hbox mis"><span class="htag" id="flMisTag">Mission brief</span><h4 id="flGoal"></h4><ol id="flSteps"></ol><div class="tools" id="flTools"></div></div>
       </div>
       <div class="hbot"><span class="dots" id="flDots"></span><button class="next" id="flNext">Next</button></div>
@@ -5372,6 +5386,7 @@ const TOOL_NAMES = { arm: "Arm", magnet: "Magnet", laser: "Laser", drill: "Drill
 function paintHud(id){
   const home = id === "earth", w = home ? { name: "Earth", g: 9.81, air: true } : worldById(id), n = WORLDS.indexOf(w) + 1;
   $("flOrb").src = "/assets/games/lunar-salvage/planets/" + id + ".png";
+  $("flNavPlanet").src = "/assets/games/lunar-salvage/planets/" + id + ".png";
   $("flPlanet").style.background = "url(/assets/games/lunar-salvage/planets/" + id + ".png) center/cover";
   $("flLocTag").textContent = home ? "Heading home" : "Next location";
   $("flLocName").textContent = w.name;
@@ -5415,6 +5430,7 @@ function showBriefLine(){
   $("flKid").setAttribute("aria-label", who + " on a video call");
   $("flWho").textContent = "CH-0" + (Object.keys(BRIEFS).indexOf(home ? "home" : nextId) + 2); $("flName").textContent = "CC · " + who.toUpperCase();
   paintHud(home ? "earth" : nextId);
+  $("flNav").style.setProperty("--p", (12 + 68 * FL.line / Math.max(1, n - 1)).toFixed(1) + "%");
   typeCaption(text);
   $("flDots").innerHTML = b.lines.map((_, i) => '<i class="' + (i <= FL.line ? "on" : "") + '"></i>').join("");
   $("flNext").textContent = FL.line < n - 1 ? "Next" : "Land";

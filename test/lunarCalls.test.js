@@ -43,6 +43,11 @@ describe("the video calls on the rocket's monitor", () => {
     expect(fn("showBriefLine")).toContain("paintHud(");
     expect(fn("showBriefLine")).toContain("typeCaption(text);");
   });
+  it("a digital rocket flies along a flight path toward the next world, closer with each line of the call (owner, 2026-11-17)", () => {
+    expect(game).toContain('<div class="nav" id="flNav" aria-hidden="true"><div class="path"></div><div class="done"></div><svg class="ship"');
+    expect(fn("paintHud")).toContain('$("flNavPlanet").src = "/assets/games/lunar-salvage/planets/" + id + ".png";');
+    expect(fn("showBriefLine")).toContain('$("flNav").style.setProperty("--p", (12 + 68 * FL.line / Math.max(1, n - 1)).toFixed(1) + "%");');
+  });
   it("captions type out, but show at once for players who turn motion down", () => {
     const t = fn("typeCaption");
     expect(t).toContain('matchMedia("(prefers-reduced-motion: reduce)").matches');
