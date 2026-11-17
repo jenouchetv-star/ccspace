@@ -29,7 +29,7 @@ describe("the What we believe page", () => {
 
 describe("the STEAMM section", () => {
   it("names all six subjects, music included", () => {
-    expect(site).toContain("we believe in early childhood development through <b>STEAMM: Science, Technology, Engineering, Art, Math, and Music.</b>");
+    expect(site).toContain("we empower K–5 learners through <b>STEAMM (Science, Technology, Engineering, Art, Math, and Music)</b> during the most formative bridge in a child’s education.");
     for (const word of ["Science", "Technology", "Engineering", "Art", "Math", "Music"]) expect(site).toContain('["' + word.charAt(0) + '","' + word + '"');
   });
   it("says how STEAMM is different from STEM, and why we believe in it", () => {
@@ -148,13 +148,13 @@ describe("taped photos (owner, 2026-11-16)", () => {
 
 describe("the STEAMM line is bold (owner, 2026-11-16)", () => {
   it("bolds STEAMM and its six subjects in the opening line", () => {
-    expect(site).toContain("we believe in early childhood development through <b>STEAMM: Science, Technology, Engineering, Art, Math, and Music.</b>");
+    expect(site).toContain("we empower K–5 learners through <b>STEAMM (Science, Technology, Engineering, Art, Math, and Music)</b> during the most formative bridge in a child’s education.");
   });
 });
 
 describe("the What we believe banner reads clearly (owner, 2026-11-16)", () => {
   it("opens with a plain sentence about what we believe, then says what the page covers", () => {
-    expect(site).toContain('"We believe children learn best by making things. This page explains why we teach STEAMM, how creativity grows problem solvers, and the promises we make to every family."');
+    expect(site).toContain('"We believe children learn best when they actively create, whether engineering a physical project or designing and problem solving in the digital space. Here we outline our foundation in STEAMM education, how creative thinking turns children into confident problem solvers, and the commitments we uphold for the families who join us."');
     expect(site).not.toContain("The ideas that shape everything we make: how children learn");
   });
 });
@@ -165,5 +165,11 @@ describe("the page is called STEAMM Methodology (owner, 2026-11-16)", () => {
   });
   it("still opens from the old What we believe address", () => {
     expect(site).toContain('if (sub === "beliefs") sub = "steamm";');
+  });
+});
+
+describe("the What is STEAMM opening names K-5 (owner, 2026-11-16)", () => {
+  it("says why the K-5 years are the right time", () => {
+    expect(site).toContain("Spanning ages 5 to 11, these elementary years mark the leap from playful curiosity to structured problem-solving");
   });
 });

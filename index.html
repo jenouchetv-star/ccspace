@@ -13244,7 +13244,7 @@ function viewAbout(sub){
     /* What we believe (owner, 2026-11-16): STEAMM and the beliefs list, moved off Our Mission. Their words still live
        on the Mission page's record, so the editor keeps editing them in the same place. */
     head = cmsHeader("about/steamm", "About", 'Our STEAMM <span class="hl">methodology</span>.',
-      "We believe children learn best by making things. This page explains why we teach STEAMM, how creativity grows problem solvers, and the promises we make to every family.", "", {
+      "We believe children learn best when they actively create, whether engineering a physical project or designing and problem solving in the digital space. Here we outline our foundation in STEAMM education, how creative thinking turns children into confident problem solvers, and the commitments we uphold for the families who join us.", "", {
         aside: '<div class="taped"><img class="skel" src="assets/grownups/in-class-stem.jpg" alt="A teacher and three kids planning a stick tower for a classroom STEM challenge" loading="lazy"></div>',
         asideSmall: true, gradient: true
       });
@@ -13472,7 +13472,7 @@ function believePhoto(src, alt){
    and our principles. Open sections with room between them, photos to break them up, no colored cards (owner, 2026-11-16). */
 function steammPanel(){
   const rec = pageRec("about/mission"), id = rec ? rec.id : null;
-  const lead = pageVal("about/mission", "steammLead", "At Chike’s Creative Space, we believe in early childhood development through <b>STEAMM: Science, Technology, Engineering, Art, Math, and Music.</b>");
+  const lead = pageVal("about/mission", "steammLead", "At Chike’s Creative Space, we empower K–5 learners through <b>STEAMM (Science, Technology, Engineering, Art, Math, and Music)</b> during the most formative bridge in a child’s education. Spanning ages 5 to 11, these elementary years mark the leap from playful curiosity to structured problem-solving—making K–5 the ideal time to build creative confidence and joyful learning habits that last a lifetime.");
   const diff = pageVal("about/mission", "steammDifference", "STEM teaches four subjects that explain how the world works: science, technology, engineering and math. STEAMM keeps all four and adds art and music, because young children don’t learn in separate boxes. A child who draws a bridge before building it, or claps a rhythm before counting it, is doing engineering and math through art and music.");
   const why = pageVal("about/mission", "steammWhy", "Young children learn best by playing, making and expressing themselves. Art gives them a way to imagine and plan. Music builds listening, rhythm and patterns, which sit right next to counting. Together, the six subjects keep kids curious longer and give every child a way in, whether they’re a builder, a drawer or a singer.");
   const others = pageVal("about/mission", "steammOthers", "Creative thinking also grows when children see how other people create. When a child watches a friend solve a problem a different way, or hears how an artist, an engineer or a musician got past a hard spot, they add a new move to their own toolbox. The next time they’re stuck, they have more than one way to try.");
@@ -31302,26 +31302,30 @@ function artInstallHelpHTML(){
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
   window.addEventListener("load", () => {
+    /* Set when this tab presses Refresh on the update banner: only then does the new worker taking over reload the
+       page. A first visit's brand-new worker also takes control (clients.claim), and reloading on that drew every
+       first visit twice: the page appeared, then flashed and appeared again (owner, 2026-11-16). */
+    let refreshAsked = false;
     navigator.serviceWorker.register("/sw.js").then((reg) => {
       /* A worker already waiting from a previous visit that never refreshed. */
-      if (reg.waiting) showUpdateBanner(() => reg.waiting.postMessage("SKIP_WAITING"));
+      if (reg.waiting) showUpdateBanner(() => { refreshAsked = true; reg.waiting.postMessage("SKIP_WAITING"); });
 
       reg.addEventListener("updatefound", () => {
         const fresh = reg.installing;
         if (!fresh) return;
         fresh.addEventListener("statechange", () => {
           if (fresh.state === "installed" && navigator.serviceWorker.controller){
-            showUpdateBanner(() => fresh.postMessage("SKIP_WAITING"));
+            showUpdateBanner(() => { refreshAsked = true; fresh.postMessage("SKIP_WAITING"); });
           }
         });
       });
     }).catch(() => {});
 
-    /* The new worker has taken over - reload once, not on every future
-       activation, so "Refresh" reliably lands on the new build. */
+    /* The new worker has taken over after this tab pressed Refresh - reload once, so "Refresh" reliably lands on
+       the new build. Never on a first visit, and never because another tab refreshed. */
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (reloaded) return;
+      if (reloaded || !refreshAsked) return;
       reloaded = true;
       location.reload();
     });
