@@ -1380,8 +1380,12 @@ addEventListener("message", ev => {
 /* ---------------------------------------------------------------- sound: effects made on the spot; the music is a file ---------------------------------------------------------------- */
 /* the owner's pick (2026-11-17): "Retro Arcade Synthwave Loop 90 BPM, Dark Neon Background" by chrysalyn on Pixabay, a 30 s loop */
 const MUSIC_URL = "/assets/games/hexago/music.mp3";
+/* arcade sound effects (owner, 2026-11-16: "some of the other games could use better sounds. like hexa'Gone"; Pixabay, see
+   docs/image-credits.md). Each plays instead of its made-on-the-spot sound once loaded; the rest stay as they were. */
+const SFX_DIR = "/assets/games/hexago/sfx/";
+const SFX_FILES = { land: "land", gem: "gem", collapse: "collapse", boing: "boing", switch: "switch", complete: "complete", hoverOn: "hover" };
 const Sound = {
-  ctx: null, master: null, music: null, sfx: null, src: null, track: null, loading: null, theme: "city", wantMusic: false, duckGain: 1, noiseBuf: null,
+  ctx: null, master: null, music: null, sfx: null, src: null, track: null, loading: null, samples: {}, theme: "city", wantMusic: false, duckGain: 1, noiseBuf: null,
   unlock(){
     if (!this.ctx){
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -1394,6 +1398,7 @@ const Sound = {
       for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
       this.noiseBuf = buf;
       this.setVolumes(app.save.settings);
+      this.loadSamples();
     }
     if (this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
     if (this.wantMusic && !this.src) this.startMusic(this.theme);
@@ -1419,8 +1424,23 @@ const Sound = {
     g.gain.setValueAtTime(vol, when); g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
     s.connect(f); f.connect(g); g.connect(dest || this.sfx); s.start(when); s.stop(when + dur + 0.05);
   },
+  loadSamples(){
+    Object.entries(SFX_FILES).forEach(([name, file]) => {
+      fetch(SFX_DIR + file + ".mp3").then(r => r.ok ? r.arrayBuffer() : null)
+        .then(b => b ? new Promise((ok, no) => this.ctx.decodeAudioData(b, ok, no)) : null)
+        .then(buf => { if (buf) this.samples[name] = buf; }).catch(() => {});
+    });
+  },
+  playSample(name, vol){
+    const buf = this.samples[name]; if (!buf) return false;
+    const s = this.ctx.createBufferSource(), g = this.ctx.createGain();
+    s.buffer = buf; s.playbackRate.value = 1 + (Math.random() - 0.5) * 0.06;
+    g.gain.value = vol; s.connect(g); g.connect(this.sfx); s.start();
+    return true;
+  },
   play(name, a){
     if (!this.ctx || this.ctx.state !== "running") return;
+    if (this.playSample(name, name === "land" ? 0.55 : name === "gem" && a === 3 ? 1 : 0.8)) return;
     const t = this.ctx.currentTime + 0.005, v = 1 + (Math.random() - 0.5) * 0.06;
     switch (name){
       case "land": this.osc("sine", 170 * v, 62, 0.16, 0.45, t); this.noise(0.06, 0.1, 1800, "lowpass", t); break;

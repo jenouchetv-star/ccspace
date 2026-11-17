@@ -21,6 +21,14 @@ describe("HexaGone! music", () => {
     expect(sound).toContain("if (this.src) return;");
     expect(sound).toMatch(/stopMusic\(keepWant\)\{[^\n]*this\.src\.stop\(\)/);
   });
+  it("plays arcade sound effects for landing, gems, collapsing tiles, trampolines, switches, rescues and a finished level", () => {
+    expect(game).toContain('const SFX_FILES = { land: "land", gem: "gem", collapse: "collapse", boing: "boing", switch: "switch", complete: "complete", hoverOn: "hover" };');
+    for (const f of Object.values({ land: "land", gem: "gem", collapse: "collapse", boing: "boing", switch: "switch", complete: "complete", hoverOn: "hover" }))
+      expect(statSync(new URL("../assets/games/hexago/sfx/" + f + ".mp3", import.meta.url)).size).toBeGreaterThan(2000);
+    expect(sound).toContain("if (this.playSample(name, ");
+    const credits = readFileSync(new URL("../docs/image-credits.md", import.meta.url), "utf8");
+    for (const id of ["357067", "190255", "457507", "454474", "177983", "142971", "153317"]) expect(credits).toContain(id);
+  });
   it("no longer makes its own tune", () => {
     expect(game).not.toContain("const MUSIC = {");
     expect(sound).not.toContain("schedule(){");
