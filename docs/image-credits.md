@@ -7,6 +7,7 @@ Photos from [Unsplash](https://unsplash.com), used under the [Unsplash License](
 | --- | --- | --- | --- |
 | `assets/about/teacher-reading-with-student.jpg` | Business inquiries page | [Woman and child reading in library](https://unsplash.com/photos/7fF0iei80AQ) | Adam Winger |
 | `assets/about/kids-makerspace.jpg` | Our mission page | Children designing and 3D printing in a makerspace (AI-generated with Gemini for this site) | Chike's Creative Space |
+| `assets/books/page-turn.mp3` | Book reader page-turn sound (a sound, not a photo) | [page turn sound effect](https://freesound.org/s/431871/), Creative Commons 0 (public domain), Freesound preview file | stumpbutt |
 | `assets/about/paper-circuit-card.jpg` | Our mission page (From watching to creating) | A boy holds up the paper circuit rocket card he made (AI-generated with Higgsfield for this site) | Chike's Creative Space |
 | `assets/about/bridge-sketch.jpg` | STEAMM Methodology page (Beyond STEM) | A girl sketches a bridge before building it (AI-generated with Higgsfield for this site) | Chike's Creative Space |
 | `assets/about/kids-3d-printer.jpg` | No longer shown (was the Our mission page photo) | [Children gathered around a 3D printer](https://unsplash.com/photos/2fr56H6rgJk) | Adam Winger |

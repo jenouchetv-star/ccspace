@@ -659,7 +659,48 @@
     return papers.join("");
   }
 
-  window.CCS_READER = { esc, bgToCSS, layerToReaderHTML, pageContentHTML, buildPapers };
+  /* A subtle page-turn sound for each flip (owner, 2026-11-16). Sounds made in code
+     came out like static, so this plays a real recording the owner picked:
+     "page turn sound effect" by stumpbutt, https://freesound.org/s/431871/,
+     Creative Commons 0 (public domain, free to use, no credit needed).
+     It plays softer than the recording, from the page lift through the flick,
+     with a quick fade before the room noise, and each turn runs a touch faster
+     or slower so it never sounds copy-pasted. It never stops a page from
+     turning if the browser can't play sound. */
+  const FLIP_SOUND = "/assets/books/page-turn.mp3";
+  let flipCtx = null, flipBytes = null, flipBuf = null;
+  function preloadPageFlip(){
+    if (!flipBytes) flipBytes = fetch(FLIP_SOUND).then(r => r.ok ? r.arrayBuffer() : null).catch(() => null);
+    return flipBytes;
+  }
+  function playPageFlip(){
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!flipCtx) flipCtx = new AC();
+      if (flipCtx.state === "suspended") flipCtx.resume();
+      const ctx = flipCtx;
+      const play = (buf) => {
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.playbackRate.value = 0.96 + Math.random() * 0.08;
+        const vol = ctx.createGain(), t = ctx.currentTime;
+        vol.gain.setValueAtTime(0.6, t);
+        vol.gain.setValueAtTime(0.6, t + 0.55);
+        vol.gain.linearRampToValueAtTime(0, t + 0.72);
+        src.connect(vol); vol.connect(ctx.destination);
+        src.start(t, 0.04);
+        src.stop(t + 0.75);
+      };
+      if (flipBuf){ play(flipBuf); return; }
+      preloadPageFlip()
+        .then(bytes => bytes ? ctx.decodeAudioData(bytes.slice(0)) : null)
+        .then(buf => { if (buf){ flipBuf = buf; play(buf); } })
+        .catch(() => {});
+    } catch (_e) { /* no sound on this device: the page still turns */ }
+  }
+
+  window.CCS_READER = { esc, bgToCSS, layerToReaderHTML, pageContentHTML, buildPapers, playPageFlip, preloadPageFlip };
 })();
 </script>
 
@@ -706,6 +747,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   document.title = story.title || "Story";
   document.getElementById('thumbnail-title').innerHTML = '<b>' + window.CCS_READER.esc(story.title || "Story") + '</b>';
   bookPagesEl.innerHTML = window.CCS_READER.buildPapers(pages);
+  window.CCS_READER.preloadPageFlip();   // fetch the page-turn sound now, so the first turn isn't silent
 
   const papers = document.querySelectorAll('.paper');
   const allPagesBtn = document.getElementById('all-pages-btn');
@@ -752,8 +794,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     flatFaces.forEach((el, idx) => el.classList.toggle('mobile-active', idx === mobileIndex));
     notifyPagePosition();
   }
-  function mobileNext() { if (mobileIndex < flatFaces.length - 1) { nextPageBtn.classList.remove('hint'); showMobilePage(mobileIndex + 1); } }
-  function mobilePrev() { if (mobileIndex > 0) showMobilePage(mobileIndex - 1); }
+  function mobileNext() { if (mobileIndex < flatFaces.length - 1) { nextPageBtn.classList.remove('hint'); window.CCS_READER.playPageFlip(); showMobilePage(mobileIndex + 1); } }
+  function mobilePrev() { if (mobileIndex > 0) { window.CCS_READER.playPageFlip(); showMobilePage(mobileIndex - 1); } }
 
   allPagesBtn.addEventListener('click', openThumbnailView);
   prevPageBtn.addEventListener('click', () => { if (isMobileBook()) mobilePrev(); else goPrevPage(); });
@@ -845,6 +887,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (turning) return false;
     nextPageBtn.classList.remove('hint');
     turning = paper;
+    window.CCS_READER.playPageFlip();
     paper.classList.add('turning');
     move();
     restack();
