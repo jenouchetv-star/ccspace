@@ -221,8 +221,14 @@ describe("joining", () => {
   it("room codes are 4 letters without I or O", () => {
     for (let i = 0; i < 200; i++) expect(M.roomCode(M.seeded(i))).toMatch(/^[A-HJ-NP-Z]{4}$/);
   });
-  it("a player with no name is Player #N, where N is their seat", () => {
-    expect(M.playerName("", 1)).toBe("Player #2");
+  it("on your own device you are \"You\"; on the big screen too, when it's just you and the computer", () => {
+    const player = readFileSync(new URL("../games/matching-suits-player.html", import.meta.url), "utf8");
+    expect(player).toContain('$("who").textContent = "You";');
+    expect(game).toContain('esc(s.local && !phonesHere() ? "You" : s.name)');
+    expect(game).toContain('phonesHere() ? v.name + "\'s cards" : "Your cards"');
+  });
+  it("a player with no name is Player N, where N is their seat (owner, 2026-11-17)", () => {
+    expect(M.playerName("", 1)).toBe("Player 2");
     expect(M.playerName("  Maya  ", 0)).toBe("Maya");
     expect(M.playerName("A very very long name indeed", 0)).toBe("A very very long");
   });

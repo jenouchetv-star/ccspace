@@ -300,7 +300,7 @@ function standings(s){
 }
 const CODE_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 function roomCode(rand){ let c = ""; for (let i = 0; i < 4; i++) c += CODE_LETTERS[Math.floor(rand() * CODE_LETTERS.length)]; return c; }
-function playerName(name, seat){ const n = String(name || "").replace(/\s+/g, " ").trim().slice(0, 16).trim(); return n || "Player #" + (seat + 1); }
+function playerName(name, seat){ const n = String(name || "").replace(/\s+/g, " ").trim().slice(0, 16).trim(); return n || "Player " + (seat + 1); }   /* no name: Player 1, Player 2... (owner, 2026-11-17) */
 /* END pure */
 </script>
 <script type="module">
@@ -317,7 +317,7 @@ const CHARACTERS = ["Chike", "Zech", "Yuna", "Kiyah", "Mateo", "Corey", "Averi",
 function computerName(seats, rand){
   const taken = new Set(seats.map(s => String(s.name).toLowerCase()));
   const free = CHARACTERS.filter(n => !taken.has(n.toLowerCase()));
-  return free.length ? free[Math.floor(rand() * free.length)] : "Player #" + (seats.length + 1);
+  return free.length ? free[Math.floor(rand() * free.length)] : "Player " + (seats.length + 1);
 }
 const SEAT_COLORS = ["#FFD23F", "#8FE3F0", "#C9B6E4", "#B8E3A8"];
 
@@ -527,7 +527,7 @@ function paintSeats(){
     const race = G.phase === "race", turn = (st && st.phase === "play" && st.turn === i) || (race && G.raceWinner === i);
     const count = st ? st.players[i].hand.length : 0;
     const html = s
-      ? '<div class="seat' + (turn ? " turn" : "") + (s.away ? " away" : "") + '"><span class="nm">' + esc(s.name) + (s.bot ? " (computer)" : "") + '</span><span class="ct">' + (race ? raceNote(i) : st ? count + (count === 1 ? " card" : " cards") : s.bot ? "Ready" : s.local ? "On this screen" : s.away ? "Reconnecting" : "Joined") + '</span></div>'
+      ? '<div class="seat' + (turn ? " turn" : "") + (s.away ? " away" : "") + '"><span class="nm">' + esc(s.local && !phonesHere() ? "You" : s.name) + (s.bot ? " (computer)" : "") + '</span><span class="ct">' + (race ? raceNote(i) : st ? count + (count === 1 ? " card" : " cards") : s.bot ? "Ready" : s.local ? "On this screen" : s.away ? "Reconnecting" : "Joined") + '</span></div>'
       : '<div class="seat open"><span class="nm">Open seat</span></div>';
     SEAT_TAGS.push(tag(html, "", spot.pos.clone().add(new THREE.Vector3(0, .5, 0))));
   }
@@ -744,7 +744,7 @@ function lobbyChanged(){
   $("bHere").hidden = here || n >= 4; if (here || n >= 4) $("hereForm").hidden = true;
   chike(n >= 2 ? "point-up" : "wave", n >= 2 ? "Everyone in? Press Start the game! Up to 4 can play: add a computer player if you'd like one more."
     : here ? "You're at the table! Add a computer player, or ask a friend to scan the code, then press Start the game."
-    : "Hi! Scan the code with a phone, tablet or computer to join, or press Play on this screen to play right here. Type your name, or play as Player #" + (n + 1) + "!");
+    : "Hi! Scan the code with a phone, tablet or computer to join, or press Play on this screen to play right here. Type your name, or play as Player " + (n + 1) + "!");
 }
 /* --- playing on this screen (owner, 2026-11-17: "If the player is playing against the robots then they should be able to
    play the game without a phone"; draft docs/mockups/matching-suits-play-here-draft.html). One screen seat per table; its
@@ -773,7 +773,7 @@ function paintTray(){
   if (!v.legal.includes(HERE.sel)) HERE.sel = null;   /* nothing is picked for them: they always choose (owner, 2026-11-17) */
   const covered = phonesHere() && !HERE.peek;
   tray.classList.toggle("wait", play && v.turn !== i);
-  $("trayName").textContent = v.name + "'s cards";
+  $("trayName").textContent = phonesHere() ? v.name + "'s cards" : "Your cards";   /* just you and the computer: it's you (owner) */
   $("trayPile").textContent = "Draw pile: " + v.pile;
   $("trayNote").textContent = G.phase === "race" ? (v.revealed ? (v.heart ? "Your " + cardName(rankOf(v.heart)) + " of hearts is on the table" : "No hearts this time") : "The Heart Race!")
     : !play ? "" : mine ? (v.start ? "Your turn: nothing matches, so start a new rank" : "Your turn: match a rank on the table")
@@ -896,7 +896,7 @@ function turnStarted(){
   const st = G.state, i = st.turn, name = st.players[i].name;
   HERE.peek = false;
   paintSeats(); paintCounts(); tellAll();
-  const here = G.seats[i].local, hi = here ? "Your turn, " + name + "! " : name + ", ";
+  const here = G.seats[i].local, hi = here ? (phonesHere() ? "Your turn, " + name + "! " : "Your turn! ") : name + ", ";
   if (!startsNew(st, i)){
     banner(name + "'s turn: match a rank on the table");
     chike("point", hi + (here ? "Tap a card that matches a rank on the table, then press Drop." : "drop a rank that's already on the table.") + " ALL your cards of that rank go together, then you draw one.");
