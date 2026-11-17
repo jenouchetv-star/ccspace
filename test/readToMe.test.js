@@ -60,8 +60,10 @@ describe("the reader's controls", () => {
   it("has a Read to me button beside All pages", () => {
     expect(reader).toMatch(/<button[^>]*id="read-btn"[\s\S]*?READ TO ME[\s\S]*?<button id="all-pages-btn"/);
   });
-  it("highlights the word being read with a soft yellow marker", () => {
-    expect(reader).toMatch(/\.rw\.now\{[^}]*background:rgba\(242,194,48/);
+  it("highlights the word being read in the same blue as the site's menu (owner, 2026-11-16)", () => {
+    expect(reader).toMatch(/\.rw\{background:linear-gradient\(180deg,transparent 40%,#8FE3F0 40%,#8FE3F0 96%,transparent 96%\)/);
+    expect(reader).toContain(".rw.now{background-size:100% 100%}");
+    expect(site).toContain('.nav__link[aria-current="page"]{ --hl:#8FE3F0;');
   });
   it("wraps the words of every text box so they can be highlighted", () => {
     expect(reader).toContain('class="txt"');
