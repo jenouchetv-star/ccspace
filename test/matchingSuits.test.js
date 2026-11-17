@@ -215,9 +215,10 @@ describe("the table screen", () => {
   });
   it("sends each player only their own hand, sealed so only their device can read it (security review)", () => {
     const tell = game.split("function tell(i){")[1].split("\n}\n")[0];
-    expect(tell).toContain("sealTo(s, { v: ++s.out, seat: i,");
-    expect(tell).toContain("hand: me ? me.hand.slice()");
+    expect(tell).toContain("sealTo(s, Object.assign({ v: ++s.out }, viewFor(i)));");
     expect(tell).not.toContain("send(");
+    const view = game.split("function viewFor(i){")[1].split("\n}\n")[0];
+    expect(view).toContain("hand: me ? me.hand.slice()");
     expect(game).toContain('send({ t: "you", to: s.pk, box: await MSC.seal(key, view) })');
   });
   it("only acts on sealed moves it can open, and never the same one twice", () => {
@@ -225,6 +226,41 @@ describe("the table screen", () => {
     expect(on).toContain('if (p.t !== "s" || !p.box) return;');
     expect(on).toContain("const m = await MSC.open(key, p.box);");
     expect(on).toContain("!(Number(m.n) > (NET.lastN[p.pk] || 0))");
+  });
+});
+
+describe("playing on this screen (owner, 2026-11-17: play against the robots without a phone)", () => {
+  it("the lobby has a Play on this screen button that seats one player at the table itself", () => {
+    expect(game).toContain('<button class="btn sun wide" id="bHere" type="button">+ Play on this screen</button>');
+    expect(game).toContain('G.seats.push({ id: "here", name: playerName($("hereName").value, i), bot: false, local: true });');
+    expect(game).toContain("if (G.phase !== \"lobby\" || hereSeat() >= 0 || G.seats.length >= 4) return;");
+  });
+  it("the screen player's cards go to the tray on this screen, never over the network", () => {
+    const tell = game.split("function tell(i){")[1].split("\n}\n")[0];
+    expect(tell.indexOf("if (s.local) return paintTray();")).toBeLessThan(tell.indexOf("sealTo("));
+  });
+  it("the tray plays by the same rules: Drop, Pass, Shuffle and the Heart Race go through the table's own moves", () => {
+    expect(game).toContain('act(i, { t: "drop", rank });');
+    expect(game).toContain('act(i, { t: "pass" });');
+    expect(game).toContain('$("tShuffle").onclick = () => { const i = hereSeat(); if (i >= 0) doShuffle(i); };');
+    expect(game).toContain("reveal(i); } };");
+  });
+  it("with friends on phones too, the tray hides the cards until tapped, and hides them again each turn", () => {
+    expect(game).toContain("const covered = phonesHere() && !HERE.peek;");
+    expect(game).toMatch(/function turnStarted\(\)\{\n\s+const st = G\.state, i = st\.turn, name = st\.players\[i\]\.name;\n\s+HERE\.peek = false;/);
+  });
+});
+
+describe("the riffle shuffle (owner's pick, 2026-11-17)", () => {
+  const R = new Function(pure + "; return riffle;")();
+  it("cards fall one at a time from each half, alternating, and none are lost", () => {
+    expect(R(["a", "b", "c"], ["x", "y", "z"])).toEqual(["a", "x", "b", "y", "c", "z"]);
+    expect(R(["a", "b", "c"], ["x", "y"])).toEqual(["a", "x", "b", "y", "c"]);
+    expect(R([], ["x"])).toEqual(["x"]);
+  });
+  it("the table splits the deck into two tilted halves, then riffles them together", () => {
+    expect(game).toContain("const order = riffle(all.slice(0, half), all.slice(half))");
+    expect(game).toContain("new THREE.Euler(0, left ? .1 : -.1, left ? -.16 : .16)");
   });
 });
 
