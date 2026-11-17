@@ -214,6 +214,17 @@
   @media (max-width: 520px){ .worlds{grid-template-columns:repeat(2,1fr)} .grades button{height:46px;font-size:17px} }
   /* the two-step start (owner, 2026-11-16): grade first, then the worlds; the real rover as the emblem and real-looking planets */
   .step[hidden]{display:none}
+  /* the saved-game card (owner, 2026-11-16) */
+  .resume{border:2px solid var(--star);border-radius:16px;padding:12px 14px;background:rgba(255,210,63,.07);display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:center;margin:4px 0 12px}
+  .resume[hidden]{display:none}
+  .resume img{width:54px;height:54px}
+  .resume .rk{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--star);font-weight:800}
+  .resume b{display:block;font-size:16px;margin:2px 0}
+  .resume small{display:block;color:var(--soft);font-size:13px;line-height:1.4}
+  .rbar{display:flex;gap:4px;margin-top:7px}.rbar i{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.18)}.rbar i.on{background:var(--star)}
+  .rbtns{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
+  .rbtns .cta{flex:1 1 180px;margin:0}
+  #startP1[hidden],#startP2[hidden]{display:none}
   .grades{flex-wrap:nowrap}
   .snext{width:100%;margin-top:14px;box-sizing:border-box}
   .card .row2{flex-direction:column}
@@ -586,6 +597,11 @@
       <button class="cta blue snext" id="bNext" aria-disabled="true">Next</button>
     </div>
     <div class="step" id="stepWorld" hidden>
+      <div class="resume" id="resumeCard" hidden>
+        <img id="resumePlanet" src="/assets/games/lunar-salvage/planets/pumice.png" alt="">
+        <div><span class="rk">Saved game</span><b id="resumeTitle"></b><small id="resumeNext"></small><div class="rbar" id="resumeBar" aria-hidden="true"></div></div>
+        <div class="rbtns"><button class="cta blue" id="bContinue"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg>Continue where I left off</button><button class="cta line" id="bFresh">Start from the beginning</button></div>
+      </div>
       <p id="startP1">A meteor shower broke our outpost on Pumice Moon. The greenhouse has no power, and the bridge to the spare power cell is folded up.</p>
       <p id="startP2">Drive the repair rover. Use its Arm, its Magnet and its Laser to clear the road, fix the bridge and bring back the power cell. Chike will tell you what he needs next. Scan things to collect Field Notes about real space science.</p>
       <div class="ask">Choose your world</div>
@@ -732,6 +748,9 @@ function mergeSave(raw){
     const st = raw.stars[w.id];
     if (st && typeof st === "object") out.stars[w.id] = { mission: st.mission === true, notes: st.notes === true, quiz: st.quiz === true };
   }
+  const r = raw.resume, rw = r && WORLDS.find(w => w.id === r.world);
+  if (rw && rw.missions.includes(r.mission) && Number.isInteger(r.step) && r.step >= 0 && r.step < 20)
+    out.resume = { world: r.world, mission: r.mission, step: r.step, t: Number(r.t) || 0, notes: Array.isArray(r.notes) ? r.notes.filter(id => NOTES.some(n => n.id === id)) : [], at: Number(r.at) || 0 };
   return out;
 }
 /* this device's save and the site's: keep everything earned on either */
@@ -744,6 +763,8 @@ function combineSaves(a, b){
     const p = x.stars[w.id], q = y.stars[w.id];
     if (p || q) out.stars[w.id] = { mission: !!((p && p.mission) || (q && q.mission)), notes: !!((p && p.notes) || (q && q.notes)), quiz: !!((p && p.quiz) || (q && q.quiz)) };
   }
+  const ra = x.resume, rb = y.resume;
+  if (ra || rb) out.resume = !ra ? rb : !rb ? ra : (rb.at || 0) >= (ra.at || 0) ? rb : ra;
   return out;
 }
 /* the quiz has three sets of questions: 1st grade, 2nd-3rd, 4th-5th */
@@ -1327,7 +1348,8 @@ function pickBonus(onField, last){
 const $ = (id) => document.getElementById(id);
 const ease = (k, dt) => 1 - Math.exp(-k * dt);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-function sfx(name, opts){ if (window.CCSSound) CCSSound.play(name, opts); }
+let RESTORING = false;   /* true while Continue rebuilds a world: no sounds, radio lines, pop-ups or new notes */
+function sfx(name, opts){ if (window.CCSSound && !RESTORING) CCSSound.play(name, opts); }
 if (window.CCSSound) $("soundSlot").appendChild(CCSSound.button({ compact: true, background: "rgba(14,20,38,.6)" }));
 /* real sound effects (owner, 2026-11-16): recordings the owner picked by ear, free CC0 sounds from
    Freesound, trimmed to their best part (sources in docs/image-credits.md). Until a recording loads,
@@ -2381,12 +2403,13 @@ function targets(){
 
 /* ---------- UI: messages ---------- */
 function radio(text, ms){
+  if (RESTORING) return;
   $("radioTxt").textContent = text;
   const c = $("chike"); c.classList.remove("talk"); void c.offsetWidth; c.classList.add("talk");
   G.radioT = (ms || 5200) / 1000;
 }
 let flashT = 0;
-function flash(text){ const f = $("flash"); f.textContent = text; f.classList.add("on"); flashT = 0.7; }
+function flash(text){ if (RESTORING) return; const f = $("flash"); f.textContent = text; f.classList.add("on"); flashT = 0.7; }
 function chipHTML(c){ return '<span class="chip ' + c.tone + '"><i></i>' + c.text + "</span>"; }
 
 /* tags that float over things in the world */
@@ -2414,6 +2437,7 @@ function paintNotesCount(){
   $("bNotes").setAttribute("aria-label", "Field notes, " + got + " of " + all.length + ($("bNotes").classList.contains("fresh") ? ", new note" : ""));
 }
 function learn(id, chips){
+  if (RESTORING) return;
   const n = noteById(id);
   if (!n) return;
   const isNew = !SAVE.notes.includes(id);
@@ -3251,6 +3275,8 @@ $("bStartPhone").onclick = () => { if (!SAVE.grade) return askGrade(); startGame
 $("gradeRow").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); });
 $("bStart").onclick = () => { if (!SAVE.grade) return askGrade(); startGame(); };
 $("bNext").onclick = () => { if (!SAVE.grade) return askGrade(); G.startStep = "world"; paintStart(); const w = document.querySelector("#worldRow .wld.sel") || $("bStart"); w.focus(); };
+$("bContinue").onclick = () => continueGame();
+$("bFresh").onclick = () => { const r = SAVE.resume; SAVE.resume = null; writeSave(); G.pickWorld = r && r.world; startGame(); };
 $("bChangeGrade").onclick = () => { G.startStep = "grade"; paintStart(); const b = document.querySelector('#gradeRow button[aria-pressed="true"]'); if (b) b.focus(); };
 $("bPause").onclick = () => togglePause();
 $("bResume").onclick = () => togglePause(false);
@@ -3300,6 +3326,7 @@ function resetWorld(){
 /* Enter, Space or a controller's A button on the start card: Next on the grade step, Start on the world step */
 function startPress(){
   if (!$("stepGrade").hidden){ if (SAVE.grade) $("bNext").click(); else askGrade(); return; }
+  if (!$("resumeCard").hidden) return continueGame();
   startGame();
 }
 function startGame(){
@@ -3990,6 +4017,7 @@ function frame(now){
     stepGusto(dt);
     stepBoarding(dt);
     if (G.started && !G.done) updateStep();
+    saveResume();
     $("clock").textContent = formatTime(G.t);
   }
   stepBridge(dt); stepWater(dt); stepDust(dt); stepBoulders(dt);
@@ -6293,6 +6321,7 @@ function resetGusto(){
 }
 /* home on Earth: the last card, with every world's stars (draft: docs/mockups/lunar-home-end-draft.png, without the three big stars) */
 function showHomeEnd(){
+  SAVE.resume = null; writeSave();
   closeOv("ovFlight"); document.body.classList.remove("flying");
   G.done = true; G.clockOn = false;
   saveWorldStars(G.world.id);
@@ -6357,6 +6386,157 @@ const START_TEXT = {
   ember: ["Your rocket landed on Ember, a red world with real air. A meteor is about to come down near Averi's base.", "Drill the ice ring for water, put out the fire with the new Hose, then clear the iron meteorite. Averi will tell you what she needs."],
   glacia: ["Your rocket landed on Glacia, an icy world with thin, cold air. The base heater is broken, and a supply rocket is on its way.", "Heat metal blocks with the Laser and carry them to the heater, then bring in the package. Yuna will tell you what she needs. Scan things to collect Field Notes."]
 };
+/* ---------- save and continue (owner, 2026-11-16: "auto save where they left off on the checklist, but give them the
+   option to continue where they left off or start from the beginning") ----------
+   Each time a checklist step or mission changes, SAVE.resume remembers the world, mission, step, time and Field Notes.
+   Continue rebuilds that world as it was: every finished step's result is put back (panel in the bin, bridge level,
+   mast standing...) and the player picks up at the start of the step they were on. While rebuilding, sounds, radio
+   lines and pop-ups stay quiet (RESTORING is declared up by sfx). */
+const RESUME = { last: "" };
+function saveResume(){
+  if (RESTORING || CT.on || !G.started || G.done || G.landing || FL.on || !G.world || !MISSIONS[G.mission]) return;
+  const key = G.world.id + "|" + G.mission + "|" + G.step;
+  if (key === RESUME.last) return;
+  RESUME.last = key;
+  SAVE.resume = { world: G.world.id, mission: G.mission, step: G.step, t: Math.round(G.t), notes: [...G.notes], at: Date.now() };
+  writeSave();
+}
+/* put a part straight into its finished spot, the way the game's own snapping does */
+function placeNow(p, id){
+  if (!p) return false;
+  const t = targets().find(q => q.id === id); if (!t) return false;
+  snapTo(p, t); p.x = t.x; p.y = t.y; p.z = t.z; if (t.yaw != null) p.yaw = t.yaw;
+  finishSnap(p);
+  return true;
+}
+function putRover(x, z, yaw){ Object.assign(rover, { x, z, yaw: yaw || 0, v: 0 }); rover.y = groundHeight(x, z); camInit = false; }
+function useSpot(sp){ if (!sp) return; sp.used = true; sp.ring.visible = false; sp.hole.visible = sp.gives !== "footing" && sp.gives !== "water"; }
+function freeEnergyRock(sp){
+  const free = parts.find(p => p.type === "energy" && p.state === "free"); if (free) return free;
+  const p = addPart("energy", sp.x + 1.2, sp.z, 0); p.state = "free"; p.y = groundHeight(p.x, p.z) + p.half; fixColors(p.g); return p;
+}
+function satRacked(n){ for (let i = SAT.n; i < n; i++){ const sp = SAT.spots[i] || SAT.spots[0]; useSpot(sp); placeNow(freeEnergyRock(sp), "rack"); } }
+function heatRacked(n){ while (GLACIA.n < n){ const b = parts.find(p => p.type === "heat" && p.state !== "fixed"); if (!b || !placeNow(b, "heater")) break; } }
+function meteorsBinned(n){ while (EMBER.binN < n){ const m = parts.find(p => p.type === "meteor" && p.state !== "fixed"); if (!m || !placeNow(m, "ebin")) break; } }
+/* what finishing each step leaves behind, mission by mission, in checklist order */
+const RESTORE = {
+  repair: [
+    () => { G.flags.approach = true; },
+    () => placeNow(PANEL, "bay"),
+    () => { lever.pulled = true; lever.grabbed = false; lever.a = 0.95; bridge.state = "sag"; bridgeT = 0; },
+    () => placeNow(WEDGE, "slot"),
+    () => { G.flags.crossed = true; },
+    () => { const b = BOULDERS.find(q => q.inside === CELL && !q.broken); if (b) breakBoulder(b); },
+    () => { G.bedItem = null; placeNow(CELL, "bed"); },
+    () => { putRover(PLACES.socket.x + 3.2, PLACES.socket.z - 1.6, Math.PI / 2); },
+    () => { G.bedItem = null; placeNow(CELL, "socket"); },
+    () => { G.testT = 6.5; stepTest(0.01); }
+  ],
+  satellite: [
+    () => { const sp = SAT.spots[0]; useSpot(sp); freeEnergyRock(sp); },
+    () => satRacked(1),
+    () => satRacked(3),
+    () => { SAT.t = 3.1; stepSat(0.01); }
+  ],
+  heat: [
+    () => { G.flags.heat1 = true; },
+    () => heatRacked(1),
+    () => heatRacked(3),
+    () => { GLACIA.warmT = 4.1; stepGlacia(0.01); }
+  ],
+  supply: [
+    () => { openHatch(); SUPPLY.openT = 0.999; stepSupply(0.05); },
+    () => { G.bedItem = null; placeNow(parts.find(p => p.type === "package"), "bed"); },
+    () => { putRover(GPLACES.drop.x + 3, GPLACES.drop.z - 3, 0); },
+    () => { G.bedItem = null; placeNow(parts.find(p => p.type === "package"), "drop"); }
+  ],
+  meteor: [
+    () => { G.water = 1; G.flags.water = true; },
+    () => { EMBER.fires.forEach(f => { f.hp = 0; f.flames.visible = false; }); },
+    () => meteorsBinned(1),
+    () => meteorsBinned(3)
+  ],
+  beacon: [
+    () => { GUSTO.footing = true; useSpot(drillSpots.find(s => s.gives === "footing")); GUSTO.showTower(); },
+    () => { const b = BOULDERS.find(q => !q.broken); if (b) breakBoulder(b); },
+    () => placeNow(parts.find(p => p.type === "mast"), "footing"),
+    () => placeNow(parts.find(p => p.type === "wedge"), "gbrace"),
+    () => { GUSTO.dirt = 0; GUSTO.dust.material.opacity = 0; },
+    () => placeNow(parts.find(p => p.type === "energy"), "gbat")
+  ],
+  board: [
+    () => { G.flags.quiz = true; },
+    () => { R.group.visible = false; G.flags.inRocket = true; G.canLaunch = true; $("bLaunch").hidden = false; ROCKET.hinge.rotation.z = ROCKET.CLOSED; putRover(ROCKET.bay.x, ROCKET.bay.z, Math.PI / 2); },
+    () => {}
+  ]
+};
+/* start a world's later mission, the quiet way (the first one is set by the world itself) */
+function beginMission(m){
+  if (G.mission === m) return;
+  if (m === "satellite") startSatellite();
+  else if (m === "supply"){ startSupply(); SUPPLY.landT = 4; stepSupply(0.01); }
+  else if (m === "board") startBoard();
+  else { G.mission = m; G.step = 0; }
+}
+/* is this saved spot something we can rebuild? */
+function resumable(r){
+  const w = r && worldById(r.world);
+  return !!(w && w.missions.includes(r.mission) && SAVE.reached.includes(r.world) && MISSIONS[r.mission] && Number.isInteger(r.step) && r.step >= 0 && r.step < MISSIONS[r.mission].steps.length);
+}
+function continueGame(){
+  const r = SAVE.resume;
+  if (!resumable(r)) return startGame();
+  if (G.started) return;
+  if (!SAVE.grade) return askGrade();
+  const w = worldById(r.world);
+  RESTORING = true;
+  try {
+    if (r.world !== G.world.id) enterWorld(r.world);
+    resetCurrentWorld();
+    /* the rocket has already landed: no landing scene */
+    ROCKET.g.position.y = 0; ROCKET.hinge.rotation.z = ROCKET.OPEN; flameOn(false); R.group.visible = true;
+    putRover(PLACES.start.x, PLACES.start.z, 0);
+    if (r.world === "ember"){ EMBER.strikeT = -1; if (r.mission === "meteor" && r.step === 0) emberArrive(); else emberAfterStrike(); }
+    for (const m of w.missions){
+      beginMission(m);
+      const steps = MISSIONS[m].steps, upto = m === r.mission ? r.step : steps.length;
+      for (let i = 0; i < upto; i++){ RESTORE[m][i](); G.flags[steps[i].flag] = true; }
+      if (m === r.mission) break;
+    }
+    /* across the bridge for the boulder and the cell */
+    if (r.mission === "repair" && r.step >= 5 && r.step <= 7) putRover(PLACES.far.x, PLACES.far.z, 0);
+    G.notes = new Set(r.notes || []);
+    G.t = r.t || 0;
+  } finally { RESTORING = false; }
+  G.started = true; G.clockOn = true; G.done = false;
+  RESUME.last = "";
+  closeOv("ovStart");
+  buildDash(); renderObjective(); updateStep(); paintNotesCount(); sendPhoneState();
+  sfx("start");
+  const st = MISSIONS[G.mission] && MISSIONS[G.mission].steps[G.step];
+  radio("Welcome back to " + w.name + "! " + (st ? st.text : ""), 7000);
+}
+/* "2 hours ago" */
+function agoText(at){
+  const s = Math.max(0, (Date.now() - (at || Date.now())) / 1000);
+  if (s < 90) return "just now";
+  if (s < 3600) return Math.round(s / 60) + " minutes ago";
+  if (s < 86400 * 1.5){ const h = Math.round(s / 3600); return h + (h === 1 ? " hour" : " hours") + " ago"; }
+  const d = Math.round(s / 86400); return d + (d === 1 ? " day" : " days") + " ago";
+}
+/* the saved-game card on the start screen */
+function paintResume(){
+  const box = $("resumeCard"), r = SAVE.resume, ok = resumable(r) && !G.started;
+  box.hidden = !ok;
+  $("startP1").hidden = $("startP2").hidden = ok;
+  if (!ok) return;
+  const w = worldById(r.world), M = MISSIONS[r.mission], n = M.steps.length, st = M.steps[r.step];
+  $("resumePlanet").src = "/assets/games/lunar-salvage/planets/" + r.world + ".png";
+  $("resumeTitle").textContent = w.name + ": step " + (r.step + 1) + " of " + n;
+  $("resumeNext").textContent = "Next: " + st.text + " Saved " + agoText(r.at) + ".";
+  $("resumeBar").innerHTML = M.steps.map((_, i) => '<i class="' + (i < r.step ? "on" : "") + '"></i>').join("");
+  $("bFresh").textContent = "Start " + w.name + " from the beginning";
+}
 function paintStart(){
   const pk = G.pickWorld || furthestWorld();
   if (!START_TEXT.pumice) START_TEXT.pumice = [$("startP1").textContent, $("startP2").textContent];
@@ -6370,6 +6550,7 @@ function paintStart(){
   $("bChangeGrade").hidden = !onWorlds;
   $("bNext").setAttribute("aria-disabled", ready ? "false" : "true");
   $("gradeChip").textContent = ready ? ["1st", "2nd", "3rd", "4th", "5th"][SAVE.grade - 1] + " grade" : "";
+  paintResume();
   for (const id of ["bStart", "bStartPhone"]) $(id).setAttribute("aria-disabled", ready ? "false" : "true");
   const row = $("worldRow"); row.innerHTML = "";
   for (const w of WORLDS){
