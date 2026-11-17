@@ -129,6 +129,8 @@ const MSC = {
   ALG: { name: "ECDH", namedCurve: "P-256" },
   pair(){ return crypto.subtle.generateKey(MSC.ALG, true, ["deriveKey"]); },
   async pub(kp){ return MSC.b64(await crypto.subtle.exportKey("raw", kp.publicKey)); },
+  /* a short fingerprint of the table's key, carried in the QR link so a scanning device trusts only the real table */
+  async fp(pubB64){ const h = await crypto.subtle.digest("SHA-256", MSC.unb64(pubB64)); return MSC.b64(h.slice(0, 12)).replace(/\+/g, "-").replace(/\//g, "_"); },
   async key(priv, pubB64){
     const pk = await crypto.subtle.importKey("raw", MSC.unb64(pubB64), MSC.ALG, false, []);
     return crypto.subtle.deriveKey({ name: "ECDH", public: pk }, priv, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
@@ -144,7 +146,7 @@ const MSC = {
   }
 };
 /* who I am at this table: my key pair is kept on this device, so reopening the link puts me back in my seat */
-const P = { code: "", pk: "", kp: null, key: null, hk: "", hostWait: null, n: 0, lastV: 0, ch: null, sb: null, id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"), view: null, sel: null, heard: false, wasTurn: false };
+const P = { code: "", fp: "", pk: "", kp: null, key: null, hk: "", hostWait: null, n: 0, lastV: 0, ch: null, sb: null, id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"), view: null, sel: null, heard: false, wasTurn: false };
 function store(k, v){ try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (_e) {} }
 function load(k){ try { return localStorage.getItem(k); } catch (_e){ return null; } }
 function show(v){ ["vJoin", "vWait", "vRace", "vPlay", "vOver"].forEach(id => $(id).hidden = id !== v); }
@@ -185,6 +187,7 @@ async function connect(code){
 }
 async function join(rejoin){
   const code = $("code").value.replace(/[^a-z]/gi, "").toUpperCase();
+  if (code !== qr) P.fp = "";   /* a typed code for a different room has no fingerprint to check */
   if (code.length !== 4){ $("joinErr").hidden = false; $("joinErr").textContent = "The room code is 4 letters. It's on the big screen."; return; }
   if (!window.crypto || !crypto.subtle){ $("joinErr").hidden = false; $("joinErr").textContent = "This browser can't join privately. Try another browser."; return; }
   P.code = code; P.hk = ""; P.key = null; P.lastV = 0;
@@ -206,7 +209,14 @@ $("code").addEventListener("input", (e) => { e.target.value = e.target.value.rep
 [$("code"), $("name")].forEach(el => el.addEventListener("keydown", (e) => { if (e.key === "Enter") $("bJoin").click(); }));
 
 async function onMsg(p){
-  if (p.t === "host"){ if (!P.hk && typeof p.hk === "string"){ P.hk = p.hk; if (P.hostWait){ const w = P.hostWait; P.hostWait = null; w(P.hk); } } return; }
+  if (p.t === "host"){
+    if (P.hk || typeof p.hk !== "string") return;
+    /* scanned from the QR code: only the table whose key matches the link's fingerprint counts */
+    if (P.fp && P.fp !== await MSC.fp(p.hk).catch(() => "")) return;
+    if (P.hk) return;
+    P.hk = p.hk; if (P.hostWait){ const w = P.hostWait; P.hostWait = null; w(P.hk); }
+    return;
+  }
   if (p.t === "closed"){ show("vWait"); $("waitMsg").textContent = "The table screen closed. Join again when it's back."; return; }
   if (!P.pk || p.to !== P.pk) return;
   P.heard = true;
@@ -298,6 +308,7 @@ addEventListener("pagehide", () => { if (P.pk) post({ t: "bye", pk: P.pk }); });
 
 /* opened from the QR code: the room is in the link; if I sat at this table before, rejoin my seat */
 const qs = new URLSearchParams(location.search), qr = (qs.get("room") || "").replace(/[^a-z]/gi, "").toUpperCase().slice(0, 4);
+const qk = qs.get("k") || ""; if (/^[A-Za-z0-9_-]{16}$/.test(qk)) P.fp = qk;
 $("name").value = load("ms-name") || "";
 if (qr){ $("code").value = qr; if (load("ms-key-" + qr)) join(true); else $("name").focus(); }
 else $("code").focus();

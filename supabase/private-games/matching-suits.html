@@ -533,6 +533,8 @@ const MSC = {
   ALG: { name: "ECDH", namedCurve: "P-256" },
   pair(){ return crypto.subtle.generateKey(MSC.ALG, true, ["deriveKey"]); },
   async pub(kp){ return MSC.b64(await crypto.subtle.exportKey("raw", kp.publicKey)); },
+  /* a short fingerprint of the table's key, carried in the QR link so a scanning device trusts only the real table */
+  async fp(pubB64){ const h = await crypto.subtle.digest("SHA-256", MSC.unb64(pubB64)); return MSC.b64(h.slice(0, 12)).replace(/\+/g, "-").replace(/\//g, "_"); },
   async key(priv, pubB64){
     const pk = await crypto.subtle.importKey("raw", MSC.unb64(pubB64), MSC.ALG, false, []);
     return crypto.subtle.deriveKey({ name: "ECDH", public: pk }, priv, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
@@ -563,10 +565,10 @@ function openRoom(code){
     ch.subscribe((s) => { if (s === "SUBSCRIBED"){ clearTimeout(to); ok({ ch, taken: () => other }); } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT"){ clearTimeout(to); no(new Error(s)); } });
   }));
 }
-function joinUrl(){ return new URL("/games/matching-suits-player.html?room=" + G.code, document.baseURI).href; }
+function joinUrl(){ return new URL("/games/matching-suits-player.html?room=" + G.code + "&k=" + NET.fp, document.baseURI).href; }
 async function makeRoom(){
   if (!window.crypto || !crypto.subtle){ $("qr").textContent = "This browser can't make a private room. You can still play with robots."; return false; }
-  NET.kp = await MSC.pair(); NET.hk = await MSC.pub(NET.kp); NET.keys = {}; NET.lastN = {};
+  NET.kp = await MSC.pair(); NET.hk = await MSC.pub(NET.kp); NET.fp = await MSC.fp(NET.hk); NET.keys = {}; NET.lastN = {};
   const rand = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
   for (let i = 0; i < 6; i++){
     const code = roomCode(rand);
