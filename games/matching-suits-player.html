@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Matching Suits: Your Cards</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+<script src="game-sound.js"></script>
+<!--
+  Matching Suits: a player's own cards, on a phone, tablet or another computer (owner's PRD, 2026-11-17).
+  Joins the table screen's room over Supabase Realtime broadcast (channel "matchingsuits-CODE"); see
+  supabase/private-games/matching-suits.html for the messages. No account or password: a name, or Player #N.
+-->
+<style>
+  :root{ --ink:#1E2226; --sun:#FFD23F; --cream:#FFFBF3; --plum:#7A4A86; --red:#D7263D; --slate:#2B3445; --felt:#0f8f86; }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:radial-gradient(ellipse at 50% 0%,#3a1a7a 0,#1a0b3a 60%,#12082a 100%);color:var(--cream);font-family:Nunito,system-ui,sans-serif}
+  body{min-height:100dvh;display:flex;flex-direction:column}
+  header{display:flex;align-items:center;gap:10px;padding:14px 16px 6px}
+  header img{height:34px}
+  header b{font-family:"Baloo 2";font-weight:800;color:var(--sun);font-size:21px}
+  header .sp{flex:1}
+  header .pill{background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:4px 10px;font-weight:900;font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:12px;padding:10px 16px calc(16px + env(safe-area-inset-bottom));max-width:560px;width:100%;margin:0 auto}
+  [hidden]{display:none!important}
+  label{font-weight:900;font-size:13px;color:#d9ccff;letter-spacing:.06em;text-transform:uppercase}
+  input{width:100%;background:var(--cream);color:var(--ink);border:3px solid var(--ink);border-radius:14px;padding:12px 14px;font:900 22px Nunito}
+  input.code{letter-spacing:.3em;text-align:center;font-family:"Baloo 2";font-size:34px;color:var(--plum);text-transform:uppercase}
+  input:focus{outline:3px solid var(--sun);outline-offset:2px}
+  .hint{font-size:13px;font-weight:700;color:#bfb0e6;margin-top:-6px}
+  .big{width:100%;font:900 20px Nunito;background:var(--sun);color:var(--ink);border:3px solid var(--ink);border-radius:18px;padding:14px;box-shadow:4px 4px 0 var(--ink);cursor:pointer}
+  .big.ghost{background:var(--cream)}
+  .big:disabled{opacity:.45;cursor:default;box-shadow:none}
+  .big:focus-visible{outline:3px solid var(--sun);outline-offset:3px}
+  .msg{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.2);border-radius:16px;padding:14px;font-weight:800;font-size:17px;line-height:1.4;text-align:center}
+  .msg.err{border-color:#ff8a9a;color:#ffd6dc}
+  .turn{background:var(--sun);color:var(--ink);border:3px solid var(--ink);border-radius:14px;padding:10px 12px;font-weight:900;font-size:18px;text-align:center}
+  .turn.wait{background:rgba(0,0,0,.35);color:#fff;border-color:rgba(255,255,255,.25)}
+  .table{background:var(--felt);border:4px solid #8a4a22;border-radius:16px;padding:10px 12px;display:flex;align-items:center;gap:12px;font-weight:900;font-size:15px;box-shadow:inset 0 0 20px rgba(0,0,0,.3)}
+  .hand{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:6px 0}
+  .card{position:relative;width:76px;height:108px;border-radius:11px;background:var(--cream);border:3px solid var(--ink);color:var(--slate);display:flex;flex-direction:column;justify-content:space-between;padding:4px 6px;
+    font-family:"Baloo 2";font-weight:800;line-height:1;box-shadow:0 4px 0 rgba(0,0,0,.35);transition:transform .25s cubic-bezier(.2,.7,.2,1),filter .25s;cursor:pointer;user-select:none}
+  .card.red{color:var(--red)}
+  .card .r{font-size:24px}.card .r.b{align-self:flex-end;transform:rotate(180deg)}
+  .card svg{width:32px;height:32px;align-self:center;fill:currentColor}
+  .card.sel{transform:translateY(-12px);box-shadow:0 0 0 4px var(--sun),0 0 22px var(--sun)}
+  .card.off{filter:grayscale(.85) brightness(.7);cursor:default}
+  .card.sm{width:44px;height:62px;padding:2px 4px;cursor:default;box-shadow:none}.card.sm .r{font-size:15px}.card.sm svg{width:18px;height:18px}
+  .card.bigc{width:120px;height:170px;margin:6px auto}.card.bigc .r{font-size:34px}.card.bigc svg{width:52px;height:52px}
+  .acts{display:flex;gap:10px;margin-top:auto}
+  .acts .big{flex:1}
+  .shuf{width:100%;font:900 16px Nunito;background:transparent;color:var(--cream);border:2px dashed rgba(255,255,255,.45);border-radius:14px;padding:10px;cursor:pointer}
+  .shuf:disabled{opacity:.45;cursor:default}
+  .shuf:focus-visible{outline:3px solid var(--sun);outline-offset:3px}
+  .count{text-align:center;font-weight:800;color:#d9ccff;font-size:14px}
+  .place{font-family:"Baloo 2";font-weight:800;font-size:44px;color:var(--sun);text-align:center;line-height:1.1}
+  @media (prefers-reduced-motion: reduce){ .card{transition:none} }
+</style>
+</head>
+<body>
+<header><img src="/assets/brand/logo.webp" alt="Chike's Creative Space"><b>Matching Suits</b><span class="sp"></span><span class="pill" id="who" hidden></span><span id="soundSlot"></span></header>
+<main>
+  <!-- join -->
+  <section id="vJoin">
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <label for="code">Room code</label>
+      <input id="code" class="code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" placeholder="ABCD">
+      <div class="hint">The 4 letters on the big screen. Scanning the code fills this in.</div>
+      <label for="name">Your name</label>
+      <input id="name" maxlength="16" autocomplete="off" placeholder="Leave empty to be Player #2, #3...">
+      <div class="hint">Your first name or a nickname, or leave it empty to be Player and your seat number.</div>
+      <button class="big" id="bJoin" type="button">Join the table</button>
+      <div class="msg err" id="joinErr" hidden></div>
+    </div>
+  </section>
+  <!-- waiting -->
+  <section id="vWait" hidden><div class="msg" id="waitMsg">Joining the table...</div></section>
+  <!-- the Heart Race -->
+  <section id="vRace" hidden>
+    <div class="turn">The Heart Race!</div>
+    <div class="msg">Your highest heart decides who goes first.</div>
+    <div id="heartCard"></div>
+    <button class="big" id="bReveal" type="button">Show my highest heart</button>
+  </section>
+  <!-- playing -->
+  <section id="vPlay" hidden style="display:flex;flex-direction:column;gap:12px;flex:1">
+    <div class="turn" id="turnLine"></div>
+    <div class="table" id="tableLine"></div>
+    <div class="hand" id="hand" aria-label="Your cards"></div>
+    <div class="count" id="handHelp"></div>
+    <button class="shuf" id="bShuffle" type="button" disabled>Shuffle the draw deck (once a game)</button>
+    <div class="acts"><button class="big" id="bDrop" type="button" disabled>Drop</button><button class="big ghost" id="bPass" type="button" disabled>Pass</button></div>
+  </section>
+  <!-- the end -->
+  <section id="vOver" hidden>
+    <div class="place" id="placeLine"></div>
+    <div class="msg" id="overMsg"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const SB_URL = "https://wdctkfhwygwwulipwnys.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
+const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const NAMES = { A: "Aces", J: "Jacks", Q: "Queens", K: "Kings" };
+const ONE = { A: "Ace", J: "Jack", Q: "Queen", K: "King" };
+const plural = (r) => NAMES[r] || r + "s";
+const SUITS = {
+  h: "M12 21s-7.5-4.6-9.6-9.2C.7 8 3 4 6.8 4c2.2 0 3.6 1.2 5.2 3 1.6-1.8 3-3 5.2-3C21 4 23.3 8 21.6 11.8 19.5 16.4 12 21 12 21z",
+  d: "M12 2l8 10-8 10-8-10z",
+  c: "M12 3a4 4 0 0 1 3.6 5.8A4 4 0 1 1 13.5 15l1.5 6H9l1.5-6a4 4 0 1 1-2.1-6.2A4 4 0 0 1 12 3z",
+  s: "M12 2s8 6.5 8 11a4 4 0 0 1-6.5 3.1L15 21H9l1.5-4.9A4 4 0 0 1 4 13c0-4.5 8-11 8-11z"
+};
+const rankOf = (c) => c.slice(0, -1), suitOf = (c) => c.slice(-1);
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function cardHTML(c, cls, attrs){ const r = rankOf(c), s = suitOf(c); return '<div class="card' + (s === "h" || s === "d" ? " red" : "") + (cls ? " " + cls : "") + '"' + (attrs || "") + '><span class="r">' + r + '</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + SUITS[s] + '"/></svg><span class="r b">' + r + '</span></div>'; }
+const sfx = (name, opts) => { if (window.CCSSound) CCSSound.play(name, opts); };
+if (window.CCSSound) $("soundSlot").appendChild(CCSSound.button({ compact: true, background: "rgba(0,0,0,.4)" }));
+
+/* who I am at this table: kept on this device, so reopening the link puts me back in my seat */
+const P = { code: "", pid: "", ch: null, sb: null, id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"), view: null, sel: null, heard: false, wasTurn: false };
+function store(k, v){ try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (_e) {} }
+function load(k){ try { return localStorage.getItem(k); } catch (_e){ return null; } }
+function show(v){ ["vJoin", "vWait", "vRace", "vPlay", "vOver"].forEach(id => $(id).hidden = id !== v); }
+function loadScript(src){ return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error("load")); document.head.appendChild(s); }); }
+async function sb(){
+  if (P.sb) return P.sb;
+  if (!window.supabase){ try { await loadScript("/assets/vendor/supabase.js"); } catch (_e){ await loadScript("https://unpkg.com/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"); } }
+  P.sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, realtime: { params: { eventsPerSecond: 20 } } });
+  return P.sb;
+}
+function send(p){ if (!P.ch) return; p.i = P.id; p.pid = P.pid; try { const r = P.ch.send({ type: "broadcast", event: "m", payload: p }); if (r && r.catch) r.catch(() => {}); } catch (_e) {} }
+async function connect(code){
+  const client = await sb();
+  if (P.ch){ try { await client.removeChannel(P.ch); } catch (_e) {} P.ch = null; }
+  return new Promise((ok, no) => {
+    const ch = client.channel("matchingsuits-" + code, { config: { broadcast: { self: false } } });
+    ch.on("broadcast", { event: "m" }, (e) => onMsg(e.payload || {}));
+    const to = setTimeout(() => no(new Error("timeout")), 9000);
+    ch.subscribe((s) => { if (s === "SUBSCRIBED"){ clearTimeout(to); P.ch = ch; ok(); } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT"){ clearTimeout(to); no(new Error(s)); } });
+  });
+}
+async function join(rejoin){
+  const code = $("code").value.replace(/[^a-z]/gi, "").toUpperCase();
+  if (code.length !== 4){ $("joinErr").hidden = false; $("joinErr").textContent = "The room code is 4 letters. It's on the big screen."; return; }
+  P.code = code; P.pid = load("ms-pid-" + code) || Array.from(crypto.getRandomValues(new Uint32Array(3))).map(n => n.toString(36)).join("");
+  store("ms-pid-" + code, P.pid);
+  const name = $("name").value.trim(); store("ms-name", name || null);
+  show("vWait"); $("waitMsg").textContent = "Joining the table...";
+  try { await connect(code); }
+  catch (_e){ show("vJoin"); $("joinErr").hidden = false; $("joinErr").textContent = "Couldn't reach the table. Check the internet and try again."; return; }
+  P.heard = false;
+  send({ t: rejoin ? "hi" : "join", name });
+  if (rejoin) send({ t: "join", name });
+  setTimeout(() => { if (!P.heard){ show("vJoin"); $("joinErr").hidden = false; $("joinErr").textContent = "No table answered with code " + code + ". Check the letters on the big screen."; } }, 7000);
+}
+$("bJoin").onclick = () => { sfx("click"); join(false); };
+$("code").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/[^a-z]/gi, "").toUpperCase().slice(0, 4); });
+[$("code"), $("name")].forEach(el => el.addEventListener("keydown", (e) => { if (e.key === "Enter") $("bJoin").click(); }));
+
+function onMsg(p){
+  if (p.t === "closed"){ show("vWait"); $("waitMsg").textContent = "The table screen closed. Join again when it's back."; return; }
+  if (p.pid !== P.pid) return;
+  P.heard = true;
+  if (p.t === "full"){ show("vJoin"); $("joinErr").hidden = false; $("joinErr").textContent = "That table is full (4 players). Ask for the next game!"; return; }
+  if (p.t === "late"){ show("vWait"); $("waitMsg").textContent = "This game has already started. You can join the next one when they press New players."; return; }
+  if (p.t === "you") paint(p);
+}
+function paint(v){
+  P.view = v;
+  $("who").hidden = false; $("who").textContent = v.name;
+  if (v.phase === "lobby"){ show("vWait"); $("waitMsg").innerHTML = "You're in, <b>" + esc(v.name) + "</b>! Waiting for everyone to join. The game starts on the big screen."; return; }
+  if (v.phase === "race"){
+    show("vRace");
+    $("heartCard").innerHTML = v.revealed ? (v.heart ? cardHTML(v.heart, "bigc") : '<div class="msg">No hearts this time!</div>') : '<div class="msg">Tap below to show it on the big screen.</div>';
+    $("bReveal").disabled = v.revealed;
+    $("bReveal").textContent = v.revealed ? "Shown! Watch the big screen" : "Show my highest heart";
+    return;
+  }
+  if (v.phase === "over"){
+    show("vOver");
+    const n = ["", "1st", "2nd", "3rd", "4th"][v.place] || "";
+    $("placeLine").textContent = v.place === 1 ? "You won!" : "You came " + n;
+    $("overMsg").textContent = v.place === 1 ? "No cards left. Great matching!" : v.winner + " won this time. Play again from the big screen!";
+    if (v.place === 1) sfx("win");
+    return;
+  }
+  /* playing */
+  show("vPlay"); $("vPlay").hidden = false;
+  const mine = v.turn === v.seat;
+  if (mine && !P.wasTurn) sfx("start", { volume: .6 });
+  P.wasTurn = mine;
+  $("turnLine").className = "turn" + (mine ? "" : " wait");
+  $("turnLine").textContent = mine ? (v.active ? (v.legal.length ? "Your turn! Drop all your " + plural(v.active) : "Your turn! No " + plural(v.active) + ": tap Pass") : "Your turn! Pick any card to start a chain") : v.turnName + "'s turn";
+  $("tableLine").innerHTML = v.active ? '<span>On the table:</span><span>' + plural(v.active) + ', ' + v.onTable + ' of 4</span><span style="margin-left:auto">Pile: ' + v.pile + '</span>' : '<span>New chain: any rank can start it</span><span style="margin-left:auto">Pile: ' + v.pile + '</span>';
+  if (!v.legal.includes(P.sel)) P.sel = v.legal.length === 1 ? v.legal[0] : null;
+  paintHand();
+}
+function paintHand(){
+  const v = P.view, can = v.turn === v.seat && !v.busy;
+  $("hand").innerHTML = v.hand.map(c => { const r = rankOf(c), ok = can && v.legal.includes(r); return cardHTML(c, (P.sel === r ? "sel" : "") + (can && !ok ? " off" : ""), ' role="button" tabindex="' + (ok ? 0 : -1) + '" data-r="' + r + '" aria-label="' + (ONE[r] || r) + ' of ' + { h: "hearts", d: "diamonds", c: "clubs", s: "spades" }[suitOf(c)] + '"'); }).join("");
+  const n = P.sel ? v.hand.filter(c => rankOf(c) === P.sel).length : 0;
+  $("bDrop").disabled = !can || !P.sel;
+  $("bDrop").textContent = P.sel ? "Drop " + (n === 1 ? "my " + (ONE[P.sel] || P.sel) : n + " " + plural(P.sel)) : "Drop";
+  $("bPass").disabled = !can || !v.canPass;
+  /* each player can reshuffle the draw deck once a game, on their turn (owner, 2026-11-17) */
+  $("bShuffle").disabled = !can || !v.canShuffle;
+  $("bShuffle").textContent = v.shuffled ? "Shuffle used" : "Shuffle the draw deck (once a game)";
+  $("handHelp").textContent = v.hand.length + (v.hand.length === 1 ? " card" : " cards") + (can && !v.canPass && !P.sel ? ". Tap a card: all your cards of that rank go together." : "");
+}
+$("hand").addEventListener("click", (e) => {
+  const el = e.target.closest(".card"); if (!el || !P.view) return;
+  const r = el.dataset.r, v = P.view;
+  if (v.turn !== v.seat || !v.legal.includes(r)) return;
+  P.sel = r; sfx("click"); paintHand();
+});
+$("hand").addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.closest(".card")){ e.preventDefault(); e.target.click(); } });
+$("bDrop").onclick = () => { if (!P.sel) return; sfx("place"); send({ t: "drop", rank: P.sel }); P.sel = null; $("bDrop").disabled = true; $("bPass").disabled = true; };
+$("bPass").onclick = () => { sfx("tick"); send({ t: "pass" }); $("bPass").disabled = true; };
+$("bShuffle").onclick = () => { sfx("flip"); send({ t: "shuffle" }); $("bShuffle").disabled = true; };
+$("bReveal").onclick = () => { sfx("flip"); send({ t: "reveal" }); $("bReveal").disabled = true; };
+/* coming back to the page: say hello again so the table resends my cards */
+document.addEventListener("visibilitychange", () => { if (!document.hidden && P.ch) send({ t: "hi" }); });
+addEventListener("pagehide", () => send({ t: "bye" }));
+
+/* opened from the QR code: the room is in the link; if I sat at this table before, rejoin my seat */
+const qs = new URLSearchParams(location.search), qr = (qs.get("room") || "").replace(/[^a-z]/gi, "").toUpperCase().slice(0, 4);
+$("name").value = load("ms-name") || "";
+if (qr){ $("code").value = qr; if (load("ms-pid-" + qr)) join(true); else $("name").focus(); }
+else $("code").focus();
+</script>
+</body>
+</html>

@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matching Suits</title>
+<style id="ccsLoadCss">
+  /* the Chike's Creative Space loading screen (draft: docs/mockups/game-loader-draft.html) */
+  #ccsLoad{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px;box-sizing:border-box;margin:0;
+    background:radial-gradient(ellipse at 50% 42%,#1f3f86 0,#0f1d45 52%,#081028 100%);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    transition:opacity .45s cubic-bezier(.2,.7,.2,1),visibility 0s linear .45s}
+  #ccsLoad.gone{opacity:0;visibility:hidden;pointer-events:none}
+  #ccsLoad .ccsl-lg{display:block;width:min(320px,70vw);height:auto;opacity:0;transform:translateY(10px) scale(.96);animation:ccsLoadIn .7s cubic-bezier(.2,.7,.2,1) .05s forwards;filter:drop-shadow(0 8px 18px rgba(0,0,0,.45))}
+  #ccsLoad .ccsl-bar{width:min(240px,56vw);height:10px;border-radius:999px;background:rgba(255,255,255,.14);overflow:hidden;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25)}
+  #ccsLoad .ccsl-bar i{display:block;height:100%;width:0;border-radius:999px;background:#ffd23f;animation:ccsLoadFill 2.4s cubic-bezier(.2,.7,.2,1) .2s forwards}
+  #ccsLoad.ready .ccsl-bar i{animation:none;width:100%;transition:width .3s cubic-bezier(.2,.7,.2,1)}
+  #ccsLoad .ccsl-gn{font-weight:800;font-size:16px;letter-spacing:.02em;line-height:1.3;color:#fff;text-align:center;opacity:0;animation:ccsLoadIn .6s cubic-bezier(.2,.7,.2,1) .25s forwards}
+  #ccsLoad .ccsl-gn small{display:block;font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#9fb6e8;margin-bottom:4px}
+  @keyframes ccsLoadIn{to{opacity:1;transform:none}}
+  @keyframes ccsLoadFill{0%{width:0}100%{width:86%}}
+  @media (prefers-reduced-motion: reduce){ #ccsLoad .ccsl-lg,#ccsLoad .ccsl-gn{animation:none;opacity:1;transform:none} #ccsLoad .ccsl-bar i{animation:none;width:60%} #ccsLoad{transition:none} }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script src="/games/game-sound.js"></script>
+<!--
+  Matching Suits: the shared table screen (owner's PRD and drafts, 2026-11-17; docs/superpowers/specs/2026-11-17-matching-suits-design.md).
+  This screen is the referee: it deals, keeps every hand, checks every move and sends each player their own cards.
+  Players join on a phone, tablet or computer at /games/matching-suits-player.html?room=CODE (Supabase Realtime broadcast,
+  channel "matchingsuits-CODE"), or add robots here.
+    player -> table: join {pid, name} | hi {pid} | reveal {pid} | drop {pid, rank} | pass {pid} | bye {pid}
+    table -> player: host | seat {pid, seat, name} | full {pid} | late {pid} | you {pid, ...their view}
+-->
+<style>
+  :root{ --ink:#1E2226; --sun:#FFD23F; --cream:#FFFBF3; --plum:#7A4A86; --red:#D7263D; --slate:#2B3445; }
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a0b3a;font-family:Nunito,system-ui,sans-serif;color:var(--cream)}
+  canvas{display:block}
+  .ui{position:fixed;inset:0;pointer-events:none}
+  .ui button,.ui .live{pointer-events:auto}
+  .top{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:12px;padding:12px 18px}
+  .top img{height:42px}
+  .marq{font-family:"Baloo 2";font-weight:800;font-size:30px;color:var(--sun);padding:2px 18px;border-radius:14px;background:#3a0f5c;border:3px solid var(--sun);
+    box-shadow:0 0 0 4px #3a0f5c,0 0 18px rgba(255,210,63,.6);position:relative;text-shadow:0 2px 0 #8a5a00}
+  .marq i{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff3b0;box-shadow:0 0 8px var(--sun);animation:bulb 1.2s steps(2) infinite}
+  @keyframes bulb{50%{background:#7a5a10;box-shadow:none}}
+  .sp{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:8px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:6px 12px;font-weight:900;font-size:14px}
+  .pill b{font-family:"Baloo 2";font-size:18px;letter-spacing:.12em;color:var(--sun)}
+  .pill[hidden]{display:none}
+  .top .ccs-sound-btn{background:rgba(0,0,0,.45)!important;color:#fff;border-color:rgba(255,255,255,.35)!important;box-shadow:none!important}
+  .banner{position:absolute;left:50%;top:76px;transform:translateX(-50%);background:var(--sun);color:var(--ink);border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);
+    border-radius:14px;padding:8px 18px;font-family:"Baloo 2";font-weight:800;font-size:clamp(16px,2vw,22px);white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+  .banner[hidden]{display:none}
+  .feed{position:absolute;right:16px;bottom:16px;width:270px;background:rgba(10,4,24,.8);border:1px solid rgba(255,255,255,.2);border-radius:14px;padding:10px 12px;font-size:13.5px;line-height:1.45}
+  .feed[hidden]{display:none}
+  .feed h4{margin:0 0 6px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--sun)}
+  .feed p{margin:0 0 5px}.feed p b{color:var(--sun)}
+  .chike{position:absolute;left:14px;bottom:12px;display:flex;align-items:flex-end;gap:8px;max-width:440px}
+  .chike img{width:118px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5))}
+  .chike .say{background:var(--cream);color:var(--ink);border:3px solid var(--ink);border-radius:16px 16px 16px 4px;padding:10px 13px;font-weight:800;font-size:16px;line-height:1.3;box-shadow:4px 4px 0 var(--ink);margin-bottom:58px}
+  .chike .say small{display:block;color:var(--plum);font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:2px}
+  .tag{position:absolute;transform:translate(-50%,-50%);font-weight:900;font-size:14px;white-space:nowrap}
+  .cnt{background:rgba(0,0,0,.55);color:#fff;border-radius:999px;padding:1px 9px}
+  .cnt.done{background:var(--sun);color:var(--ink)}
+  .seat{display:flex;flex-direction:column;align-items:center;gap:3px}
+  .seat .nm{background:var(--ink);color:#fff;border-radius:999px;padding:3px 11px;border:2px solid transparent}
+  .seat .ct{font-size:12px;background:rgba(0,0,0,.5);border-radius:999px;padding:1px 9px}
+  .seat.turn .nm{background:var(--sun);color:var(--ink);box-shadow:0 0 18px var(--sun)}
+  .seat.away .nm{opacity:.6}
+  .seat.open .nm{background:rgba(0,0,0,.35);border:2px dashed rgba(255,255,255,.5)}
+
+  .panel{position:absolute;background:var(--cream);color:var(--ink);border:3px solid var(--ink);border-radius:18px;box-shadow:6px 6px 0 var(--ink);padding:16px}
+  .panel[hidden]{display:none}
+  .lobby{right:24px;top:84px;width:310px;text-align:center}
+  .lobby h3{margin:0 0 2px;font-family:"Baloo 2";font-size:21px}
+  .lobby .code{font-family:"Baloo 2";font-weight:800;font-size:48px;letter-spacing:.18em;color:var(--plum);line-height:1.05}
+  .lobby .qr{width:156px;height:156px;margin:8px auto;border:3px solid var(--ink);border-radius:10px;padding:6px;background:#fff;display:grid;place-items:center;font-size:12px;font-weight:800;color:#556}
+  .lobby .qr svg{width:100%;height:100%}
+  .lobby p{margin:6px 0 0;font-size:13px;font-weight:700;color:#4b5563;line-height:1.4}
+  .lobby p b{color:var(--ink)}
+  .lobby .row{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+  .btn{font:900 16px Nunito;border:3px solid var(--ink);border-radius:999px;padding:10px 18px;box-shadow:3px 3px 0 var(--ink);cursor:pointer;color:var(--ink);background:var(--cream)}
+  .btn.sun{background:var(--sun)}
+  .btn:disabled{opacity:.45;cursor:default}
+  .btn:focus-visible{outline:3px solid var(--plum);outline-offset:3px}
+
+  .race{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);display:flex;gap:40px;justify-content:center;background:rgba(18,6,40,.78);border:2px solid rgba(255,210,63,.5);border-radius:22px;padding:22px 30px 18px;box-shadow:0 20px 50px rgba(0,0,0,.45)}
+  .race[hidden]{display:none}
+  .race .who{display:flex;flex-direction:column;align-items:center;gap:10px;transition:transform .5s cubic-bezier(.2,.7,.2,1)}
+  .race .who.win{transform:translateY(-14px) scale(1.08)}
+  .race .who.win .hc{box-shadow:0 0 0 5px var(--sun),0 0 40px var(--sun)}
+  .race .tg{font-family:"Baloo 2";font-weight:800;color:var(--sun);font-size:18px;min-height:26px;text-shadow:0 2px 6px rgba(0,0,0,.6)}
+  .race .nm{background:var(--ink);color:#fff;border-radius:999px;padding:4px 12px;font-weight:900}
+  .hc{width:96px;height:136px;border-radius:12px;border:3px solid var(--ink);background:var(--cream);color:var(--red);display:flex;flex-direction:column;justify-content:space-between;padding:6px 8px;box-sizing:border-box;font-family:"Baloo 2";font-weight:800;font-size:30px;line-height:1;box-shadow:0 4px 0 rgba(0,0,0,.35)}
+  .hc.slate{color:var(--slate)}
+  .hc svg{width:42px;height:42px;align-self:center;fill:currentColor}
+  .hc .b{align-self:flex-end;transform:rotate(180deg)}
+  .hc.back{background:repeating-linear-gradient(45deg,#2a4fae 0 8px,#3b63c7 8px 16px);position:relative}
+  .hc.back:after{content:"";position:absolute;inset:12px;border:2px solid rgba(255,255,255,.6);border-radius:8px;background:url(/assets/brand/logo.webp) center/80% no-repeat}
+  .hc.none{background:rgba(255,255,255,.12);border-style:dashed;border-color:rgba(255,255,255,.5);color:#fff;font-size:16px;display:grid;place-items:center;text-align:center}
+
+  .podium{position:absolute;left:58%;bottom:16%;transform:translateX(-50%);display:flex;align-items:flex-end;gap:14px}
+  .podium[hidden]{display:none}
+  .podium .p{width:150px;text-align:center}
+  .podium .blk{border:3px solid var(--ink);border-radius:12px 12px 0 0;box-shadow:4px 0 0 var(--ink);display:grid;place-items:center;font-family:"Baloo 2";font-weight:800;font-size:42px;color:var(--ink)}
+  .podium .nm{font-weight:900;font-size:17px;margin-bottom:4px}
+  .podium small{display:block;font-weight:800;color:#e3d6ff;margin-bottom:6px}
+  .again{position:absolute;left:50%;top:136px;transform:translateX(-50%);display:flex;gap:10px}
+  .again[hidden]{display:none}
+  .confetti i{position:absolute;width:9px;height:14px;top:-20px;animation:fall 4s linear infinite}
+  @keyframes fall{to{transform:translateY(110vh) rotate(540deg)}}
+  .err{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:420px;text-align:center}
+  @media (prefers-reduced-motion: reduce){ .marq i,.confetti i{animation:none} .race .who{transition:none} }
+  @media (max-width: 760px){ .lobby{left:50%;right:auto;transform:translateX(-50%);top:70px;width:min(310px,92vw)} .chike img{width:80px} .chike .say{font-size:13px;margin-bottom:34px} .feed{display:none} .race{gap:12px} .hc{width:64px;height:92px;font-size:20px} .hc svg{width:28px;height:28px} }
+</style>
+</head>
+<body>
+<div id="ccsLoad" role="status" aria-live="polite" data-name="Matching Suits"><img class="ccsl-lg" src="/assets/brand/logo.webp" alt="Chike's Creative Space"><div class="ccsl-bar"><i></i></div><div class="ccsl-gn"><small>Loading</small><b></b></div></div>
+<script id="ccsLoadJs">(function(){ var el = document.getElementById("ccsLoad"); if (!el) return; var t0 = Date.now(), gone = false, hold = 1000, snd = null; var b = el.querySelector(".ccsl-gn b"); if (b) b.textContent = el.getAttribute("data-name") || "";
+  /* the logo sound (owner's pick 1A, 2026-11-17): played a bit faster; quiet when sound is off on the site or the browser blocks it */
+  var on = true; try { on = localStorage.getItem("ccs-sound") !== "off"; } catch (e) { /* a sealed frame can't read the site's setting */ }
+  if (on){ try { snd = new Audio("/assets/games/loader/logo-intro.mp3"); snd.volume = 0.7; snd.playbackRate = 1.5; var p = snd.play(); if (p && p.then) p.then(function(){ hold = 1600; }, function(){ snd = null; }); } catch (e) { snd = null; } }
+  function fade(){ var a = snd; if (!a) return; var t = setInterval(function(){ a.volume = Math.max(0, a.volume - 0.07); if (a.volume <= 0){ clearInterval(t); a.pause(); } }, 90); }
+  function hide(){ if (gone) return; gone = true; el.className = "ready"; setTimeout(function(){ el.className = "ready gone"; fade(); setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 500); }, 320); }
+  function done(){ setTimeout(function(){ setTimeout(hide, Math.max(0, hold - (Date.now() - t0))); }, 60); }
+  if (document.readyState === "complete") done(); else window.addEventListener("load", done);
+  setTimeout(function(){ hide(); }, 9000); })();</script>
+<div class="ui">
+  <div class="top"><img src="/assets/brand/logo.webp" alt="Chike's Creative Space"><span class="marq" id="marq">Matching Suits</span><span class="sp"></span><span class="pill">Room <b id="roomTop">----</b></span><span class="pill" id="pilePill" hidden>Draw pile <b id="pileN">0</b></span><span id="soundSlot" class="live"></span></div>
+  <div class="banner" id="banner" hidden></div>
+  <div class="feed" id="feedBox" hidden><h4>What just happened</h4><div id="feed"></div></div>
+  <div class="panel lobby" id="lobby">
+    <h3>Join the game</h3>
+    <div class="code" id="roomCode">----</div>
+    <div class="qr" id="qr">Getting a room ready</div>
+    <p>Scan with a phone or tablet, or go to <b id="joinUrl">chikescreativespace.com/join</b> on another computer and type the code.</p>
+    <div class="row"><button class="btn" id="bBot" type="button">+ Add a robot player</button><button class="btn sun" id="bStart" type="button" disabled>Start the game</button></div>
+  </div>
+  <div class="podium" id="podium" hidden></div>
+  <div class="again" id="again" hidden><button class="btn sun" id="bAgain" type="button">Play again</button><button class="btn" id="bNewRoom" type="button">New players</button></div>
+  <div class="confetti" id="confetti"></div>
+  <div class="chike"><img id="chikeImg" src="/assets/characters/chike-pose-wave.png" alt="Chike"><div class="say" aria-live="polite"><small>Chike</small><span id="chikeSay">Getting the table ready...</span></div></div>
+  <div id="tags"></div>
+</div>
+<script>
+/* BEGIN pure */
+const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const SUIT_ORDER = { s: 4, h: 3, d: 2, c: 1 };
+const rankOf = (c) => c.slice(0, -1);
+const suitOf = (c) => c.slice(-1);
+const rankValue = (r) => RANKS.indexOf(r) + 1;
+function newDeck(){ const d = []; for (const s of ["s", "h", "d", "c"]) for (const r of RANKS) d.push(r + s); return d; }
+/* a small repeatable random number maker (xorshift), so tests can replay a game */
+function seeded(n){ let x = (Math.imul(n | 0, 2654435761) >>> 0) || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; }
+function shuffle(a, rand){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(rand() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+function deal(n, rand){ const d = shuffle(newDeck(), rand), hands = []; for (let i = 0; i < n; i++) hands.push(d.splice(0, 5)); return { hands, pile: d }; }
+function highestHeart(hand){ let best = null; hand.forEach(c => { if (suitOf(c) === "h" && (!best || rankValue(rankOf(c)) > rankValue(rankOf(best)))) best = c; }); return best; }
+/* the Heart Race: the highest heart goes first; with no hearts at all, the highest card (spades, hearts, diamonds, clubs) */
+function firstPlayer(hands){
+  let best = -1, who = 0;
+  hands.forEach((h, i) => { const c = highestHeart(h); if (c && rankValue(rankOf(c)) > best){ best = rankValue(rankOf(c)); who = i; } });
+  if (best >= 0) return who;
+  hands.forEach((h, i) => h.forEach(c => { const v = rankValue(rankOf(c)) * 10 + SUIT_ORDER[suitOf(c)]; if (v > best){ best = v; who = i; } }));
+  return who;
+}
+/* after the Heart Race, every player's highest heart stays on the table, on its slot, and each player who put one down
+   draws a card (owner, 2026-11-17: "all of the hearts should remain on the table. Then each player draws another card") */
+function placeHearts(s){
+  const out = [];
+  s.players.forEach((p, i) => {
+    const h = highestHeart(p.hand); if (!h) return;
+    p.hand = p.hand.filter(c => c !== h);
+    s.slots[rankOf(h)] += 1;
+    const drew = s.pile.length ? s.pile.pop() : null;
+    if (drew) p.hand.push(drew);
+    out.push({ p: i, card: h, drew });
+  });
+  return out;
+}
+function startGame(players, rand){
+  const { hands, pile } = deal(players.length, rand), first = firstPlayer(hands);
+  return { phase: "race", players: players.map((p, i) => Object.assign({}, p, { hand: hands[i] })), pile,
+    slots: Object.fromEntries(RANKS.map(r => [r, 0])), done: {}, turn: first, first, active: null, lastDropper: null, winner: null };
+}
+/* what the player whose turn it is may drop: any rank they hold (a free choice), or only the rank being played */
+function legalRanks(s, p){
+  if (s.phase !== "play" || s.turn !== p) return [];
+  const held = s.players[p].hand.map(rankOf);
+  if (s.active) return held.includes(s.active) ? [s.active] : [];
+  return RANKS.filter(r => held.includes(r));
+}
+/* each player may reshuffle the draw deck once a game, on their turn, before they move (owner, 2026-11-17) */
+function canShuffle(s, p){ return s.phase === "play" && s.turn === p && !s.players[p].shuffled && s.pile.length >= 2; }
+function reshuffle(s, p, rand){ if (!canShuffle(s, p)) return false; shuffle(s.pile, rand); s.players[p].shuffled = true; return true; }
+function canPass(s, p){ return s.phase === "play" && s.turn === p && !!s.active && legalRanks(s, p).length === 0; }
+/* drop ALL your cards of a rank, then draw one card if the pile has any; the 4th card of a rank gives a bonus turn */
+function drop(s, p, rank){
+  if (!legalRanks(s, p).includes(rank)) return false;
+  const pl = s.players[p], cards = pl.hand.filter(c => rankOf(c) === rank);
+  pl.hand = pl.hand.filter(c => rankOf(c) !== rank);
+  s.slots[rank] += cards.length;
+  const drew = s.pile.length ? s.pile.pop() : null;
+  if (drew) pl.hand.push(drew);
+  s.lastDropper = p;
+  const ev = { t: "drop", p, rank, cards, drew, complete: false, win: false };
+  if (s.slots[rank] >= 4){ s.done[rank] = true; s.active = null; ev.complete = true; }
+  else { s.active = rank; s.turn = (p + 1) % s.players.length; }
+  if (!pl.hand.length){ s.phase = "over"; s.winner = p; ev.win = true; }
+  return ev;
+}
+/* no cards of the rank being played: pass (no draw). Back round to the last player who dropped: the chain breaks */
+function pass(s, p){
+  if (!canPass(s, p)) return false;
+  s.turn = (p + 1) % s.players.length;
+  const broke = s.turn === s.lastDropper;
+  if (broke) s.active = null;
+  return { t: "pass", p, broke };
+}
+/* a robot: follows when it can; with a free choice it finishes a stack if it can, or drops its biggest group */
+function botMove(s, p){
+  const legal = legalRanks(s, p);
+  if (!legal.length) return { t: "pass" };
+  if (s.active) return { t: "drop", rank: s.active };
+  const held = s.players[p].hand.map(rankOf), count = (r) => held.filter(x => x === r).length;
+  const finish = legal.filter(r => s.slots[r] + count(r) >= 4);
+  if (finish.length) return { t: "drop", rank: finish[0] };
+  let best = legal[0];
+  legal.forEach(r => { if (count(r) > count(best) || (count(r) === count(best) && rankValue(r) > rankValue(best))) best = r; });
+  return { t: "drop", rank: best };
+}
+function standings(s){
+  return s.players.map((p, i) => ({ id: p.id, name: p.name, left: p.hand.length, i }))
+    .sort((a, b) => (a.i === s.winner ? -1 : b.i === s.winner ? 1 : a.left - b.left || a.i - b.i));
+}
+const CODE_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+function roomCode(rand){ let c = ""; for (let i = 0; i < 4; i++) c += CODE_LETTERS[Math.floor(rand() * CODE_LETTERS.length)]; return c; }
+function playerName(name, seat){ const n = String(name || "").replace(/\s+/g, " ").trim().slice(0, 16).trim(); return n || "Player #" + (seat + 1); }
+/* END pure */
+</script>
+<script type="module">
+import * as THREE from "three";
+const $ = (id) => document.getElementById(id);
+const sfx = (name, opts) => { if (window.CCSSound) CCSSound.play(name, opts); };
+if (window.CCSSound) $("soundSlot").appendChild(CCSSound.button({ compact: true }));
+const NAMES = { A: "Aces", J: "Jacks", Q: "Queens", K: "Kings" };
+const plural = (r) => NAMES[r] || r + "s";
+const ONE = { A: "Ace", J: "Jack", Q: "Queen", K: "King" };
+const cardName = (r) => ONE[r] || r;
+const ROBOTS = ["Robo", "Bolt", "Sprocket", "Gizmo"];
+const SEAT_COLORS = ["#FFD23F", "#8FE3F0", "#C9B6E4", "#B8E3A8"];
+
+/* ===================== the 3D table (from docs/mockups/matching-suits-3d-draft.html) ===================== */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color("#1a0b3a");
+scene.fog = new THREE.Fog("#1a0b3a", 16, 34);
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 100);
+const LOOK = new THREE.Vector3(0, 1, 0.5);
+function fitCamera(){ const narrow = innerWidth / innerHeight < 1.2; camera.fov = narrow ? 58 : 42; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+fitCamera();
+addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); fitCamera(); });
+
+function canvasTex(w, h, draw, repeat){
+  const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  if (repeat){ t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat[0], repeat[1]); }
+  return t;
+}
+const rnd = (a, b) => a + Math.random() * (b - a);
+const feltTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = "#0f8f86"; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 26000; i++){ g.fillStyle = Math.random() < .5 ? "rgba(255,255,255,.035)" : "rgba(0,0,0,.05)"; g.fillRect(rnd(0, w), rnd(0, h), 1.4, 1.4); }
+}, [6, 6]);
+const woodTex = canvasTex(512, 128, (g, w, h) => {
+  const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, "#7a3f1d"); gr.addColorStop(.5, "#a2582a"); gr.addColorStop(1, "#6a3418"); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 60; i++){ g.strokeStyle = "rgba(40,15,5," + rnd(.08, .25) + ")"; g.lineWidth = rnd(.6, 2); g.beginPath(); const y = rnd(0, h); g.moveTo(0, y); for (let x = 0; x <= w; x += 32) g.lineTo(x, y + Math.sin(x / rnd(40, 90)) * rnd(1, 5)); g.stroke(); }
+}, [8, 1]);
+const SUITS = {
+  h: "M12 21s-7.5-4.6-9.6-9.2C.7 8 3 4 6.8 4c2.2 0 3.6 1.2 5.2 3 1.6-1.8 3-3 5.2-3C21 4 23.3 8 21.6 11.8 19.5 16.4 12 21 12 21z",
+  d: "M12 2l8 10-8 10-8-10z",
+  c: "M12 3a4 4 0 0 1 3.6 5.8A4 4 0 1 1 13.5 15l1.5 6H9l1.5-6a4 4 0 1 1-2.1-6.2A4 4 0 0 1 12 3z",
+  s: "M12 2s8 6.5 8 11a4 4 0 0 1-6.5 3.1L15 21H9l1.5-4.9A4 4 0 0 1 4 13c0-4.5 8-11 8-11z"
+};
+function drawSuit(g, s, x, y, size, color){ g.save(); g.translate(x - size / 2, y - size / 2); g.scale(size / 24, size / 24); g.fillStyle = color; g.fill(new Path2D(SUITS[s])); g.restore(); }
+const carpetTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = "#3b1466"; g.fillRect(0, 0, w, h);
+  const cols = ["#ffd23f", "#17b3ce", "#ff6fa8", "#8fe3f0"], ss = ["h", "d", "c", "s"];
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++){ const i = (x + y) % 4; drawSuit(g, ss[i], x * 128 + 64 + (y % 2) * 32, y * 128 + 64, 34, cols[i] + "55"); }
+  for (let i = 0; i < 40; i++){ g.fillStyle = "rgba(255,255,255,.18)"; g.beginPath(); g.arc(rnd(0, w), rnd(0, h), rnd(1, 2.4), 0, 7); g.fill(); }
+}, [10, 10]);
+const RED = "#D7263D", SLATE = "#2B3445";
+const faceTexCache = {};
+function cardFaceTex(card){
+  if (faceTexCache[card]) return faceTexCache[card];
+  const rank = rankOf(card), suit = suitOf(card);
+  return (faceTexCache[card] = canvasTex(256, 360, (g, w, h) => {
+    g.fillStyle = "#FFFBF3"; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 22); g.fill();
+    g.lineWidth = 6; g.strokeStyle = "#1E2226"; g.stroke();
+    const col = suit === "h" || suit === "d" ? RED : SLATE;
+    g.fillStyle = col; g.font = "800 64px 'Baloo 2', sans-serif"; g.textBaseline = "top"; g.fillText(rank, 20, 14);
+    drawSuit(g, suit, 46, 104, 46, col);
+    g.save(); g.translate(w, h); g.rotate(Math.PI); g.fillText(rank, 20, 14); drawSuit(g, suit, 46, 104, 46, col); g.restore();
+    drawSuit(g, suit, w / 2, h / 2, 130, col);
+  }));
+}
+const backTex = canvasTex(256, 360, (g, w, h) => {
+  g.fillStyle = "#2a4fae"; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 22); g.fill();
+  g.save(); g.clip(); for (let i = -h; i < w + h; i += 22){ g.strokeStyle = "#3b63c7"; g.lineWidth = 10; g.beginPath(); g.moveTo(i, 0); g.lineTo(i + h, h); g.stroke(); } g.restore();
+  g.lineWidth = 6; g.strokeStyle = "#1E2226"; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 22); g.stroke();
+  g.lineWidth = 5; g.strokeStyle = "rgba(255,255,255,.8)"; g.beginPath(); g.roundRect(26, 26, w - 52, h - 52, 14); g.stroke();
+});
+const logo = new Image(); logo.src = "/assets/brand/logo.webp";
+logo.onload = () => { const g = backTex.image.getContext("2d"); const lw = 190, lh = lw * logo.height / logo.width; g.drawImage(logo, (256 - lw) / 2, (360 - lh) / 2, lw, lh); backTex.needsUpdate = true; };
+/* card faces use the Baloo 2 font: redraw any made before the font arrived */
+if (document.fonts) document.fonts.ready.then(() => { Object.keys(faceTexCache).forEach(k => { const t = faceTexCache[k]; delete faceTexCache[k]; const n = cardFaceTex(k); t.image = n.image; t.needsUpdate = true; faceTexCache[k] = t; }); });
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ map: carpetTex, roughness: .95 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const TW = 6.4, TD = 4.1, TY = 1.0;
+const tableTop = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, .12, 96), [
+  new THREE.MeshStandardMaterial({ color: "#5e2f14", roughness: .6 }), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 1 }), new THREE.MeshStandardMaterial({ color: "#5e2f14" })]);
+tableTop.scale.set(TW, 1, TD); tableTop.position.y = TY - .06; tableTop.receiveShadow = true; scene.add(tableTop);
+const rim = new THREE.Mesh(new THREE.TorusGeometry(1, .055, 24, 128), new THREE.MeshStandardMaterial({ map: woodTex, roughness: .35, metalness: .1 }));
+rim.rotation.x = Math.PI / 2; rim.scale.set(TW + .05, TD + .05, 4.2); rim.position.y = TY + .02; rim.castShadow = true; rim.receiveShadow = true; scene.add(rim);
+const trim = new THREE.Mesh(new THREE.TorusGeometry(1, .012, 8, 128), new THREE.MeshStandardMaterial({ color: "#ffd23f", metalness: .9, roughness: .25 }));
+trim.rotation.x = Math.PI / 2; trim.scale.set(TW - .2, TD - .2, 1); trim.position.y = TY + .005; scene.add(trim);
+const ped = new THREE.Mesh(new THREE.CylinderGeometry(.6, 1.1, TY - .1, 32), new THREE.MeshStandardMaterial({ color: "#4a230e", roughness: .5 }));
+ped.position.y = (TY - .1) / 2; ped.castShadow = true; scene.add(ped);
+/* marquee bulbs chasing round the rim */
+const BULBS = [], NB = 64, bulbGeo = new THREE.SphereGeometry(.07, 12, 8);
+for (let i = 0; i < NB; i++){
+  const a = i / NB * Math.PI * 2, m = new THREE.MeshStandardMaterial({ color: "#fff3b0", emissive: "#ffd23f", emissiveIntensity: 1 });
+  const b = new THREE.Mesh(bulbGeo, m); b.position.set(Math.cos(a) * (TW + .06), TY + .26, Math.sin(a) * (TD + .06)); scene.add(b); BULBS.push(m);
+}
+scene.add(new THREE.HemisphereLight("#c9b8ff", "#4a1a75", 1.0));
+const lamp = new THREE.SpotLight("#fff1d6", 60, 0, .72, .55, 1.6);
+lamp.position.set(0, 7.2, .3); lamp.target.position.set(0, TY, .3); lamp.castShadow = true;
+lamp.shadow.mapSize.set(2048, 2048); lamp.shadow.bias = -0.0004; lamp.shadow.radius = 4;
+scene.add(lamp, lamp.target);
+const shade = new THREE.Mesh(new THREE.ConeGeometry(.9, .7, 32, 1, true), new THREE.MeshStandardMaterial({ color: "#3a0f5c", side: THREE.DoubleSide, metalness: .3, roughness: .4 }));
+shade.position.set(0, 7.6, .3); scene.add(shade);
+const lampBulb = new THREE.Mesh(new THREE.SphereGeometry(.22, 16, 12), new THREE.MeshBasicMaterial({ color: "#fff6d8" })); lampBulb.position.set(0, 7.35, .3); scene.add(lampBulb);
+const SWEEP = ["#ff6fa8", "#17b3ce", "#ffd23f"].map((c, i) => { const s = new THREE.SpotLight(c, 160, 0, .38, .6, 1.3); s.position.set((i - 1) * 9, 10, -6); scene.add(s, s.target); return s; });
+
+/* cards */
+const CW = .62, CH = .88, CT = .012;
+const edgeMat = new THREE.MeshStandardMaterial({ color: "#f4efe2", roughness: .7 });
+const backMat = new THREE.MeshStandardMaterial({ map: backTex, roughness: .55 });
+const faceMatCache = {};
+function faceMat(card){ return faceMatCache[card] || (faceMatCache[card] = new THREE.MeshStandardMaterial({ map: cardFaceTex(card), roughness: .5 })); }
+const cardGeo = new THREE.BoxGeometry(CW, CT, CH);
+function makeCard(card){
+  const m = new THREE.Mesh(cardGeo, [edgeMat, edgeMat, card ? faceMat(card) : backMat, backMat, edgeMat, edgeMat]);
+  m.castShadow = true; m.receiveShadow = true; scene.add(m); return m;
+}
+function killCard(m){ scene.remove(m); }
+/* the 13 slots */
+const SLOTS = {};
+RANKS.forEach((r, i) => {
+  const row = i < 7 ? 0 : 1, k = row ? i - 7 : i, n = row ? 6 : 7;
+  const x = (k - (n - 1) / 2) * 1.05, z = row ? 1.4 : -1.4;   /* two rows with the draw deck between them */
+  const t = canvasTex(160, 214, (g, w, h) => {
+    g.setLineDash([12, 9]); g.lineWidth = 6; g.strokeStyle = "rgba(255,255,255,.55)"; g.beginPath(); g.roundRect(6, 6, w - 12, h - 12, 16); g.stroke();
+    g.fillStyle = "rgba(255,255,255,.28)"; g.font = "800 72px 'Baloo 2', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(r, w / 2, h / 2 + 4);
+  });
+  const o = new THREE.Mesh(new THREE.PlaneGeometry(.8, 1.07), new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 1 }));
+  o.rotation.x = -Math.PI / 2; o.position.set(x, TY + .002, z); o.receiveShadow = true; scene.add(o);
+  SLOTS[r] = { x, z, meshes: [] };
+});
+const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 1.3), new THREE.MeshBasicMaterial({ color: "#ffd23f", transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+glow.rotation.x = -Math.PI / 2; scene.add(glow);
+function stackPos(r, i){ const sl = SLOTS[r]; return new THREE.Vector3(sl.x + Math.sin(i * 2.1) * .03, TY + CT / 2 + i * (CT + .004), sl.z + Math.cos(i * 1.7) * .03); }
+const PILE = { x: 0, z: 0, meshes: [] };   /* the draw deck in the middle of the table (owner, 2026-11-17) */
+function pilePos(i){ return new THREE.Vector3(PILE.x + Math.sin(i) * .01, TY + CT / 2 + i * (CT + .002), PILE.z); }
+
+/* seats round the table, clockwise; each holds a fan of face-down cards */
+/* players face each other: someone always sits across the table (owner, 2026-11-17: "place one of the robo players
+   across the table"); robots join after people, so they take the far seats */
+/* a player at each corner of the table (owner, 2026-11-17), clockwise: front-left, back-left, back-right, front-right;
+   two players sit at opposite corners, facing each other */
+const C_FL = [-4.3, 2.6, Math.PI * .75], C_BL = [-4.6, -2.95, Math.PI * .25], C_BR = [4.6, -2.95, -Math.PI * .25], C_FR = [4.3, 2.6, -Math.PI * .75];
+const SEAT_SPOTS = { 2: [C_FL, C_BR], 3: [C_FL, C_BL, C_BR], 4: [C_FL, C_BL, C_BR, C_FR] };
+function seatSpot(i, n){ const s = (SEAT_SPOTS[n] || SEAT_SPOTS[4])[i]; return { pos: new THREE.Vector3(s[0], TY, s[1]), face: s[2] }; }
+function fanPos(spot, i, n){
+  const off = (i - (n - 1) / 2) * .22, a = spot.face;
+  /* the fan sits on the felt, a little in from the player's corner, toward the middle */
+  const len = Math.hypot(spot.pos.x, spot.pos.z) || 1, inX = -spot.pos.x / len * .6, inZ = -spot.pos.z / len * .6;
+  return { p: new THREE.Vector3(spot.pos.x + inX + Math.cos(a) * off, TY + CT / 2 + i * .002, spot.pos.z + inZ + Math.sin(a) * off), ry: a + (i - (n - 1) / 2) * .08 };
+}
+
+/* labels pinned to the table */
+const tagsEl = $("tags"); let TAGS = [];
+function tag(html, cls, pos){ const el = document.createElement("div"); el.className = "tag " + cls; el.innerHTML = html; tagsEl.appendChild(el); const t = { el, pos }; TAGS.push(t); return t; }
+const SLOT_TAGS = {};
+RANKS.forEach(r => { SLOT_TAGS[r] = tag("", "cnt", new THREE.Vector3(SLOTS[r].x, TY, SLOTS[r].z + (SLOTS[r].z < 0 ? -.72 : .72)));   /* back row: counters behind the slots, clear of the deck */ SLOT_TAGS[r].el.hidden = true; });
+let SEAT_TAGS = [];
+const pv = new THREE.Vector3();
+function placeTags(){ TAGS.forEach(t => { if (t.el.hidden) return; pv.copy(t.pos).project(camera); t.el.style.left = ((pv.x + 1) / 2 * innerWidth) + "px"; t.el.style.top = ((1 - pv.y) / 2 * innerHeight) + "px"; }); }
+const mq = $("marq"); for (let i = 0; i < 14; i++){ const b = document.createElement("i"); b.style.left = (i / 14 * 100) + "%"; b.style.top = i % 2 ? "-6px" : "calc(100% - 1px)"; b.style.animationDelay = (i % 2 ? .6 : 0) + "s"; mq.appendChild(b); }
+
+/* card movements: a card arcs from one place to another and settles (decelerating, never bouncy) */
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+const MOVES = [];
+function fly(mesh, to, rot, dur, arc, delay){ return new Promise(ok => MOVES.push({ mesh, from: null, to, r0: null, r1: rot, t: -(delay || 0), dur, arc, ok })); }
+function stepMoves(dt){
+  for (let i = MOVES.length - 1; i >= 0; i--){
+    const m = MOVES[i]; m.t += dt / m.dur; if (m.t < 0) continue;
+    if (!m.from){ m.from = m.mesh.position.clone(); m.r0 = m.mesh.rotation.clone(); }
+    const k = Math.min(1, m.t), e = easeOut(k);
+    m.mesh.position.lerpVectors(m.from, m.to, e); m.mesh.position.y += Math.sin(Math.PI * e) * m.arc;
+    m.mesh.rotation.set(m.r0.x + (m.r1.x - m.r0.x) * e, m.r0.y + (m.r1.y - m.r0.y) * e, m.r0.z + (m.r1.z - m.r0.z) * e);
+    if (k >= 1){ MOVES.splice(i, 1); m.ok(); }
+  }
+}
+/* a browser pauses animation while the table screen is hidden (another tab, a sleeping laptop): finish the card moves at
+   once then, so play never stalls */
+function finishMoves(){ while (MOVES.length){ const m = MOVES.pop(); m.mesh.position.copy(m.to); m.mesh.rotation.copy(m.r1); m.ok(); } }
+setInterval(() => { if (document.hidden && MOVES.length) finishMoves(); }, 250);
+document.addEventListener("visibilitychange", () => { if (document.hidden) finishMoves(); });
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+/* ===================== the game ===================== */
+const G = { code: "", seats: [], state: null, phase: "lobby", busy: false, revealed: {}, feed: [], shown: {}, raceWinner: -1 };
+/* seats: { id, name, bot, pid, away } */
+
+function chike(pose, text){ $("chikeImg").src = "/assets/characters/chike-pose-" + pose + ".png"; $("chikeSay").textContent = text; }
+function banner(text){ const b = $("banner"); b.hidden = !text; b.textContent = text || ""; }
+function news(html){ G.feed.unshift(html); G.feed = G.feed.slice(0, 3); $("feed").innerHTML = G.feed.map(h => "<p>" + h + "</p>").join(""); $("feedBox").hidden = false; }
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const nm = (i) => "<b>" + esc(G.state ? G.state.players[i].name : G.seats[i].name) + "</b>";
+
+/* --- seats on the table --- */
+function paintSeats(){
+  SEAT_TAGS.forEach(t => { t.el.remove(); TAGS = TAGS.filter(x => x !== t); });
+  SEAT_TAGS = [];
+  const lobby = G.phase === "lobby", n = lobby ? 4 : G.seats.length;
+  for (let i = 0; i < n; i++){
+    const s = G.seats[i], spot = seatSpot(i, n), st = G.state;
+    const race = G.phase === "race", turn = (st && st.phase === "play" && st.turn === i) || (race && G.raceWinner === i);
+    const count = st ? st.players[i].hand.length : 0;
+    const html = s
+      ? '<div class="seat' + (turn ? " turn" : "") + (s.away ? " away" : "") + '"><span class="nm">' + esc(s.name) + (s.bot ? " (robot)" : "") + '</span><span class="ct">' + (race ? raceNote(i) : st ? count + (count === 1 ? " card" : " cards") : s.bot ? "Ready" : s.away ? "Reconnecting" : "Joined") + '</span></div>'
+      : '<div class="seat open"><span class="nm">Open seat</span></div>';
+    SEAT_TAGS.push(tag(html, "", spot.pos.clone().add(new THREE.Vector3(0, .5, 0))));
+  }
+}
+function paintCounts(){
+  const st = G.state;
+  RANKS.forEach(r => { const t = SLOT_TAGS[r]; t.el.hidden = !st || G.phase === "race"; if (t.el.hidden) return; t.el.textContent = st.done[r] ? "4/4 done" : st.slots[r] + "/4"; t.el.className = "tag cnt" + (st.done[r] ? " done" : ""); });
+  $("pilePill").hidden = !st; if (st) $("pileN").textContent = st.pile.length;
+}
+
+/* --- the table's 3D cards follow the game --- */
+let FANS = [];
+/* whose move it is (owner, 2026-11-17): a spotlight on the player whose turn it is, and everyone else's cards dimmed.
+   Each seat's cards share their own materials, so a whole fan fades together. */
+const FAN_MATS = [];
+function fanMats(i){
+  if (!FAN_MATS[i]){ const back = backMat.clone(), edge = edgeMat.clone(); FAN_MATS[i] = { back, edge, arr: [edge, edge, back, back, edge, edge], dim: 0 }; }
+  return FAN_MATS[i];
+}
+const turnSpot = new THREE.SpotLight("#fff1c4", 0, 0, .3, .55, 1.3);
+turnSpot.position.set(0, 6, 0); turnSpot.target.position.set(0, TY, 0); scene.add(turnSpot, turnSpot.target);
+const poolTex = canvasTex(256, 256, (g, w, h) => { const r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); r.addColorStop(0, "rgba(255,241,196,.9)"); r.addColorStop(.55, "rgba(255,226,140,.35)"); r.addColorStop(1, "rgba(255,210,63,0)"); g.fillStyle = r; g.fillRect(0, 0, w, h); });
+const pool = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6), new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+pool.rotation.x = -Math.PI / 2; scene.add(pool);
+const DIM = new THREE.Color("#3c3550"), WHITE = new THREE.Color("#ffffff");
+let spotOn = 0, spotAt = null;
+function fanCenter(i, n){ const sp = seatSpot(i, n), len = Math.hypot(sp.pos.x, sp.pos.z) || 1; return new THREE.Vector3(sp.pos.x - sp.pos.x / len * .6, TY, sp.pos.z - sp.pos.z / len * .6); }
+function paintTurn(dt){
+  const st = G.state, who = st && st.phase === "play" ? st.turn : -1, k = REDUCED ? 1 : 1 - Math.exp(-dt * 5);   /* eases in, never bounces */
+  if (who >= 0){
+    const c = fanCenter(who, G.seats.length);
+    if (!spotAt) spotAt = c.clone(); else spotAt.lerp(c, k);
+    turnSpot.target.position.copy(spotAt); turnSpot.position.set(spotAt.x * 1.15, 6.2, spotAt.z * 1.15 + .4);
+    pool.position.set(spotAt.x, TY + .006, spotAt.z);
+  }
+  spotOn += ((who >= 0 ? 1 : 0) - spotOn) * k;
+  turnSpot.intensity = spotOn * 70; pool.material.opacity = spotOn * .3;   /* softer (owner, 2026-11-17: "reduce the brightness") */
+  FANS.forEach((f, i) => {
+    const fm = fanMats(i); fm.dim += (((who >= 0 && who !== i) ? 1 : 0) - fm.dim) * k;
+    fm.back.color.copy(WHITE).lerp(DIM, fm.dim); fm.edge.color.copy(edgeMat.color).lerp(DIM, fm.dim);
+    f.forEach(m => { if (m.material !== fm.arr) m.material = fm.arr; });
+  });
+}
+function layoutFans(instant){
+  const st = G.state, n = G.seats.length;
+  FANS.forEach((f, i) => {
+    const want = st ? st.players[i].hand.length - (G.shown[i] ? 1 : 0) : 0;
+    while (f.length < want) f.push(makeCard(null));
+    while (f.length > want) killCard(f.pop());
+    const spot = seatSpot(i, n);
+    f.forEach((m, k) => { const fp = fanPos(spot, k, f.length); if (instant){ m.position.copy(fp.p); m.rotation.set(0, fp.ry, 0); } else fly(m, fp.p, new THREE.Euler(0, fp.ry, 0), .35, 0); });
+  });
+}
+function clearTable(){
+  RANKS.forEach(r => { SLOTS[r].meshes.forEach(killCard); SLOTS[r].meshes = []; });
+  PILE.meshes.forEach(killCard); PILE.meshes = [];
+  FANS.forEach(f => f.forEach(killCard)); FANS = [];
+  Object.values(G.shown || {}).forEach(killCard); G.shown = {};
+  glow.material.opacity = 0;
+}
+function buildTable(){
+  clearTable();
+  const st = G.state;
+  st.pile.forEach((_, i) => { const m = makeCard(null); m.position.copy(pilePos(i)); m.rotation.y = .05 * Math.sin(i * 3); PILE.meshes.push(m); });
+  FANS = G.seats.map(() => []);
+  layoutFans(true);
+}
+
+/* --- the room: Supabase Realtime broadcast --- */
+const SB_URL = "https://wdctkfhwygwwulipwnys.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
+const NET = { sb: null, ch: null, id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-") };
+function loadScript(src){ return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error("load " + src)); document.head.appendChild(s); }); }
+async function sbClient(){
+  if (NET.sb) return NET.sb;
+  if (!window.supabase){ try { await loadScript("/assets/vendor/supabase.js"); } catch (_e){ await loadScript("https://unpkg.com/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"); } }
+  NET.sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, realtime: { params: { eventsPerSecond: 30 } } });
+  return NET.sb;
+}
+function send(p){ if (!NET.ch) return; p.i = NET.id; try { const r = NET.ch.send({ type: "broadcast", event: "m", payload: p }); if (r && r.catch) r.catch(() => {}); } catch (_e) {} }
+function openRoom(code){
+  return sbClient().then(sb => new Promise((ok, no) => {
+    const ch = sb.channel("matchingsuits-" + code, { config: { broadcast: { self: false } } });
+    let other = false;
+    ch.on("broadcast", { event: "m" }, (e) => { const p = e.payload || {}; if (p.t === "host" && p.i !== NET.id) other = true; else onMsg(p); });
+    const to = setTimeout(() => no(new Error("timeout")), 9000);
+    ch.subscribe((s) => { if (s === "SUBSCRIBED"){ clearTimeout(to); ok({ ch, taken: () => other }); } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT"){ clearTimeout(to); no(new Error(s)); } });
+  }));
+}
+function joinUrl(){ return new URL("/games/matching-suits-player.html?room=" + G.code, document.baseURI).href; }
+async function makeRoom(){
+  const rand = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
+  for (let i = 0; i < 6; i++){
+    const code = roomCode(rand);
+    try {
+      const r = await openRoom(code);
+      NET.ch = r.ch; send({ t: "host" });
+      await wait(700);
+      if (r.taken()){ try { await NET.sb.removeChannel(r.ch); } catch (_e) {} NET.ch = null; continue; }
+      G.code = code; $("roomCode").textContent = code; $("roomTop").textContent = code;
+      $("joinUrl").textContent = new URL("/join", document.baseURI).host + "/join";
+      showQR();
+      setInterval(() => send({ t: "host" }), 4000);
+      return true;
+    } catch (_e) { /* try another code */ }
+  }
+  $("qr").textContent = "Couldn't reach the internet room. You can still play with robots.";
+  return false;
+}
+async function showQR(){
+  try {
+    if (!window.qrcode) await loadScript("https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js");
+    const qr = window.qrcode(0, "M"); qr.addData(joinUrl()); qr.make();
+    $("qr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 1, scalable: true });
+  } catch (_e){ $("qr").textContent = "Type the code on the join page."; }
+}
+
+/* --- messages from players --- */
+function seatOf(pid){ return G.seats.findIndex(s => s && s.pid === pid); }
+function onMsg(p){
+  if (!p || !p.pid) return;
+  const i = seatOf(p.pid);
+  if (p.t === "join" || p.t === "hi"){
+    if (i >= 0){ G.seats[i].away = false; if (p.t === "join" && p.name && G.phase === "lobby"){ G.seats[i].name = playerName(p.name, i); } paintSeats(); tell(i); return; }
+    if (p.t === "hi") return;
+    if (G.phase !== "lobby"){ send({ t: "late", pid: p.pid }); return; }
+    const free = G.seats.length < 4 ? G.seats.length : -1;
+    if (free < 0){ send({ t: "full", pid: p.pid }); return; }
+    G.seats.push({ id: p.pid, pid: p.pid, name: playerName(p.name, free), bot: false });
+    sfx("pop", { volume: .6 });
+    news(nm(free) + " joined.");
+    lobbyChanged(); tell(free); return;
+  }
+  if (i < 0) return;
+  if (p.t === "bye"){ G.seats[i].away = true; paintSeats(); return; }
+  if (p.t === "reveal" && G.phase === "race") reveal(i);
+  if (p.t === "drop" && G.phase === "play") act(i, { t: "drop", rank: p.rank });
+  if (p.t === "pass" && G.phase === "play") act(i, { t: "pass" });
+  if (p.t === "shuffle" && G.phase === "play") doShuffle(i);
+}
+/* what each player sees on their own device */
+function tell(i){
+  const s = G.seats[i]; if (!s || s.bot) return;
+  const st = G.state, me = st && st.players[i];
+  send({ t: "you", pid: s.pid, seat: i, name: s.name, phase: G.phase, code: G.code,
+    hand: me ? me.hand.slice().sort((a, b) => rankValue(rankOf(a)) - rankValue(rankOf(b)) || SUIT_ORDER[suitOf(b)] - SUIT_ORDER[suitOf(a)]) : [],
+    legal: st ? legalRanks(st, i) : [], canPass: st ? canPass(st, i) : false,
+    canShuffle: st ? canShuffle(st, i) && !G.busy : false, shuffled: !!(me && me.shuffled),
+    turn: st && st.phase === "play" ? st.turn : -1, turnName: st && st.turn >= 0 ? st.players[st.turn].name : "",
+    active: st ? st.active : null, onTable: st && st.active ? st.slots[st.active] : 0, pile: st ? st.pile.length : 0,
+    heart: me ? highestHeart(me.hand) : null, revealed: !!G.revealed[i], busy: G.busy,
+    players: G.seats.length, place: G.phase === "over" ? standings(st).findIndex(x => x.i === i) + 1 : 0,
+    winner: G.phase === "over" ? st.players[st.winner].name : "" });
+}
+function tellAll(){ G.seats.forEach((_, i) => tell(i)); }
+
+/* --- the lobby --- */
+function lobbyChanged(){
+  paintSeats();
+  const n = G.seats.length;
+  $("bStart").disabled = n < 2;
+  $("bBot").disabled = n >= 4;
+  chike(n >= 2 ? "point-up" : "wave", n >= 2 ? "Everyone in? Press Start the game! Up to 4 can play: add a robot if you'd like one more." : "Hi! Scan the code with a phone, tablet or computer to join. Type your name, or play as Player #" + (n + 1) + "!");
+}
+$("bBot").onclick = () => {
+  if (G.seats.length >= 4 || G.phase !== "lobby") return;
+  const used = G.seats.filter(s => s.bot).length, i = G.seats.length;
+  G.seats.push({ id: "bot" + i, name: ROBOTS[used % ROBOTS.length], bot: true });
+  sfx("click"); news(nm(i) + " the robot sat down."); lobbyChanged();
+};
+$("bStart").onclick = () => { if (G.seats.length >= 2) startRound(); };
+
+/* --- a round --- */
+function startRound(){
+  sfx("start");
+  G.state = startGame(G.seats.map(s => ({ id: s.id, name: s.name, bot: s.bot })), Math.random);
+  G.phase = "race"; G.revealed = {}; G.busy = false; G.raceWinner = -1;
+  $("lobby").hidden = true; $("podium").hidden = true; $("again").hidden = true; $("confetti").innerHTML = "";
+  buildTable(); paintCounts(); paintSeats();
+  banner("The Heart Race: who goes first?");
+  chike("point-up", "Heart Race! Everyone, tap Show my highest heart on your device. Put it down on the table: the highest heart goes first.");
+  G.seats.forEach((s, i) => { if (s.bot) setTimeout(() => reveal(i), 900 + i * 500); });
+  tellAll();
+}
+function raceNote(i){
+  if (G.raceWinner === i) return "Goes first!";
+  if (!G.revealed[i]) return "Choosing...";
+  const h = highestHeart(G.state.players[i].hand);
+  return h ? cardName(rankOf(h)) + " of hearts" : "No hearts";
+}
+/* a player puts their highest heart down: it slides out of their cards and lands face up on its slot */
+function reveal(i){
+  if (G.phase !== "race" || G.revealed[i]) return;
+  G.revealed[i] = true; sfx("flip");
+  const h = highestHeart(G.state.players[i].hand);
+  if (h){
+    /* it goes straight onto its own slot, face up, and stays there */
+    const fan = FANS[i], from = fan.pop(), m = makeCard(h), r = rankOf(h);
+    m.position.copy(from.position); m.rotation.set(0, from.rotation.y, Math.PI); killCard(from);
+    G.shown[i] = m; SLOTS[r].meshes.push(m);
+    fly(m, stackPos(r, SLOTS[r].meshes.length - 1), new THREE.Euler(0, (Math.random() - .5) * .14, 0), REDUCED ? .01 : .9, REDUCED ? 0 : 1.1).then(() => sfx("place"));
+    layoutFans(false);
+  }
+  paintSeats(); tell(i);
+  if (Object.keys(G.revealed).length === G.seats.length) finishRace();
+}
+async function finishRace(){
+  const st = G.state, w = st.first, h = highestHeart(st.players[w].hand), anyHeart = st.players.some(p => highestHeart(p.hand));
+  await wait(900);
+  G.raceWinner = w; paintSeats(); sfx("good");
+  if (G.shown[w]){ glow.position.set(G.shown[w].position.x, TY + .004, G.shown[w].position.z); glowFlash = 2.6; }
+  if (anyHeart) chike("thumbs-up", st.players[w].name + " has the " + cardName(rankOf(h)) + " of hearts, so they go first! The hearts stay on the table, and everyone who put one down draws a new card.");
+  else chike("thumbs-up", "Nobody has a heart! " + st.players[w].name + " has the highest card, so they go first.");
+  news(nm(w) + " won the Heart Race.");
+  await wait(REDUCED ? 1500 : 2600);
+  /* the hearts are already on their slots: they stay, and each of those players draws a card */
+  const placed = placeHearts(st);
+  G.shown = {};
+  G.phase = "draw"; paintCounts();
+  const draws = [];
+  for (const x of placed){
+    if (!x.drew) continue;
+    const top = PILE.meshes.pop(); if (!top) continue;
+    const fan = FANS[x.p], spot = seatSpot(x.p, G.seats.length), fp = fanPos(spot, fan.length, fan.length + 1);
+    fan.push(top);
+    draws.push(fly(top, fp.p, new THREE.Euler(0, fp.ry, 0), REDUCED ? .01 : .6, REDUCED ? 0 : .8));
+    sfx("flip", { pitch: 1.1, volume: .5 });
+    await wait(REDUCED ? 10 : 260);
+  }
+  await Promise.all(draws);
+  if (placed.length) news("The hearts are on the table, and " + placed.length + (placed.length === 1 ? " player drew" : " players drew") + " a new card.");
+  G.raceWinner = -1;
+  layoutFans(false);
+  st.phase = "play"; G.phase = "play";
+  turnStarted();
+}
+
+/* whose turn, and what Chike says about it */
+function turnStarted(){
+  const st = G.state, i = st.turn, name = st.players[i].name;
+  paintSeats(); paintCounts(); tellAll();
+  if (st.active){
+    banner(name + "'s turn: drop all your " + plural(st.active) + ", or pass");
+    chike("point", "The " + plural(st.active) + " are on the table. " + name + ", drop all your " + plural(st.active) + ", or pass if you have none.");
+  } else {
+    banner(name + "'s turn: pick any rank to start a chain");
+    chike("point-up", name + ", pick any card in your hand. You'll drop ALL the cards of that rank, then draw one.");
+  }
+  if (st.players[i].bot) setTimeout(async () => {
+    if (G.state !== st || st.phase !== "play" || st.turn !== i) return;
+    if (canShuffle(st, i) && st.pile.length > 8 && Math.random() < .15) await doShuffle(i);
+    act(i, botMove(st, i));
+  }, REDUCED ? 700 : 1500);
+}
+async function act(i, move){
+  const st = G.state;
+  if (G.busy || !st || st.phase !== "play" || st.turn !== i) return;
+  if (move.t === "pass"){
+    const was = st.active, ev = pass(st, i); if (!ev) return;
+    sfx("tick", { pitch: .8 });
+    news(nm(i) + " had no " + plural(was) + " and passed.");
+    if (ev.broke){
+      const lead = st.turn;
+      news("Nobody else had any. " + nm(lead) + " starts a new chain.");
+      chike("point-up", "Nobody else had any, so " + st.players[lead].name + " starts a new chain with any card.");
+      await wait(1400);
+    }
+    turnStarted(); return;
+  }
+  const rank = move.rank, ev = drop(st, i, rank); if (!ev) return;
+  G.busy = true; tellAll();
+  /* the dropped cards fly from the player's seat onto the stack, building upward */
+  const fan = FANS[i], base = SLOTS[rank].meshes.length;
+  const flights = ev.cards.map((c, k) => {
+    const from = fan.length ? fan.pop() : makeCard(null);
+    const m = makeCard(c); m.position.copy(from.position); m.rotation.copy(from.rotation); killCard(from);
+    SLOTS[rank].meshes.push(m);
+    return fly(m, stackPos(rank, base + k), new THREE.Euler(0, (Math.random() - .5) * .14, 0), REDUCED ? .01 : .9, REDUCED ? 0 : 1.3, k * .25).then(() => sfx("place", { pitch: .9 + k * .08 }));
+  });
+  news(nm(i) + " dropped " + (ev.cards.length === 1 ? (rank === "A" || rank === "8" ? "an " : "a ") + cardName(rank) : ["", "one", "two", "three", "four"][ev.cards.length] + " " + plural(rank)) + ".");
+  await Promise.all(flights);
+  paintCounts();
+  /* draw one card from the pile */
+  if (ev.drew){
+    const top = PILE.meshes.pop();
+    if (top){ const spot = seatSpot(i, G.seats.length), fp = fanPos(spot, fan.length, fan.length + 1); await fly(top, fp.p, new THREE.Euler(0, fp.ry, 0), REDUCED ? .01 : .7, REDUCED ? 0 : .9); fan.push(top); sfx("flip", { pitch: 1.1, volume: .6 }); }
+    if (!st.pile.length){ news("The draw pile is empty!"); chike("arms-crossed", "The draw pile is empty! Now the first player with no cards wins."); await wait(1600); }
+  }
+  layoutFans(false); paintCounts();
+  if (ev.complete){
+    /* 4/4: the stack flips over, with a glow, and the same player goes again */
+    sfx("win", { volume: .5 });
+    SLOTS[rank].meshes.forEach((m, k) => fly(m, m.position.clone(), new THREE.Euler(0, m.rotation.y, Math.PI), REDUCED ? .01 : .6, REDUCED ? 0 : .3 + k * .04, k * .06));
+    glowFlash = 1.4;
+    news(nm(i) + " finished the " + plural(rank) + ": 4/4! Bonus turn.");
+    banner("4/4! The " + plural(rank) + " are done. " + st.players[i].name + " gets a bonus turn!");
+    chike("thumbs-up", st.players[i].name + " finished the " + plural(rank) + "! When a stack gets all 4, it flips over and you get a bonus turn.");
+    await wait(REDUCED ? 900 : 2200);
+  }
+  G.busy = false;
+  if (ev.win) return gameOver();
+  turnStarted();
+}
+let glowFlash = 0;
+/* a reshuffle: the deck splits in two, the halves swap over and stack back up */
+async function doShuffle(i){
+  const st = G.state;
+  if (G.busy || !st || !reshuffle(st, i, Math.random)) return;
+  G.busy = true; tellAll();
+  news(nm(i) + " reshuffled the draw deck. Everyone gets one reshuffle a game.");
+  chike("point", st.players[i].name + " reshuffled the draw deck! Each player can do that once a game, on their turn.");
+  if (!REDUCED){
+    const half = Math.floor(PILE.meshes.length / 2);
+    await Promise.all(PILE.meshes.map((m, k) => { const left = k < half, to = new THREE.Vector3(PILE.x + (left ? -.55 : .55), pilePos(left ? k : k - half).y, PILE.z); return fly(m, to, new THREE.Euler(0, left ? .25 : -.25, 0), .35, .15); }));
+    for (let r = 0; r < 4; r++){ sfx("flip", { pitch: .9 + r * .1, volume: .5 }); await wait(90); }
+    await Promise.all(PILE.meshes.map((m, k) => fly(m, pilePos(k), new THREE.Euler(0, .05 * Math.sin(k * 3), 0), .4, .25, (k % 2) * .02)));
+  }
+  G.busy = false; tellAll();
+}
+
+function gameOver(){
+  const st = G.state, w = st.winner; G.phase = "over";
+  sfx("win"); paintSeats(); paintCounts();
+  banner(st.players[w].name + " wins! No cards left!");
+  chike("thumbs-up", "Great game, everyone! Matching cards and finishing sets is how you plan ahead. Want a rematch?");
+  news(nm(w) + " has no cards left and wins!");
+  const top3 = standings(st).slice(0, 3), order = top3.length === 3 ? [top3[1], top3[0], top3[2]] : top3.length === 2 ? [top3[1], top3[0]] : top3;
+  const H = { 0: 170, 1: 120, 2: 90 }, C = { 0: "var(--sun)", 1: "#C9D6E8", 2: "#E3B98A" };
+  $("podium").innerHTML = order.map(p => { const place = top3.indexOf(p); return '<div class="p"><div class="nm">' + esc(p.name) + '</div><small>' + p.left + (p.left === 1 ? " card" : " cards") + ' left</small><div class="blk" style="height:' + H[place] + 'px;background:' + C[place] + '">' + (place + 1) + '</div></div>'; }).join("");
+  $("podium").hidden = false; $("again").hidden = false;
+  if (!REDUCED) $("confetti").innerHTML = Array.from({ length: 40 }, (_, i) => '<i style="left:' + (i * 2.5) + '%;background:' + ["#FFD23F", "#17B3CE", "#D7263D", "#8FE3F0", "#B8E3A8"][i % 5] + ';animation-delay:' + (-(i * .37) % 4).toFixed(2) + 's"></i>').join("");
+  tellAll();
+}
+$("bAgain").onclick = () => { sfx("click"); startRound(); };
+$("bNewRoom").onclick = () => {
+  sfx("click"); G.state = null; G.phase = "lobby"; clearTable(); paintCounts();
+  G.seats = G.seats.filter(s => !s.bot);
+  $("podium").hidden = true; $("again").hidden = true; $("confetti").innerHTML = ""; banner("");
+  $("lobby").hidden = false; lobbyChanged(); tellAll();
+};
+
+/* ===================== each frame ===================== */
+const clock = new THREE.Clock();
+function frame(){
+  const dt = Math.min(.05, clock.getDelta()), t = clock.elapsedTime;
+  stepMoves(dt);
+  paintTurn(dt);
+  const st = G.state;
+  if (st && st.phase === "play" && st.active){ const sl = SLOTS[st.active]; glow.position.set(sl.x, TY + .004, sl.z); glow.material.opacity = .35 + .12 * Math.sin(t * 2.4); }
+  else if (glowFlash > 0){ glowFlash -= dt; glow.material.opacity = Math.max(0, glowFlash) * .5; }
+  else glow.material.opacity = 0;
+  BULBS.forEach((m, i) => { m.emissiveIntensity = REDUCED ? .9 : ((i + Math.floor(t * 10)) % 4 === 0) ? 2.4 : .35; });
+  if (!REDUCED) SWEEP.forEach((s, i) => s.target.position.set(Math.sin(t * .35 + i * 2.1) * 9, 0, Math.cos(t * .3 + i * 1.7) * 6 + 2));
+  camera.position.set(REDUCED ? 0 : Math.sin(t * .12) * .6, 8.2, 8.6); camera.lookAt(LOOK);
+  renderer.render(scene, camera);
+  placeTags();
+  requestAnimationFrame(frame);
+}
+frame();
+paintSeats(); lobbyChanged();
+makeRoom();
+addEventListener("beforeunload", () => send({ t: "closed" }));
+</script>
+</body>
+</html>

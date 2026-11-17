@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Matching Suits 3D Draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<style>
+  :root{ --ink:#1E2226; --sun:#FFD23F; --cream:#FFFBF3; --plum:#7A4A86; }
+  html,body{margin:0;height:100%;overflow:hidden;background:#12082a;font-family:Nunito,system-ui,sans-serif;color:var(--cream)}
+  canvas{display:block}
+  .ui{position:fixed;inset:0;pointer-events:none}
+  .top{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:12px;padding:12px 18px}
+  .top img{height:42px}
+  .marq{font-family:"Baloo 2";font-weight:800;font-size:30px;color:var(--sun);padding:2px 18px;border-radius:14px;background:#3a0f5c;border:3px solid #ffd23f;
+    box-shadow:0 0 0 4px #3a0f5c,0 0 18px rgba(255,210,63,.6);position:relative;text-shadow:0 2px 0 #8a5a00}
+  .marq i{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff3b0;box-shadow:0 0 8px #ffd23f;animation:bulb 1.2s steps(2) infinite}
+  @keyframes bulb{50%{background:#7a5a10;box-shadow:none}}
+  .sp{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:8px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:6px 12px;font-weight:900;font-size:14px}
+  .pill b{font-family:"Baloo 2";font-size:18px;letter-spacing:.12em;color:var(--sun)}
+  .banner{position:absolute;left:50%;top:76px;transform:translateX(-50%);background:var(--sun);color:var(--ink);border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);
+    border-radius:14px;padding:8px 18px;font-family:"Baloo 2";font-weight:800;font-size:22px;white-space:nowrap;transition:opacity .4s cubic-bezier(.2,.7,.2,1)}
+  .feed{position:absolute;right:16px;bottom:16px;width:270px;background:rgba(10,4,24,.78);border:1px solid rgba(255,255,255,.2);border-radius:14px;padding:10px 12px;font-size:13.5px;line-height:1.45}
+  .feed h4{margin:0 0 6px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--sun)}
+  .feed p{margin:0 0 5px}.feed p b{color:var(--sun)}
+  .chike{position:absolute;left:14px;bottom:12px;display:flex;align-items:flex-end;gap:8px;max-width:420px}
+  .chike img{width:118px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5))}
+  .chike .say{background:var(--cream);color:var(--ink);border:3px solid var(--ink);border-radius:16px 16px 16px 4px;padding:10px 13px;font-weight:800;font-size:16px;line-height:1.3;box-shadow:4px 4px 0 var(--ink);margin-bottom:58px}
+  .chike .say small{display:block;color:var(--plum);font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:2px}
+  .tag{position:absolute;transform:translate(-50%,-50%);font-weight:900;font-size:14px;white-space:nowrap}
+  .cnt{background:rgba(0,0,0,.55);color:#fff;border-radius:999px;padding:1px 9px}
+  .cnt.done{background:var(--sun);color:var(--ink)}
+  .seat{display:flex;flex-direction:column;align-items:center;gap:3px}
+  .seat .nm{background:var(--ink);color:#fff;border-radius:999px;padding:3px 11px}
+  .seat .ct{font-size:12px;background:rgba(0,0,0,.45);border-radius:999px;padding:1px 9px}
+  .seat.turn .nm{background:var(--sun);color:var(--ink);box-shadow:0 0 18px var(--sun)}
+  .note{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);font-size:12px;color:#bfa9e8;background:rgba(0,0,0,.4);padding:4px 10px;border-radius:999px}
+</style>
+</head>
+<body>
+<div class="ui">
+  <div class="top"><img src="/assets/brand/logo.webp" alt="Chike's Creative Space"><span class="marq" id="marq">Matching Suits</span><span class="sp"></span><span class="pill">Room <b>K7FM</b></span><span class="pill">Draw pile <b id="pileN">26</b></span></div>
+  <div class="banner" id="banner">Maya's turn: drop all your 7s, or pass</div>
+  <div class="feed"><h4>What just happened</h4><div id="feed"><p><b>Player #2</b> dropped two 7s and drew 1 card.</p><p><b>Robo</b> had no 7s and passed.</p></div></div>
+  <div class="chike"><img id="chikeImg" src="/assets/characters/chike-pose-point.png" alt="Chike"><div class="say"><small>Chike</small><span id="chikeSay">The 7s are on the table. Maya, if you have any 7s, drop them all. No 7s? Tap Pass.</span></div></div>
+  <div id="tags"></div>
+  <div class="note">Draft: the shared table screen in 3D (Three.js). Phones show your own hand, as in the first draft.</div>
+</div>
+<script type="module">
+import * as THREE from "three";
+
+/* ---------------- renderer, scene, camera ---------------- */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color("#1a0b3a");
+scene.fog = new THREE.Fog("#12082a", 16, 34);
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 100);
+const LOOK = new THREE.Vector3(0, 1, 0.5);
+addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+
+/* ---------------- textures, all drawn here ---------------- */
+function canvasTex(w, h, draw, repeat){
+  const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  if (repeat){ t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat[0], repeat[1]); }
+  return t;
+}
+const rnd = (a, b) => a + Math.random() * (b - a);
+/* felt: teal with fine fibers */
+const feltTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = "#0f8f86"; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 26000; i++){ g.fillStyle = Math.random() < .5 ? "rgba(255,255,255,.035)" : "rgba(0,0,0,.05)"; g.fillRect(rnd(0, w), rnd(0, h), 1.4, 1.4); }
+}, [6, 6]);
+/* polished wood for the rim */
+const woodTex = canvasTex(512, 128, (g, w, h) => {
+  const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, "#7a3f1d"); gr.addColorStop(.5, "#a2582a"); gr.addColorStop(1, "#6a3418"); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 60; i++){ g.strokeStyle = "rgba(40,15,5," + rnd(.08, .25) + ")"; g.lineWidth = rnd(.6, 2); g.beginPath(); const y = rnd(0, h); g.moveTo(0, y); for (let x = 0; x <= w; x += 32) g.lineTo(x, y + Math.sin(x / rnd(40, 90)) * rnd(1, 5)); g.stroke(); }
+}, [8, 1]);
+/* a playful carpet: purple with stars and card suits */
+const SUITS = {
+  h: "M12 21s-7.5-4.6-9.6-9.2C.7 8 3 4 6.8 4c2.2 0 3.6 1.2 5.2 3 1.6-1.8 3-3 5.2-3C21 4 23.3 8 21.6 11.8 19.5 16.4 12 21 12 21z",
+  d: "M12 2l8 10-8 10-8-10z",
+  c: "M12 3a4 4 0 0 1 3.6 5.8A4 4 0 1 1 13.5 15l1.5 6H9l1.5-6a4 4 0 1 1-2.1-6.2A4 4 0 0 1 12 3z",
+  s: "M12 2s8 6.5 8 11a4 4 0 0 1-6.5 3.1L15 21H9l1.5-4.9A4 4 0 0 1 4 13c0-4.5 8-11 8-11z"
+};
+function drawSuit(g, s, x, y, size, color){ g.save(); g.translate(x - size / 2, y - size / 2); g.scale(size / 24, size / 24); g.fillStyle = color; g.fill(new Path2D(SUITS[s])); g.restore(); }
+const carpetTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = "#3b1466"; g.fillRect(0, 0, w, h);
+  const cols = ["#ffd23f", "#17b3ce", "#ff6fa8", "#8fe3f0"], ss = ["h", "d", "c", "s"];
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++){ const i = (x + y) % 4; drawSuit(g, ss[i], x * 128 + 64 + (y % 2) * 32, y * 128 + 64, 34, cols[i] + "55"); }
+  for (let i = 0; i < 40; i++){ g.fillStyle = "rgba(255,255,255,.18)"; g.beginPath(); g.arc(rnd(0, w), rnd(0, h), rnd(1, 2.4), 0, 7); g.fill(); }
+}, [10, 10]);
+/* card faces */
+const RED = "#D7263D", SLATE = "#2B3445";
+function cardFace(rank, suit){
+  return canvasTex(256, 360, (g, w, h) => {
+    g.fillStyle = "#FFFBF3"; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 22); g.fill();
+    g.lineWidth = 6; g.strokeStyle = "#1E2226"; g.stroke();
+    const col = suit === "h" || suit === "d" ? RED : SLATE;
+    g.fillStyle = col; g.font = "800 64px 'Baloo 2', sans-serif"; g.textBaseline = "top"; g.fillText(rank, 20, 14);
+    drawSuit(g, suit, 46, 104, 46, col);
+    g.save(); g.translate(w, h); g.rotate(Math.PI); g.fillText(rank, 20, 14); drawSuit(g, suit, 46, 104, 46, col); g.restore();
+    drawSuit(g, suit, w / 2, h / 2, 130, col);
+  });
+}
+const backTex = canvasTex(256, 360, (g, w, h) => {
+  g.fillStyle = "#2a4fae"; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 22); g.fill();
+  g.save(); g.clip(); for (let i = -h; i < w + h; i += 22){ g.strokeStyle = "#3b63c7"; g.lineWidth = 10; g.beginPath(); g.moveTo(i, 0); g.lineTo(i + h, h); g.stroke(); } g.restore();
+  g.lineWidth = 6; g.strokeStyle = "#1E2226"; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 22); g.stroke();
+  g.lineWidth = 5; g.strokeStyle = "rgba(255,255,255,.8)"; g.beginPath(); g.roundRect(26, 26, w - 52, h - 52, 14); g.stroke();
+});
+/* the site's logo on every card back */
+const logo = new Image(); logo.src = "/assets/brand/logo.webp";
+logo.onload = () => { const g = backTex.image.getContext("2d"); const lw = 190, lh = lw * logo.height / logo.width; g.drawImage(logo, (256 - lw) / 2, (360 - lh) / 2, lw, lh); backTex.needsUpdate = true; };
+
+/* ---------------- the room ---------------- */
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ map: carpetTex, roughness: .95 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+/* the table: an oval of teal felt in a gold-trimmed wooden rim, on a pedestal */
+const TW = 6.4, TD = 4.1, TY = 1.0;
+const table = new THREE.Group(); scene.add(table);
+const top = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, .12, 96), [
+  new THREE.MeshStandardMaterial({ color: "#5e2f14", roughness: .6 }), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 1 }), new THREE.MeshStandardMaterial({ color: "#5e2f14" })]);
+top.scale.set(TW, 1, TD); top.position.y = TY - .06; top.receiveShadow = true; table.add(top);
+const rim = new THREE.Mesh(new THREE.TorusGeometry(1, .055, 24, 128), new THREE.MeshStandardMaterial({ map: woodTex, roughness: .35, metalness: .1 }));
+rim.rotation.x = Math.PI / 2; rim.scale.set(TW + .05, TD + .05, 4.2); rim.position.y = TY + .02; rim.castShadow = true; rim.receiveShadow = true; table.add(rim);
+const trim = new THREE.Mesh(new THREE.TorusGeometry(1, .012, 8, 128), new THREE.MeshStandardMaterial({ color: "#ffd23f", metalness: .9, roughness: .25 }));
+trim.rotation.x = Math.PI / 2; trim.scale.set(TW - .2, TD - .2, 1); trim.position.y = TY + .005; table.add(trim);
+const ped = new THREE.Mesh(new THREE.CylinderGeometry(.6, 1.1, TY - .1, 32), new THREE.MeshStandardMaterial({ color: "#4a230e", roughness: .5 }));
+ped.position.y = (TY - .1) / 2; ped.castShadow = true; table.add(ped);
+
+/* marquee bulbs that chase around the rim: the kids' casino sparkle */
+const BULBS = [], NB = 64;
+const bulbGeo = new THREE.SphereGeometry(.07, 12, 8);
+for (let i = 0; i < NB; i++){
+  const a = i / NB * Math.PI * 2, m = new THREE.MeshStandardMaterial({ color: "#fff3b0", emissive: "#ffd23f", emissiveIntensity: 1 });
+  const b = new THREE.Mesh(bulbGeo, m); b.position.set(Math.cos(a) * (TW + .06), TY + .26, Math.sin(a) * (TD + .06)); table.add(b); BULBS.push(m);
+}
+
+/* ---------------- light: a warm lamp over the table, soft shadows, colorful spotlights ---------------- */
+scene.add(new THREE.HemisphereLight("#c9b8ff", "#4a1a75", 1.0));
+const lamp = new THREE.SpotLight("#fff1d6", 60, 0, .72, .55, 1.6);
+lamp.position.set(0, 7.2, .3); lamp.target.position.set(0, TY, .3); lamp.castShadow = true;
+lamp.shadow.mapSize.set(2048, 2048); lamp.shadow.bias = -0.0004; lamp.shadow.radius = 4;
+scene.add(lamp, lamp.target);
+const shade = new THREE.Mesh(new THREE.ConeGeometry(.9, .7, 32, 1, true), new THREE.MeshStandardMaterial({ color: "#3a0f5c", side: THREE.DoubleSide, metalness: .3, roughness: .4 }));
+shade.position.set(0, 7.6, .3); scene.add(shade);
+const bulb = new THREE.Mesh(new THREE.SphereGeometry(.22, 16, 12), new THREE.MeshBasicMaterial({ color: "#fff6d8" })); bulb.position.set(0, 7.35, .3); scene.add(bulb);
+/* party spotlights that sweep the carpet (pink, cyan, yellow) */
+const SWEEP = ["#ff6fa8", "#17b3ce", "#ffd23f"].map((c, i) => {
+  const s = new THREE.SpotLight(c, 160, 0, .38, .6, 1.3); s.position.set((i - 1) * 9, 10, -6); scene.add(s, s.target); return s;
+});
+
+/* ---------------- cards ---------------- */
+const CW = .62, CH = .88, CT = .012;
+const edgeMat = new THREE.MeshStandardMaterial({ color: "#f4efe2", roughness: .7 });
+const backMat = new THREE.MeshStandardMaterial({ map: backTex, roughness: .55 });
+const faceMats = {};
+function faceMat(r, s){ const k = r + s; return faceMats[k] || (faceMats[k] = new THREE.MeshStandardMaterial({ map: cardFace(r, s), roughness: .5 })); }
+const cardGeo = new THREE.BoxGeometry(CW, CT, CH);
+function makeCard(r, s){
+  /* box faces: +x, -x, +y (face up), -y (back), +z, -z */
+  const m = new THREE.Mesh(cardGeo, [edgeMat, edgeMat, r ? faceMat(r, s) : backMat, backMat, edgeMat, edgeMat]);
+  m.castShadow = true; m.receiveShadow = true; scene.add(m); return m;
+}
+
+/* the 13 slots: a dashed outline printed on the felt with the rank, in two rows */
+const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const SLOT = [];
+function slotOutline(rank){
+  const t = canvasTex(160, 214, (g, w, h) => {
+    g.setLineDash([12, 9]); g.lineWidth = 6; g.strokeStyle = "rgba(255,255,255,.55)"; g.beginPath(); g.roundRect(6, 6, w - 12, h - 12, 16); g.stroke();
+    g.fillStyle = "rgba(255,255,255,.28)"; g.font = "800 72px 'Baloo 2', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(rank, w / 2, h / 2 + 4);
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(.8, 1.07), new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 1 }));
+  m.rotation.x = -Math.PI / 2; m.receiveShadow = true; return m;
+}
+RANKS.forEach((r, i) => {
+  const row = i < 7 ? 0 : 1, k = row ? i - 7 : i, n = row ? 6 : 7;
+  const x = (k - (n - 1) / 2) * 1.12, z = row ? .55 : -.85;
+  const o = slotOutline(r); o.position.set(x, TY + .002, z); scene.add(o);
+  SLOT.push({ r, x, z, cards: [], done: false });
+});
+/* the glow under the slot that is being played */
+const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 1.3), new THREE.MeshBasicMaterial({ color: "#ffd23f", transparent: true, opacity: .45, blending: THREE.AdditiveBlending, depthWrite: false }));
+glow.rotation.x = -Math.PI / 2; scene.add(glow);
+
+/* stacks build UPWARD: each card sits on the one below, a hair turned */
+function stackPos(slot, i){ return new THREE.Vector3(slot.x + Math.sin(i * 2.1) * .03, TY + CT / 2 + i * (CT + .004), slot.z + Math.cos(i * 1.7) * .03); }
+function place(slot, r, s){ const c = makeCard(r, s), i = slot.cards.length; c.position.copy(stackPos(slot, i)); c.rotation.y = (Math.random() - .5) * .12; slot.cards.push(c); return c; }
+const S = (r) => SLOT[RANKS.indexOf(r)];
+place(S("A"), "A", "s");
+place(S("3"), "3", "h"); place(S("3"), "3", "c");
+place(S("Q"), "Q", "d");
+["10h", "10s", "10d", "10c"].forEach(k => { const c = place(S("10"), "10", k.slice(-1)); c.rotation.z = Math.PI; });   /* a finished 4/4 stack lies face down */
+S("10").done = true;
+const SEVENS = [["7", "h"], ["7", "s"], ["7", "d"]];
+function resetSevens(){ const sl = S("7"); sl.cards.forEach(c => scene.remove(c)); sl.cards = []; sl.done = false; SEVENS.forEach(([r, s]) => place(sl, r, s)); }
+resetSevens();
+
+/* the draw pile: a real deck in the middle, which gets shorter */
+const PILE = { x: 0, z: 1.75, cards: [] };
+for (let i = 0; i < 26; i++){ const c = makeCard(null); c.position.set(PILE.x + Math.sin(i) * .01, TY + CT / 2 + i * (CT + .002), PILE.z); c.rotation.y = .05 * Math.sin(i * 3); PILE.cards.push(c); }
+
+/* players around the table, each with a fan of face-down cards in front of them */
+const PLAYERS = [
+  { name: "Player #2", cards: 3, pos: new THREE.Vector3(-5.6, TY, -.1), face: Math.PI / 2 },
+  { name: "Robo", cards: 6, pos: new THREE.Vector3(5.6, TY, -.1), face: -Math.PI / 2 },
+  { name: "Maya", cards: 5, pos: new THREE.Vector3(-1.9, TY, 3.55), face: Math.PI, turn: true },
+  { name: "Leo", cards: 4, pos: new THREE.Vector3(2.4, TY, 3.55), face: Math.PI }
+];
+PLAYERS.forEach(p => {
+  p.hand = [];
+  for (let i = 0; i < p.cards; i++){
+    const c = makeCard(null), a = p.face, off = (i - (p.cards - 1) / 2) * .22;
+    const inward = new THREE.Vector3(-Math.sin(a), 0, -Math.cos(a)).multiplyScalar(-.55);
+    c.position.set(p.pos.x + Math.cos(a) * off + inward.x * -1 * 0 + (p.pos.x > 4 ? -.6 : p.pos.x < -4 ? .6 : 0), TY + CT / 2 + i * .002, p.pos.z + (p.pos.z > 3 ? -.75 : 0) + Math.sin(a) * off);
+    c.rotation.y = a + (i - (p.cards - 1) / 2) * .08; p.hand.push(c);
+  }
+});
+
+/* ---------------- labels on the table (counts and names), kept in place on screen ---------------- */
+const tagsEl = document.getElementById("tags"), TAGS = [];
+function tag(html, cls, pos){ const el = document.createElement("div"); el.className = "tag " + cls; el.innerHTML = html; tagsEl.appendChild(el); TAGS.push({ el, pos }); return el; }
+SLOT.forEach(s => { s.tag = tag("", "cnt" + (s.done ? " done" : ""), new THREE.Vector3(s.x, TY, s.z + .72)); });
+function paintCounts(){ SLOT.forEach(s => { s.tag.textContent = s.done ? "4/4 done" : s.cards.length + "/4"; s.tag.className = "tag cnt" + (s.done ? " done" : ""); }); }
+paintCounts();
+PLAYERS.forEach(p => { p.tag = tag('<div class="seat' + (p.turn ? " turn" : "") + '"><span class="nm">' + p.name + '</span><span class="ct">' + p.cards + ' cards</span></div>', "", p.pos.clone().add(new THREE.Vector3(0, .5, 0))); });
+const v = new THREE.Vector3();
+function placeTags(){ TAGS.forEach(t => { v.copy(t.pos).project(camera); t.el.style.left = ((v.x + 1) / 2 * innerWidth) + "px"; t.el.style.top = ((1 - v.y) / 2 * innerHeight) + "px"; }); }
+
+/* marquee bulbs on the title sign */
+const mq = document.getElementById("marq");
+for (let i = 0; i < 14; i++){ const b = document.createElement("i"); const f = i / 14; b.style.left = (f * 100) + "%"; b.style.top = (i % 2 ? "-6px" : "calc(100% - 1px)"); b.style.animationDelay = (i % 2 ? .6 : 0) + "s"; mq.appendChild(b); }
+
+/* ---------------- a short loop of play: Maya drops her 7, finishes the 7s, flips them, and draws ---------------- */
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const MOVES = [];
+function fly(card, to, rotTo, dur, arc, done){ MOVES.push({ card, from: card.position.clone(), to, r0: card.rotation.clone(), r1: rotTo, t: 0, dur, arc, done }); }
+const banner = document.getElementById("banner"), say = document.getElementById("chikeSay"), cimg = document.getElementById("chikeImg"), feed = document.getElementById("feed"), pileN = document.getElementById("pileN");
+function chike(pose, text){ cimg.src = "/assets/characters/chike-pose-" + pose + ".png"; say.textContent = text; }
+function news(html){ const p = document.createElement("p"); p.innerHTML = html; feed.prepend(p); while (feed.children.length > 3) feed.lastChild.remove(); }
+let loopT = 0, step = 0, drawn = null;
+function runLoop(dt){
+  loopT += dt;
+  const maya = PLAYERS[2], sl = S("7");
+  if (step === 0 && loopT > 1.6){
+    step = 1;
+    const c = makeCard("7", "c"); c.position.copy(maya.hand[maya.hand.length - 1].position); c.position.y += .3;
+    const to = stackPos(sl, sl.cards.length); sl.cards.push(c);
+    fly(c, to, new THREE.Euler(0, (Math.random() - .5) * .12, 0), 1.1, 1.4, () => { paintCounts(); news("<b>Maya</b> dropped the 7 of clubs."); });
+  }
+  if (step === 1 && loopT > 3.2){
+    step = 2; sl.done = true; paintCounts();
+    banner.textContent = "4/4! The 7s are done. Maya gets a bonus turn!";
+    chike("thumbs-up", "Maya finished the 7s! When a stack gets all 4, it flips over and you get a bonus turn.");
+    news("<b>Maya</b> finished the 7s: 4/4! Bonus turn.");
+    sl.cards.forEach((c, i) => fly(c, c.position.clone(), new THREE.Euler(0, c.rotation.y, Math.PI), .7, .25 + i * .05));
+  }
+  if (step === 2 && loopT > 4.6){
+    step = 3;
+    const top = PILE.cards.pop(); pileN.textContent = PILE.cards.length;
+    fly(top, maya.hand[2].position.clone().add(new THREE.Vector3(0, .05, 0)), new THREE.Euler(0, Math.PI + .1, 0), 1, 1.1, () => { drawn = top; });
+    news("<b>Maya</b> drew 1 card.");
+  }
+  if (step === 3 && loopT > 6.4){
+    step = 4;
+    banner.textContent = "Maya's bonus turn: pick any rank to start a new chain";
+    chike("point-up", "Bonus turn! Maya can start a new chain with any card she has. Which one will she pick?");
+  }
+  if (step === 4 && loopT > 9.5){
+    /* back to the start of the loop */
+    step = 0; loopT = 0; resetSevens(); paintCounts();
+    if (drawn){ scene.remove(drawn); drawn = null; }
+    const c = makeCard(null); c.position.set(PILE.x, TY + CT / 2 + PILE.cards.length * (CT + .002), PILE.z); PILE.cards.push(c); pileN.textContent = PILE.cards.length;
+    banner.textContent = "Maya's turn: drop all your 7s, or pass";
+    chike("point", "The 7s are on the table. Maya, if you have any 7s, drop them all. No 7s? Tap Pass.");
+  }
+}
+
+/* ---------------- each frame ---------------- */
+const clock = new THREE.Clock();
+function frame(){
+  const dt = Math.min(.05, clock.getDelta()), t = clock.elapsedTime;
+  runLoop(dt);
+  for (let i = MOVES.length - 1; i >= 0; i--){
+    const m = MOVES[i]; m.t = Math.min(1, m.t + dt / m.dur); const e = easeOut(m.t);
+    m.card.position.lerpVectors(m.from, m.to, e); m.card.position.y += Math.sin(Math.PI * e) * m.arc;
+    m.card.rotation.set(m.r0.x + (m.r1.x - m.r0.x) * e, m.r0.y + (m.r1.y - m.r0.y) * e, m.r0.z + (m.r1.z - m.r0.z) * e);
+    if (m.t >= 1){ MOVES.splice(i, 1); if (m.done) m.done(); }
+  }
+  /* the glow under the slot in play */
+  const sl = S("7"); glow.position.set(sl.x, TY + .004, sl.z); glow.material.opacity = sl.done ? .65 + .2 * Math.sin(t * 6) : .35 + .12 * Math.sin(t * 2.4);
+  /* chasing bulbs and sweeping spotlights */
+  BULBS.forEach((m, i) => { m.emissiveIntensity = ((i + Math.floor(t * 10)) % 4 === 0) ? 2.4 : .35; });
+  SWEEP.forEach((s, i) => s.target.position.set(Math.sin(t * .35 + i * 2.1) * 9, 0, Math.cos(t * .3 + i * 1.7) * 6 + 2));
+  /* the camera drifts a little, easing, so the table feels alive */
+  camera.position.set(Math.sin(t * .12) * .6, 8.2, 8.6); camera.lookAt(LOOK);
+  renderer.render(scene, camera);
+  placeTags();
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
