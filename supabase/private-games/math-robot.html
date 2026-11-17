@@ -333,60 +333,89 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
   }
 
   /* ---------------- the voice ----------------
-     The best-sounding English voice built into this browser and device. It speaks right away, with nothing to download.
-     Online voices are skipped, so nothing the robot says leaves the computer. */
+     Robo Math Buddy's own voice (owner's pick, 2026-11-17: voice B, Kokoro af_nova with a light metallic robot effect,
+     "a robot sound but with a human cadence"), pre-recorded, so it sounds the same on every device and nothing the robot
+     says leaves the computer. Every fixed sentence is one clip; in a math sentence the words between the numbers ("what
+     is", "plus", "the answer is") are clips and numbers are said word by word. Names are left out of the voice; they are
+     always in the chat. scripts/robot-lines.mjs lists what is recorded. */
   function voiceLabel(text){ $("voice").querySelector("span").textContent = text; }
-  var bestVoice = null;
-  function voiceScore(v){
-    var n = v.name, s = 0;
-    if (!/^en/i.test(v.lang) || v.localService === false) return -1;
-    if (/^en[-_]US/i.test(v.lang)) s += 20; else if (/^en[-_](GB|AU|CA|IE|NZ)/i.test(v.lang)) s += 10;
-    if (/natural/i.test(n)) s += 60;
-    if (/\b(Aria|Jenny|Ana|Emma|Michelle|Ava|Sonia|Libby)\b/i.test(n)) s += 12;
-    if (/enhanced|premium|neural/i.test(n)) s += 35;
-    if (/Samantha/i.test(n)) s += 32;
-    if (/\b(Zira|Hazel|Susan|Karen|Moira|Tessa)\b/i.test(n)) s += 5;        /* the friendlier of the older voices */
-    if (/espeak|Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Deranged|Good News|Hysterical|Jester|Junior|Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox|Fred|Ralph|Kathy|Princess/i.test(n)) s -= 100;
-    return s;
+  /* BEGIN voice-pure */
+  function voiceHash(t){ var h = 0x811c9dc5; for (var i = 0; i < t.length; i++){ h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(36); }
+  var VOICE_ONES = ["zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"];
+  var VOICE_TENS = ["","","twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety"];
+  function intWords(n){
+    if (n < 20) return [VOICE_ONES[n]];
+    if (n < 100) return [VOICE_TENS[Math.floor(n / 10)]].concat(n % 10 ? [VOICE_ONES[n % 10]] : []);
+    if (n < 1000) return [VOICE_ONES[Math.floor(n / 100)], "hundred"].concat(n % 100 ? intWords(n % 100) : []);
+    if (n < 1e6) return intWords(Math.floor(n / 1000)).concat(["thousand"], n % 1000 ? intWords(n % 1000) : []);
+    return intWords(Math.floor(n / 1e6)).concat(["million"], n % 1e6 ? intWords(n % 1e6) : []);
   }
-  function chooseVoice(){
-    var list = [];
-    try { list = speechSynthesis.getVoices() || []; } catch(e) {}
-    var best = null, top = -1;
-    list.forEach(function(v){ var s = voiceScore(v); if (s > top){ top = s; best = v; } });
-    return best;
+  /* "1,234.5" -> one thousand two hundred thirty four point five */
+  function numberWords(str){
+    var parts = String(str).replace(/,/g, "").split("."), n = parseInt(parts[0], 10);
+    if (!isFinite(n) || n < 0 || n >= 1e9) return [];
+    var out = intWords(n);
+    if (parts[1]) out = out.concat(["point"], parts[1].split("").map(function(d){ return VOICE_ONES[+d]; }));
+    return out;
   }
-  if ("speechSynthesis" in window){
-    bestVoice = chooseVoice();
-    try { speechSynthesis.addEventListener("voiceschanged", function(){ bestVoice = chooseVoice(); }); } catch(e) {}
+  /* math read the way a person says it ("7/8" is "7 over 8", not July 8th) */
+  function sayable(text){
+    return String(text).replace(/(\d)\s*\/\s*(\d)/g, "$1 over $2").replace(/×/g, " times ").replace(/÷/g, " divided by ").replace(/−/g, " minus ")
+      .replace(/=/g, " equals ").replace(/\+/g, " plus ").replace(/(^|\s)-\s?(?=\d)/g, "$1minus ").replace(/\s-\s/g, " minus ").replace(/%/g, " percent")
+      .replace(/[^\w\s.,!?'’:-]/g, " ").replace(/\s+/g, " ").trim();
   }
-  function deviceSpeak(text){
-    if (!("speechSynthesis" in window)) return;
-    try {
-      speechSynthesis.cancel();
-      if (!bestVoice) bestVoice = chooseVoice();
-      if (!bestVoice) return;                        /* no voice on this device: the words still show in the chat */
-      var u = new SpeechSynthesisUtterance(text); u.voice = bestVoice; u.lang = bestVoice.lang;
-      var natural = voiceScore(bestVoice) >= 50;     /* a natural voice sounds friendly a little higher; an old flat one needs more lift */
-      u.rate = natural ? 1.0 : 1.05; u.pitch = natural ? 1.15 : 1.35;
-      u.onend = function(){ talkUntil = performance.now() + 150; };
-      speechSynthesis.speak(u);
-    } catch(e) {}
+  /* a sentence that loses its name: some say something else instead, some are left to the chat */
+  var VOICE_FIX = { "Your name is §!": "", "My name is §!": "", "I'll call you § from now on.": "I'll call you that from now on.",
+    "My name is § now.": "That's my name now.", "§ is a great color!": "That's a great color!" };
+  /* what to play for a message: [{ key, text }]. skips: names to leave out. has(key): is there a whole recording of it */
+  function voicePlan(text, skips, has){
+    var s = sayable(text), out = [];
+    (skips || []).forEach(function(n){ n = n && sayable(n); if (n) s = s.split(n).join("§"); });
+    (s.match(/(?:[^.!?]|\.(?=\d))+[.!?]*/g) || []).forEach(function(sent){
+      sent = sent.trim();
+      if (sent.indexOf("§") >= 0) sent = VOICE_FIX[sent] !== undefined ? VOICE_FIX[sent] : sent.replace(/,?\s*§/g, "").replace(/\s+([.!?,])/g, "$1").trim();
+      if (!sent || !/[a-z0-9]/i.test(sent)) return;
+      var key = "s" + voiceHash(sent);
+      if (!/\d/.test(sent) || has(key)){ out.push({ key: key, text: sent }); return; }
+      sent.split(/(\d[\d,]*(?:\.\d+)?)/).forEach(function(part){
+        if (/^\d/.test(part)){ numberWords(part).forEach(function(w){ out.push({ key: "n-" + w, text: w }); }); return; }
+        var w = part.toLowerCase().replace(/[^a-z' ]/g, " ").replace(/\s+/g, " ").trim();
+        if (w) out.push({ key: "r" + voiceHash(w), text: w });
+      });
+    });
+    return out;
   }
+  /* END voice-pure */
+  var VOICE_DIR = "/assets/games/robo-math/voice/";
+  var VOICE_CLIPS = {};
+  "n-eight n-eighteen n-eighty n-eleven n-fifteen n-fifty n-five n-forty n-four n-fourteen n-hundred n-million n-nine n-nineteen n-ninety n-one n-point n-seven n-seventeen n-seventy n-six n-sixteen n-sixty n-ten n-thirteen n-thirty n-thousand n-three n-twelve n-twenty n-two n-zero r1708pge r1ikkigl r1wsz7ov r1z0b5ep r5dyfkm rdv23nz rekxm6w rlpjdtp rmjg61g rpuzibo rpx1mt1 rwqfmmy s101e3yb s10jx22t s10rvppm s11e2dou s12634zg s12bvz8u s12nn6f5 s12oc58m s12ueh7y s12v9tn3 s135bc1l s13ozb4k s14mdfsw s1573r70 s15bod5v s15som2c s163yjlw s16b5euc s16e29qz s16eoddi s16h6pn3 s16s9ptz s16u3a74 s1700snj s173m9ag s174vd4c s17do04e s195l20j s19cyo7k s19hckop s19vge3j s19wi2c3 s1a82w9w s1aizujf s1ax3pua s1bnngc0 s1cd77qa s1d3i6s7 s1dchj66 s1e8fjta s1ee0kgo s1f56cd8 s1f9nlsa s1getgky s1gmtcvx s1h0ss4x s1h895ak s1hcnzdd s1hhxydh s1hw0339 s1j66d5d s1jeqww9 s1jj01xy s1jl54vw s1jsfkzu s1jxnjkx s1jzqphr s1l3zqip s1l9bwjd s1lec2nq s1lnv649 s1lwev35 s1lxfymb s1mn22b7 s1ncnfiw s1nh87v7 s1nu7eg0 s1olvu3w s1p56cem s1p6k14z s1qldkpf s1qv0zxr s1qvbbqf s1rdla48 s1sn81e4 s1t5248 s1t6aoxl s1tb0hlc s1tdhqio s1u73bg8 s1ua2sj4 s1vcx1mz s1vfl3th s1vwuuto s1vyevf3 s1w24tfd s1wl6hfb s1y5z18n s1y83zff s23le93 s2ka1z4 s2ko7yz s30kqyk s3alka9 s3txg2y s48he6r s4i6vbh s4tt6go s5swhqj s5uq3fg s5w7aje s653y95 s7d546f s7woruv s7xz0z1 s84wa9d s8pnm6a s8rbla4 s9e91go s9rpjhn sa8fzpl saqwl4a sblr7ul sbtpc62 sc2rl6p sc3d4w9 scr78ir sdkxfuy sdz2by9 sex8fxk sezkst8 sf5ecxs sfnlfi8 sg2wo26 sg6dohd shk7i21 si8zbk4 sikgrv1 sim4sm6 sizv82l sjwua3g skmptqb slrdzkj smiqerq snmzro1 so8qh7d soel860 sp67sxs spkdjx3 spy9f2 sqdhz3y sqp3z7k srb4q5p sreij1f srjsrmk ssj77kn sso1t70 ssxpy32 suz489a sv0dd22 sv54zln svqfcai sw3xmxt sw6q94t swf3h2u swfzxrn sxp809j sxyw82i sy6rufc syab90d sz42zoc szmls9y szojbma szunpe7".split(" ").forEach(function(k){ if (k) VOICE_CLIPS[k] = 1; });
+  var voiceNow = new Audio(), voiceSoon = new Audio(), voiceQueue = [];
+  function voiceNext(){
+    var k = voiceQueue.shift();
+    if (!k){ talkUntil = performance.now() + 150; return; }
+    voiceNow.src = VOICE_DIR + k + ".mp3";
+    voiceNow.volume = window.CCSSound && CCSSound.volume ? CCSSound.volume("sfx") : 1;
+    var p = voiceNow.play(); if (p && p.catch) p.catch(function(){});
+    if (voiceQueue[0]){ voiceSoon.src = VOICE_DIR + voiceQueue[0] + ".mp3"; voiceSoon.preload = "auto"; }   /* the next piece is ready, so pieces follow on smoothly */
+  }
+  voiceNow.addEventListener("ended", voiceNext);
+  voiceNow.addEventListener("error", voiceNext);
+  function robotSpeak(text, skips){
+    try { voiceNow.pause(); } catch(e) {}
+    voiceQueue = voicePlan(text, skips, function(k){ return !!VOICE_CLIPS[k]; })
+      .map(function(p){ return p.key; }).filter(function(k){ return VOICE_CLIPS[k]; });
+    voiceNext();
+  }
+  function robotQuiet(){ voiceQueue = []; try { voiceNow.pause(); } catch(e) {} }
+  function robotTalking(){ return voiceQueue.length > 0 || (!voiceNow.paused && !voiceNow.ended); }
 
-  /* read math out the way a person would say it ("7/8" is "7 over 8", not July 8th) */
-  function spoken(text){
-    return text.replace(/(\d)\s*\/\s*(\d)/g, "$1 over $2").replace(/×/g, " times ").replace(/÷/g, " divided by ").replace(/−/g, " minus ")
-      .replace(/=/g, " equals ").replace(/[^\w\s.,!?'’:+\-%]/g, " ").replace(/\s+/g, " ");
-  }
-
-  /* saying things: a chat message, and the voice when it is on */
-  function say(text){
+  /* saying things: a chat message, and the voice when it is on. skip: more words (like a typed color) to leave out of the voice */
+  function say(text, skip){
     addMsg("bot", text);
     refreshChips();
     talkUntil = performance.now() + Math.min(9000, 400 + text.length * 30);
     if (!state.voice) return;
-    deviceSpeak(spoken(text));
+    robotSpeak(text, [mem.name, mem.botName].concat(skip || []));
   }
   function pick(list){ return list[Math.floor(Math.random() * list.length)]; }
 
@@ -1044,7 +1073,7 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
       if (/good|great|fine|ok|okay|awesome|happy|amazing|well|yes/.test(t)){ mood("happy", 2.2); say(pick(["Yay! I'm so glad, " + mem.name + "!", "That makes my lights shine brighter!"]) + " " + ASK_MENU); return; }
     }
     if (was === "day"){ mood("happy", 2); say("That sounds fun! Thanks for telling me, " + mem.name + ". What would you like to do now?"); return; }
-    if (was === "color"){ var col = cleanName(text); mood("love", 2); say((col ? col + " is" : "That's") + " a great color! My eyes might glow that color tonight."); return; }
+    if (was === "color"){ var col = cleanName(text); mood("love", 2); say((col ? col + " is" : "That's") + " a great color! My eyes might glow that color tonight.", [col]); return; }
 
     /* what the kid wants to do */
     if (/i have a question|question for you|can i ask|ask (you )?a question/.test(t)){ leaveModes(); state.pending = "ask"; mood("happy", 2); say("Sure! Ask me anything. It can be a math question, like \"What is 12 times 8?\", or a question about me!"); return; }
@@ -1421,7 +1450,7 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
       headG.rotation.y = Math.cos(t * 1.0) * .08;
 
       /* the eyes: what the robot feels, where it looks, and blinking */
-      var talking = now < talkUntil || (state.voice && window.speechSynthesis && speechSynthesis.speaking);
+      var talking = now < talkUntil || (state.voice && robotTalking());
       var m = state.wantFive ? "excited" : (now < robot.moodUntil ? robot.mood : "neutral");
       look.next -= dt;
       if (input === document.activeElement && input.value){ look.tx = 28; look.ty = 8; }          /* glances at the chat while you type */
@@ -1497,7 +1526,7 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
       voiceLabel("Voice on");
     } else {
       voiceLabel("Voice off");
-      try { speechSynthesis.cancel(); } catch(e) {}
+      robotQuiet();
     }
   });
   $("newq").addEventListener("click", function(){
@@ -1530,7 +1559,7 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
       rec.onresult = function(ev){ hear(ev.results[0][0].transcript); };
       rec.onerror = function(){ say("I couldn't hear you. You can type to me instead!"); };
       rec.onend = function(){ rec = null; btn.classList.remove("on"); };
-      try { speechSynthesis.cancel(); } catch(e) {}
+      robotQuiet();   /* stop talking while listening */
       rec.start(); btn.classList.add("on");
     } catch(e) { rec = null; say("The microphone isn't available here. You can type to me instead!"); }
   });
