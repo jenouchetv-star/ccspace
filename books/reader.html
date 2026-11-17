@@ -92,11 +92,20 @@
             bottom: 22px;
             transform: translateX(-50%);
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             z-index: 40;
         }
+        /* Read to me (owner, 2026-11-16): a yellow pill beside All pages, and a soft highlighter on the word being read */
+        #read-btn{display:inline-flex;align-items:center;gap:8px;background:#F2C230;color:#1E2226;border:none;border-radius:25px;padding:10px 18px;
+            font-family:'Poppins',sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.25);transition:all .3s ease}
+        #read-btn:hover{filter:brightness(.92);transform:translateY(2px)}
+        #read-btn:focus-visible{outline:3px solid #1E2226;outline-offset:3px}
+        #read-btn svg{width:16px;height:16px;flex:none}
+        #read-btn[hidden]{display:none}
+        .rw{border-radius:5px;transition:background-color .12s ease,box-shadow .12s ease}
+        .rw.now{background:rgba(242,194,48,.75);box-shadow:0 0 0 2px rgba(242,194,48,.75)}
         #all-pages-btn {
             background-color: #BC3229;
             color: white;
@@ -533,6 +542,7 @@
             </button>
         </div>
         <div class="bottom-controls">
+            <button type="button" id="read-btn" aria-pressed="false" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg><span>READ TO ME</span></button>
             <button id="all-pages-btn"><p style="font-family: poppins; font-size: 12px; color: white; letter-spacing: 2px; margin:0"><b>&#9776;  ALL PAGES</b></p></button>
         </div>
         <div id="thumbnail-modal" class="modal-overlay" role="dialog" aria-modal="true">
@@ -605,7 +615,7 @@
     if (layer.type === "text"){
       const isTag = layer.style === "tag";
       const customSize = layerFontSizeCSS(layer) ? ';' + layerFontSizeCSS(layer) : '';
-      return '<div style="position:absolute;left:' + layer.x + '%;top:' + layer.y + '%;width:' + layer.w + '%;height:' + layer.h + '%;'
+      return '<div class="txt" style="position:absolute;left:' + layer.x + '%;top:' + layer.y + '%;width:' + layer.w + '%;height:' + layer.h + '%;'
         + 'text-align:' + esc(layer.align) + ';color:' + esc(layer.color || "inherit") + ';' + (TEXT_STYLE_CSS[layer.style] || TEXT_STYLE_CSS.body)
         + (isTag ? '' : customSize) + '">'
         + (isTag ? '<span style="' + TAG_PILL_CSS + customSize + '">' : '')
@@ -700,7 +710,43 @@
     } catch (_e) { /* no sound on this device: the page still turns */ }
   }
 
-  window.CCS_READER = { esc, bgToCSS, layerToReaderHTML, pageContentHTML, buildPapers, playPageFlip, preloadPageFlip };
+  /* ---- Read to me helpers ---- */
+  /* wraps every word in a page's text boxes in <span class="rw">, in reading order; split on any whitespace,
+     the same way the narration was recorded, so word N here is word N in the recording's timing */
+  function wrapWords(root){
+    const out = [];
+    root.querySelectorAll('.txt').forEach(box => {
+      const walk = document.createTreeWalker(box, NodeFilter.SHOW_TEXT), nodes = [];
+      while (walk.nextNode()) nodes.push(walk.currentNode);
+      nodes.forEach(n => {
+        const parts = n.textContent.split(/(\s+)/);
+        if (!parts.some(p => p.trim())) return;
+        const frag = document.createDocumentFragment();
+        parts.forEach(p => {
+          if (!p) return;
+          if (!p.trim()){ frag.appendChild(document.createTextNode(p)); return; }
+          const s = document.createElement('span'); s.className = 'rw'; s.textContent = p; frag.appendChild(s); out.push(s);
+        });
+        n.parentNode.replaceChild(frag, n);
+      });
+    });
+    return out;
+  }
+  /* the word being said at time t: the last word that has started (so a word stays lit in the short gaps), or -1 */
+  function wordAt(times, t){
+    let k = -1;
+    for (let i = 0; i < times.length; i++){ if (times[i][0] <= t) k = i; else break; }
+    return k;
+  }
+  /* what the browser's own voice says: the names the owner's way (2026-11-16), and which word a spot in that text belongs to */
+  const SAY = [[/\bChike\b/g, "Chee-kay"], [/\bZech\b/g, "Zack"], [/\bYuna\b/g, "You-nah"], [/\bZectune\b/g, "Zack-tune"], [/\bChikopia\b/g, "Chee-koh-pee-uh"]];
+  function spokenWords(words){
+    let text = ""; const starts = [];
+    words.forEach((w, i) => { let s = w; SAY.forEach(([re, to]) => { s = s.replace(re, to); }); if (i) text += " "; starts.push(text.length); text += s; });
+    return { text, wordForChar(c){ let k = 0; for (let i = 0; i < starts.length; i++){ if (starts[i] <= c) k = i; else break; } return k; } };
+  }
+
+  window.CCS_READER = { esc, bgToCSS, layerToReaderHTML, pageContentHTML, buildPapers, playPageFlip, preloadPageFlip, wrapWords, wordAt, spokenWords };
 })();
 </script>
 
@@ -794,8 +840,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     flatFaces.forEach((el, idx) => el.classList.toggle('mobile-active', idx === mobileIndex));
     notifyPagePosition();
   }
-  function mobileNext() { if (mobileIndex < flatFaces.length - 1) { nextPageBtn.classList.remove('hint'); window.CCS_READER.playPageFlip(); showMobilePage(mobileIndex + 1); } }
-  function mobilePrev() { if (mobileIndex > 0) { window.CCS_READER.playPageFlip(); showMobilePage(mobileIndex - 1); } }
+  function mobileNext() { handTurn(); if (mobileIndex < flatFaces.length - 1) { nextPageBtn.classList.remove('hint'); window.CCS_READER.playPageFlip(); showMobilePage(mobileIndex + 1); } }
+  function mobilePrev() { handTurn(); if (mobileIndex > 0) { window.CCS_READER.playPageFlip(); showMobilePage(mobileIndex - 1); } }
 
   allPagesBtn.addEventListener('click', openThumbnailView);
   prevPageBtn.addEventListener('click', () => { if (isMobileBook()) mobilePrev(); else goPrevPage(); });
@@ -905,6 +951,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   function goNextPage() {
+    handTurn();
     if (currentLocation >= lastFlipLocation) return;
     const sheet = papers[currentLocation];
     if (!sheet) return;
@@ -912,6 +959,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   function goPrevPage() {
+    handTurn();
     if (currentLocation <= 0) return;
     const sheet = papers[currentLocation - 1];
     if (!sheet) return;
@@ -919,6 +967,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   function goToPage(pageNum) {
+    handTurn();
     if (isMobileBook()) { showMobilePage(pageNum - 1); return; }
     if (turning) { turning.classList.remove('turning'); turning = null; }
     if (pageNum <= 1) currentLocation = 0;
@@ -954,6 +1003,118 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   function openThumbnailView() { generateThumbnails(); thumbnailModal.classList.add('show'); setTimeout(() => closeModalBtn.focus(), 100); }
   function closeThumbnailView() { thumbnailModal.classList.remove('show'); allPagesBtn.focus(); }
+
+
+  /* ---------- Read to me (owner, 2026-11-16) ----------
+     Heart (a Kokoro voice the owner picked) reads the pages that are showing, left then right, while a
+     yellow highlighter follows each word. Then the book turns its own page and keeps reading. Each page's
+     recording and word times come from assets/books/narration. A page whose words changed after it was
+     recorded (or a new book) is read by the browser's own voice instead, still saying the names the
+     owner's way. Turning a page by hand stops the reading; the button pauses and picks up again. */
+  const readBtn = document.getElementById('read-btn');
+  const ICON_SPEAK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>';
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+  const RT = { on: false, paused: false, auto: false, waiting: false, pending: null, audio: null, tick: null, utter: null, raf: 0, timer: 0, queue: [], spans: null, lit: null };
+  const canSpeak = 'speechSynthesis' in window;
+  let narration = null;
+  fetch('/assets/books/narration/' + storyId + '.json').then(r => r.ok ? r.json() : null).then(j => { narration = j; }).catch(() => {});
+  readBtn.hidden = false;
+
+  const wordCache = {};
+  function faceFor(i){ return document.getElementById((i % 2 === 0 ? 'f' : 'b') + (Math.floor(i / 2) + 1)); }
+  function wordsOf(i){ if (!wordCache[i]){ const f = faceFor(i); wordCache[i] = f ? window.CCS_READER.wrapWords(f) : []; } return wordCache[i]; }
+  function visiblePages(){
+    if (isMobileBook()) return [mobileIndex];
+    const out = [];
+    if (currentLocation > 0) out.push(2 * currentLocation - 1);
+    if (2 * currentLocation < totalPages) out.push(2 * currentLocation);
+    return out;
+  }
+  function setBtn(){
+    const playing = RT.on && !RT.paused;
+    readBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    readBtn.innerHTML = (playing ? ICON_PAUSE : ICON_SPEAK) + '<span>' + (playing ? 'PAUSE' : 'READ TO ME') + '</span>';
+  }
+  function light(i){
+    if (RT.lit) RT.lit.classList.remove('now');
+    RT.lit = i != null && i >= 0 && RT.spans ? RT.spans[i] || null : null;
+    if (RT.lit) RT.lit.classList.add('now');
+  }
+  /* wait a moment, unless reading stopped; if it's paused, carry on when it resumes */
+  function later(fn, ms){
+    RT.waiting = true;
+    RT.timer = setTimeout(() => { RT.waiting = false; if (!RT.on) return; if (RT.paused){ RT.pending = fn; return; } fn(); }, ms);
+  }
+  function clearSound(){
+    cancelAnimationFrame(RT.raf); clearTimeout(RT.timer); RT.waiting = false; RT.pending = null;
+    if (RT.audio){ RT.audio.onended = RT.audio.onerror = null; RT.audio.pause(); RT.audio = null; }
+    if (canSpeak && RT.utter){ RT.utter.onend = RT.utter.onboundary = RT.utter.onerror = null; speechSynthesis.cancel(); RT.utter = null; }
+  }
+  function stopReading(){ clearSound(); light(null); RT.on = false; RT.paused = false; RT.queue = []; setBtn(); }
+  function handTurn(){ if (RT.on && !RT.auto) stopReading(); }
+  function startReading(){ clearSound(); RT.on = true; RT.paused = false; RT.queue = visiblePages(); setBtn(); nextInQueue(); }
+  function nextInQueue(){
+    if (!RT.on) return;
+    if (!RT.queue.length){
+      /* the pages showing are read: turn to the next ones, or finish at the end of the book */
+      const atEnd = isMobileBook() ? mobileIndex >= flatFaces.length - 1 : currentLocation >= lastFlipLocation;
+      if (atEnd){ stopReading(); return; }
+      later(() => {
+        RT.auto = true; if (isMobileBook()) mobileNext(); else goNextPage(); RT.auto = false;
+        later(() => { RT.queue = visiblePages(); nextInQueue(); }, isMobileBook() ? 450 : 950);
+      }, 700);
+      return;
+    }
+    readPage(RT.queue.shift(), nextInQueue);
+  }
+  function readPage(i, done){
+    const spans = wordsOf(i); RT.spans = spans;
+    if (!spans.length){ later(done, 1500); return; }        /* a picture page: a moment to look */
+    const pg = narration && narration.pages && narration.pages[i];
+    if (!pg || spans.map(s => s.textContent).join(' ') !== pg.text){ speakPage(spans, done); return; }
+    const a = new Audio('/assets/books/narration/' + storyId + '/' + pg.src);
+    RT.audio = a;
+    RT.tick = () => { if (RT.audio !== a) return; light(window.CCS_READER.wordAt(pg.t, a.currentTime)); RT.raf = requestAnimationFrame(RT.tick); };
+    a.onended = () => { cancelAnimationFrame(RT.raf); RT.audio = null; light(null); later(done, 350); };
+    a.onerror = () => { cancelAnimationFrame(RT.raf); RT.audio = null; speakPage(spans, done); };
+    a.play().then(() => { RT.raf = requestAnimationFrame(RT.tick); }).catch(err => {
+      if (RT.audio !== a) return;
+      RT.audio = null;
+      /* the browser wants a tap before sound (opening a book straight into Read to me): wait on the button */
+      if (err && err.name === 'NotAllowedError'){ RT.paused = true; RT.queue.unshift(i); setBtn(); return; }
+      speakPage(spans, done);
+    });
+  }
+  function speakPage(spans, done){
+    if (!canSpeak){ later(done, 1500); return; }
+    const s = window.CCS_READER.spokenWords(spans.map(x => x.textContent));
+    const u = new SpeechSynthesisUtterance(s.text);
+    u.lang = 'en-US'; u.rate = 0.9;
+    u.onboundary = (e) => { if (typeof e.charIndex === 'number') light(s.wordForChar(e.charIndex)); };
+    u.onend = u.onerror = () => { if (RT.utter !== u) return; RT.utter = null; light(null); later(done, 350); };
+    RT.utter = u; speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }
+  function pause(){
+    RT.paused = true; cancelAnimationFrame(RT.raf);
+    if (RT.audio) RT.audio.pause();
+    if (canSpeak && RT.utter) speechSynthesis.pause();
+    setBtn();
+  }
+  function resume(){
+    RT.paused = false; setBtn();
+    if (RT.audio){ RT.audio.play().then(() => { RT.raf = requestAnimationFrame(RT.tick); }).catch(() => {}); return; }
+    if (RT.utter){ speechSynthesis.resume(); return; }
+    if (RT.pending){ const f = RT.pending; RT.pending = null; f(); return; }
+    if (RT.waiting) return;              /* a short wait is already under way; it carries on by itself */
+    nextInQueue();
+  }
+  readBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!RT.on) startReading(); else if (RT.paused) resume(); else pause();
+  });
+  window.addEventListener('pagehide', stopReading);
+  /* opened from a book card's Read to me button */
+  if (params.get('read') === '1') setTimeout(startReading, 600);
 
   if (isMobileBook()) { showMobilePage(0); } else { updateBookState(); }
 

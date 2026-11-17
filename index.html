@@ -12562,7 +12562,7 @@ function gameStage(g){
         ? '<iframe id="gamestage-frame" srcdoc="' + E(g.srcdoc) + '" title="' + E(g.title) + '" sandbox="allow-scripts allow-popups" allow="fullscreen; camera; clipboard-write; autoplay"></iframe>'
         : '<iframe id="gamestage-frame" src="' + E(g.path) + '" title="' + E(g.title) + '"'
           + ' sandbox="allow-scripts allow-same-origin allow-popups' + (g.sandboxExtra ? " " + E(g.sandboxExtra) : "") + '"'
-          + ' allow="fullscreen; camera; clipboard-write' + (g.sandboxExtra ? "; web-share" : "") + '"></iframe>')
+          + ' allow="fullscreen; camera; clipboard-write; autoplay' + (g.sandboxExtra ? "; web-share" : "") + '"></iframe>')
     + '</div>';
 }
 
@@ -12985,6 +12985,9 @@ function bookListCard(b){
     + '<div class="card__foot">'
     + '<button class="btn btn--sm btn--cyan" data-act="open-book" data-id="' + E(b.id) + '">'
     + ic("book-open") + ' Read</button>'
+    /* opens the book reading itself aloud, for beginning readers (owner, 2026-11-16) */
+    + '<button class="btn btn--sm btn--sun" data-act="open-book" data-read="1" data-id="' + E(b.id) + '" aria-label="Read ' + E(b.title) + ' to me">'
+    + ic("volume-2") + ' Read to me</button>'
     + cardShareBtn("/stories/" + b.id, b.title)
     + '</div></div></article>';
 }
@@ -13001,7 +13004,9 @@ function bookCard(b){
     + '<p class="tiny mute" style="margin:10px 0 0">' + E(plural(b.pages, "page")) + '. Tap a page to turn it, or use the arrow keys.</p>'
     + '<div class="row" style="margin-top:20px">'
     + '<button class="btn btn--lg btn--cyan" data-act="open-book" data-id="' + E(b.id) + '">'
-    + ic("book-open") + ' Read the book</button></div>'
+    + ic("book-open") + ' Read the book</button>'
+    + '<button class="btn btn--lg btn--sun" data-act="open-book" data-read="1" data-id="' + E(b.id) + '">'
+    + ic("volume-2") + ' Read it to me</button></div>'
     + '</div></article>';
 }
 
@@ -29539,7 +29544,9 @@ const ACTIONS = {
        story through /admin/stories must be reflected here too, instead of
        the reader stage silently keeping showing BOOKS' own frozen title. */
     const rec = db.find("stories", b.id);
-    openGameStage(rec && rec.title ? Object.assign({}, b, { title: rec.title }) : b);
+    const book = rec && rec.title ? Object.assign({}, b, { title: rec.title }) : b;
+    /* Read to me: the reader opens already reading aloud */
+    openGameStage(el.getAttribute("data-read") === "1" && book.path ? Object.assign({}, book, { path: book.path + "&read=1" }) : book);
   },
   "close-picker": () => closeMediaPicker(),
   "picker-scrim": (el, ev) => { if (ev.target === el) closeMediaPicker(); },
