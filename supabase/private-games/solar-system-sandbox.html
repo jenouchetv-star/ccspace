@@ -547,6 +547,16 @@ function cmpHome(){
 const $ = id => document.getElementById(id);
 function sfx(name, opts){ if (window.CCSSound) CCSSound.play(name, opts); }
 if (window.CCSSound) $("soundSlot").appendChild(CCSSound.button({ compact: true, background: "rgba(14,20,38,.6)" }));
+/* music and transitions (owner, 2026-11-16; Pixabay, see docs/image-credits.md): space music, a similar-but-different
+   track in Compare, a whoosh into a planet and a sci-fi sweep into Compare */
+const SND = "/assets/games/solar-system/audio/";
+if (window.CCSSound) CCSSound.samples({
+  spaceMain: { src: SND + "space-main.mp3", loop: true },
+  spaceCompare: { src: SND + "space-compare.mp3", loop: true },
+  zoomIn: { src: SND + "zoom.mp3", vary: 0.04 },
+  toCompare: { src: SND + "compare.mp3" }
+});
+const MUSIC = window.CCSSound ? { main: CCSSound.loop('spaceMain'), cmp: CCSSound.loop('spaceCompare'), a: 0, b: 0 } : null;
 
 const dock = $("dock"), labels = $("labels"), card = $("card");
 const ballCss = { sun: "radial-gradient(circle at 40% 40%,#fff,#fff6e6 60%,#ffe9c7)", mercury: "url(" + TEX + "mercury.jpg)", venus: "#e9d9b0", earth: "url(" + TEX + "earth.jpg)",
@@ -605,7 +615,7 @@ function select(p){
   if (comparing){ focus = null; cmpFly(p); }
   else if (!focus){ camTarget.set(0, sun.position.y, 0); camWant = new THREE.Vector3(0, sun.position.y + 30, 62); }
   flying = true;
-  sfx("whoosh", { volume: 0.5 });
+  sfx("zoomIn", { volume: 0.7 });
 }
 /* Compare sizes: glide along the row to a globe, close enough that it fills a good part of the screen with its neighbours beside it */
 function cmpFly(p){
@@ -642,7 +652,7 @@ function setCompare(on){
   BODIES.forEach(b => { b.cmpLabel.style.display = on ? "" : "none"; if (b.label) b.label.style.display = on ? "none" : ""; });
   if (current){ renderCard(); if (on){ focus = null; cmpFly(current); } else { focus = current.id === "sun" ? null : current; if (!focus){ camTarget.set(0, sun.position.y, 0); camWant = new THREE.Vector3(0, sun.position.y + 30, 62); } } flying = true; }
   else overview();
-  sfx("whoosh", { volume: 0.5 });
+  sfx(on ? "toCompare" : "whoosh", on ? { volume: 0.6 } : { volume: 0.5 });
 }
 $("bCompare").onclick = () => setCompare(!comparing);
 $("bCmpDone").onclick = () => setCompare(false);
@@ -908,6 +918,11 @@ function frame(){
     p.label.style.display = vis ? "" : "none"; p.label.style.left = ((v.x + 1) / 2 * innerWidth) + "px"; p.label.style.top = ((1 - v.y) / 2 * innerHeight) + "px"; });
   else placeCmpLabels();
   renderer.render(scene, camera);
+  /* the music follows the view, crossfading over a second or two */
+  if (MUSIC){
+    MUSIC.a += ((comparing ? 0 : 0.38) - MUSIC.a) * 0.025; MUSIC.b += ((comparing ? 0.38 : 0) - MUSIC.b) * 0.025;
+    MUSIC.main.set(MUSIC.a); MUSIC.cmp.set(MUSIC.b);
+  }
   requestAnimationFrame(frame);
 }
 frame();
