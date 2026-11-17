@@ -239,7 +239,7 @@ describe("the table screen", () => {
     expect(game).toContain("setInterval(() => { if (document.hidden && MOVES.length) finishMoves(); }, 250);");
   });
   it("has the logo loading screen, Chike in the corner, and robots", () => {
-    expect(game).toContain('data-name="Stack Up!"');   /* the game's name since 2026-11-17 (was Matching Suits) */
+    expect(game).toContain('data-name="Stack &#39;Em Up!"');   /* the game's name since 2026-11-17 (was Matching Suits) */
     expect(game).toContain('id="chikeImg"');
     expect(game).toContain('const CHARACTERS = ["Chike", "Zech", "Yuna", "Kiyah", "Mateo", "Corey", "Averi", "Stacey"];');
     /* a player at each corner of the table (owner) */

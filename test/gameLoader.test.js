@@ -24,7 +24,7 @@ const GAMES = {
   "supabase/private-games/hands-free-builder.html": "Hands-Free Builder",
   "supabase/private-games/hexago.html": "HexaGone!",
   "supabase/private-games/math-robot.html": "Robo Math Buddy",
-  "supabase/private-games/matching-suits.html": "Stack Up!",   /* was Matching Suits (owner renamed it, 2026-11-17) */
+  "supabase/private-games/matching-suits.html": "Stack 'Em Up!",   /* was Matching Suits (owner renamed it, 2026-11-17) */
   "supabase/private-games/number-dash.html": "Math Runner",
   "supabase/private-games/pic-pop-puzzle.html": "Pic-a-Puzzle",
   "supabase/private-games/remote-lunar-salvage.html": "Remote Lunar Salvage",
