@@ -23,6 +23,12 @@
   header img{height:34px}
   header b{font-family:"Baloo 2";font-weight:800;color:var(--sun);font-size:21px}
   header .sp{flex:1}
+  /* the sound and volume buttons: light icons on the dark header, small enough to keep the title on one line */
+  header .ccs-sound-btn{color:#fff;border:2px solid rgba(255,255,255,.35);box-shadow:none;min-height:36px;min-width:36px;padding:4px}
+  header .ccs-mix-btn{margin-right:4px}
+  header b{white-space:nowrap}
+  #soundSlot{display:flex;align-items:center}
+  @media (max-width:420px){ header{gap:6px;padding:12px 12px 6px} header b{font-size:19px} header img{height:30px} }
   header .pill{background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:4px 10px;font-weight:900;font-size:13px}
   main{flex:1;display:flex;flex-direction:column;gap:12px;padding:10px 16px calc(16px + env(safe-area-inset-bottom));max-width:560px;width:100%;margin:0 auto}
   [hidden]{display:none!important}
@@ -39,6 +45,19 @@
   .msg.err{border-color:#ff8a9a;color:#ffd6dc}
   .turn{background:var(--sun);color:var(--ink);border:3px solid var(--ink);border-radius:14px;padding:10px 12px;font-weight:900;font-size:18px;text-align:center}
   .turn.wait{background:rgba(0,0,0,.35);color:#fff;border-color:rgba(255,255,255,.25)}
+  /* the table, on the phone (owner, 2026-11-17; draft docs/mockups/matching-suits-phone-table-draft.html) */
+  .felt{background:var(--felt);border:4px solid #8a4a22;border-radius:18px;padding:10px 10px 8px;box-shadow:inset 0 0 22px rgba(0,0,0,.35)}
+  .felt .top{display:flex;justify-content:space-between;font-weight:900;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#d8fff7;margin-bottom:8px}
+  .slots{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .slots.r2{grid-template-columns:repeat(6,1fr);padding:0 6%;margin-top:8px}
+  .s{position:relative;aspect-ratio:5/7;border-radius:7px;border:2px dashed rgba(255,255,255,.45);display:grid;place-items:center;font-family:"Baloo 2";font-weight:800;font-size:15px;color:rgba(255,255,255,.55)}
+  .s.has{border:2px solid var(--ink);background:var(--cream);color:var(--slate);box-shadow:0 2px 0 rgba(0,0,0,.35)}
+  .s .n{position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:#fff;font-family:Nunito;font-size:10px;font-weight:900;border-radius:999px;padding:0 5px;line-height:15px;white-space:nowrap}
+  .s.can{box-shadow:0 0 0 3px var(--sun),0 0 14px var(--sun)}
+  .s.done{border:2px solid var(--ink);background:repeating-linear-gradient(45deg,#2a4fae 0 5px,#3b63c7 5px 10px);color:transparent}
+  .s.done .n{background:var(--sun);color:var(--ink)}
+  .legend{display:flex;gap:12px;justify-content:center;font-size:11px;font-weight:800;color:#d8fff7;margin-top:12px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
   .table{background:var(--felt);border:4px solid #8a4a22;border-radius:16px;padding:10px 12px;display:flex;align-items:center;gap:12px;font-weight:900;font-size:15px;box-shadow:inset 0 0 20px rgba(0,0,0,.3)}
   .hand{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:6px 0}
   .card{position:relative;width:76px;height:108px;border-radius:11px;background:var(--cream);border:3px solid var(--ink);color:var(--slate);display:flex;flex-direction:column;justify-content:space-between;padding:4px 6px;
@@ -88,7 +107,12 @@
   <!-- playing -->
   <section id="vPlay" hidden style="display:flex;flex-direction:column;gap:12px;flex:1">
     <div class="turn" id="turnLine"></div>
-    <div class="table" id="tableLine"></div>
+    <div class="felt" id="tableBox" role="group" aria-label="The cards on the table">
+      <div class="top"><span>The table</span><span id="pileLine">Draw pile: 0</span></div>
+      <div class="slots" id="slotsA"></div>
+      <div class="slots r2" id="slotsB"></div>
+      <div class="legend"><span><i style="background:var(--sun)"></i>You can drop</span><span><i style="background:#2a4fae"></i>Finished</span></div>
+    </div>
     <div class="hand" id="hand" aria-label="Your cards"></div>
     <div class="count" id="handHelp"></div>
     <button class="shuf" id="bShuffle" type="button" disabled>Shuffle the draw deck (once a game)</button>
@@ -246,8 +270,12 @@ function cleanView(p){
   if (!legal.every(isRank)) return null;
   const table = Array.isArray(p.table) ? p.table : [];
   if (table.length > 13 || !table.every(isRank)) return null;
+  const slots = Array.isArray(p.slots) ? p.slots.map(n => num(n, 4)) : [];
+  if (slots.length && slots.length !== 13) return null;
+  const done = Array.isArray(p.done) ? p.done : [];
+  if (done.length > 13 || !done.every(isRank)) return null;
   return { t: "you", phase: p.phase, name: txt(p.name), seat: num(p.seat, 3), turn: p.turn == null ? -1 : num(p.turn, 3), turnName: txt(p.turnName),
-    hand, legal, table, start: p.start === true, heart: p.heart || null, active: p.active || null, onTable: num(p.onTable, 4), pile: num(p.pile, 52),
+    hand, legal, table, slots, done, start: p.start === true, heart: p.heart || null, active: p.active || null, onTable: num(p.onTable, 4), pile: num(p.pile, 52),
     canPass: p.canPass === true, canShuffle: p.canShuffle === true, shuffled: p.shuffled === true, revealed: p.revealed === true, busy: p.busy === true,
     place: num(p.place, 4), winner: txt(p.winner) };
 }
@@ -278,9 +306,21 @@ function paint(v){
   $("turnLine").className = "turn" + (mine ? "" : " wait");
   /* match the table (owner, 2026-11-17): drop any rank already on the table, or start a new one when nothing matches */
   $("turnLine").textContent = mine ? (v.start ? "Your turn! Nothing matches: start a new rank" : "Your turn! Match a rank on the table") : v.turnName + "'s turn";
-  $("tableLine").innerHTML = '<span>On the table:</span><span>' + (v.table.length ? esc(v.table.join(", ")) : "nothing yet") + '</span><span style="margin-left:auto">Pile: ' + v.pile + '</span>';
+  paintTable(v, mine);
   if (!v.legal.includes(P.sel)) P.sel = null;   /* nothing is picked for them: they always choose */
   paintHand();
+}
+/* the table: all 13 slots in the big screen's two rows, how many of each rank are down, finished ranks flipped, and
+   the ranks this player can drop right now glowing */
+function paintTable(v, mine){
+  $("pileLine").textContent = "Draw pile: " + v.pile;
+  const slot = (r, k) => {
+    const n = v.slots[k] || 0, done = v.done.includes(r), can = mine && !v.busy && v.legal.includes(r);
+    const label = (ONE[r] || r) + ": " + (done ? "finished" : n + " of 4 down") + (can ? ", you can drop it" : "");
+    return '<div class="s' + (done ? " done" : n ? " has" : "") + (can ? " can" : "") + '" role="img" aria-label="' + label + '">' + r + (n || done ? '<span class="n">' + (done ? 4 : n) + '/4</span>' : "") + "</div>";
+  };
+  $("slotsA").innerHTML = RANKS.slice(0, 7).map((r, k) => slot(r, k)).join("");
+  $("slotsB").innerHTML = RANKS.slice(7).map((r, k) => slot(r, k + 7)).join("");
 }
 function paintHand(){
   const v = P.view, can = v.turn === v.seat && !v.busy;

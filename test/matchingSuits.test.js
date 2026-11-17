@@ -328,6 +328,13 @@ describe("the pages", () => {
     expect(existsSync(new URL("../games/matching-suits-player.html", import.meta.url))).toBe(true);
     expect(readFileSync(new URL("../join/index.html", import.meta.url), "utf8")).toContain("/games/matching-suits-player.html");
   });
+  it("the phone shows the whole table: all 13 slots, cards down, finished ranks, and the ranks you can drop (owner, 2026-11-17)", () => {
+    const player = readFileSync(new URL("../games/matching-suits-player.html", import.meta.url), "utf8");
+    expect(game).toContain("slots: st ? RANKS.map(r => st.slots[r]) : [], done: st ? RANKS.filter(r => st.done[r]) : [],");
+    expect(player).toContain('<div class="felt" id="tableBox" role="group" aria-label="The cards on the table">');
+    expect(player).toContain("const n = v.slots[k] || 0, done = v.done.includes(r), can = mine && !v.busy && v.legal.includes(r);");
+    expect(player).toContain("if (slots.length && slots.length !== 13) return null;");
+  });
   it("the controller has a Shuffle button that works only when the table allows it", () => {
     const player = readFileSync(new URL("../games/matching-suits-player.html", import.meta.url), "utf8");
     expect(player).toContain('id="bShuffle"');
