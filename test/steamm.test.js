@@ -33,9 +33,9 @@ describe("the STEAMM section", () => {
     for (const word of ["Science", "Technology", "Engineering", "Art", "Math", "Music"]) expect(site).toContain('["' + word.charAt(0) + '","' + word + '"');
   });
   it("says how STEAMM is different from STEM, and why we believe in it", () => {
-    expect(site).toContain("How STEAMM is different from STEM");
-    expect(site).toContain("STEAMM keeps all four and adds art and music");
-    expect(site).toContain("Why we believe in it");
+    expect(site).toContain("Beyond STEM: What Makes STEAMM Different?");
+    expect(site).toContain("STEAMM keeps all four and adds Art and Music");
+    expect(site).toContain("Why STEAMM Matters for K-5 Learners");
   });
   it("lists our STEAMM principles", () => {
     expect(site).toContain("Our STEAMM principles");
@@ -171,5 +171,41 @@ describe("the page is called STEAMM Methodology (owner, 2026-11-16)", () => {
 describe("the What is STEAMM opening names K-5 (owner, 2026-11-16)", () => {
   it("says why the K-5 years are the right time", () => {
     expect(site).toContain("Spanning ages 5 to 11, these elementary years mark the leap from playful curiosity to structured problem-solving");
+  });
+});
+
+describe("Beyond STEM and why STEAMM matters for K-5 (owner's copy, 2026-11-16)", () => {
+  const panel = site.split("function steammPanel(){")[1].split("\n}\n")[0];
+  it("uses the owner's two headings", () => {
+    expect(panel).toContain("Beyond STEM: What Makes STEAMM Different?");
+    expect(panel).toContain("Why STEAMM Matters for K-5 Learners");
+  });
+  it("keeps the owner's words, with the three points and their bold lead-ins", () => {
+    expect(site).toContain("STEM covers four essential pillars (Science, Technology, Engineering, and Math) that explain how the world works.");
+    expect(site).toContain("they are actively practicing engineering and math through creative expression.");
+    for (const lead of ["Creative Blueprints (Art &amp; Music):", "Transferable Problem-Solving:", "Inclusive Engagement:"]) expect(site).toContain("<li><b>" + lead + "</b>");
+    expect(site).toContain("whether they are a natural builder, a dedicated illustrator, or a budding musician.");
+  });
+});
+
+describe("Fail Early, Fix Fast (owner's copy, 2026-11-16)", () => {
+  const panel = site.split("function steammPanel(){")[1].split("\n}\n")[0];
+  it("sits after How creativity grows problem solvers and before the research", () => {
+    const fail = panel.indexOf('id="failHead"');
+    expect(fail).toBeGreaterThan(panel.indexOf('id="growHead"'));
+    expect(fail).toBeLessThan(panel.indexOf('id="researchHead"'));
+  });
+  it("keeps the owner's words and the three prompts", () => {
+    expect(site).toContain("Every maker fails, and that is good news.");
+    expect(site).toContain("When a student gets stuck, we never hand them the answer.");
+    for (const q of ["What happened?", "What could you change?", "What will you try next?"]) expect(site).toContain(q);
+    expect(site).toContain("Failing early is a gift when the fix follows right behind, while the lesson is still fresh and the breakthrough feels truly earned.");
+  });
+});
+
+describe("no Our approach label over What is STEAMM (owner, 2026-11-16)", () => {
+  it("opens the section with the heading itself", () => {
+    const panel = site.split("function steammPanel(){")[1].split("\n}\n")[0];
+    expect(panel).not.toContain('<span class="eyebrow">Our approach</span>');
   });
 });
