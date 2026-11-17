@@ -28,18 +28,18 @@ function decode(s){
 export function tokens(html){ return decode(String(html || "").replace(/<[^>]*>/g, " ")).split(/\s+/).filter(Boolean); }
 
 /* how the names are said (owner, 2026-11-16): only the audio changes, the page keeps the real spelling */
-const SAY = [[/\bChike\b/g, "Chee-kay"], [/\bZech\b/g, "Zack"], [/\bYuna\b/g, "You-nah"], [/\bZectune\b/g, "Zack-tune"], [/\bChikopia\b/g, "Chee-koh-pee-uh"], [/\bLED\b/g, "L E D"]];
+const SAY = [[/\bChike\b/g, "Chee-kay"], [/\bZech\b/g, "Zack"], [/\bYuna\b/g, "You-nah"], [/\bZectune\b/g, "Zack-tune"], [/\bChikopia\b/g, "Chee-koh-pee-uh"], [/\bLED\b/g, "L E D"], [/\bAveri\b/g, "Avery"]];
 function spoken(layerWords){
   /* a pause between text boxes: a heading like "The End" gets a full stop before the next box */
   return layerWords.filter(w => w.length).map(w => { const t = w.join(" "); return /[.!?:"”’)]$/.test(t) ? t : t + "."; }).join(" ")
     .replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
     .replace(/\s+/g, " ").trim()
-    .replace(...SAY[0]).replace(...SAY[1]).replace(...SAY[2]).replace(...SAY[3]).replace(...SAY[4]).replace(...SAY[5]);
+    .replace(/[^]*/, (t) => SAY.reduce((s, [re, to]) => s.replace(re, to), t));
 }
 
 /* match Whisper's words to the page's words, letter by letter, then fill any gaps between neighbours */
 const norm = (w) => w.toLowerCase().replace(/[^a-z0-9]/g, "");
-const ALIAS = { cheekay: "chike", chikay: "chike", zack: "zech", zach: "zech", younah: "yuna", yuna: "yuna", zacktune: "zectune", cheekohpeeuh: "chikopia", led: "led" };
+const ALIAS = { cheekay: "chike", chikay: "chike", zack: "zech", zach: "zech", younah: "yuna", yuna: "yuna", zacktune: "zectune", cheekohpeeuh: "chikopia", led: "led", avery: "averi" };
 function sim(a, b){
   a = ALIAS[a] || a; b = ALIAS[b] || b;
   if (!a || !b) return 0; if (a === b) return 1;
