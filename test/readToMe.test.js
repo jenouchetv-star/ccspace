@@ -25,7 +25,7 @@ describe("the recorded narration", () => {
       const pages = Object.entries(n.pages);
       expect(pages.length).toBeGreaterThan(3);
       for (const [p, pg] of pages){
-        expect(pg.t.length, id + " p" + p).toBe(pg.text.split(" ").length);
+        expect(pg.t.length, id + " p" + p).toBe(pg.title ? 0 : pg.text.split(" ").length);   /* a cover title has no words on the page to light up */
         expect(existsSync(new URL("../assets/books/narration/" + id + "/" + pg.src, import.meta.url))).toBe(true);
         for (let i = 1; i < pg.t.length; i++) expect(pg.t[i][0]).toBeGreaterThanOrEqual(pg.t[i - 1][0]);   // words in order
       }
@@ -147,5 +147,19 @@ describe("the green page's words stay plain text once they're wrapped for highli
   it("styles only the try-it icon box, never the words beside it (each word became a little box)", () => {
     expect(reader).toContain(".lp__try>span{");
     expect(reader).not.toMatch(/\.lp__try span\{/);
+  });
+});
+
+describe("covers are read too (owner, 2026-11-16: the voice wasn't reading some covers)", () => {
+  it("has Heart's recording of the title for every cover whose title is in the picture", () => {
+    for (const id of BOOKS){
+      const n = JSON.parse(readFileSync(new URL("../assets/books/narration/" + id + ".json", import.meta.url), "utf8"));
+      const cover = n.pages[0];
+      expect(cover, id).toBeTruthy();
+      expect(existsSync(new URL("../assets/books/narration/" + id + "/" + cover.src, import.meta.url)), id).toBe(true);
+    }
+  });
+  it("plays a cover's title recording instead of skipping past it", () => {
+    expect(main).toContain("if (!spans.length && !(pg && pg.title)){ later(done, 1500); return; }");
   });
 });

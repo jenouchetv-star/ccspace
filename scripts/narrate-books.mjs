@@ -2,6 +2,7 @@
 //   1. In an empty folder outside this project:  npm init -y && npm install kokoro-js@1.2.1 @breezystack/lamejs@1.2.7
 //      (@huggingface/transformers comes with kokoro-js; the voice and Whisper models download on first run)
 //   2. Copy this file into that folder and run:  node narrate-books.mjs <path to this project> [book id ...]
+//      With no book ids it records every published book. Add --covers-only to just add cover titles.
 //      With no book ids it records every published book. It writes assets/books/narration/<id>.json and <id>/p<page>.mp3.
 //   The reader only plays a page's recording while its words still match exactly; a changed page falls back
 //   to the browser's voice until it is re-recorded.
@@ -14,7 +15,8 @@ import lamejs from "@breezystack/lamejs";
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 
 const ROOT = process.argv[2];
-const ONLY = process.argv.slice(3);
+const ONLY = process.argv.slice(3).filter(a => !a.startsWith("--"));
+const COVERS_ONLY = process.argv.includes("--covers-only");   /* add cover titles without re-recording the pages */
 const READER = readFileSync(ROOT + "/books/reader.html", "utf8");
 const URL_ = READER.match(/const SUPABASE_URL = "([^"]+)"/)[1];
 const KEY = READER.match(/const SUPABASE_ANON_KEY = "([^"]+)"/)[1];
@@ -107,13 +109,25 @@ const asr = await pipeline("automatic-speech-recognition", "onnx-community/whisp
 
 for (const s of stories){
   const dir = ROOT + "/assets/books/narration/" + s.id; mkdirSync(dir, { recursive: true });
-  const out = { voice: "kokoro " + VOICE, speed: SPEED, pages: {} };
+  const jsonPath = ROOT + "/assets/books/narration/" + s.id + ".json";
+  const out = COVERS_ONLY ? JSON.parse(readFileSync(jsonPath, "utf8")) : { voice: "kokoro " + VOICE, speed: SPEED, pages: {} };
   /* the pages the reader shows: the "The End" page becomes the green "What you learned" page (or it's added at the end) */
   const shown = pagesWithLearn(s.data.pages, s.data.learn);
   for (let p = 0; p < shown.length; p++){
+    if (COVERS_ONLY && p > 0) break;
     const layers = shown[p].learnPage ? learnItems(s.data.learn).map(tokens) : (shown[p].layers || []).filter(l => l.type === "text").map(l => tokens(l.content));
     const words = layers.flat();
-    if (!words.length) continue;
+    if (!words.length){
+      /* a cover whose title is part of the picture: Heart reads the book's title (owner, 2026-11-16) */
+      if (p === 0 && s.data.title){
+        const a = await tts.generate(spoken([tokens(s.data.title)]), { voice: VOICE, speed: SPEED });
+        writeFileSync(dir + "/p0.mp3", mp3(a.audio, a.sampling_rate));
+        out.pages[0] = { title: s.data.title, text: "", src: "p0.mp3", dur: +(a.audio.length / a.sampling_rate).toFixed(2), t: [] };
+        console.log(s.id, "cover title", s.data.title);
+      }
+      continue;
+    }
+    if (COVERS_ONLY) continue;
     const say = spoken(layers);
     const audio = await tts.generate(say, { voice: VOICE, speed: SPEED });
     const f = audio.audio, sr = audio.sampling_rate;
@@ -125,7 +139,7 @@ for (const s of stories){
     console.log(s.id, "page", p, words.length, "words,", matched, "matched", (f.length / sr).toFixed(1) + "s");
   }
   /* "Hear it" on the green page: the word to know, on its own */
-  if (s.data.learn && s.data.learn.word){
+  if (!COVERS_ONLY && s.data.learn && s.data.learn.word){
     const w = await tts.generate(spoken([tokens(s.data.learn.word)]).replace(/\.$/, ""), { voice: VOICE, speed: 0.85 });
     writeFileSync(dir + "/word.mp3", mp3(w.audio, w.sampling_rate));
   }
