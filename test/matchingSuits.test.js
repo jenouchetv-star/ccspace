@@ -201,6 +201,22 @@ describe("robots", () => {
   });
 });
 
+describe("computer players (owner, 2026-11-17: character names, picked at random)", () => {
+  const src = "const CHARACTERS = " + game.split("const CHARACTERS = ")[1].split("function computerName(")[0] + "function computerName(" + game.split("function computerName(")[1].split("\n}\n")[0] + "\n}\n";
+  const names = new Function(src + "return computerName;")();
+  it("are Chike and friends, never two with the same name, and never a name a person already took", () => {
+    const seats = [{ name: "Zech" }];
+    for (let k = 0; k < 3; k++) seats.push({ name: names(seats, Math.random) });
+    expect(new Set(seats.map(s => s.name)).size).toBe(4);
+    seats.slice(1).forEach(s => expect(["Chike", "Yuna", "Kiyah", "Mateo", "Corey", "Averi", "Stacey"]).toContain(s.name));
+  });
+  it("change from game to game", () => {
+    const seen = new Set();
+    for (let k = 0; k < 40; k++) seen.add(names([], Math.random));
+    expect(seen.size).toBeGreaterThan(4);
+  });
+});
+
 describe("joining", () => {
   it("room codes are 4 letters without I or O", () => {
     for (let i = 0; i < 200; i++) expect(M.roomCode(M.seeded(i))).toMatch(/^[A-HJ-NP-Z]{4}$/);
@@ -219,7 +235,7 @@ describe("the table screen", () => {
   it("has the logo loading screen, Chike in the corner, and robots", () => {
     expect(game).toContain('data-name="Matching Suits"');
     expect(game).toContain('id="chikeImg"');
-    expect(game).toContain('const ROBOTS = ["Robo", "Bolt", "Sprocket", "Gizmo"];');
+    expect(game).toContain('const CHARACTERS = ["Chike", "Zech", "Yuna", "Kiyah", "Mateo", "Corey", "Averi", "Stacey"];');
     /* a player at each corner of the table (owner) */
     expect(game).toContain("const SEAT_SPOTS = { 2: [C_FL, C_BR], 3: [C_FL, C_BL, C_BR], 4: [C_FL, C_BL, C_BR, C_FR] };");
   });

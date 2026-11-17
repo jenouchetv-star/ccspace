@@ -180,7 +180,7 @@
     <p>Scan with a phone or tablet, or go to <b id="joinUrl">chikescreativespace.com/join</b> on another computer and type the code.</p>
     <button class="btn sun wide" id="bHere" type="button">+ Play on this screen</button>
     <div class="here" id="hereForm" hidden><input id="hereName" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Your name, or leave it empty" aria-label="Your name"><button class="btn sun" id="bHereGo" type="button">Sit down</button></div>
-    <div class="row"><button class="btn" id="bBot" type="button">+ Add a robot player</button><button class="btn sun" id="bStart" type="button" disabled>Start the game</button></div>
+    <div class="row"><button class="btn" id="bBot" type="button">+ Add a computer player</button><button class="btn sun" id="bStart" type="button" disabled>Start the game</button></div>
   </div>
   <!-- the cards of whoever plays on this screen -->
   <div class="tray" id="tray" hidden>
@@ -312,7 +312,13 @@ const NAMES = { A: "Aces", J: "Jacks", Q: "Queens", K: "Kings" };
 const plural = (r) => NAMES[r] || r + "s";
 const ONE = { A: "Ace", J: "Jack", Q: "Queen", K: "King" };
 const cardName = (r) => ONE[r] || r;
-const ROBOTS = ["Robo", "Bolt", "Sprocket", "Gizmo"];
+/* computer players are Chike and friends, picked at random (owner, 2026-11-17: "randomize the character's names") */
+const CHARACTERS = ["Chike", "Zech", "Yuna", "Kiyah", "Mateo", "Corey", "Averi", "Stacey"];
+function computerName(seats, rand){
+  const taken = new Set(seats.map(s => String(s.name).toLowerCase()));
+  const free = CHARACTERS.filter(n => !taken.has(n.toLowerCase()));
+  return free.length ? free[Math.floor(rand() * free.length)] : "Player #" + (seats.length + 1);
+}
 const SEAT_COLORS = ["#FFD23F", "#8FE3F0", "#C9B6E4", "#B8E3A8"];
 
 /* ===================== the 3D table (from docs/mockups/matching-suits-3d-draft.html) ===================== */
@@ -521,7 +527,7 @@ function paintSeats(){
     const race = G.phase === "race", turn = (st && st.phase === "play" && st.turn === i) || (race && G.raceWinner === i);
     const count = st ? st.players[i].hand.length : 0;
     const html = s
-      ? '<div class="seat' + (turn ? " turn" : "") + (s.away ? " away" : "") + '"><span class="nm">' + esc(s.name) + (s.bot ? " (robot)" : "") + '</span><span class="ct">' + (race ? raceNote(i) : st ? count + (count === 1 ? " card" : " cards") : s.bot ? "Ready" : s.local ? "On this screen" : s.away ? "Reconnecting" : "Joined") + '</span></div>'
+      ? '<div class="seat' + (turn ? " turn" : "") + (s.away ? " away" : "") + '"><span class="nm">' + esc(s.name) + (s.bot ? " (computer)" : "") + '</span><span class="ct">' + (race ? raceNote(i) : st ? count + (count === 1 ? " card" : " cards") : s.bot ? "Ready" : s.local ? "On this screen" : s.away ? "Reconnecting" : "Joined") + '</span></div>'
       : '<div class="seat open"><span class="nm">Open seat</span></div>';
     SEAT_TAGS.push(tag(html, "", spot.pos.clone().add(new THREE.Vector3(0, .5, 0))));
   }
@@ -638,7 +644,7 @@ function openRoom(code){
 }
 function joinUrl(){ return new URL("/games/matching-suits-player.html?room=" + G.code + "&k=" + NET.fp, document.baseURI).href; }
 async function makeRoom(){
-  if (!window.crypto || !crypto.subtle){ $("qr").textContent = "This browser can't make a private room. You can still play with robots."; return false; }
+  if (!window.crypto || !crypto.subtle){ $("qr").textContent = "This browser can't make a private room. You can still play against the computer."; return false; }
   NET.kp = await MSC.pair(); NET.hk = await MSC.pub(NET.kp); NET.fp = await MSC.fp(NET.hk); NET.keys = {}; NET.lastN = {};
   const rand = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
   for (let i = 0; i < 6; i++){
@@ -655,7 +661,7 @@ async function makeRoom(){
       return true;
     } catch (_e) { /* try another code */ }
   }
-  $("qr").textContent = "Couldn't reach the internet room. You can still play with robots.";
+  $("qr").textContent = "Couldn't reach the internet room. You can still play against the computer.";
   return false;
 }
 async function showQR(){
@@ -736,8 +742,8 @@ function lobbyChanged(){
   $("bBot").disabled = n >= 4;
   const here = hereSeat() >= 0;
   $("bHere").hidden = here || n >= 4; if (here || n >= 4) $("hereForm").hidden = true;
-  chike(n >= 2 ? "point-up" : "wave", n >= 2 ? "Everyone in? Press Start the game! Up to 4 can play: add a robot if you'd like one more."
-    : here ? "You're at the table! Add a robot player, or ask a friend to scan the code, then press Start the game."
+  chike(n >= 2 ? "point-up" : "wave", n >= 2 ? "Everyone in? Press Start the game! Up to 4 can play: add a computer player if you'd like one more."
+    : here ? "You're at the table! Add a computer player, or ask a friend to scan the code, then press Start the game."
     : "Hi! Scan the code with a phone, tablet or computer to join, or press Play on this screen to play right here. Type your name, or play as Player #" + (n + 1) + "!");
 }
 /* --- playing on this screen (owner, 2026-11-17: "If the player is playing against the robots then they should be able to
@@ -813,9 +819,9 @@ $("bHereGo").onclick = sitHere;
 $("hereName").addEventListener("keydown", (e) => { if (e.key === "Enter") sitHere(); });
 $("bBot").onclick = () => {
   if (G.seats.length >= 4 || G.phase !== "lobby") return;
-  const used = G.seats.filter(s => s.bot).length, i = G.seats.length;
-  G.seats.push({ id: "bot" + i, name: ROBOTS[used % ROBOTS.length], bot: true });
-  sfx("click"); news(nm(i) + " the robot sat down."); lobbyChanged();
+  const i = G.seats.length;
+  G.seats.push({ id: "bot" + i, name: computerName(G.seats, Math.random), bot: true });
+  sfx("click"); news(nm(i) + " sat down to play (computer)."); lobbyChanged();
 };
 $("bStart").onclick = () => { if (G.seats.length >= 2) startRound(); };
 
