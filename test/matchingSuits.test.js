@@ -204,6 +204,11 @@ describe("the table screen", () => {
     expect(paint).toContain("(who >= 0 && who !== i) ? 1 : 0");
     expect(game).toMatch(/stepMoves\(dt\);\s*paintTurn\(dt\);/);
   });
+  it("card backs never turn black in the site's sealed frame: the logo is asked for with CORS, and only a readable copy is used (owner, 2026-11-17)", () => {
+    expect(game).toContain('const logo = new Image(); logo.crossOrigin = "anonymous"; logo.src = "/assets/brand/logo.webp";');
+    expect(game).toContain("try { g.getImageData(0, 0, 1, 1); } catch (_e) { return; }");
+    expect(game).not.toMatch(/backTex\.image\.getContext\("2d"\)/);
+  });
   it("lets each player reshuffle once from their device", () => {
     expect(game).toContain('if (p.t === "shuffle" && G.phase === "play") doShuffle(i);');
     expect(game).toContain("canShuffle: st ? canShuffle(st, i) && !G.busy : false");

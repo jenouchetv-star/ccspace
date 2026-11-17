@@ -319,8 +319,17 @@ const backTex = canvasTex(256, 360, (g, w, h) => {
   g.lineWidth = 6; g.strokeStyle = "#1E2226"; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 22); g.stroke();
   g.lineWidth = 5; g.strokeStyle = "rgba(255,255,255,.8)"; g.beginPath(); g.roundRect(26, 26, w - 52, h - 52, 14); g.stroke();
 });
-const logo = new Image(); logo.src = "/assets/brand/logo.webp";
-logo.onload = () => { const g = backTex.image.getContext("2d"); const lw = 190, lh = lw * logo.height / logo.width; g.drawImage(logo, (256 - lw) / 2, (360 - lh) / 2, lw, lh); backTex.needsUpdate = true; };
+/* the logo comes from the site; inside the site's sealed game frame it counts as another origin, so it is asked for with
+   CORS (the site allows it). A canvas holding a locked picture renders black in 3D (the owner saw black card backs,
+   2026-11-17), so the logo goes onto a copy, and the copy is only used if it can still be read. */
+const logo = new Image(); logo.crossOrigin = "anonymous"; logo.src = "/assets/brand/logo.webp";
+logo.onload = () => {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 360;
+  const g = c.getContext("2d"); g.drawImage(backTex.image, 0, 0);
+  const lw = 190, lh = lw * logo.height / logo.width; g.drawImage(logo, (256 - lw) / 2, (360 - lh) / 2, lw, lh);
+  try { g.getImageData(0, 0, 1, 1); } catch (_e) { return; }   /* locked: keep the plain patterned back */
+  backTex.image = c; backTex.needsUpdate = true;
+};
 /* card faces use the Baloo 2 font: redraw any made before the font arrived */
 if (document.fonts) document.fonts.ready.then(() => { Object.keys(faceTexCache).forEach(k => { const t = faceTexCache[k]; delete faceTexCache[k]; const n = cardFaceTex(k); t.image = n.image; t.needsUpdate = true; faceTexCache[k] = t; }); });
 
