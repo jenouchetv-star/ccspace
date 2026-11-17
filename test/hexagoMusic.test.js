@@ -29,6 +29,11 @@ describe("HexaGone! music", () => {
     const credits = readFileSync(new URL("../docs/image-credits.md", import.meta.url), "utf8");
     for (const id of ["357067", "190255", "457507", "454474", "177983", "142971", "153317"]) expect(credits).toContain(id);
   });
+  it("keeps the bounce on every landing soft (owner, 2026-11-17: reduce the bouncing sound)", () => {
+    expect(game).toContain("const BOUNCE_VOL = 0.25;");
+    expect(sound).toContain('name === "land" ? BOUNCE_VOL');
+    expect(sound).toContain('case "land": this.osc("sine", 170 * v, 62, 0.16, 0.45 * BOUNCE_VOL / 0.55, t);');
+  });
   it("no longer makes its own tune", () => {
     expect(game).not.toContain("const MUSIC = {");
     expect(sound).not.toContain("schedule(){");
