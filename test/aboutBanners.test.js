@@ -33,7 +33,9 @@ describe("Mission and Vision continue below the banner", () => {
   it("puts the closing line as a pull quote and a photo beside the rest of the mission", () => {
     expect(mission).toContain('aboutStory("From watching to creating."');
     expect(mission).toContain('<blockquote class="aboutstory__quote">');
-    expect(mission).toContain("assets/about/teacher-reading-with-student.jpg");
+    expect(mission).toContain("assets/about/paper-circuit-card.jpg");
+    // the library photo belongs to Business inquiries; no picture appears twice (owner, 2026-11-16)
+    expect(mission).not.toContain("assets/about/teacher-reading-with-student.jpg");
   });
   it("moves the longer vision below the banner, beside a photo", () => {
     const vision = site.split('sub === "vision"){')[1].split('else if (sub === "partners")')[0];

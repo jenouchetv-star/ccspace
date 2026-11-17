@@ -75,7 +75,7 @@ describe("the calmer What we believe layout (owner, 2026-11-16)", () => {
     for (const src of ["assets/grownups/rubber-band-guitar.jpg", "assets/activities/cardboard-house.jpg", "assets/grownups/while-they-make-birdhouse.jpg"]) {
       expect(panel + beliefs).toContain(src);
     }
-    expect((panel + beliefs).match(/believePhoto\("assets\/[^"]+\.jpg", "[^"]{20,}"\)/g).length).toBe(3);
+    expect((panel + beliefs).match(/believePhoto\("assets\/[^"]+\.jpg", "[^"]{20,}"\)/g).length).toBe(4);
     expect(panel + beliefs).not.toContain('alt=""');
   });
   it("gives every section room to breathe", () => {
@@ -185,6 +185,16 @@ describe("Beyond STEM and why STEAMM matters for K-5 (owner's copy, 2026-11-16)"
     expect(site).toContain("they are actively practicing engineering and math through creative expression.");
     for (const lead of ["Creative Blueprints (Art &amp; Music):", "Transferable Problem-Solving:", "Inclusive Engagement:"]) expect(site).toContain("<li><b>" + lead + "</b>");
     expect(site).toContain("whether they are a natural builder, a dedicated illustrator, or a budding musician.");
+  });
+});
+
+describe("a new photo under Beyond STEM (owner, 2026-11-16)", () => {
+  const panel = site.split("function steammPanel(){")[1].split("\n}\n")[0];
+  it("fills the left column with the bridge sketch, a picture used nowhere else", () => {
+    const left = panel.split("Beyond STEM: What Makes STEAMM Different?")[1].split("Why STEAMM Matters for K-5 Learners")[0];
+    expect(left).toContain('believePhoto("assets/about/bridge-sketch.jpg"');
+    expect(site.split("assets/about/bridge-sketch.jpg").length - 1).toBe(1);
+    expect(readFileSync(new URL("../assets/about/bridge-sketch.jpg", import.meta.url)).length).toBeGreaterThan(50000);
   });
 });
 
