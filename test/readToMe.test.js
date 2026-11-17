@@ -98,3 +98,54 @@ describe("Read to me on the book cards", () => {
     expect(site).toMatch(/allow="fullscreen; camera; clipboard-write; autoplay' \+ \(g\.sandboxExtra/);
   });
 });
+
+describe("the green What you learned page at the end of every book (owner, 2026-11-16)", () => {
+  const story = (lastText) => ({ layers: [{ type: "text", content: lastText }] });
+  const learn = { word: "maglev", say: "MAG-lev", tryIt: "Try two magnets.", takeaways: [{ title: "Word to know", text: "Maglev floats." }, { title: "Same Sides Push Away", text: "Magnets push." }, { title: "Less Friction", text: "It glides." }] };
+  it("takes the place of the book's The End page", () => {
+    const pages = [story("Once upon a time"), story("<p>The End</p> What will you create next?")];
+    const shown = R.pagesWithLearn(pages, learn);
+    expect(shown.length).toBe(2);
+    expect(shown[1].learnPage).toBe(true);
+  });
+  it("is added after the last page when a book has no The End page", () => {
+    const shown = R.pagesWithLearn([story("Once"), story("What Zech learned")], learn);
+    expect(shown.length).toBe(3);
+    expect(shown[2].learnPage).toBe(true);
+  });
+  it("leaves a book alone if it has no takeaways yet", () => {
+    const pages = [story("The End")];
+    expect(R.pagesWithLearn(pages, null)).toBe(pages);
+  });
+  it("shows three takeaways, the word with a Hear it button, and a try-it line, in the green card style", () => {
+    const h = R.learnPageHTML(learn, "f9", 10);
+    expect(h).toContain('class="page-content learnpage"');
+    expect(h).toContain("3 big takeaways");
+    expect((h.match(/class="lp__card"/g) || []).length).toBe(3);
+    expect(h).toContain('class="lp__hear" data-word="maglev"');
+    expect(h).toContain("<b>Try it at home:</b> Try two magnets.");
+    expect(reader).toMatch(/\.learnpage\{[^}]*background-color:#E3F3DC/);
+  });
+  it("reads aloud in the same order the recording was made", () => {
+    const h = R.learnPageHTML(learn, "f9", 10);
+    const read = [...h.matchAll(/<(span|b|p|h2) class="[^"]*\btxt\b[^"]*">([\s\S]*?)<\/\1>/g)].map(m => m[2].replace(/<[^>]*>/g, ""));
+    const script = readFileSync(new URL("../scripts/narrate-books.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+    const fn = "function learnItems(learn){" + script.split("function learnItems(learn){")[1].split("\n}\n")[0] + "\n}";
+    const learnItems = new Function(fn + "\nreturn learnItems;")();
+    expect(read).toEqual(learnItems(learn));
+  });
+  it("is recorded for every book, with its word to hear on its own", () => {
+    for (const id of BOOKS){
+      const n = JSON.parse(readFileSync(new URL("../assets/books/narration/" + id + ".json", import.meta.url), "utf8"));
+      expect(Object.values(n.pages).some(p => p.text.startsWith("3 big takeaways Word to know")), id).toBe(true);
+      expect(existsSync(new URL("../assets/books/narration/" + id + "/word.mp3", import.meta.url)), id).toBe(true);
+    }
+  });
+});
+
+describe("the green page's words stay plain text once they're wrapped for highlighting", () => {
+  it("styles only the try-it icon box, never the words beside it (each word became a little box)", () => {
+    expect(reader).toContain(".lp__try>span{");
+    expect(reader).not.toMatch(/\.lp__try span\{/);
+  });
+});

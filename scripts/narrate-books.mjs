@@ -37,6 +37,21 @@ function spoken(layerWords){
     .replace(/[^]*/, (t) => SAY.reduce((s, [re, to]) => s.replace(re, to), t));
 }
 
+/* the green "What you learned" page, matching books/reader.html (learnPageHTML and pagesWithLearn): what it reads aloud, in order */
+function learnItems(learn){
+  const t = learn.takeaways || [];
+  return ["3 big takeaways", t[0] && t[0].title, learn.word, t[0] && t[0].text, t[1] && t[1].title, t[1] && t[1].text, t[2] && t[2].title, t[2] && t[2].text,
+    learn.tryIt ? "Try it at home: " + learn.tryIt : ""].filter(Boolean);
+}
+function pagesWithLearn(pages, learn){
+  if (!learn || !(learn.takeaways || []).length) return pages;
+  const words = (p) => (p.layers || []).filter(l => l.type === "text").map(l => String(l.content || "").replace(/<[^>]*>/g, " ")).join(" ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+  const out = pages.slice(), last = out.length - 1;
+  if (last >= 0 && /^The End\b/i.test(words(out[last]))) out[last] = { learnPage: true };
+  else out.push({ learnPage: true });
+  return out;
+}
+
 /* match Whisper's words to the page's words, letter by letter, then fill any gaps between neighbours */
 const norm = (w) => w.toLowerCase().replace(/[^a-z0-9]/g, "");
 const ALIAS = { cheekay: "chike", chikay: "chike", zack: "zech", zach: "zech", younah: "yuna", yuna: "yuna", zacktune: "zectune", cheekohpeeuh: "chikopia", led: "led", avery: "averi" };
@@ -93,8 +108,10 @@ const asr = await pipeline("automatic-speech-recognition", "onnx-community/whisp
 for (const s of stories){
   const dir = ROOT + "/assets/books/narration/" + s.id; mkdirSync(dir, { recursive: true });
   const out = { voice: "kokoro " + VOICE, speed: SPEED, pages: {} };
-  for (let p = 0; p < s.data.pages.length; p++){
-    const layers = (s.data.pages[p].layers || []).filter(l => l.type === "text").map(l => tokens(l.content));
+  /* the pages the reader shows: the "The End" page becomes the green "What you learned" page (or it's added at the end) */
+  const shown = pagesWithLearn(s.data.pages, s.data.learn);
+  for (let p = 0; p < shown.length; p++){
+    const layers = shown[p].learnPage ? learnItems(s.data.learn).map(tokens) : (shown[p].layers || []).filter(l => l.type === "text").map(l => tokens(l.content));
     const words = layers.flat();
     if (!words.length) continue;
     const say = spoken(layers);
@@ -106,6 +123,11 @@ for (const s of stories){
     writeFileSync(dir + "/p" + p + ".mp3", mp3(f, sr));
     out.pages[p] = { text: words.join(" "), src: "p" + p + ".mp3", dur: +(f.length / sr).toFixed(2), t: times };
     console.log(s.id, "page", p, words.length, "words,", matched, "matched", (f.length / sr).toFixed(1) + "s");
+  }
+  /* "Hear it" on the green page: the word to know, on its own */
+  if (s.data.learn && s.data.learn.word){
+    const w = await tts.generate(spoken([tokens(s.data.learn.word)]).replace(/\.$/, ""), { voice: VOICE, speed: 0.85 });
+    writeFileSync(dir + "/word.mp3", mp3(w.audio, w.sampling_rate));
   }
   writeFileSync(ROOT + "/assets/books/narration/" + s.id + ".json", JSON.stringify(out));
 }

@@ -107,6 +107,28 @@
         #read-btn[hidden]{display:none}
         .rw{background:linear-gradient(180deg,transparent 40%,#8FE3F0 40%,#8FE3F0 96%,transparent 96%) 0 50% / 0% 100% no-repeat;transition:background-size .15s ease}
         .rw.now{background-size:100% 100%}
+        /* the green "What you learned" page at the end of every book (owner, 2026-11-16): three takeaways that recap
+           the story, in the same green, white cards and ink lines as the Word to know boxes on the game pages.
+           Sizes follow the page's own width (cqw), so it fits the same on a phone and a big screen. */
+        .learnpage{container-type:size;background-color:#E3F3DC;background-image:radial-gradient(circle,rgba(47,107,44,.10) 1px,transparent 1.3px);background-size:8px 8px}
+        .lp{position:absolute;inset:0;padding:5.5cqw 5.5cqw 9cqw;display:flex;flex-direction:column;gap:2.1cqw;font-family:'Poppins',sans-serif;color:#1E2226;text-align:left}
+        .lp__label{display:flex;align-items:center;gap:1.6cqw;color:#2F6B2C;font-weight:800;font-size:2.7cqw;letter-spacing:.12em;text-transform:uppercase}
+        .lp__label svg{width:4.2cqw;height:4.2cqw;flex:none}
+        .lp__title{margin:0;font-size:5.2cqw;line-height:1.1;font-weight:800}
+        .lp__card{background:#fff;border:2px solid #1E2226;border-radius:3.4cqw;padding:2.1cqw 2.9cqw 2.3cqw}
+        .lp__card h3{display:flex;align-items:center;gap:2.1cqw;margin:0 0 1cqw;font-size:3.25cqw;line-height:1.2;font-weight:800}
+        .lp__num{width:5.8cqw;height:5.8cqw;flex:none;display:grid;place-items:center;border:2px solid #1E2226;border-radius:50%;box-shadow:2px 2px 0 #1E2226;font-weight:800;font-size:2.9cqw}
+        .lp__card p{margin:0;font-size:2.75cqw;line-height:1.45;font-weight:500}
+        .lp__word{display:flex;align-items:baseline;gap:2.1cqw;flex-wrap:wrap;margin:0 0 .5cqw}
+        .lp__word b{font-size:4.4cqw;font-weight:800}
+        .lp__say{font-size:2.6cqw;font-weight:700;color:#3E464C;letter-spacing:.03em}
+        .lp__hear{margin-left:auto;align-self:center;font:inherit;font-size:2.5cqw;font-weight:700;color:#1E2226;border:2px solid #1E2226;border-radius:999px;background:#FFF6E2;padding:.3cqw 2.1cqw;display:inline-flex;gap:1cqw;align-items:center;cursor:pointer}
+        .lp__hear svg{width:3cqw;height:3cqw}
+        .lp__hear:focus-visible{outline:3px solid #1E2226;outline-offset:2px}
+        .lp__try{margin-top:auto;display:flex;gap:2.1cqw;align-items:flex-start}
+        .lp__try>span{width:5.8cqw;height:5.8cqw;flex:none;display:grid;place-items:center;border:2px solid #1E2226;border-radius:1.9cqw;background:#FFF6E2}
+        .lp__try>span svg{width:3.3cqw;height:3.3cqw}
+        .lp__try p{margin:0;font-size:2.75cqw;line-height:1.45;font-weight:500}
         #all-pages-btn {
             background-color: #BC3229;
             color: white;
@@ -639,7 +661,9 @@
     return '<img src="' + esc(layer.src) + '" alt="' + esc(layer.alt) + '" style="' + posStyle + '">';
   }
 
+  let LEARN = null;   /* the book's takeaways, set once the story loads */
   function pageContentHTML(page, faceId, pageNum){
+    if (page && page.learnPage && LEARN) return learnPageHTML(LEARN, faceId, pageNum);
     /* The cover (page 1) isn't counted - it carries no number at all, and
        the first real content page starts the visible count over at 1,
        the standard picture-book convention. */
@@ -711,6 +735,39 @@
     } catch (_e) { /* no sound on this device: the page still turns */ }
   }
 
+  /* ---- the green "What you learned" page (owner, 2026-11-16) ---- */
+  const LP_CAP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>';
+  const LP_SPK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>';
+  const LP_FLASK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6L4.5 19a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 9V3"/></svg>';
+  const LP_TINTS = ["#BFE3B4", "#FBD98A", "#BFD8F5"];
+  /* The book's last page: three takeaways recapping the story. Everything marked .txt is read aloud, in this order. */
+  function learnPageHTML(learn, faceId, pageNum){
+    const t = learn.takeaways || [];
+    const card = (k) => {
+      const x = t[k] || { title: "", text: "" };
+      const head = '<h3><span class="lp__num" style="background:' + LP_TINTS[k] + '" aria-hidden="true">' + (k + 1) + '</span><span class="txt">' + esc(x.title) + '</span></h3>';
+      const word = k === 0 ? '<div class="lp__word"><b class="txt">' + esc(learn.word) + '</b><span class="lp__say">' + esc(learn.say) + '</span>'
+        + '<button type="button" class="lp__hear" data-word="' + esc(learn.word) + '" aria-label="Hear how to say ' + esc(learn.word) + '">' + LP_SPK + 'Hear it</button></div>' : '';
+      return '<div class="lp__card">' + head + word + '<p class="txt">' + esc(x.text) + '</p></div>';
+    };
+    return '<div class="page-content learnpage" id="' + faceId + '"><div class="lp">'
+      + '<div class="lp__label">' + LP_CAP + 'What you learned</div>'
+      + '<h2 class="lp__title txt">3 big takeaways</h2>'
+      + card(0) + card(1) + card(2)
+      + (learn.tryIt ? '<div class="lp__try"><span aria-hidden="true">' + LP_FLASK + '</span><p class="txt"><b>Try it at home:</b> ' + esc(learn.tryIt) + '</p></div>' : '')
+      + '</div>' + (pageNum > 1 ? '<div class="page-number">' + (pageNum - 1) + '</div>' : '') + '</div>';
+  }
+  /* the pages a reader sees: the book's own, with its "The End" page swapped for the green page,
+     or the green page added at the end when a book has no "The End" page */
+  function pagesWithLearn(pages, learn){
+    if (!learn || !(learn.takeaways || []).length) return pages;
+    const words = (p) => (p.layers || []).filter(l => l.type === "text").map(l => String(l.content || "").replace(/<[^>]*>/g, " ")).join(" ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+    const out = pages.slice(), last = out.length - 1;
+    if (last >= 0 && /^The End\b/i.test(words(out[last]))) out[last] = { learnPage: true };
+    else out.push({ learnPage: true });
+    return out;
+  }
+
   /* ---- Read to me helpers ---- */
   /* wraps every word in a page's text boxes in <span class="rw">, in reading order; split on any whitespace,
      the same way the narration was recorded, so word N here is word N in the recording's timing */
@@ -747,7 +804,7 @@
     return { text, wordForChar(c){ let k = 0; for (let i = 0; i < starts.length; i++){ if (starts[i] <= c) k = i; else break; } return k; } };
   }
 
-  window.CCS_READER = { esc, bgToCSS, layerToReaderHTML, pageContentHTML, buildPapers, playPageFlip, preloadPageFlip, wrapWords, wordAt, spokenWords };
+  window.CCS_READER = { esc, bgToCSS, layerToReaderHTML, pageContentHTML, buildPapers, playPageFlip, preloadPageFlip, wrapWords, wordAt, spokenWords, learnPageHTML, pagesWithLearn, setLearn(l){ LEARN = l || null; } };
 })();
 </script>
 
@@ -784,7 +841,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     return;
   }
 
-  const pages = (story.pages && story.pages.length) ? story.pages : [];
+  window.CCS_READER.setLearn(story.learn);
+  const pages = window.CCS_READER.pagesWithLearn((story.pages && story.pages.length) ? story.pages : [], story.learn);
   if (!pages.length){
     errorBox.textContent = "This story has no pages yet.";
     errorBox.style.display = 'flex';
@@ -1109,6 +1167,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (RT.waiting) return;              /* a short wait is already under way; it carries on by itself */
     nextInQueue();
   }
+  bookPagesEl.addEventListener('click', (e) => {
+    const b = e.target.closest('.lp__hear'); if (!b) return;
+    e.stopPropagation();
+    const a = new Audio('/assets/books/narration/' + storyId + '/word.mp3');
+    a.play().catch(() => { if (!canSpeak) return; const s = window.CCS_READER.spokenWords([b.dataset.word]); const u = new SpeechSynthesisUtterance(s.text); u.lang = 'en-US'; u.rate = 0.85; speechSynthesis.cancel(); speechSynthesis.speak(u); });
+  }, true);
   readBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (!RT.on) startReading(); else if (RT.paused) resume(); else pause();
