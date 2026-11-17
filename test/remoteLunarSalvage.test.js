@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS, BOARD_STEPS, FLIGHT, flightPhase, BRIEFS, QUIZ_BANKS, QUIZ_PICS, starsForWorld, setTerrain, HEAT, heatStep, heaterTakes, nextWorldId, HOSE, hoseArc, waterStep };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS, BOARD_STEPS, FLIGHT, flightPhase, BRIEFS, QUIZ_BANKS, QUIZ_PICS, starsForWorld, setTerrain, HEAT, heatStep, heaterTakes, nextWorldId, HOSE, hoseArc, waterStep, WIND, gustAt };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -69,7 +69,7 @@ describe("field notes and the quiz", () => {
   it("has twelve notes on Pumice Moon, and every one can be found", () => {
     expect(S.NOTES.filter((n) => n.world === "pumice")).toHaveLength(12);
     const fromParts = new Set(Object.values(S.PART_TYPES).map((t) => t.note).filter(Boolean));
-    for (const n of S.NOTES) expect(["gravity", "laser", "rocket", "marsPull", "heatFlow", "melt", "thinAir", "fireTriangle", "waterCools", "meteorAir", "venusPull"].includes(n.id) || fromParts.has(n.id)).toBe(true);
+    for (const n of S.NOTES) expect(["gravity", "laser", "rocket", "marsPull", "heatFlow", "melt", "thinAir", "fireTriangle", "waterCools", "meteorAir", "venusPull", "windAir", "dustSolar", "beaconRadio", "twoSuns", "gustoPull"].includes(n.id) || fromParts.has(n.id)).toBe(true);
     for (const n of S.NOTES) expect(n.hint.length).toBeGreaterThan(10);
   });
   it("says plainly that the sounds are pretend", () => {
@@ -841,7 +841,7 @@ describe("Glacia is fair to young players", () => {
 
 describe("each mission says its own done line", () => {
   it("Glacia's missions don't claim the greenhouse is alive", () => {
-    expect(game).toContain('const DONE_LINE = { repair: ["The greenhouse is alive again!", "sprout"], satellite: ["The dish is talking to Earth!", "dish"], heat: ["The base is warm again!", "thermo"], supply: ["The supplies are in!", "package"], meteor: ["Averi\'s base is safe!", "ebin"], board: ["Off you go!", "rocket"] };');
+    expect(game).toContain('const DONE_LINE = { repair: ["The greenhouse is alive again!", "sprout"], satellite: ["The dish is talking to Earth!", "dish"], heat: ["The base is warm again!", "thermo"], supply: ["The supplies are in!", "package"], meteor: ["Averi\'s base is safe!", "ebin"], beacon: ["The beacon is shining!", "beacon"], board: ["Off you go!", "rocket"] };');
   });
 });
 
@@ -972,10 +972,70 @@ describe("Ember review fixes", () => {
     expect(game).toContain('TERRAIN === "pumice" && onBridgeDeck(x, z, bridge.state)');
   });
   it("meteorite parts get a real rock model", () => {
-    expect(game).toMatch(/function addPart\(type, x, z, yaw, onSurface\)\{\s*const pm = type === "meteor" \? meteorMesh\(\) : partMesh\(type\);/);
+    expect(game).toMatch(/function addPart\(type, x, z, yaw, onSurface\)\{\s*const pm = type === "meteor" \? meteorMesh\(\) : type === "mast" \? mastMesh\(\) : partMesh\(type\);/);
   });
   it("Ember's hose and drill buttons follow the 4 then 5 key order", () => {
     expect(game.indexOf('<button data-mode="drill"')).toBeLessThan(game.indexOf('<button data-mode="hose"'));
     expect(remote.indexOf('data-m="drill"')).toBeLessThan(remote.indexOf('data-m="hose"'));
+  });
+});
+
+describe("Gusto Canyon: the beacon, the wind and the flight home", () => {
+  it("blows in gusts: still air most of the time, a gust that rises and falls", () => {
+    expect(S.gustAt(0)).toBe(0);
+    expect(S.gustAt(S.WIND.len / 2)).toBeCloseTo(1, 5);
+    expect(S.gustAt(S.WIND.len + 0.5)).toBe(0);
+    expect(S.gustAt(S.WIND.every + S.WIND.len / 2)).toBeCloseTo(1, 5);
+    expect(S.WIND.push).toBeGreaterThan(0);
+    expect(S.WIND.push).toBeLessThan(1);
+  });
+  it("rebuilds the beacon with every tool, in order", () => {
+    expect(S.MISSIONS.beacon.steps.map((st) => st.flag)).toEqual(["footing", "freed", "mast", "brace", "clean", "power"]);
+    expect(S.MISSIONS.beacon.tool).toEqual(["drill", "laser", "arm", "arm", "hose", "arm"]);
+    expect(S.worldById("gusto").missions).toEqual(["beacon", "board"]);
+    expect(S.worldById("gusto").tools).toEqual(["drive", "arm", "magnet", "laser", "drill", "hose"]);
+  });
+  it("has a beacon mast for the claw (aluminum: the magnet won't lift it) and spots that take each piece", () => {
+    expect(S.PART_TYPES.mast.mat).toBe("aluminum");
+    expect(S.magnetCheck("mast").ok).toBe(false);
+    expect(S.TARGET_ACCEPTS.footing).toEqual(["mast"]);
+    expect(S.TARGET_ACCEPTS.gbrace).toEqual(["wedge"]);
+    expect(S.TARGET_ACCEPTS.gbat).toEqual(["energy"]);
+    expect(S.drillFind({ gives: "footing" })).toBe("footing");
+  });
+  it("has five true notes of its own, each with a drawing", () => {
+    const g = S.NOTES.filter((n) => n.world === "gusto");
+    expect(g.map((n) => n.id)).toEqual(["windAir", "dustSolar", "beaconRadio", "twoSuns", "gustoPull"]);
+    for (const n of g) expect(S.NOTE_DOODLES[n.id]).toMatch(/^<svg/);
+    expect(g.find((n) => n.id === "gustoPull").text).toContain("5.0");
+    expect(g.find((n) => n.id === "twoSuns").text).toContain("Kepler-16b");
+    expect(g.find((n) => n.id === "beaconRadio").text).toMatch(/speed of light/);
+  });
+  it("has picture questions for every grade band", () => {
+    const b = S.QUIZ_BANKS.gusto;
+    for (const band of ["g1", "g23", "g45"]) {
+      expect(b[band]).toHaveLength(3);
+      for (const q of b[band]) {
+        expect(S.QUIZ_PICS[q.pic]).toMatch(/^<svg/);
+        expect(q.opts).toHaveLength(band === "g1" ? 2 : 3);
+        if (band === "g1") for (const o of q.opts) expect(S.QUIZ_PICS[o.pic]).toMatch(/^<svg/);
+      }
+    }
+  });
+  it("flies home with all four mission kids on the screen, each saying a line", () => {
+    const h = S.BRIEFS.home;
+    expect(h.kids).toEqual(["chike", "zech", "corey", "kylah"]);
+    expect(h.lines.map((l) => l.who)).toEqual(["Chike", "Zech", "Corey", "Kiyah", "Chike"]);
+    for (const l of h.lines) expect(l.text.length).toBeGreaterThan(10);
+    expect(h.lines[h.lines.length - 1].text).toMatch(/^Landing on Earth/);
+    expect(S.nextWorldId("gusto")).toBe(null);
+  });
+  it("Mateo's requests all have pictures", () => {
+    for (const k of S.MISSIONS.beacon.pic) expect(game).toMatch(new RegExp("PICS\\." + k + " = '<svg"));
+  });
+  it("lands on Earth after Gusto Canyon, not on another world, and the last card sums up all four worlds", () => {
+    expect(game).toContain('G.world.id === "gusto" ? BRIEFS.home');
+    expect(game).toContain("function showHomeEnd(){");
+    expect(game).toContain("You saved all four worlds!");
   });
 });
