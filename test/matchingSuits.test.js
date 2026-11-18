@@ -118,6 +118,24 @@ describe("playing: match the table (owner, 2026-11-17)", () => {
     expect(s.done["7"]).toBe(true);
     expect(s.turn).toBe(1);
   });
+  it("flipping a full set of 4 does not draw a card from the pile (owner, 2026-11-18)", () => {
+    const s = fixed([["7h", "2c", "Kh"], ["7s", "7d", "7c", "3c"], ["4d"]], ["5s", "6s", "8s"]);
+    M.drop(s, 0, "7");
+    expect(s.pile).toHaveLength(2);                  /* a normal drop still draws */
+    const ev = M.drop(s, 1, "7");
+    expect(ev.complete).toBe(true);
+    expect(ev.drew).toBe(null);
+    expect(s.players[1].hand).toEqual(["3c"]);
+    expect(s.pile).toEqual(["5s", "6s"]);
+  });
+  it("flipping a set with your last cards wins, even with cards left in the pile", () => {
+    const s = fixed([["7h", "2c"], ["7s", "7d", "7c"], ["4d"]], ["5s", "6s", "8s"]);
+    M.drop(s, 0, "7");
+    const ev = M.drop(s, 1, "7");
+    expect(ev.win).toBe(true);
+    expect(s.winner).toBe(1);
+    expect(s.pile).toHaveLength(2);
+  });
   it("nobody can win while the pile lasts; once it's empty, the first with no cards wins and the rest rank by cards left", () => {
     const s = fixed([["7h"], ["3c", "4c"], ["4d", "5d", "6d"]], ["5s"]);
     M.drop(s, 0, "7");

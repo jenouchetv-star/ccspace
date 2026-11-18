@@ -260,13 +260,14 @@ function canShuffle(s, p){ return s.phase === "play" && s.turn === p && !s.playe
 function reshuffle(s, p, rand){ if (!canShuffle(s, p)) return false; shuffle(s.pile, rand); s.players[p].shuffled = true; return true; }
 /* there is always something to drop, so there is no passing any more */
 function canPass(_s, _p){ return false; }
-/* drop ALL your cards of a rank, then draw one card if the pile has any; the 4th card of a rank gives a bonus turn */
+/* drop ALL your cards of a rank, then draw one card if the pile has any; the 4th card of a rank flips the stack and
+   gives a bonus turn, with no card drawn (owner, 2026-11-18: flipping a set does not draw from the deck) */
 function drop(s, p, rank){
   if (!legalRanks(s, p).includes(rank)) return false;
   const pl = s.players[p], cards = pl.hand.filter(c => rankOf(c) === rank);
   pl.hand = pl.hand.filter(c => rankOf(c) !== rank);
   s.slots[rank] += cards.length;
-  const drew = s.pile.length ? s.pile.pop() : null;
+  const drew = s.slots[rank] < 4 && s.pile.length ? s.pile.pop() : null;
   if (drew) pl.hand.push(drew);
   s.lastDropper = p; s.active = null;
   const ev = { t: "drop", p, rank, cards, drew, complete: false, win: false, started: cards.length === s.slots[rank] };
@@ -953,7 +954,7 @@ async function act(i, move){
     glowFlash = 1.4;
     news(nm(i) + " finished the " + plural(rank) + ": 4/4! Bonus turn.");
     banner("4/4! The " + plural(rank) + " are done. " + st.players[i].name + " gets a bonus turn!");
-    chike("thumbs-up", st.players[i].name + " finished the " + plural(rank) + "! When a stack gets all 4, it flips over and you get a bonus turn.");
+    chike("thumbs-up", st.players[i].name + " finished the " + plural(rank) + "! When a stack gets all 4, it flips over. No card from the deck this time, but you get a bonus turn.");
     await wait(REDUCED ? 900 : 2200);
   }
   G.busy = false;
