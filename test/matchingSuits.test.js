@@ -341,6 +341,13 @@ describe("restarting from a phone (owner, 2026-11-18: any live player can restar
     const shuf = game.split("async function doShuffle(i){")[1].split("\n}\n")[0];
     expect(shuf).toContain("if (G.round !== r) return;");
   });
+  it("the phone's Heart Race title is a heading, not a yellow box like the button (owner, 2026-11-18)", () => {
+    const race = player.split('<section id="vRace" hidden>')[1].split("</section>")[0];
+    expect(race).toContain('<h2 class="title">');
+    expect(race).not.toContain('class="turn"');
+    expect(race).not.toContain('class="msg"');
+    expect((race.match(/class="big"/g) || []).length).toBe(1);
+  });
   it("the phone has a Restart button that asks first, then sends the restart", () => {
     expect(player).toContain('id="bRestart"');
     expect(player).toContain('id="restartAsk"');
