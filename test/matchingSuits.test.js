@@ -67,6 +67,57 @@ describe("after the Heart Race (owner, 2026-11-17)", () => {
   });
 });
 
+describe("picking your heart (owner, 2026-11-18: let each player decide which heart to put down)", () => {
+  const P = new Function(pure + "; return { raceFirst, placeHearts, newHand, canNewHand, startGame, seeded, RANKS };")();
+  it("the heart each player picks is the one that stays on the table, not always their highest", () => {
+    const s = fixed([["9h", "2h", "Kc"], ["Qh", "3c"], ["4d", "5d"]], ["5s", "6s", "8s"]);
+    const placed = P.placeHearts(s, { 0: "2h", 1: "Qh" });
+    expect(placed.map(x => x.card)).toEqual(["2h", "Qh"]);
+    expect(s.slots["2"]).toBe(1); expect(s.slots["9"]).toBe(0);
+    expect(s.players[0].hand).toEqual(["9h", "Kc", "8s"]);
+  });
+  it("the highest heart put down goes first, even if someone kept a higher one in their hand", () => {
+    const s = fixed([["Kh", "2h"], ["Qh", "3c"], ["4d"]], []);
+    expect(P.raceFirst(s, { 0: "2h", 1: "Qh" })).toBe(1);
+    expect(P.raceFirst(s, { 0: "Kh", 1: "Qh" })).toBe(0);
+  });
+  it("with no hearts put down at all, the highest card goes first, as before", () => {
+    const s = fixed([["9s", "2c"], ["Jd"], ["4c"]], []);
+    expect(P.raceFirst(s, {})).toBe(1);
+  });
+  it("a heart that isn't in your hand can't be put down: your highest heart goes instead", () => {
+    const s = fixed([["9h", "2h"], ["3c"]], ["5s", "6s"]);
+    const placed = P.placeHearts(s, { 0: "Ah" });
+    expect(placed.map(x => x.card)).toEqual(["9h"]);
+  });
+});
+
+describe("one free new hand in the Heart Race (owner, 2026-11-18: \"1 free shuffle so they can get another set of cards\")", () => {
+  const P = new Function(pure + "; return { newHand, canNewHand, startGame, seeded };")();
+  it("swaps your 5 cards for 5 new ones from the deck, once, and nothing is lost", () => {
+    const s = P.startGame([{ id: "a", name: "A" }, { id: "b", name: "B" }], P.seeded(5));
+    const before = s.players[0].hand.slice(), all = s.players.flatMap(p => p.hand).concat(s.pile).sort();
+    expect(P.canNewHand(s, 0)).toBe(true);
+    expect(P.newHand(s, 0, P.seeded(9))).toBe(true);
+    expect(s.players[0].hand).toHaveLength(5);
+    expect(s.players[0].hand).not.toEqual(before);
+    expect(s.pile).toHaveLength(42);
+    expect(s.players.flatMap(p => p.hand).concat(s.pile).sort()).toEqual(all);
+    expect(P.canNewHand(s, 0)).toBe(false);
+    expect(P.newHand(s, 0, P.seeded(9))).toBe(false);
+    expect(P.canNewHand(s, 1)).toBe(true);    /* everyone gets their own */
+  });
+  it("only in the Heart Race, before the game is played", () => {
+    const s = P.startGame([{ id: "a", name: "A" }, { id: "b", name: "B" }], P.seeded(5));
+    s.phase = "play";
+    expect(P.canNewHand(s, 0)).toBe(false);
+  });
+  it("the table swaps a hand when a phone asks, only before that player has put a heart down", () => {
+    expect(game).toContain('if (p.t === "newhand" && G.phase === "race" && !G.revealed[i]) redeal(i);');
+    expect(game).toContain("newHand: st ? canNewHand(st, i) && !G.revealed[i] && !G.redealing[i] : false");
+  });
+});
+
 describe("playing: match the table (owner, 2026-11-17)", () => {
   it("you may drop any rank you hold that's already on the table, not just the last one played", () => {
     const s = fixed([["7h", "9s", "2c", "Kh"], ["3c"]], ["5s", "6s", "8s"]);
@@ -309,7 +360,8 @@ describe("playing on this screen (owner, 2026-11-17: play against the robots wit
     expect(game).toContain('act(i, { t: "drop", rank });');
     expect(game).toContain('act(i, { t: "pass" });');
     expect(game).toContain('$("tShuffle").onclick = () => { const i = hereSeat(); if (i >= 0) doShuffle(i); };');
-    expect(game).toContain("reveal(i); } };");
+    expect(game).toContain("reveal(i, HERE.heart); HERE.heart = null; } };");
+    expect(game).toContain('$("tNewHand").onclick = () => { const i = hereSeat(); if (i >= 0) redeal(i); };');
   });
   it("with friends on phones too, the tray hides the cards until tapped, and hides them again each turn", () => {
     expect(game).toContain("const covered = phonesHere() && !HERE.peek;");
@@ -320,9 +372,9 @@ describe("playing on this screen (owner, 2026-11-17: play against the robots wit
 describe("restarting from a phone (owner, 2026-11-18: any live player can restart the game from their device)", () => {
   const player = readFileSync(new URL("../games/matching-suits-player.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const R = new Function(pure + "; return canRestart;")();
-  it("a seated person can restart once the game has begun; a computer player, a stranger or the lobby can't", () => {
-    for (const ph of ["race", "draw", "play", "over"]) expect(R(ph, { pk: "x", bot: false }), ph).toBe(true);
-    expect(R("lobby", { pk: "x", bot: false })).toBe(false);
+  it("a seated person can restart in the Heart Race or after a game, but never while the game is in play (owner, 2026-11-18)", () => {
+    for (const ph of ["race", "over"]) expect(R(ph, { pk: "x", bot: false }), ph).toBe(true);
+    for (const ph of ["lobby", "draw", "play"]) expect(R(ph, { pk: "x", bot: false }), ph).toBe(false);
     expect(R("play", { id: "bot1", bot: true })).toBe(false);
     expect(R("play", undefined)).toBe(false);
   });
@@ -347,6 +399,9 @@ describe("restarting from a phone (owner, 2026-11-18: any live player can restar
     expect(race).not.toContain('class="turn"');
     expect(race).not.toContain('class="msg"');
     expect((race.match(/class="big"/g) || []).length).toBe(1);
+  });
+  it("the phone shows Restart only in the Heart Race and Play again after a game, never during play", () => {
+    expect(player).toContain('const on = ["race", "over"].includes(v.phase), over = v.phase === "over";');
   });
   it("the phone has a Restart button that asks first, then sends the restart", () => {
     expect(player).toContain('id="bRestart"');
@@ -418,5 +473,27 @@ describe("the pages", () => {
     expect(player).toContain('id="bShuffle"');
     expect(player).toContain('$("bShuffle").disabled = !can || !v.canShuffle;');
     expect(player).toContain('send({ t: "shuffle" })');
+  });
+});
+
+describe("the phone's new look (owner, 2026-11-18; draft docs/mockups/stack-em-up-phone-pick-heart-draft.html)", () => {
+  const player = readFileSync(new URL("../games/matching-suits-player.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  it("shuffle is a picture of the deck with an arrow pointing to it", () => {
+    const btn = player.split('id="bShuffle"')[0].split("<").pop() + player.split('id="bShuffle"')[1].split("</button>")[0];
+    expect(btn).toContain('class="deck"');
+    expect(player).toContain('<svg class="arrow"');
+    expect(player).toContain("Tap the deck to shuffle it");
+  });
+  it("whose turn it is is a label over words, not a yellow box", () => {
+    expect(player).toContain('<div class="status" id="turnLine"></div>');
+    expect(player).not.toMatch(/class="turn[" ]/);
+  });
+  it("the Heart Race shows the whole hand, and you tap the heart you want before putting it down", () => {
+    const race = player.split('<section id="vRace" hidden>')[1].split("</section>")[0];
+    expect(race).toContain('id="raceHand"');
+    expect(race).toContain('id="bNewHand"');
+    expect(player).toContain('send({ t: "reveal", card: P.heart })');
+    expect(player).toContain('send({ t: "newhand" })');
+    expect(player).toContain("newHand: p.newHand === true");
   });
 });

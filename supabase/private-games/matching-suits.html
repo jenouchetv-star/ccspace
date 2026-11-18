@@ -188,7 +188,8 @@
     <div class="trow">
       <div class="twrap"><div class="thand" id="trayHand" role="group" aria-label="Your cards"></div><button class="tcover" id="tCover" type="button" hidden>Tap to see your cards</button></div>
       <div class="tacts">
-        <button class="tb" id="tReveal" type="button" hidden>Show my highest heart</button>
+        <button class="tb" id="tReveal" type="button" hidden>Pick a heart first</button>
+        <button class="tb dash" id="tNewHand" type="button" hidden>Get 5 new cards (free, once)</button>
         <button class="tb" id="tDrop" type="button">Drop</button>
         <button class="tb dash" id="tShuffle" type="button">Shuffle the draw deck (once a game)</button>
       </div>
@@ -224,12 +225,28 @@ function firstPlayer(hands){
   hands.forEach((h, i) => h.forEach(c => { const v = rankValue(rankOf(c)) * 10 + SUIT_ORDER[suitOf(c)]; if (v > best){ best = v; who = i; } }));
   return who;
 }
-/* after the Heart Race, every player's highest heart stays on the table, on its slot, and each player who put one down
+/* each player picks which heart to put down (owner, 2026-11-18); a pick that isn't a heart in their hand, or no pick
+   (a computer player), puts down their highest heart */
+function pickedHeart(hand, pick){ return pick && suitOf(pick) === "h" && hand.includes(pick) ? pick : highestHeart(hand); }
+/* the highest heart put down goes first; with no hearts anywhere, the highest card (spades, hearts, diamonds, clubs) */
+function raceFirst(s, picks){ return firstPlayer(s.players.map((p, i) => { const h = pickedHeart(p.hand, (picks || {})[i]); return h ? [h] : p.hand; })); }
+/* one free new hand in the Heart Race (owner, 2026-11-18: "1 free shuffle so they can get another set of cards before
+   playing"): your 5 cards go back into the deck, it's shuffled, and you take 5 new ones */
+function canNewHand(s, p){ return s.phase === "race" && !s.players[p].redealt && s.pile.length >= 5; }
+function newHand(s, p, rand){
+  if (!canNewHand(s, p)) return false;
+  const pl = s.players[p], n = pl.hand.length;
+  s.pile.push(...pl.hand); shuffle(s.pile, rand);
+  pl.hand = s.pile.splice(s.pile.length - n, n);
+  pl.redealt = true;
+  return true;
+}
+/* after the Heart Race, every player's picked heart stays on the table, on its slot, and each player who put one down
    draws a card (owner, 2026-11-17: "all of the hearts should remain on the table. Then each player draws another card") */
-function placeHearts(s){
+function placeHearts(s, picks){
   const out = [];
   s.players.forEach((p, i) => {
-    const h = highestHeart(p.hand); if (!h) return;
+    const h = pickedHeart(p.hand, (picks || {})[i]); if (!h) return;
     p.hand = p.hand.filter(c => c !== h);
     s.slots[rankOf(h)] += 1;
     const drew = s.pile.length ? s.pile.pop() : null;
@@ -257,8 +274,9 @@ function legalRanks(s, p){
 function startsNew(s, p){ const l = legalRanks(s, p); return l.length > 0 && !l.some(r => s.slots[r] > 0); }
 /* each player may reshuffle the draw deck once a game, on their turn, before they move (owner, 2026-11-17) */
 function canShuffle(s, p){ return s.phase === "play" && s.turn === p && !s.players[p].shuffled && s.pile.length >= 2; }
-/* any person at the table (not a computer player) can restart once the game has begun (owner, 2026-11-18) */
-function canRestart(phase, seat){ return !!seat && !seat.bot && ["race", "draw", "play", "over"].includes(phase); }
+/* any person at the table (not a computer player) can restart in the Heart Race, or play again after a game, but no one
+   can restart while the game is in play (owner, 2026-11-18) */
+function canRestart(phase, seat){ return !!seat && !seat.bot && ["race", "over"].includes(phase); }
 function reshuffle(s, p, rand){ if (!canShuffle(s, p)) return false; shuffle(s.pile, rand); s.players[p].shuffled = true; return true; }
 /* there is always something to drop, so there is no passing any more */
 function canPass(_s, _p){ return false; }
@@ -511,7 +529,7 @@ const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
 /* ===================== the game ===================== */
-const G = { code: "", seats: [], state: null, phase: "lobby", busy: false, revealed: {}, feed: [], shown: {}, raceWinner: -1, round: 0 };
+const G = { code: "", seats: [], state: null, phase: "lobby", busy: false, revealed: {}, feed: [], shown: {}, raceWinner: -1, round: 0, chosen: {}, redealing: {} };
 /* seats: { id, name, bot, pid, away } */
 
 function chike(pose, text){ $("chikeImg").src = "/assets/characters/chike-pose-" + pose + ".png"; $("chikeSay").textContent = text; }
@@ -707,7 +725,8 @@ function onMove(pk, p){
     lobbyChanged(); tell(free); return;
   }
   if (i < 0) return;
-  if (p.t === "reveal" && G.phase === "race") reveal(i);
+  if (p.t === "reveal" && G.phase === "race") reveal(i, typeof p.card === "string" ? p.card : null);
+  if (p.t === "newhand" && G.phase === "race" && !G.revealed[i]) redeal(i);
   if (p.t === "drop" && G.phase === "play" && RANKS.includes(p.rank)) act(i, { t: "drop", rank: p.rank });
   if (p.t === "pass" && G.phase === "play") act(i, { t: "pass" });
   if (p.t === "shuffle" && G.phase === "play") doShuffle(i);
@@ -742,7 +761,8 @@ function viewFor(i){
     active: null, onTable: 0, table: st ? onTable(st) : [], start: st ? startsNew(st, i) : false, pile: st ? st.pile.length : 0,
     /* the whole table, for the picture of it on the phone (owner, 2026-11-17): cards down per rank (A to K), and finished ranks */
     slots: st ? RANKS.map(r => st.slots[r]) : [], done: st ? RANKS.filter(r => st.done[r]) : [],
-    heart: me ? highestHeart(me.hand) : null, revealed: !!G.revealed[i], busy: G.busy,
+    heart: G.chosen[i] || null, revealed: !!G.revealed[i], busy: G.busy,
+    newHand: st ? canNewHand(st, i) && !G.revealed[i] && !G.redealing[i] : false,
     players: G.seats.length, place: G.phase === "over" ? standings(st).findIndex(x => x.i === i) + 1 : 0,
     winner: G.phase === "over" ? st.players[st.winner].name : "" };
 }
@@ -764,7 +784,7 @@ function lobbyChanged(){
 /* --- playing on this screen (owner, 2026-11-17: "If the player is playing against the robots then they should be able to
    play the game without a phone"; draft docs/mockups/matching-suits-play-here-draft.html). One screen seat per table; its
    cards live in the tray at the bottom. If friends join on phones too, the tray hides the cards until tapped. --- */
-const HERE = { sel: null, peek: false };
+const HERE = { sel: null, peek: false, heart: null };
 const hereSeat = () => G.seats.findIndex(s => s && s.local);
 const phonesHere = () => G.seats.some(s => s && s.pk);
 const SUIT_SVG = {
@@ -776,7 +796,7 @@ const SUIT_SVG = {
 const SUIT_NAME = { h: "hearts", d: "diamonds", c: "clubs", s: "spades" };
 function trayCard(c, cls, on){
   const r = rankOf(c), su = suitOf(c);
-  return '<button type="button" class="tc' + (su === "h" || su === "d" ? " red" : "") + (cls ? " " + cls : "") + '" data-r="' + r + '"' + (on ? "" : ' tabindex="-1" aria-disabled="true"')
+  return '<button type="button" class="tc' + (su === "h" || su === "d" ? " red" : "") + (cls ? " " + cls : "") + '" data-r="' + r + '" data-c="' + c + '"' + (on ? "" : ' tabindex="-1" aria-disabled="true"')
     + ' aria-label="' + cardName(r) + " of " + SUIT_NAME[su] + '"><span class="r">' + r + '</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + SUIT_SVG[su] + '"/></svg><span class="r b">' + r + '</span></button>';
 }
 function paintTray(){
@@ -790,13 +810,19 @@ function paintTray(){
   tray.classList.toggle("wait", play && v.turn !== i);
   $("trayName").textContent = phonesHere() ? v.name + "'s cards" : "Your cards";   /* just you and the computer: it's you (owner) */
   $("trayPile").textContent = "Draw pile: " + v.pile;
-  $("trayNote").textContent = G.phase === "race" ? (v.revealed ? (v.heart ? "Your " + cardName(rankOf(v.heart)) + " of hearts is on the table" : "No hearts this time") : "The Heart Race!")
+  const race = G.phase === "race", hearts = v.hand.filter(c => suitOf(c) === "h"), picking = race && !v.revealed && !G.redealing[i];
+  if (!picking || !hearts.includes(HERE.heart)) HERE.heart = picking && hearts.includes(HERE.heart) ? HERE.heart : null;
+  $("trayNote").textContent = race ? (v.revealed ? (v.heart ? "Your " + cardName(rankOf(v.heart)) + " of hearts is on the table" : "No hearts this time") : hearts.length ? "The Heart Race! Pick a heart to put down" : "The Heart Race! No hearts this time")
     : !play ? "" : mine ? (v.start ? "Your turn: nothing matches, so start a new rank" : "Your turn: match a rank on the table")
     : v.turnName + "'s turn";
-  $("trayHand").innerHTML = v.hand.map(c => { const r = rankOf(c), ok = mine && v.legal.includes(r); return trayCard(c, (HERE.sel === r && mine ? "sel" : "") + (mine && !ok ? " off" : !mine ? " idle" : ""), ok && !covered); }).join("");
+  /* in the Heart Race, the hearts can be picked (owner, 2026-11-18); in play, the ranks you can drop */
+  $("trayHand").innerHTML = race
+    ? v.hand.map(c => { const h = suitOf(c) === "h", ok = picking && h; return trayCard(c, (HERE.heart === c ? "sel" : "") + (ok ? "" : " off"), ok && !covered); }).join("")
+    : v.hand.map(c => { const r = rankOf(c), ok = mine && v.legal.includes(r); return trayCard(c, (HERE.sel === r && mine ? "sel" : "") + (mine && !ok ? " off" : !mine ? " idle" : ""), ok && !covered); }).join("");
   $("tCover").hidden = !covered;
-  $("tReveal").hidden = G.phase !== "race"; $("tReveal").disabled = !!v.revealed;
-  $("tReveal").textContent = v.revealed ? "Shown! Watch the table" : "Show my highest heart";
+  $("tReveal").hidden = !race; $("tReveal").disabled = !!v.revealed || !picking || covered || (hearts.length > 0 && !HERE.heart);
+  $("tReveal").textContent = v.revealed ? "Shown! Watch the table" : !hearts.length ? "I'm ready" : HERE.heart ? "Put down my " + cardName(rankOf(HERE.heart)) : "Pick a heart first";
+  $("tNewHand").hidden = !race || !v.newHand; $("tNewHand").disabled = covered;
   ["tDrop", "tShuffle"].forEach(id => $(id).hidden = !play);
   const n = HERE.sel ? v.hand.filter(c => rankOf(c) === HERE.sel).length : 0;
   $("tDrop").disabled = !mine || !HERE.sel || covered;
@@ -808,6 +834,14 @@ function hereDrop(){ const i = hereSeat(); if (i < 0 || !HERE.sel) return; const
 $("trayHand").addEventListener("click", (e) => {
   const el = e.target.closest(".tc"), i = hereSeat(); if (!el || i < 0 || !G.state) return;
   const r = el.dataset.r, st = G.state;
+  /* the Heart Race: tap the heart you want to put down (owner, 2026-11-18) */
+  if (G.phase === "race"){
+    const c = el.dataset.c;
+    if (G.revealed[i] || G.redealing[i] || suitOf(c) !== "h" || !st.players[i].hand.includes(c) || (phonesHere() && !HERE.peek)) return;
+    HERE.heart = c; sfx("click"); paintTray();
+    const again = $("trayHand").querySelector('.tc[data-c="' + c + '"]'); if (again) again.focus();
+    return;
+  }
   if (G.phase !== "play" || st.turn !== i || G.busy || !legalRanks(st, i).includes(r)) return;
   HERE.sel = r; sfx("click"); paintTray();
   const again = $("trayHand").querySelector('.tc[data-r="' + r + '"]'); if (again) again.focus();
@@ -821,7 +855,8 @@ $("trayHand").addEventListener("keydown", (e) => {
 $("tCover").onclick = () => { HERE.peek = true; sfx("flip", { volume: .5 }); paintTray(); };
 $("tDrop").onclick = hereDrop;
 $("tShuffle").onclick = () => { const i = hereSeat(); if (i >= 0) doShuffle(i); };
-$("tReveal").onclick = () => { const i = hereSeat(); if (i >= 0){ sfx("flip"); reveal(i); } };
+$("tReveal").onclick = () => { const i = hereSeat(); if (i >= 0){ sfx("flip"); reveal(i, HERE.heart); HERE.heart = null; } };
+$("tNewHand").onclick = () => { const i = hereSeat(); if (i >= 0) redeal(i); };
 $("bHere").onclick = () => { if (G.phase !== "lobby") return; sfx("click"); $("hereForm").hidden = false; $("hereName").focus(); };
 function sitHere(){
   if (G.phase !== "lobby" || hereSeat() >= 0 || G.seats.length >= 4) return;
@@ -845,27 +880,29 @@ function startRound(by){
   G.round++;   /* anything still waiting from the last round sees this and stops */
   sfx("start");
   G.state = startGame(G.seats.map(s => ({ id: s.id, name: s.name, bot: s.bot })), Math.random);
-  G.phase = "race"; G.revealed = {}; G.busy = false; G.raceWinner = -1;
+  G.phase = "race"; G.revealed = {}; G.chosen = {}; G.redealing = {}; G.busy = false; G.raceWinner = -1; HERE.heart = null;
   $("lobby").hidden = true; $("podium").hidden = true; $("again").hidden = true; $("confetti").innerHTML = "";
   buildTable(); paintCounts(); paintSeats();
   banner("The Heart Race: who goes first?");
   const where = hereSeat() < 0 ? " on your device" : phonesHere() ? " on your phone or in the tray below" : " in the tray below";
-  chike("point-up", (by ? by + " restarted the game, so everyone gets new cards. " : "") + "Heart Race! Everyone, tap Show my highest heart" + where + ". Put it down on the table: the highest heart goes first.");
+  chike("point-up", (by ? by + " restarted the game, so everyone gets new cards. " : "") + "Heart Race! Everyone, pick a heart to put down" + where + ". The highest heart on the table goes first. Don't like your cards? You can swap them for 5 new ones, once.");
   const r = G.round;
   G.seats.forEach((s, i) => { if (s.bot) setTimeout(() => { if (G.round === r) reveal(i); }, 900 + i * 500); });
   tellAll();
 }
 function raceNote(i){
   if (G.raceWinner === i) return "Goes first!";
-  if (!G.revealed[i]) return "Choosing...";
-  const h = highestHeart(G.state.players[i].hand);
+  if (!G.revealed[i]) return G.redealing[i] ? "New cards..." : "Choosing...";
+  const h = G.chosen[i];
   return h ? cardName(rankOf(h)) + " of hearts" : "No hearts";
 }
-/* a player puts their highest heart down: it slides out of their cards and lands face up on its slot */
-function reveal(i){
-  if (G.phase !== "race" || G.revealed[i]) return;
+/* a player puts down the heart they picked (owner, 2026-11-18; a computer player puts down its highest): it slides out
+   of their cards and lands face up on its slot */
+function reveal(i, pick){
+  if (G.phase !== "race" || G.revealed[i] || G.redealing[i]) return;
   G.revealed[i] = true; sfx("flip");
-  const h = highestHeart(G.state.players[i].hand);
+  const h = pickedHeart(G.state.players[i].hand, pick);
+  G.chosen[i] = h;
   if (h){
     /* it goes straight onto its own slot, face up, and stays there */
     const fan = FANS[i], from = fan.pop(), m = makeCard(h), r = rankOf(h);
@@ -877,8 +914,35 @@ function reveal(i){
   paintSeats(); tell(i);
   if (Object.keys(G.revealed).length === G.seats.length) finishRace();
 }
+/* one free new hand before putting a heart down (owner, 2026-11-18): the player's cards fly into the deck, then 5 new
+   ones fly back. The deck keeps the same number of cards. */
+async function redeal(i){
+  const st = G.state, r = G.round;
+  if (G.phase !== "race" || G.revealed[i] || G.redealing[i] || !newHand(st, i, Math.random)) return;
+  G.redealing[i] = true; paintSeats(); tell(i);
+  if (G.seats[i].local){ HERE.heart = null; paintTray(); }
+  sfx("flip", { volume: .5 });
+  news(nm(i) + " swapped their cards for 5 new ones.");
+  chike("point", st.players[i].name + " swapped their cards for 5 new ones! Everyone can do that once, before they put a heart down.");
+  const fan = FANS[i], n = fan.length, base = PILE.meshes.length;
+  await Promise.all(fan.splice(0).map((m, k) => { PILE.meshes.push(m); return fly(m, pilePos(base + k), new THREE.Euler(0, .05 * Math.sin((base + k) * 3), 0), REDUCED ? .01 : .45, REDUCED ? 0 : .5, k * .06); }));
+  if (G.round !== r) return;
+  await wait(REDUCED ? 10 : 250);
+  if (G.round !== r) return;
+  const spot = seatSpot(i, G.seats.length);
+  await Promise.all(Array.from({ length: n }, (_, k) => {
+    const m = PILE.meshes.pop(); fan.push(m); const fp = fanPos(spot, k, n);
+    return fly(m, fp.p, new THREE.Euler(0, fp.ry, 0), REDUCED ? .01 : .5, REDUCED ? 0 : .6, k * .08);
+  }));
+  if (G.round !== r) return;
+  G.redealing[i] = false; paintSeats(); tell(i);
+  if (G.seats[i].local) paintTray();
+}
 async function finishRace(){
-  const st = G.state, w = st.first, h = highestHeart(st.players[w].hand), anyHeart = st.players.some(p => highestHeart(p.hand)), r = G.round;
+  const st = G.state, r = G.round;
+  /* the highest heart put down goes first (owner, 2026-11-18: each player picks theirs) */
+  st.first = st.turn = raceFirst(st, G.chosen);
+  const w = st.first, h = G.chosen[w], anyHeart = Object.values(G.chosen).some(Boolean);
   await wait(900);
   if (G.round !== r) return;
   G.raceWinner = w; paintSeats(); sfx("good");
@@ -889,7 +953,7 @@ async function finishRace(){
   await wait(REDUCED ? 1500 : 2600);
   if (G.round !== r) return;
   /* the hearts are already on their slots: they stay, and each of those players draws a card */
-  const placed = placeHearts(st);
+  const placed = placeHearts(st, G.chosen);
   G.shown = {};
   G.phase = "draw"; paintCounts();
   const draws = [];
