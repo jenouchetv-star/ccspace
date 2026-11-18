@@ -27,7 +27,7 @@ const GAMES = {
   "supabase/private-games/matching-suits.html": "Stack 'Em Up!",   /* was Matching Suits (owner renamed it, 2026-11-17) */
   "supabase/private-games/number-dash.html": "Math Runner",
   "supabase/private-games/pic-pop-puzzle.html": "Pic-a-Puzzle",
-  "supabase/private-games/remote-lunar-salvage.html": "Remote Lunar Salvage",
+  "supabase/private-games/remote-lunar-salvage.html": "Remote Lunar Mission",   /* was Remote Lunar Salvage (owner renamed it, 2026-11-18) */
   "supabase/private-games/solar-system-sandbox.html": "Solar System Sandbox"
 };
 const read = (p) => readFileSync(new URL("../" + p, import.meta.url), "utf8");
