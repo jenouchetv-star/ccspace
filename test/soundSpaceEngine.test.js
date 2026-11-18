@@ -1081,3 +1081,61 @@ function fakeOffline() {
   }
   return { Offline, last: () => made };
 }
+
+// ---- The loop on a long song (owner, 2026-11-18) ----------------------------
+
+describe("Sound Space player and the loop", () => {
+  const E = SS.engine;
+  // 16 counts on eighths at 120: a square is 0.25 s. Notes at count 1 (60), count 5 (62) and count 9 (64).
+  const longSong = () => {
+    const song = SS.model.newSong();
+    song.counts = 16; song.grid = 2; song.tempo = 120;
+    const t = SS.model.addTrack(song, "piano");
+    [[0, 60], [8, 62], [16, 64]].forEach(([s, p]) => SS.model.toggleNote(t, s, p, 1));
+    return song;
+  };
+  const run = (song, opts, ticks) => {
+    const ctx = fakeCtx();
+    const heard = [], steps = [];
+    const voices = { play: (ev) => { heard.push(ev.pitch); return []; } };
+    let tick = null;
+    const player = E.createPlayer(ctx, voices, { setInterval: (fn) => ((tick = fn), 1), clearInterval: () => { tick = null; } });
+    player.onStep((s) => steps.push(s));
+    player.start(song, opts);
+    for (let i = 0; i < ticks && tick; i++) { ctx.currentTime += 0.025; tick(); }
+    return { heard, steps, player };
+  };
+
+  it("with Loop on, Play goes round the loop only", () => {
+    const song = longSong(); song.loopCounts = 4; song.loopStart = 4;
+    const r = run(song, { fromStep: 8 }, 200);
+    expect(r.heard.filter((p) => p === 62).length).toBeGreaterThanOrEqual(2);
+    expect(r.heard).not.toContain(60);
+    expect(r.heard).not.toContain(64);
+    expect(r.steps.filter((s) => s >= 0).every((s) => s >= 8 && s < 16)).toBe(true);
+    r.player.stop();
+  });
+
+  it("with Loop off, Play goes through the whole song once and stops", () => {
+    const song = longSong(); song.loopCounts = 4; song.loopStart = 4; song.loop = false;
+    const r = run(song, { fromStep: 0 }, 600);
+    expect(r.heard).toEqual([60, 62, 64]);
+    expect(r.player.playing).toBe(false);
+  });
+
+  it("a range (recording) keeps the player inside it, round and round", () => {
+    const song = longSong();
+    const r = run(song, { fromStep: 16, range: { from: 16, to: 24 } }, 200);
+    expect(r.heard.filter((p) => p === 64).length).toBeGreaterThanOrEqual(2);
+    expect(r.heard).not.toContain(60);
+    expect(r.heard).not.toContain(62);
+    r.player.stop();
+  });
+
+  it("a range with Loop off plays it once", () => {
+    const song = longSong(); song.loop = false;
+    const r = run(song, { fromStep: 16, range: { from: 16, to: 24 } }, 600);
+    expect(r.heard).toEqual([64]);
+    expect(r.player.playing).toBe(false);
+  });
+});

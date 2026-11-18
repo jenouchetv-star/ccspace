@@ -20,7 +20,8 @@
 <!--
   Sound Space (Chike's Creative Space): kids make their own short songs. Add tracks, pick an instrument for each,
   then play the piano keys or drum pads, record what you play (notes, never audio), or tap notes into the grid.
-  A song is 4, 8 or 16 counts long and loops while you build it up.
+  A song is 1 to 64 bars long; a loop of 4, 8 or 16 counts goes round while you build it up, and recording stays
+  inside it. Copy and Paste move any part of a track into a track or a new one.
 
   The music logic lives in sound-space/*.js (model, engine, wav, instruments); the content in icons.js (the drawn
   instrument pictures), library.js (Beats and patterns, the starter song) and lessons.js (Music lessons); this page
@@ -36,6 +37,7 @@
 :root{
   /* one color per kind of instrument (no orange, no green, no rainbow) */
   --drums:#D946EF; --keys:#5B8CFF; --strings:#8B5CF6; --winds:#F2C14E; --bass:#14B8A6; --fx:#FF5C8A;
+  --loop:#14B8A6;
   --go:#14B8A6; --rec:#8E2457;
   /* corners, as tight as Art Space's: panels, cards, dialogs and tiles 10px; buttons, chips, inputs, wells and track
      cards, drum pads and the pattern cards' play buttons 7px; grid pads, cells and strip squares 3px; piano keys 4px
@@ -513,8 +515,9 @@ body.kbd-collapsed #kbd{ display:none; }
 .center{ display:flex; flex-direction:column; background:var(--bg); min-width:0; min-height:0; }
 .lanes{ flex:none; max-height:28%; overflow:auto; padding:10px 14px 8px; border-bottom:1px solid var(--line); background:linear-gradient(var(--lane-a),var(--lane-b)); }
 .lanes__empty{ margin:4px 0; color:var(--mute); font-size:12px; }
-.countrow{ display:flex; margin:0 0 6px 124px; gap:2px; padding:0 3px; }
-.countrow span{ flex:1; text-align:left; font-size:10.5px; color:var(--faint); font-variant-numeric:tabular-nums; font-weight:700; }
+.countrow{ display:flex; margin:0 0 6px 124px; gap:2px; padding:0 3px 3px; position:relative; }
+.countrow span{ flex:1; min-width:0; text-align:left; font-size:10.5px; color:var(--faint); font-variant-numeric:tabular-nums; font-weight:700; white-space:nowrap; overflow:visible; }
+.ovloop{ position:absolute; bottom:-1px; height:3px; border-radius:2px; background:var(--loop); left:calc(3px + (100% - 6px) * var(--a, 0)); width:calc((100% - 6px) * var(--w, 1)); }
 .countrow span.now{ color:var(--text); }
 .lane{ display:flex; align-items:center; gap:8px; height:32px; margin-bottom:5px; }
 .lane .nm{ width:116px; flex:none; display:flex; align-items:center; gap:6px; font-size:12px; font-weight:800; min-width:0; }
@@ -540,9 +543,36 @@ body.kbd-collapsed #kbd{ display:none; }
 .gscroll{ flex:1; min-height:120px; overflow:auto; border-radius:var(--r); background:var(--well); box-shadow:var(--press); }
 .grid{ position:relative; display:flex; flex-direction:column; gap:3px; padding:8px; min-width:min-content; }
 .grow-row{ display:flex; align-items:center; height:22px; flex:none; }
-.gcount{ position:sticky; top:0; z-index:3; height:20px; background:var(--well); margin:-8px -8px 0; padding:4px 8px 0; }
-.gcount .cells span{ font-size:10.5px; font-weight:800; color:var(--faint); font-variant-numeric:tabular-nums; padding-left:2px; }
+.gcount{ position:sticky; top:0; z-index:3; height:30px; background:var(--well); margin:-8px -8px 0; padding:4px 8px 0; }
+/* the corner over the keys hides the count numbers as the grid scrolls sideways under it */
+.gcount .pk.ghost{ height:100%; background:var(--well); border-radius:0; margin-left:-8px; padding-left:8px; width:var(--gk, 118px); box-sizing:border-box; }
+.gcount .cells{ height:100%; cursor:pointer; touch-action:none; user-select:none; -webkit-user-select:none; }
+.gcount .cells span{ font-size:10.5px; font-weight:800; color:var(--faint); font-variant-numeric:tabular-nums; padding-left:2px; align-self:end; height:16px; line-height:16px; border-radius:4px 0 0 4px; }
 .gcount .cells span.now{ color:var(--text); }
+/* the counts picked to copy (blue) and where a paste goes (yellow): the numbers light up, and a band covers the grid */
+.gcount .cells span.pick{ background:color-mix(in srgb,var(--accent) 35%,transparent); color:var(--text); border-radius:0; }
+.gcount .cells span.at{ background:#F2C14E; color:#1C1C22; border-radius:0; }
+/* --gl and --gr: where the squares start and end in the grid, measured when it is drawn (the keys down the side differ) */
+.gband{ position:absolute; top:30px; bottom:4px; z-index:2; pointer-events:none; border-radius:6px;
+  left:calc(var(--gl, 126px) - 2px + (100% - var(--gl, 126px) - var(--gr, 8px)) * var(--a, 0)); width:calc((100% - var(--gl, 126px) - var(--gr, 8px)) * var(--w, 0) + 1px); }
+.gband[hidden]{ display:none; }
+.gsel{ background:color-mix(in srgb,var(--accent) 12%,transparent); box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--accent) 80%,transparent); }
+.gpaste{ background:rgba(242,193,78,.12); box-shadow:inset 0 0 0 2px rgba(242,193,78,.85); }
+.gloopshade{ box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--loop) 55%,transparent); background:color-mix(in srgb,var(--loop) 6%,transparent); }
+/* the loop: a teal bar over the count numbers, dragged (or moved with the arrow keys) a bar at a time */
+.gloop{ align-self:start; height:7px; margin-top:1px; border-radius:4px; background:var(--loop); box-shadow:0 0 8px color-mix(in srgb,var(--loop) 60%,transparent); position:relative; cursor:grab; touch-action:none; outline-offset:2px; }
+.gloop::before, .gloop::after{ content:""; position:absolute; top:-3px; width:4px; height:13px; border-radius:2px; background:color-mix(in srgb,var(--loop) 55%,#fff); }
+.gloop::before{ left:-1px; } .gloop::after{ right:-1px; }
+.gloop:active{ cursor:grabbing; }
+.gloop:focus-visible{ outline:2px solid var(--focus); }
+/* Paste: a small menu under the button */
+.pastemenu{ position:fixed; z-index:42; width:300px; padding:6px; border-radius:var(--r); border:1px solid var(--tc-edge); background:linear-gradient(var(--tc-a),var(--tc-b)); box-shadow:var(--pop); }
+.pastemenu[hidden]{ display:none; }
+.pastemenu button{ display:block; width:100%; text-align:left; border:0; background:none; color:var(--text); font:800 13px inherit; font-family:inherit; padding:9px 10px; border-radius:var(--r-sm); cursor:pointer; }
+.pastemenu button small{ display:block; font-weight:500; font-size:11.5px; color:var(--mute); margin-top:2px; line-height:1.35; }
+.pastemenu button:hover, .pastemenu button:focus-visible{ background:var(--accent-weak); outline:none; }
+.pastemenu button:disabled{ opacity:.45; cursor:default; background:none; }
+.pastemenu hr{ border:0; height:1px; margin:4px 2px; background:var(--line); }
 /* piano keys down the side of the grid, shaded like real keys */
 .pk{ width:110px; flex:none; margin-right:8px; height:20px; border-radius:0 var(--r-key) var(--r-key) 0; background:linear-gradient(90deg,#D9D9E0,#FFFFFF 18%,#F1F1F5); display:flex; align-items:center; justify-content:flex-end;
   padding-right:8px; font-size:10.5px; font-weight:900; color:#1C1C22; box-shadow:inset 0 -2px 0 #B5B5C0,0 1px 0 #000; position:sticky; left:0; z-index:2; cursor:pointer; }
@@ -569,7 +599,7 @@ body.kbd-collapsed #kbd{ display:none; }
 .note.hot, .strip i.hot{ animation:padglow .5s cubic-bezier(.2,.7,.3,1) both; }
 @keyframes padglow{ from{ filter:brightness(1.5); box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 2px 0 color-mix(in srgb,var(--tc) 45%,#000),0 0 18px var(--tc); } to{ filter:none; } }
 .gph{ position:absolute; top:0; bottom:0; z-index:2; pointer-events:none; display:none; border-left:2px solid #fff; background:rgba(255,255,255,.07);
-  box-shadow:-1px 0 0 rgba(0,0,0,.35); left:calc(126px + (100% - 134px) * var(--ph, 0)); width:calc((100% - 134px) / var(--n)); }
+  box-shadow:-1px 0 0 rgba(0,0,0,.35); left:calc(var(--gl, 126px) + (100% - var(--gl, 126px) - var(--gr, 8px)) * var(--ph, 0)); width:calc((100% - var(--gl, 126px) - var(--gr, 8px)) / var(--n)); }
 .playing .gph{ display:block; }
 
 /* bottom: piano keys or drum pads */
@@ -983,7 +1013,7 @@ body.kbd-collapsed #kbd{ display:none; }
   .edhead .acts .btn{ width:32px; padding:0; }
   .gscroll{ min-height:90px; }
   .pk{ width:58px; } .pk.black{ width:42px; margin-right:24px; } .pk.drum{ width:84px; }
-  .gph{ left:calc(74px + (100% - 82px) * var(--ph, 0)); width:calc((100% - 82px) / var(--n)); }
+  .gph{ left:calc(var(--gl, 74px) + (100% - var(--gl, 74px) - var(--gr, 8px)) * var(--ph, 0)); width:calc((100% - var(--gl, 74px) - var(--gr, 8px)) / var(--n)); }
   .cells{ min-width:calc(var(--n) * 20px); }
   .kbd{ padding:10px; gap:8px; }
   .keys{ height:110px; }
@@ -1071,9 +1101,19 @@ body.kbd-collapsed #kbd{ display:none; }
    words go and the gaps tighten; then below 1100px the box drops its %, and the Counts, Grid and Speed words stay for a
    screen reader only */
 @media (max-width:1439px) and (min-width:641px){ .transport{ gap:8px; } .transport .field small{ display:none; } .fader--main{ width:80px; } }
+/* Length's box holds 1 to 64 */
+.lenf .num input{ width:36px; }
+@media (max-width:1439px) and (min-width:1101px){ .fader--main{ width:64px; } }
+/* a narrow editor (both panels open on a laptop): Copy, Paste, Clear and Remove show their icons only (their names are
+   in their tooltips and read out), so the row never runs past the edge */
+.editor{ container-type:inline-size; }
+@container (max-width:940px){
+  .edhead .acts .btn:is([data-act="copy"],[data-act="paste"],[data-act="clear"],[data-act="remove-track"]) span{ display:none; }
+  .edhead .acts .btn:is([data-act="copy"],[data-act="paste"],[data-act="clear"],[data-act="remove-track"]){ width:32px; padding:0; justify-content:center; }
+}
 @media (max-width:1100px) and (min-width:641px){
   .vol__box .track__unit{ display:none; } .vol__box{ width:46px; }
-  #counts-lbl, #gridres-lbl, .transport label[for="ss-tempo"]{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  #counts-lbl, #gridres-lbl, .transport label[for="ss-tempo"], .transport #length-lbl{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
   .transport .field{ gap:0; } .transport .well button{ padding:6px 9px; } .lcd{ min-width:46px; }
 }
 /* Help on phones: full screen, the categories in a sideways strip, one card a row */
@@ -1117,13 +1157,14 @@ body.kbd-collapsed #kbd{ display:none; }
 .songsheet__head .btn{ margin-left:auto; width:34px; height:34px; }
 .songsheet__rows{ display:grid; gap:2px; }
 .songsheet .field{ display:flex; align-items:center; gap:10px; min-height:44px; }
-.songsheet #counts-lbl, .songsheet #gridres-lbl, .songsheet label[for="ss-tempo"], .songsheet .vol__lab{ width:62px; flex:none; }
+.songsheet #counts-lbl, .songsheet #gridres-lbl, .songsheet label[for="ss-tempo"], .songsheet #length-lbl, .songsheet .vol__lab{ width:62px; flex:none; }
 .songsheet .vol > svg.lucide{ display:none; }
 .songsheet .well button{ padding:8px 12px; }
 .songsheet .num button{ width:34px; height:32px; }
 .songsheet .num input{ width:54px; font-size:14px; }
 .songsheet .fader--main{ flex:1 1 auto; width:auto; }
 .songsheet .vol__box{ width:62px; }
+.songsheet .lenf small{ display:inline; }   /* "bars, 2:08" beside Length: the sheet has room for it */
 @media only screen and (max-width:640px){
   /* the top bar keeps Back to the site, My songs, the song's name and More; the rest is in More */
   #editor .appbar .appmark--editor, #editor .appbar .grow, #editor .appbar .sep, #tg-tracks, #undo-btn, #redo-btn, #tg-lib, #tg-focus,
@@ -1225,10 +1266,11 @@ body.kbd-collapsed #kbd{ display:none; }
     <button type="button" class="toggle" id="ss-loop" aria-pressed="true" title="Loop: play the song again and again"><span class="led" aria-hidden="true"></span><i data-lucide="repeat"></i>Loop</button>
     <button type="button" class="toggle" id="ss-countin" aria-pressed="false" title="Count-in: a 1, 2, 3, 4 click before recording"><span class="led" aria-hidden="true"></span><i data-lucide="timer"></i>Count-in</button>
     <span class="sep" aria-hidden="true"></span>
-    <div class="field"><span id="counts-lbl">Counts</span><div class="well" id="ss-counts" role="radiogroup" aria-labelledby="counts-lbl" title="Counts: how long the song is"><button type="button" role="radio" data-counts="4" aria-checked="false">4</button><button type="button" role="radio" data-counts="8" aria-checked="true">8</button><button type="button" role="radio" data-counts="16" aria-checked="false">16</button></div></div>
+    <div class="field"><span id="counts-lbl">Counts</span><div class="well" id="ss-counts" role="radiogroup" aria-labelledby="counts-lbl" title="Counts: how long the loop is. Recording stays inside it."><button type="button" role="radio" data-counts="4" aria-checked="false">4</button><button type="button" role="radio" data-counts="8" aria-checked="true">8</button><button type="button" role="radio" data-counts="16" aria-checked="false">16</button></div></div>
+    <div class="field lenf"><label for="ss-length" id="length-lbl">Length</label><span class="num" title="Length: how long the whole song is, in bars of 4 counts (up to 64)"><button type="button" data-act="len-down" aria-label="One bar shorter" title="One bar shorter">&minus;</button><input id="ss-length" type="number" min="1" max="64" step="1" value="2" inputmode="numeric" aria-describedby="ss-length-time"><button type="button" data-act="len-up" aria-label="One bar longer" title="One bar longer">+</button></span><small id="ss-length-time">bars, 0:04</small></div>
     <div class="field"><span id="gridres-lbl">Grid</span><div class="well" id="ss-grid-res" role="radiogroup" aria-labelledby="gridres-lbl" title="Grid: eighths or sixteenths"><button type="button" role="radio" data-grid="2" aria-checked="true">Eighths</button><button type="button" role="radio" data-grid="4" aria-checked="false">Sixteenths</button></div></div>
     <div class="field"><label for="ss-tempo">Speed</label><span class="num" title="Speed: how fast the beat goes"><button type="button" data-act="tempo-down" aria-label="Slower" title="Slower">&minus;</button><input id="ss-tempo" type="number" min="60" max="160" step="1" value="120" inputmode="numeric"><button type="button" data-act="tempo-up" aria-label="Faster" title="Faster">+</button></span><small>beats a minute</small></div>
-    <button type="button" class="btn songbtn" id="ss-song" aria-haspopup="dialog" aria-expanded="false" aria-controls="songsheet" title="Song settings: Speed, Counts, Grid and Main"><i data-lucide="sliders-horizontal"></i>Song</button>
+    <button type="button" class="btn songbtn" id="ss-song" aria-haspopup="dialog" aria-expanded="false" aria-controls="songsheet" title="Song settings: Speed, Counts, Length, Grid and Main"><i data-lucide="sliders-horizontal"></i>Song</button>
   </div>
 
   <div class="main">
@@ -1300,7 +1342,7 @@ body.kbd-collapsed #kbd{ display:none; }
         <div class="splash__bar" aria-hidden="true"><i id="splash-bar"></i></div>
       </div>
       <div class="splash__details">
-        <p>120 instruments · Piano keys and drum pads · Record and loop · 4, 8 or 16 counts.</p>
+        <p>120 instruments · Piano keys and drum pads · Record and loop · Songs up to 64 bars.</p>
         <p>Songs save as you go, in this browser. Made for all creative kids.</p>
       </div>
       <div class="splash__family"><img src="../studio/creative-studio-logo.svg" alt="">Creative Space Studio</div>
@@ -1361,6 +1403,11 @@ body.kbd-collapsed #kbd{ display:none; }
 </aside>
 <!-- phones (up to 640px): the top bar's More menu. Each item has the real bar button's data-act, so the page's one
      data-act handler runs it; the menu only opens, closes and moves the focus. -->
+<div id="paste-menu" class="pastemenu" role="menu" aria-label="Paste" hidden>
+  <button type="button" role="menuitem" data-paste="here"><span id="paste-here-t">Paste here</span><small id="paste-here-s"></small></button>
+  <hr>
+  <button type="button" role="menuitem" data-paste="new">Paste as a new track<small id="paste-new-s"></small></button>
+</div>
 <div id="more-menu" class="moremenu" role="menu" aria-label="More" hidden>
   <div class="moremenu__row" role="none">
     <button type="button" role="menuitem" tabindex="-1" class="mi" id="mi-undo" data-act="undo"><i data-lucide="undo-2"></i>Undo</button>
@@ -1509,18 +1556,23 @@ const HELP = [
     "<p>A song can have up to 8 tracks, each with its own instrument. Pick a track on the left to change it. <b>M</b> mutes a track and <b>S</b> plays only that track. The picked track's card opens: its Volume slider sets how loud it is, or type a number from 0 to 100 in the box beside it.</p><p>Main sets how loud the whole song plays. Each track's Volume is in its card.</p><p>Reverb makes a track sound like it's played in a bigger room. Pick Off, Room, Hall, Big hall or Stadium.</p><p>Sustain lets notes ring on after they end, like a piano pedal.</p>"
     + "<p>Press <b>More sound</b> on the card for three more effects. Its lights show which ones are on. Chorus makes one sound like a few playing together, with a gentle wobble. Flanger sweeps it like a jet, and Phaser makes it swirl. Dynamics evens out loud and quiet notes: Compress makes the track sound steady, and Limit stops the loudest notes going over the top. EQ turns the low, middle and high sounds up or down: drag a fader, or double-click it to put it back to 0. Low cut takes away deep rumble. Effects tracks get EQ only.</p>"],
   ["Playing", "Play, stop and loop", "play stop loop again repeat space",
-    "<p><b>Play</b> starts the song and <b>Stop</b> stops it. With <b>Loop</b> on, the song plays again and again. " + K("Space") + " plays and stops too.</p>"],
+    "<p><b>Play</b> starts the song and <b>Stop</b> stops it. With <b>Loop</b> on, the loop (the teal bar) plays again and again. With Loop off, the whole song plays once. " + K("Space") + " plays and stops too.</p>"],
   ["Playing", "Piano keys", "piano keys keyboard computer higher lower octave music real usb midi electric pedal",
     "<p>Tap the keys, or use your computer keys: " + K("A") + " " + K("S") + " " + K("D") + " " + K("F") + " " + K("G") + " " + K("H") + " " + K("J") + " " + K("K") + " " + K("L") + " " + K(";") + " " + K("'") + " for the white keys and " + K("W") + " " + K("E") + " " + K("T") + " " + K("Y") + " " + K("U") + " " + K("O") + " " + K("P") + " for the black keys. <b>Higher</b> and <b>Lower</b> move the keys up or down.</p>"
     + "<p>Have a music keyboard? Plug it into the computer with USB and press <b>Use a music keyboard</b>.</p>"],
   ["Playing", "Drum pads", "drum pads kit beat",
     "<p>Drum tracks get 8 pads. Tap them, or use " + K("A") + " to " + K("K") + " on your computer.</p>"],
   ["Recording", "Record what you play", "record count-in click overdub",
-    "<p>Press <b>Record</b>, then play the keys or pads. Your notes snap to the nearest square. You hear a soft click on every beat while you record, so you can keep time. With <b>Count-in</b> on, you hear 1, 2, 3, 4 first. With <b>Loop</b> on, recording keeps going and each time round adds more notes. With Loop off, it records once and stops. Recording keeps notes, never sound from a microphone.</p>"],
+    "<p>Press <b>Record</b>, then play the keys or pads. Your notes snap to the nearest square. You hear a soft click on every beat while you record, so you can keep time. With <b>Count-in</b> on, you hear 1, 2, 3, 4 first. Recording happens inside the loop (the teal bar). With <b>Loop</b> on, recording keeps going and each time round adds more notes. With Loop off, it records once and stops. Recording keeps notes, never sound from a microphone.</p>"],
   ["The grid", "Add and change notes", "grid notes tap square longer length drag",
     "<p>Tap a square to add a note, and tap a note to take it away. Higher notes are higher up. Drag the right edge of a note to make it longer. Pick a note shape above the grid to choose how long the next note will be. On drums, a longer hit just draws a longer bar. The drum sounds the same.</p><p>With the keyboard: the arrow keys move around the grid, " + K("Space") + " or " + K("Enter") + " adds or removes a note, and " + K("Shift") + " with the left and right arrows makes a note shorter or longer.</p>"],
-  ["The grid", "Counts and speed", "counts length speed tempo beats 4 8 16",
-    "<p><b>Counts</b> sets how long the song is: 4, 8 or 16 counts. Each count has 4 squares (2 if you choose Eighths in Grid). Making it shorter hides the rest, and making it longer again brings it back. <b>Speed</b> is how many counts a minute, from 60 to 160.</p>"],
+  ["The grid", "Length, loop and speed", "counts length long longer bars minutes loop speed tempo beats 4 8 16 64",
+    "<p><b>Length</b> sets how long the whole song is, in bars. A bar is 4 counts. Press + and − to add or take away a bar, up to 64 bars (about 2 minutes). New bars start empty. Making the song shorter hides the end, and making it longer again brings it back.</p>"
+    + "<p><b>Counts</b> sets the loop: 4, 8 or 16 counts, shown by the teal bar over the count numbers. Drag the teal bar to move the loop. With <b>Loop</b> on, Play goes round the loop; with Loop off, Play goes through the whole song. Recording always stays inside the loop.</p>"
+    + "<p>Each count has 4 squares (2 if you choose Eighths in Grid). <b>Speed</b> is how many counts a minute, from 60 to 160.</p>"],
+  ["The grid", "Copy and paste", "copy paste duplicate repeat part section counts track new",
+    "<p>Drag across the count numbers above the grid to pick some counts. They light up blue. Press <b>Copy</b> (" + K("Ctrl+C") + "). If you don't pick any counts, Copy takes the whole track.</p>"
+    + "<p>Tap a count number to choose where it goes. It turns yellow. Pick the track you want it on, then press <b>Paste</b> (" + K("Ctrl+V") + "): paste it here, or as a new track. Each paste moves the yellow count along, so pressing Paste again carries on down the song. Drum notes paste into drum tracks, and notes into tracks that play notes. What you copy stays on this device, so you can paste it into another song too. " + K("Esc") + " unpicks the counts.</p>"],
   ["Start", "Beats and patterns", "beats patterns library premade use drum bass melody chords style",
     "<p>The <b>Beats and patterns</b> panel has more than 300 ready-made drum beats, bass lines, melodies, chords and effect patterns. <b>For this track</b> shows the ones that suit the track you picked. Press the play button to hear one, then <b>Use</b> to put it on your track. You can change its notes after, and undo takes it back.</p>"],
   ["Start", "Music lessons", "lessons learn lesson word beat melody rhythm bass loop tempo rest harmony song outline outlined glow",
@@ -1543,6 +1595,7 @@ const HELP_SVG = {
   record:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor"/>',
   grid:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
   gauge:'<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
+  copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
   beats:'<path d="m16 6 4 14M12 6v14M8 8v12M4 4v16"/>',
   lesson:'<path d="M2 9.5 12 5l10 4.5L12 14z"/><path d="M22 9.5v6M6 11.6V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-4.4"/>',
   panels:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/>',
@@ -1551,7 +1604,7 @@ const HELP_SVG = {
   star:'<path d="m12 2 3 7 7 .6-5.4 4.6L18 22l-6-3.6L6 22l1.4-7.8L2 9.6 9 9z"/>'
 };
 /* one picture per topic, in HELP's order, and one per category */
-const HELP_ICON = ["music", "sliders", "repeat", "piano", "drum", "record", "grid", "gauge", "beats", "lesson", "panels", "cloud", "moon"];
+const HELP_ICON = ["music", "sliders", "repeat", "piano", "drum", "record", "grid", "gauge", "copy", "beats", "lesson", "panels", "cloud", "moon"];
 const HELP_GROUP_ICON = { "Start":"star", "Playing":"piano", "Recording":"record", "The grid":"grid", "Saving":"cloud" };
 const HELP_NONE = "Nothing found. Try a word like keys, loop or record.";
 const helpIcon = n => '<svg class="hi" viewBox="0 0 24 24" aria-hidden="true">' + HELP_SVG[n] + '</svg>';
@@ -2198,6 +2251,7 @@ function openSong(s, opts){
   s.tracks.forEach(t => fxEqOnly(t, kindOf(t)));   /* effects tracks have EQ only */
   if (liveChains) liveChains.disconnect();   /* the last song's live effect chains (and their LFOs) go */
   song = s; stash = {}; playedOnce = false;
+  pick = null; pasteAt = null;   /* what was copied stays, so it can go into this song too */
   openTrack = null;   /* the editor appears with the selected card already open, never animating */
   pickedNote = finestNote(spc());   /* a new song starts on the sixteenth note, a song saved on eighths on the eighth */
   songOwner = (opts && opts.owner) || "";
@@ -2212,6 +2266,7 @@ function openSong(s, opts){
   document.body.classList.remove("lib-open");
   audio();
   renderAll(true);
+  requestAnimationFrame(() => { if (song === s) scrollGridToCount(M.loopOf(s).start, true); });   /* a long song opens at its loop */
   if (opts && opts.save) saveNow();
   if (opts && opts.missing && opts.missing.length) toast("Some instruments in this song aren’t in Sound Space: " + opts.missing.map(id => String(id).replace(/[-_]+/g, " ")).join(", ") + ". Those tracks stay silent.", 8000);
 }
@@ -2246,7 +2301,7 @@ function changeInstrument(id){
 /* ============================================================
    Playing and recording
    ============================================================ */
-let recording = false, countingIn = false, recTrackId = null, recStart = 0, recTotal = 16, recStepSec = 0.3;
+let recording = false, countingIn = false, recTrackId = null, recStart = 0, recFrom = 0, recTotal = 16, recStepSec = 0.3;
 let recTimers = [], recPending = [], recChanged = false, countIn = null;
 let curStep = -1, curCount = -1;
 function play(){
@@ -2255,7 +2310,8 @@ function play(){
   if (!audio()) return;
   if (player.playing || countingIn) return;
   stopPatternPreview();
-  player.start(song, { fromStep:0 });
+  /* with Loop on it goes round the loop; with Loop off the whole song plays once from the start */
+  player.start(song, { fromStep: song.loop ? M.loopSteps(song).from : 0 });
   if (!playedOnce){ playedOnce = true; count("song_played"); }
   renderTransport();
 }
@@ -2301,8 +2357,10 @@ function cancelCountIn(){
 function beginRecording(){
   recTimers.forEach(clearTimeout); recTimers = [];
   recording = true; recPending = []; recChanged = false;
-  recTotal = M.totalSteps(song); recStepSec = E.stepSeconds(song.tempo, song.grid);
-  player.start(song, { fromStep:0, click:true });
+  /* recording stays inside the loop (16 counts at most): round and round with Loop on, once with it off */
+  const range = M.loopSteps(song);
+  recFrom = range.from; recTotal = range.to - range.from; recStepSec = E.stepSeconds(song.tempo, song.grid);
+  player.start(song, { fromStep:range.from, click:true, range });
   recStart = ctx.currentTime + 0.06;
   if (!playedOnce){ playedOnce = true; count("song_played"); }
   /* Loop off: record one pass, then stop recording (the song plays to its end) */
@@ -2328,7 +2386,7 @@ function recordDown(track, pitch, oneShot, evTs, vel){
   const t = pressTime(evTs), lat = outLatency(), heard = t - lat;
   if (heard < recStart - recStepSec / 2) return null;
   const k = Math.round((heard - recStart) / recStepSec);
-  const p = { trackId:track.id, step:M.recordedStep(t, recStart, song.tempo, recTotal, lat, song.grid), pitch, len:1, vel:clamp(vel > 0 ? vel : 0.9, 0, 1), t:heard, oneShot, inserted:false };
+  const p = { trackId:track.id, step:recFrom + M.recordedStep(t, recStart, song.tempo, recTotal, lat, song.grid), pitch, len:1, vel:clamp(vel > 0 ? vel : 0.9, 0, 1), t:heard, oneShot, inserted:false };
   const due = recStart + k * recStepSec;
   const ms = Math.max(0, (due - ctx.currentTime + 0.05) * 1000);
   if (ms <= 5) insertRecorded(p);
@@ -2390,8 +2448,17 @@ function setPlayhead(step){
       $$('[data-count="' + cnt + '"]').forEach(el => el.classList.add("hot"));
       $$('[data-cnum="' + cnt + '"]').forEach(el => el.classList.add("now"));
       if (!countingIn) $("#ss-beat").textContent = String(cnt + 1);
+      followPlayhead(step, total);
     } else if (!countingIn) $("#ss-beat").textContent = "1";
   }
+}
+/* a grid wider than its window turns the page when the moving line goes off it, so the line stays in view */
+function followPlayhead(step, total){
+  const sc = $("#gscroll"), cells = $("#ss-grid .gcount .cells");
+  if (!sc || !cells || sc.hidden || sc.scrollWidth <= sc.clientWidth + 2 || ldrag || cpick) return;
+  const x = cells.offsetWidth * (step / total);                 /* from where the squares start */
+  const seen = sc.clientWidth - cells.offsetLeft;               /* the squares' width in view, right of the keys */
+  if (x < sc.scrollLeft || x > sc.scrollLeft + seen - 24) sc.scrollLeft = Math.max(0, x - 8);
 }
 
 /* ============================================================
@@ -2429,7 +2496,17 @@ function renderTransport(){
   $("#ss-record").setAttribute("aria-label", recording || countingIn ? "Stop recording" : "Record");
   $("#ss-loop").setAttribute("aria-pressed", String(!!song.loop));
   $("#ss-countin").setAttribute("aria-pressed", String(!!song.countIn));
-  $$("#ss-counts button").forEach(b => { b.setAttribute("aria-checked", String(+b.dataset.counts === song.counts)); b.disabled = busy(); });
+  const loopSize = M.loopOf(song).counts;
+  $$("#ss-counts button").forEach(b => { b.setAttribute("aria-checked", String(+b.dataset.counts === loopSize)); b.disabled = busy(); });
+  const len = $("#ss-length");
+  if (document.activeElement !== len) len.value = String(song.counts / 4);
+  len.disabled = busy();
+  const lenWords = barsText(song.counts) + ", " + timeText(M.songSeconds(song)) + " long";
+  $("#ss-length-time").textContent = (song.counts === 4 ? "bar, " : "bars, ") + timeText(M.songSeconds(song));
+  len.closest(".num").title = "Length: how long the whole song is, in bars of 4 counts (up to 64). Now " + lenWords + ".";
+  $('[data-act="len-down"]').disabled = busy() || song.counts <= 4;
+  $('[data-act="len-up"]').disabled = busy() || song.counts >= M.CONST.MAX_COUNTS;
+  renderPasteBtn();
   $$("#ss-grid-res button").forEach(b => { b.setAttribute("aria-checked", String(+b.dataset.grid === spc())); b.disabled = busy(); });
   const tempo = $("#ss-tempo");
   if (document.activeElement !== tempo) tempo.value = song.tempo;
@@ -2517,18 +2594,32 @@ function renderOverview(){
   box.style.setProperty("--n", total);
   if (!song.tracks.length){ box.innerHTML = '<p class="lanes__empty">Your tracks show here, with a line that moves as the song plays.</p>'; return; }
   const anySolo = song.tracks.some(t => t.solo);
-  let h = '<div class="countrow" aria-hidden="true">';
-  for (let c = 0; c < song.counts; c++) h += '<span data-cnum="' + c + '"' + (c === curCount ? ' class="now"' : "") + '>' + (c + 1) + '</span>';
-  h += '</div>';
+  /* a long song (or a narrow window) numbers every 2nd, 4th, 8th ... count, so the numbers never run into each other:
+     about 26px for each number. The teal line is the loop. */
+  const room = Math.max(60, (box.clientWidth || 600) - (narrowMq.matches ? 100 : 150));
+  let every = 1;
+  while (every < song.counts && song.counts / every * 26 > room) every *= 2;
+  /* past 16 counts the squares and numbers sit edge to edge: 2px gaps between a thousand squares would not fit */
+  const gap = song.counts > 16 ? "gap:0;" : "";
+  let h = '<div class="countrow" aria-hidden="true" style="' + gap + '">';
+  for (let c = 0; c < song.counts; c++) h += '<span data-cnum="' + c + '"' + (c === curCount ? ' class="now"' : "") + '>' + (c % every ? "" : c + 1) + '</span>';
+  h += '<i class="ovloop"></i></div>';
   keepFocus(() => {
     box.innerHTML = h + song.tracks.map(t => {
       const inst = instOf(t), cat = inst ? inst.category : "keys", label = trackLabel(t), on = litSteps(t, total);
       const cells = on.map(s => s >= 0 ? '<i class="on" data-count="' + Math.floor(s / spc()) + '"></i>' : "<i></i>").join("");
       return '<div class="lane' + ((t.mute || (anySolo && !t.solo)) ? " muted" : "") + '" style="--tc:var(--' + cat + ')"><span class="nm">' + instIcon(inst, "sm") + '<span>' + esc(label) + '</span></span>'
-        + '<button type="button" class="strip' + (t.id === sel ? " sel" : "") + '" data-act="select-track" data-id="' + esc(t.id) + '" style="grid-template-columns:repeat(' + total + ',1fr)" aria-label="' + esc(label + ": " + t.notes.length + (t.notes.length === 1 ? " note" : " notes") + (t.id === sel ? ", selected" : ", select this track")) + '">' + cells + '<span class="ph"></span></button></div>';
+        + '<button type="button" class="strip' + (t.id === sel ? " sel" : "") + '" data-act="select-track" data-id="' + esc(t.id) + '" style="' + gap + 'grid-template-columns:repeat(' + total + ',1fr)" aria-label="' + esc(label + ": " + t.notes.length + (t.notes.length === 1 ? " note" : " notes") + (t.id === sel ? ", selected" : ", select this track")) + '">' + cells + '<span class="ph"></span></button></div>';
     }).join("");
   });
+  paintMarks();
 }
+/* a tap on a track's line in the overview also brings that part of the song into the grid */
+$("#ss-overview").addEventListener("click", e => {
+  const st = e.target.closest(".strip"); if (!st || !song) return;
+  const r = st.getBoundingClientRect(), c = clamp(Math.floor((e.clientX - r.left) / r.width * song.counts), 0, song.counts - 1);
+  if (song.counts > 16) requestAnimationFrame(() => scrollGridToCount(Math.max(0, c - 2)));
+});
 function rowsFor(t){
   const inst = instOf(t), kind = kindOf(t);
   if (kind === "kit") return (inst && inst.slots ? inst.slots : I.KIT_SLOTS).map((name, i) => ({ pitch:i, label:name, drum:true }));
@@ -2555,6 +2646,8 @@ function renderEditor(scrollGrid){
     + '<span class="acts">'
     + '<button type="button" class="btn only-narrow" data-act="lib-open" aria-label="Beats and patterns" title="Beats and patterns"><i data-lucide="library"></i><span>Beats</span></button>'
     + '<button type="button" class="btn" data-act="change-inst" aria-label="Change instrument" title="Change instrument"><i data-lucide="replace"></i><span>Change instrument</span></button>'
+    + '<button type="button" class="btn" id="ss-copy" data-act="copy" aria-label="Copy" title="Copy the counts you picked, or the whole track  (Ctrl+C)"><i data-lucide="copy"></i><span>Copy</span></button>'
+    + '<button type="button" class="btn" id="ss-paste" data-act="paste" aria-label="Paste" aria-haspopup="menu" aria-expanded="false" aria-controls="paste-menu" title="Paste what you copied  (Ctrl+V)"' + (clip ? "" : " disabled") + '><i data-lucide="clipboard-paste"></i><span>Paste</span></button>'
     + '<button type="button" class="btn" data-act="clear" aria-label="Clear this track" title="Clear this track"><i data-lucide="eraser"></i><span>Clear</span></button>'
     + '<button type="button" class="btn" data-act="remove-track" aria-label="Remove this track" title="Remove this track"><i data-lucide="trash-2"></i><span>Remove</span></button>'
     + '</span>';
@@ -2591,8 +2684,11 @@ function renderGrid(scroll){
   gridFocus.r = clamp(gridFocus.r, 0, rows.length - 1); gridFocus.c = clamp(gridFocus.c, 0, total - 1);
   grid.style.setProperty("--n", total);
   const tmpl = "grid-template-columns:repeat(" + total + ",minmax(0,1fr))";
-  let h = '<div class="grow-row gcount" aria-hidden="true"><span class="pk ghost"></span><div class="cells" style="' + tmpl + '">';
-  for (let c = 0; c < total; c++) h += '<span style="grid-column:' + (c + 1) + '"' + (c % spc() === 0 ? ' data-cnum="' + (c / spc()) + '"' : "") + '>' + (c % spc() === 0 ? (c / spc() + 1) : "") + '</span>';
+  /* the count numbers (drag across them to pick counts, tap one to say where a paste goes) and the loop's bar; only the
+     loop's bar is read out */
+  let h = '<div class="grow-row gcount"><span class="pk ghost" aria-hidden="true"></span><div class="cells" style="' + tmpl + '">';
+  for (let c = 0; c < total; c++) h += '<span aria-hidden="true" style="grid-column:' + (c + 1) + '"' + (c % spc() === 0 ? ' data-cnum="' + (c / spc()) + '"' : "") + '>' + (c % spc() === 0 ? (c / spc() + 1) : "") + '</span>';
+  h += '<i class="gloop" id="ss-loopbar" role="slider" tabindex="0" aria-label="Loop: where it starts" aria-valuemin="1" title="The loop: Play and Record go round this part. Drag it to move it."></i>';
   h += '</div></div>';
   rows.forEach((row, r) => {
     const cls = row.drum ? "pk drum" : "pk" + (row.black ? " black" : "") + (row.out ? " out" : "");
@@ -2600,8 +2696,17 @@ function renderGrid(scroll){
       + '<div class="cells" style="' + tmpl + '">' + cellsHtml(t, r, total) + '</div></div>';
   });
   h += '<span class="gph" aria-hidden="true"></span>';
+  h += '<span class="gband gloopshade" aria-hidden="true"></span><span class="gband gsel" aria-hidden="true" hidden></span><span class="gband gpaste" aria-hidden="true" hidden></span>';
   grid.setAttribute("aria-label", "Notes for " + trackLabel(t) + ": arrow keys move, Space adds or removes a note");
   grid.innerHTML = h;
+  /* where the squares start and end, for the bands over the grid */
+  const cellsEl = grid.querySelector(".grow-row[data-r] .cells");
+  if (cellsEl){
+    grid.style.setProperty("--gl", cellsEl.offsetLeft + "px");
+    grid.style.setProperty("--gr", Math.max(0, grid.clientWidth - cellsEl.offsetLeft - cellsEl.offsetWidth) + "px");
+    grid.style.setProperty("--gk", Math.max(0, cellsEl.offsetLeft - 8) + "px");   /* the count numbers line up with the squares under them */
+  }
+  paintMarks();
   if (scroll){
     const sc = $("#gscroll");
     if (kindOf(t) === "pitched"){
@@ -2625,6 +2730,200 @@ function paintRow(pitch){
   if (hadFocus) focusCell(gridFocus.r, gridFocus.c);
   if (curCount >= 0) $$('.note[data-count="' + curCount + '"]', rowEl).forEach(el => el.classList.add("hot"));
 }
+/* ============================================================
+   The loop, picked counts, Copy and Paste (owner, 2026-11-18). A song can be up to 64 bars. Play (with Loop on) and
+   Record go round the loop: 4, 8 or 16 counts, the teal bar over the count numbers. Drag across the count numbers to
+   pick counts; Copy takes them (or the whole track), and Paste puts them into a track at the yellow count, or into a
+   new track. What was copied stays on this device (CLIP_KEY), so it pastes into another song too.
+   ============================================================ */
+const CLIP_KEY = "ss-clip";
+let clip = null;
+try { clip = M.cleanClip(JSON.parse(localStorage.getItem(CLIP_KEY) || "null")); } catch(e){ clip = null; }
+let pick = null;      /* the counts picked to copy: { a, b }, first to last */
+let pasteAt = null;   /* the count a paste starts at (yellow), or null */
+const clipCounts = () => clip ? Math.ceil(clip.steps / clip.grid) : 0;
+const countsText = (a, b) => a === b ? "count " + (a + 1) : "counts " + (a + 1) + " to " + (b + 1);
+const barsText = n => (n / 4) + (n === 4 ? " bar" : " bars");
+function timeText(sec){ const s = Math.round(sec); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+/* the loop's bar, the picked counts (blue) and the paste spot (yellow), on the grid and the overview */
+function paintMarks(){
+  if (!song) return;
+  const counts = song.counts, L0 = M.loopOf(song), g = spc();
+  if (pick && pick.a >= counts) pick = null; else if (pick) pick.b = Math.min(pick.b, counts - 1);
+  if (pasteAt !== null && pasteAt >= counts) pasteAt = null;
+  const ol = $("#ss-overview .ovloop");
+  if (ol){ ol.style.setProperty("--a", L0.start / counts); ol.style.setProperty("--w", L0.counts / counts); }
+  const grid = $("#ss-grid"), bar = $("#ss-loopbar");
+  if (!bar) return;
+  bar.style.gridColumn = (L0.start * g + 1) + " / span " + (L0.counts * g);
+  bar.setAttribute("aria-valuemax", String(counts - L0.counts + 1));
+  bar.setAttribute("aria-valuenow", String(L0.start + 1));
+  bar.setAttribute("aria-valuetext", "Loop: " + countsText(L0.start, L0.start + L0.counts - 1));
+  const band = (sel, a, n) => { const el = grid.querySelector(sel); if (!el) return; el.hidden = n <= 0; if (n > 0){ el.style.setProperty("--a", a / counts); el.style.setProperty("--w", Math.min(n, counts - a) / counts); } };
+  band(".gloopshade", L0.start, L0.counts);
+  band(".gsel", pick ? pick.a : 0, pick ? pick.b - pick.a + 1 : 0);
+  band(".gpaste", pasteAt === null ? 0 : pasteAt, pasteAt === null ? 0 : Math.max(1, clipCounts()));
+  $$("#ss-grid .gcount [data-cnum]").forEach(el => { const c = +el.dataset.cnum; el.classList.toggle("pick", !!pick && c >= pick.a && c <= pick.b); el.classList.toggle("at", pasteAt === c); });
+}
+function clearPick(){ pick = null; pasteAt = null; paintMarks(); }
+/* the count under a point on the grid's count numbers */
+function countAtX(x){
+  const cells = $("#ss-grid .gcount .cells"); if (!cells || !song) return 0;
+  const r = cells.getBoundingClientRect();
+  return clamp(Math.floor((x - r.left) / (r.width / song.counts)), 0, song.counts - 1);
+}
+/* brings a count into view at the left of the grid, just right of the keys down the side */
+function scrollGridToCount(c, onlyIfHidden){
+  const sc = $("#gscroll"), cells = $("#ss-grid .gcount .cells"); if (!sc || !cells || sc.hidden || !song) return;
+  const x = cells.offsetWidth * (c / song.counts);
+  if (onlyIfHidden && x >= sc.scrollLeft && x <= sc.scrollLeft + sc.clientWidth - cells.offsetLeft - 40) return;
+  sc.scrollLeft = Math.max(0, x - 8);
+}
+/* a press on the count numbers: a drag picks counts; a tap says where a paste goes once something is copied, or picks
+   that one count; Shift and a tap picks from the picked counts to there */
+let cpick = null, ldrag = null;
+function startCountPick(e){
+  e.preventDefault();
+  cpick = { id:e.pointerId, from:countAtX(e.clientX), moved:false, shift:e.shiftKey };
+  try { e.target.closest(".cells").setPointerCapture(e.pointerId); } catch(err){}
+}
+function moveCountPick(e){
+  const c = countAtX(e.clientX);
+  if (c === cpick.from && !cpick.moved) return;
+  cpick.moved = true; pick = { a:Math.min(cpick.from, c), b:Math.max(cpick.from, c) }; pasteAt = null;
+  paintMarks();
+}
+function endCountPick(){
+  const p = cpick; cpick = null; if (!p || p.moved) return;
+  const c = p.from;
+  if (p.shift) pick = pick ? { a:Math.min(pick.a, c), b:Math.max(pick.b, c) } : { a:c, b:c };
+  else if (clip) pasteAt = pasteAt === c ? null : c;
+  else pick = pick && pick.a === c && pick.b === c ? null : { a:c, b:c };
+  paintMarks();
+}
+/* the loop's bar: dragged, it moves a bar at a time and the song (playing or not) follows; one undo step */
+function startLoopDrag(e){
+  e.preventDefault();
+  if (busy()) return;
+  const L0 = M.loopOf(song);
+  ldrag = { id:e.pointerId, at:countAtX(e.clientX), start:L0.start };
+  try { e.target.setPointerCapture(e.pointerId); } catch(err){}
+}
+function moveLoopDrag(e){ if (M.moveLoop(song, ldrag.start + countAtX(e.clientX) - ldrag.at)) paintMarks(); }
+function endLoopDrag(){ const d = ldrag; ldrag = null; if (d && M.loopOf(song).start !== d.start) commit(); }
+function loopKey(e){
+  if (busy()) return;
+  const L0 = M.loopOf(song);
+  const to = e.key === "ArrowLeft" || e.key === "ArrowDown" ? L0.start - 4 : e.key === "ArrowRight" || e.key === "ArrowUp" ? L0.start + 4
+    : e.key === "Home" ? 0 : e.key === "End" ? song.counts : null;
+  if (to === null) return;
+  e.preventDefault(); e.stopPropagation();
+  if (M.moveLoop(song, to)){ commit(); paintMarks(); scrollGridToCount(M.loopOf(song).start); }
+}
+
+/* Copy: the picked counts of the selected track, or all of it. The paste spot moves to just after them. */
+function copyPart(){
+  const t = selTrack(); if (!song || !t) return;
+  const g = spc(), a = pick ? pick.a : 0, b = pick ? pick.b : song.counts - 1;
+  const notes = M.copyNotes(t, a * g, (b + 1) * g);
+  /* checked the same way as a clip read back from storage, so a paste never puts anything odd into a song */
+  clip = M.cleanClip({ steps:(b - a + 1) * g, grid:g, kind:kindOf(t), notes,
+    track:{ instrumentId:t.instrumentId, volume:t.volume, reverb:t.reverb || 0, sustain:!!t.sustain, chorus:t.chorus, dyn:t.dyn, eq:t.eq } });
+  if (!clip){ toast("That part couldn’t be copied."); renderPasteBtn(); return; }
+  try { localStorage.setItem(CLIP_KEY, JSON.stringify(clip)); } catch(e){}
+  pasteAt = b + 1 < song.counts ? b + 1 : null;
+  renderPasteBtn(); paintMarks();
+  toast((pick ? "Copied " + countsText(a, b) + " of " : "Copied all of ") + trackLabel(t) + (notes.length ? "" : " (no notes there yet)") + ". Tap a count number to pick where it goes, then press Paste.", 5000);
+}
+function renderPasteBtn(){ const b = $("#ss-paste"); if (b) b.disabled = !clip || busy(); }
+/* where a paste starts: the yellow count, else the first picked count, else the count of the focused square, else 1 */
+function pasteSpot(){
+  if (pasteAt !== null) return pasteAt;
+  if (pick) return pick.a;
+  if ($("#ss-grid").contains(document.activeElement) && document.activeElement.classList.contains("cell")) return Math.floor(gridFocus.c / spc());
+  return 0;
+}
+const canPasteHere = t => !!clip && !!t && kindOf(t) === clip.kind;
+const clipInst = () => clip && clip.track ? I.byId(clip.track.instrumentId) : null;
+const canPasteNew = () => !!clipInst() && song.tracks.length < M.CONST.MAX_TRACKS;
+const KIND_ONLY = { kit:"Drum notes paste into a drum track.", fx:"Effect sounds paste into an effects track.", pitched:"These notes paste into a track that plays notes, like keys, strings, winds or bass." };
+/* a paste that runs past the song's end: ask to make the song long enough (one undo with the paste), or paste what fits */
+async function growFor(at){
+  const need = at + clipCounts(); if (need <= song.counts) return;
+  const fit = Math.min(M.CONST.MAX_COUNTS, Math.ceil(need / 4) * 4); if (fit <= song.counts) return;
+  const yes = await ask("Make the song longer?", "What you’re pasting runs past the end of the song. Make the song " + barsText(fit) + " long so all of it fits?", "Make it longer", { noLabel:"Paste what fits", calm:true });
+  if (yes && !busy()){ const r = M.resizeSong(song, fit, stash); stash = r.stash; song = r.song; }
+}
+async function pasteHere(at){
+  if (!clip || busy() || !canPasteHere(selTrack())) return;
+  await growFor(at);
+  const t = selTrack(); if (!t || busy() || !canPasteHere(t)) return;
+  const g = spc(), r = M.pasteNotes(t, clip, at * g, M.totalSteps(song), g);
+  pasteAt = at + clipCounts() < song.counts ? at + clipCounts() : null;
+  commit(); renderAll();
+  requestAnimationFrame(() => scrollGridToCount(at, true));   /* the pasted part comes into view */
+  toast("Pasted on " + trackLabel(t) + " at count " + (at + 1) + "." + (r.cut ? " " + r.cut + (r.cut === 1 ? " note didn’t" : " notes didn’t") + " fit before the end of the song." : "") + " Undo takes it back.", 4500);
+}
+async function pasteNew(at){
+  if (!clip || busy()) return;
+  if (!canPasteNew()){ toast(clipInst() ? "A song can have up to 8 tracks." : "That instrument isn’t in Sound Space."); return; }
+  await growFor(at);
+  if (busy()) return;
+  const src = clip.track, t = M.addTrack(song, src.instrumentId);
+  if (!t){ toast("A song can have up to 8 tracks."); return; }
+  Object.assign(t, { volume:src.volume, reverb:src.reverb, sustain:src.sustain, chorus:clone(src.chorus), dyn:clone(src.dyn), eq:clone(src.eq) });
+  fxEqOnly(t, kindOf(t));
+  const g = spc();
+  M.pasteNotes(t, clip, at * g, M.totalSteps(song), g);
+  sel = t.id; gridFocus = { r:0, c:0 };
+  ensureLoaded(t.instrumentId);
+  pasteAt = at + clipCounts() < song.counts ? at + clipCounts() : null;
+  commit(); renderAll(true);
+  requestAnimationFrame(() => scrollGridToCount(at));
+  toast("Pasted as a new track, " + trackLabel(t) + ". Undo takes it back.", 4000);
+}
+/* Paste opens a small menu: here (when the kinds match) or as a new track */
+function pasteMenuOpen(){ return !$("#paste-menu").hidden; }
+function openPasteMenu(){
+  if (!clip || !song || busy()) return;
+  const t = selTrack(), at = pasteSpot(), last = Math.min(at + clipCounts(), song.counts) - 1, inst = clipInst();
+  const here = $('#paste-menu [data-paste="here"]'), nw = $('#paste-menu [data-paste="new"]');
+  $("#paste-here-t").textContent = "Paste here, at count " + (at + 1);
+  here.disabled = !canPasteHere(t);
+  $("#paste-here-s").textContent = !t ? "Pick a track first." : here.disabled ? KIND_ONLY[clip.kind]
+    : (at + clipCounts() > song.counts ? "It runs past the end of the song: you can make the song longer. " : "Counts " + (at + 1) + " to " + (last + 1) + " of " + trackLabel(t) + " get the copied notes. ") + "What was there is replaced.";
+  nw.disabled = !canPasteNew();
+  $("#paste-new-s").textContent = !inst ? "That instrument isn’t in Sound Space." : song.tracks.length >= M.CONST.MAX_TRACKS ? "A song can have up to 8 tracks." : "Adds a new " + inst.name + " track with the copied notes at count " + (at + 1) + ".";
+  const m = $("#paste-menu"), b = $("#ss-paste"), r = b.getBoundingClientRect();
+  m.hidden = false;
+  m.style.top = Math.round(Math.min(r.bottom + 6, window.innerHeight - m.offsetHeight - 8)) + "px";
+  m.style.left = Math.round(clamp(r.right - m.offsetWidth, 8, window.innerWidth - m.offsetWidth - 8)) + "px";
+  b.setAttribute("aria-expanded", "true");
+  const first = [here, nw].find(x => !x.disabled); if (first) first.focus();
+}
+function closePasteMenu(back){
+  if (!pasteMenuOpen()) return;
+  $("#paste-menu").hidden = true;
+  const b = $("#ss-paste"); if (b){ b.setAttribute("aria-expanded", "false"); if (back) b.focus(); }
+}
+$("#paste-menu").addEventListener("click", e => {
+  const b = e.target.closest("[data-paste]"); if (!b || b.disabled) return;
+  const at = pasteSpot();
+  closePasteMenu(false);
+  if (b.dataset.paste === "here") pasteHere(at); else pasteNew(at);
+});
+$("#paste-menu").addEventListener("keydown", e => {
+  const items = $$("#paste-menu [data-paste]").filter(x => !x.disabled), i = items.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp"){ e.preventDefault(); e.stopPropagation(); if (items.length) items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus(); }
+  else if (e.key === "Escape" || e.key === "Tab"){ e.preventDefault(); e.stopPropagation(); closePasteMenu(true); }
+});
+document.addEventListener("pointerdown", e => { if (pasteMenuOpen() && !e.target.closest("#paste-menu, #ss-paste")) closePasteMenu(false); }, true);
+/* Ctrl+V: straight in when the kinds match, else the menu */
+function pasteKey(){
+  if (!clip){ toast("Copy part of a track first: pick some counts, then press Copy."); return; }
+  if (canPasteHere(selTrack())) pasteHere(pasteSpot()); else openPasteMenu();
+}
+
 function focusCell(r, c){
   const old = $('#ss-grid .cell[tabindex="0"]'); if (old) old.tabIndex = -1;
   gridFocus = { r, c };
@@ -2675,7 +2974,7 @@ function renderPlayArea(){
   held.forEach((h, k) => { if (h.trackId === t.id) lightKey(k, t, h.pitch, true); });
   paintLitKey();
 }
-narrowMq.addEventListener("change", () => { if (song && !$("#editor").hidden) renderPlayArea(); });
+narrowMq.addEventListener("change", () => { if (song && !$("#editor").hidden){ renderPlayArea(); renderGrid(); renderOverview(); } });   /* the keys down the side change size */
 function lightKey(key, track, pitch, down){
   if (down){
     if (!track || track.id !== sel) return;
@@ -2731,6 +3030,9 @@ function lengthen(r, c, by){
 const gridEl = $("#ss-grid");
 let drag = null;
 gridEl.addEventListener("pointerdown", e => {
+  if (!song) return;
+  if (e.target.closest(".gloop")) return startLoopDrag(e);
+  if (e.target.closest(".gcount .cells")) return startCountPick(e);
   const pk = e.target.closest("[data-pk]");
   if (pk){ const t = selTrack(); if (t){ noteOn("pk", t, +pk.dataset.pk, e.timeStamp); try { pk.setPointerCapture(e.pointerId); } catch(err){} } e.preventDefault(); return; }
   const grip = e.target.closest(".grip");
@@ -2751,6 +3053,8 @@ gridEl.addEventListener("pointerdown", e => {
   if (cell){ e.preventDefault(); const c = +cell.dataset.c; gridFocus = { r, c }; toggleAt(r, c); focusCell(r, c); }
 });
 gridEl.addEventListener("pointermove", e => {
+  if (ldrag && e.pointerId === ldrag.id) return moveLoopDrag(e);
+  if (cpick && e.pointerId === cpick.id) return moveCountPick(e);
   if (!drag || e.pointerId !== drag.id) return;
   const total = M.totalSteps(song), rect = drag.cells.getBoundingClientRect();
   const col = clamp(Math.floor((e.clientX - rect.left) / (rect.width / total)), drag.n.step, total - 1);
@@ -2759,6 +3063,8 @@ gridEl.addEventListener("pointermove", e => {
   drag.el.style.gridColumn = (drag.n.step + 1) + " / span " + drag.n.len;
 });
 function endDrag(e){
+  if (ldrag && e.pointerId === ldrag.id) endLoopDrag();
+  if (cpick && e.pointerId === cpick.id){ if (e.type === "pointercancel") cpick = null; else endCountPick(); }
   if (drag && e.pointerId === drag.id){
     const d = drag; drag = null;
     if (d.n.len !== d.start){ commit(); paintRow(d.n.pitch); renderOverview(); }
@@ -2768,6 +3074,7 @@ function endDrag(e){
 gridEl.addEventListener("pointerup", endDrag);
 gridEl.addEventListener("pointercancel", endDrag);
 gridEl.addEventListener("keydown", e => {
+  if (e.target.closest(".gloop")) return loopKey(e);
   const cell = e.target.closest(".cell"); if (!cell) return;
   let r = +cell.dataset.r, c = +cell.dataset.c;
   const total = M.totalSteps(song);
@@ -2858,7 +3165,7 @@ applyLayout();
    ============================================================ */
 /* ---- phone parts the tests run on their own (test/soundSpacePhone.test.js) ---- */
 /* the lesson targets whose control sits in the Song sheet on a phone (Loop and Count-in stay in the row) */
-const SONG_SHEET_TARGETS = ["#ss-tempo", "#ss-counts", "#ss-grid-res", "#ss-volume", "#ss-volnum"];
+const SONG_SHEET_TARGETS = ["#ss-tempo", "#ss-counts", "#ss-length", "#ss-grid-res", "#ss-volume", "#ss-volnum"];
 function songSheetFor(target){ return SONG_SHEET_TARGETS.indexOf(target) >= 0; }
 /* the arrows, Home and End in the More menu: the next item that can be used, round from one end to the other */
 function menuMove(enabled, i, key){
@@ -2927,7 +3234,7 @@ window.addEventListener("resize", onResizeMore);
 /* the Song sheet: on a phone, Speed, Counts, Grid and Main move into it (a marker keeps each one's place in the play
    controls), and go back when the window is wider */
 let songFieldsHome = null, sheetShutByHand = false;
-function songFields(){ return ["#ss-tempo", "#ss-counts", "#ss-grid-res", "#ss-volume"].map(s => $(s).closest(".field")); }
+function songFields(){ return ["#ss-tempo", "#ss-counts", "#ss-length", "#ss-grid-res", "#ss-volume"].map(s => $(s).closest(".field")); }
 function placeSongFields(){
   if (narrowMq.matches && !songFieldsHome){
     const rows = $("#songsheet-rows");
@@ -3011,11 +3318,15 @@ document.addEventListener("keydown", e => {
   if (!$("#picker").hidden && e.key === "Escape"){ e.preventDefault(); closePicker(); return; }
   if (e.key === "Escape" && document.body.classList.contains("lib-open")){ document.body.classList.remove("lib-open"); applyLayout(); return; }
   if (!song || $("#editor").hidden || dialogOpen() || typing(e.target)) return;
+  if (pasteMenuOpen()) return;   /* the paste menu has the keys while it is open */
+  if (e.key === "Escape" && (pick || pasteAt !== null)){ e.preventDefault(); clearPick(); return; }
   const mod = e.ctrlKey || e.metaKey;
   if (mod && !e.altKey){
     const k = e.key.toLowerCase();
     if (k === "z" && !e.shiftKey){ e.preventDefault(); undo(); }
     else if (k === "y" || (k === "z" && e.shiftKey)){ e.preventDefault(); redo(); }
+    else if (k === "c" && !e.shiftKey){ if (String(window.getSelection ? window.getSelection() : "")) return; e.preventDefault(); copyPart(); }
+    else if (k === "v" && !e.shiftKey){ e.preventDefault(); pasteKey(); }
     return;
   }
   if (e.altKey) return;
@@ -3155,15 +3466,16 @@ $("#ss-loop").addEventListener("click", () => { if (!song || busy()) return; son
 $("#ss-countin").addEventListener("click", () => { if (!song || busy()) return; song.countIn = !song.countIn; commit(); renderTransport(); });
 $("#ss-counts").addEventListener("click", e => {
   const b = e.target.closest("[data-counts]"); if (!b || !song || busy()) return;
-  const n = +b.dataset.counts; if (n === song.counts) return;
-  const r = M.resizeSong(song, n, stash);
+  /* Counts is the loop's size now; a loop longer than the song makes the song that long, with empty counts */
+  const n = +b.dataset.counts; if (n === M.loopOf(song).counts) return;
+  const r = M.setLoopSize(song, n, stash);
   stash = r.stash; song = r.song;
   commit(); renderAll();
 });
 $("#ss-counts").addEventListener("keydown", e => {
   if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
   e.preventDefault();
-  const list = M.CONST.COUNTS, i = list.indexOf(song.counts) + (e.key === "ArrowRight" ? 1 : -1);
+  const list = M.CONST.COUNTS, i = list.indexOf(M.loopOf(song).counts) + (e.key === "ArrowRight" ? 1 : -1);
   const b = $('#ss-counts [data-counts="' + list[clamp(i, 0, list.length - 1)] + '"]');
   if (b){ b.click(); b.focus(); }
 });
@@ -3229,8 +3541,22 @@ function setTempo(v){
   const n = clamp(Math.round(+v || M.CONST.TEMPO_DEFAULT), M.CONST.TEMPO_MIN, M.CONST.TEMPO_MAX);
   if (n !== song.tempo){ song.tempo = n; commit(); }
   $("#ss-tempo").value = song.tempo;
+  renderTransport();   /* the song's time beside Length follows the speed */
 }
 $("#ss-tempo").addEventListener("change", e => setTempo(e.target.value));
+/* Length: the whole song, in bars (4 counts each), from 1 to 64. Longer adds empty bars; shorter hides the end until
+   the song is made longer again (stash). */
+function setLength(counts){
+  if (!song || busy()) return;
+  const n = clamp(Math.round((+counts || song.counts) / 4) * 4, 4, M.CONST.MAX_COUNTS);
+  if (n !== song.counts){
+    const r = M.resizeSong(song, n, stash);
+    stash = r.stash; song = r.song;
+    commit(); renderAll();
+  } else renderTransport();
+}
+$("#ss-length").addEventListener("change", e => setLength(+e.target.value * 4));
+$("#ss-length").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); setLength(+e.target.value * 4); e.target.blur(); } });
 $("#ss-tempo").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); setTempo(e.target.value); e.target.blur(); } });
 /* the main volume: the slider and the box show one number; the song and the live bus follow it */
 function setMainVolume(v){
@@ -3498,7 +3824,7 @@ function previewPattern(id){
     voices.load(useId).then(r => { loadState.set(useId, r && r.ok ? "ok" : "failed"); if (r && r.ok) go(); else toast("That sound didn’t load. Check your connection and try again."); });
   } else go();
 }
-/* Use: the pattern replaces the selected track's notes, repeated to fill the song or cut at its end. One undo. */
+/* Use: the pattern replaces the selected track's notes in the loop, repeated to fill it or cut at its end. One undo. */
 async function usePattern(id){
   const p = L.byId(id); if (!p || !song || busy()) return;
   if (!selTrack()){ toast("Add a track first, then press Use."); return; }
@@ -3511,12 +3837,15 @@ async function usePattern(id){
   }
   const t = selTrack(); if (!t) return;
   stopPatternPreview();
-  t.notes = [];
-  delete stash[t.id];
-  M.applyPattern(t, L.fitPattern(p, instOf(t)), p.counts, song.counts, p.grid, spc());
+  /* it fills the loop (on a short song, the whole song); the rest of a long song keeps its notes */
+  const g = spc(), total = M.totalSteps(song), loop = M.loopSteps(song), whole = loop.from === 0 && loop.to === total;
+  const filled = { notes:[] };
+  M.applyPattern(filled, L.fitPattern(p, instOf(t)), p.counts, (loop.to - loop.from) / g, p.grid, g);
+  M.pasteNotes(t, { steps:loop.to - loop.from, grid:g, notes:filled.notes }, loop.from, total, g);
+  if (whole) delete stash[t.id];
   commit(); renderAll();
   lessonEvent("use");
-  toast("“" + p.name + "” is on " + trackLabel(t) + ". Undo takes it back.");
+  toast("“" + p.name + "” is on " + trackLabel(t) + (whole ? "" : ", " + countsText(loop.from / g, loop.to / g - 1)) + ". Undo takes it back.");
 }
 $("#lib-body").addEventListener("click", e => {
   const ty = e.target.closest("[data-lib-type]"); if (ty){ lib.type = ty.dataset.libType; lib.shown = LIB_PAGE; renderLibrary(); return; }
@@ -3788,6 +4117,10 @@ function lengthText(sec){
 let exportTimes = 2;
 let exportBack = null, exportRun = 0, exportBusy = false;
 const songHasNotes = () => !!song && song.tracks.some(t => t.notes.length);
+/* a long song (up to 64 bars) can't go round 2 or 4 times past 5 minutes: that sound file would be too big for most
+   computers to make; once through is always fine */
+const EXPORT_MAX_SEC = 300;
+const exportTimesOk = n => n === 1 || (!!song && E.exportFrames(song, n) / 44100 <= EXPORT_MAX_SEC);
 function openExport(){
   if (!song) return;
   stopAll();   /* the song stops, so it isn't playing while its sound file is made */
@@ -3806,7 +4139,8 @@ function closeExport(){
 function paintExport(){
   if ($("#export").hidden || !song) return;
   const empty = !songHasNotes();
-  $$("#export-times button").forEach(b => { b.setAttribute("aria-checked", String(+b.dataset.times === exportTimes)); b.disabled = exportBusy || empty; });
+  if (!exportTimesOk(exportTimes)) exportTimes = EXPORT_TIMES.filter(exportTimesOk).pop() || 1;
+  $$("#export-times button").forEach(b => { b.setAttribute("aria-checked", String(+b.dataset.times === exportTimes)); b.disabled = exportBusy || empty || !exportTimesOk(+b.dataset.times); });
   $("#export-len").textContent = empty ? "Add some notes first, then you can make a sound file." : lengthText(E.exportFrames(song, exportTimes) / 44100);
   $("#export-go").disabled = exportBusy || empty;
 }
@@ -3861,7 +4195,7 @@ function saveProjectFile(){
   exportSay("Done! Your project file is in your downloads: " + name + ". Open it again any time with Open a file.");
 }
 function setExportTimes(n){
-  if (exportBusy || EXPORT_TIMES.indexOf(n) < 0) return;
+  if (exportBusy || EXPORT_TIMES.indexOf(n) < 0 || !exportTimesOk(n)) return;
   exportTimes = n; paintExport();
 }
 function exportClick(e){
@@ -4218,6 +4552,10 @@ document.addEventListener("click", async e => {
   if (act === "lib-open"){ document.body.classList.add("lib-open"); renderLibrary(); applyLayout(); const c = $(".lib__close"); if (c) c.focus(); return; }
   if (act === "tempo-down") return setTempo(song.tempo - 5);
   if (act === "tempo-up") return setTempo(song.tempo + 5);
+  if (act === "len-down") return setLength(song.counts - 4);
+  if (act === "len-up") return setLength(song.counts + 4);
+  if (act === "copy") return copyPart();
+  if (act === "paste") return pasteMenuOpen() ? closePasteMenu(true) : openPasteMenu();
   if (act === "oct-up" || act === "oct-down"){
     const t = selTrack(); if (!t) return;
     const inst = instOf(t), r = inst && inst.range ? inst.range : [0, 127];

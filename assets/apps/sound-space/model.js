@@ -4,7 +4,10 @@
   const CONST = {
     SCHEMA_VERSION: 1,
     STEPS_PER_COUNT: 2,
+    // COUNTS: the loop sizes (Counts in the play controls); recording always stays inside the loop. A song itself can be
+    // any whole number of bars (4 counts each) up to MAX_COUNTS: 64 bars, about 2 minutes at 120 (owner, 2026-11-18).
     COUNTS: [4, 8, 16],
+    MAX_COUNTS: 256,
     GRIDS: [2, 4],
     MAX_TRACKS: 8,
     TEMPO_MIN: 60,
@@ -14,7 +17,10 @@
     GRID_DEFAULT: 4
   };
 
-  const SONG_KEYS = ["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs"];
+  // loopStart and loopCounts: where the loop starts (a count, from 0) and how long it is. Songs saved before them have
+  // neither; their loop is worked out from the song's length (loopOf).
+  const SONG_KEYS = ["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs", "loopStart", "loopCounts"];
+  const BAR = 4;
   // reverb: 0 Off, 1 Room, 2 Hall, 3 Big hall, 4 Stadium. sustain: notes ring on after they end (pitched instruments only).
   // Songs saved before these two have neither; they open as reverb 0 and sustain false.
   // chorus, dyn and eq: each track's Chorus, Dynamics and EQ. Songs saved before them have none; they open with every
@@ -135,13 +141,118 @@
 
   const hasNote = (list, n) => list.some((x) => x.step === n.step && x.pitch === n.pitch);
 
+  // A song's length: a whole number of bars, from 1 bar up to 64.
+  function validCounts(n) {
+    return isInt(n) && n >= BAR && n <= CONST.MAX_COUNTS && n % BAR === 0;
+  }
+
+  // The loop: { start, counts } in counts. With none set, it is the biggest loop size that fits, from count 1. A set one
+  // is shrunk to fit a shorter song, and moved back inside it.
+  function loopOf(song) {
+    const total = validCounts(song.counts) ? song.counts : 8;
+    let size = CONST.COUNTS.indexOf(song.loopCounts) >= 0 ? song.loopCounts : CONST.COUNTS[CONST.COUNTS.length - 1];
+    while (size > total && size > CONST.COUNTS[0]) size = CONST.COUNTS[CONST.COUNTS.indexOf(size) - 1];
+    const start = isInt(song.loopStart) ? Math.max(0, Math.min(song.loopStart, total - size)) : 0;
+    return { start, counts: size };
+  }
+  function loopSteps(song) {
+    const l = loopOf(song), g = song.grid || CONST.STEPS_PER_COUNT;
+    return { from: l.start * g, to: (l.start + l.counts) * g };
+  }
+  // writes the loop down as it is now, so a later change of length never moves or grows it by itself
+  function pinLoop(song) {
+    const l = loopOf(song);
+    song.loopStart = l.start;
+    song.loopCounts = l.counts;
+  }
+  // Moves the loop to start at `start` (a count), snapped to a bar and kept inside the song. true when it moved.
+  function moveLoop(song, start) {
+    const l = loopOf(song);
+    const to = Math.max(0, Math.min(Math.round((Number(start) || 0) / BAR) * BAR, song.counts - l.counts));
+    song.loopCounts = l.counts;
+    if (to === l.start && song.loopStart === to) return false;
+    song.loopStart = to;
+    return to !== l.start;
+  }
+  // A new loop size. A loop longer than the song makes the song that long (the new counts are empty).
+  function setLoopSize(song, size, stash) {
+    if (CONST.COUNTS.indexOf(size) < 0) return { song: clone(song), stash: stash || {} };
+    const r = size > song.counts ? resizeSong(song, size, stash) : { song: clone(song), stash: stash || {} };
+    const l = loopOf(r.song);
+    r.song.loopCounts = size;
+    r.song.loopStart = Math.max(0, Math.min(l.start, r.song.counts - size));
+    r.song.updatedMs = Date.now();
+    return r;
+  }
+  function songSeconds(song) {
+    return song.counts * 60 / song.tempo;
+  }
+
+  // Copy: the notes that start from step `from` up to (not including) `to`, counted from `from`, each cut at `to`.
+  function copyNotes(track, from, to) {
+    return track.notes
+      .filter((n) => n.step >= from && n.step < to)
+      .sort((a, b) => a.step - b.step || a.pitch - b.pitch)
+      .map((n) => ({ step: n.step - from, pitch: n.pitch, len: Math.max(1, Math.min(n.len, to - n.step)), vel: n.vel }));
+  }
+  // Paste: clip = { steps, grid, notes } goes in at step `at` of a song `total` steps long on `grid`. The notes that
+  // start in that part are replaced, and a note running into it from before is cut short where it begins. A clip on the
+  // other grid is moved onto this one (two notes landing on one square become one). Notes past the song's end are left
+  // out: { placed, cut } says how many went in and how many didn't fit.
+  function pasteNotes(track, clip, at, total, grid) {
+    const cg = clip.grid || CONST.STEPS_PER_COUNT;
+    const sg = grid || CONST.STEPS_PER_COUNT;
+    const stepOf = (s) => (cg === sg ? s : sg > cg ? s * (sg / cg) : Math.floor(s / (cg / sg)));
+    const lenOf = (l) => (cg === sg ? l : Math.max(1, Math.round(l * sg / cg)));
+    const span = Math.max(1, stepOf(clip.steps));
+    const end = Math.min(at + span, total);
+    track.notes = track.notes.filter((n) => n.step < at || n.step >= end);
+    track.notes.forEach((n) => { if (n.step < at && n.step + n.len > at) n.len = at - n.step; });
+    let placed = 0, cut = 0;
+    clip.notes.forEach((n) => {
+      const step = at + stepOf(n.step);
+      if (step >= total) { cut++; return; }
+      if (track.notes.some((x) => x.step === step && x.pitch === n.pitch)) return;
+      track.notes.push({ step, pitch: n.pitch, len: Math.max(1, Math.min(lenOf(n.len), total - step)), vel: n.vel });
+      placed++;
+    });
+    return { placed, cut };
+  }
+  // A clip read back from this device's storage: the shape copy makes, or null. `track` is the copied track's sound
+  // (instrument, volume and effects) for Paste as a new track, or null when it isn't one.
+  const CLIP_KINDS = ["pitched", "kit", "fx"];
+  const MAX_CLIP_NOTES = 8000;
+  function cleanClip(c) {
+    if (!c || typeof c !== "object") return null;
+    if (!isInt(c.steps) || c.steps < 1 || c.steps > CONST.MAX_COUNTS * 4) return null;
+    if (CONST.GRIDS.indexOf(c.grid) < 0 || CLIP_KINDS.indexOf(c.kind) < 0) return null;
+    if (!Array.isArray(c.notes) || c.notes.length > MAX_CLIP_NOTES) return null;
+    const notes = [];
+    for (const n of c.notes) {
+      if (!n || !isInt(n.step) || n.step < 0 || n.step >= c.steps || !isInt(n.pitch) || n.pitch < 0 || n.pitch > 127) return null;
+      if (!isInt(n.len) || n.len < 1 || !isNum(n.vel) || n.vel < 0 || n.vel > 1) return null;
+      notes.push({ step: n.step, pitch: n.pitch, len: n.len, vel: n.vel });
+    }
+    const t = c.track;
+    const track = t && typeof t === "object" && typeof t.instrumentId === "string" && t.instrumentId && isNum(t.volume) && t.volume >= 0 && t.volume <= 1 &&
+      isInt(t.reverb) && t.reverb >= 0 && t.reverb <= REVERB_MAX && typeof t.sustain === "boolean" &&
+      validKindAmount(t.chorus, FX.CHORUS_KINDS) && validKindAmount(t.dyn, FX.DYN_KINDS) && validEq(t.eq)
+      ? clone({ instrumentId: t.instrumentId, volume: t.volume, reverb: t.reverb, sustain: t.sustain, chorus: t.chorus, dyn: t.dyn, eq: t.eq }) : null;
+    return { steps: c.steps, grid: c.grid, kind: c.kind, notes, track };
+  }
+
+  // A new length (counts). Longer adds empty bars (or brings back what a shorter length hid); shorter hides the end in
+  // `stash` until the song is made longer again. The loop stays where it was, pulled back inside a shorter song.
   function resizeSong(song, counts, stash) {
     const st = stash || {};
     const out = clone(song);
+    if (!validCounts(counts)) return { song: out, stash: st };
+    pinLoop(out);
     const oldTotal = totalSteps(song);
     const newTotal = counts * (song.grid || CONST.STEPS_PER_COUNT);
     out.counts = counts;
     out.updatedMs = Date.now();
+    pinLoop(out);
     out.tracks.forEach((t) => {
       if (newTotal < oldTotal) {
         const hidden = t.notes.filter((n) => n.step >= newTotal);
@@ -159,15 +270,6 @@
           const rest = stashed.filter((n) => n.step >= newTotal);
           back.forEach((n) => { if (!hasNote(t.notes, n)) t.notes.push(n); });
           if (rest.length) st[t.id] = rest; else delete st[t.id];
-        } else {
-          const base = t.notes.slice();
-          for (let off = oldTotal; off < newTotal; off += oldTotal) {
-            base.forEach((n) => {
-              if (n.step + off < newTotal) {
-                t.notes.push({ step: n.step + off, pitch: n.pitch, len: Math.min(n.len, newTotal - (n.step + off)), vel: n.vel });
-              }
-            });
-          }
         }
       }
     });
@@ -200,7 +302,9 @@
     if (!obj || typeof obj !== "object" || Array.isArray(obj)) return bad("not_an_object");
     if (Object.keys(obj).some((k) => SONG_KEYS.indexOf(k) < 0)) return bad("unknown_field");
     if (obj.schemaVersion !== CONST.SCHEMA_VERSION) return bad("bad_schema_version");
-    if (CONST.COUNTS.indexOf(obj.counts) < 0) return bad("bad_counts");
+    if (!validCounts(obj.counts)) return bad("bad_counts");
+    if (obj.loopCounts !== undefined && CONST.COUNTS.indexOf(obj.loopCounts) < 0) return bad("bad_field");
+    if (obj.loopStart !== undefined && (!isInt(obj.loopStart) || obj.loopStart < 0 || obj.loopStart >= obj.counts)) return bad("bad_field");
     if (!isNum(obj.tempo) || obj.tempo < CONST.TEMPO_MIN || obj.tempo > CONST.TEMPO_MAX) return bad("bad_tempo");
     if (typeof obj.id !== "string" || !obj.id) return bad("bad_field");
     if (typeof obj.title !== "string" || obj.title.length > 60) return bad("bad_field");
@@ -331,6 +435,15 @@
     setGrid,
     toggleNote,
     setNoteLength,
+    validCounts,
+    loopOf,
+    loopSteps,
+    moveLoop,
+    setLoopSize,
+    songSeconds,
+    copyNotes,
+    pasteNotes,
+    cleanClip,
     resizeSong,
     quantizeStep,
     recordedStep,

@@ -71,7 +71,7 @@ const LOCK_SECONDS = 75;               // a song's lock runs out this long after
 /** A browser tab's lock id, as the app makes it: 8 to 64 letters, digits, - or _. Anything else: none. */
 const cleanHolder = (v: unknown) => { const s = typeof v === "string" ? v : ""; return /^[A-Za-z0-9_-]{8,64}$/.test(s) ? s : ""; };
 /* the fields a song has (model.js SONG_KEYS); anything else is not a song */
-const SONG_KEYS = new Set(["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs"]);
+const SONG_KEYS = new Set(["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs", "loopStart", "loopCounts"]);
 
 async function sha256Hex(s: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));

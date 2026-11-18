@@ -1112,16 +1112,26 @@
     let cb = null;
     let lastReported = null;
     let click = false;
+    let range = null;
 
     function total() {
       return SS.model.totalSteps(song);
+    }
+    // Where the player goes round: a range it was started with (recording stays inside the loop), else with Loop on
+    // the song's loop, else the whole song, once. Read each step, so a loop moved while it plays is followed.
+    function bounds() {
+      const all = total();
+      if (range) return { from: Math.min(range.from, all - 1), to: Math.min(range.to, all) };
+      if (song.loop && SS.model.loopSteps) return SS.model.loopSteps(song);
+      return { from: 0, to: all };
     }
 
     function advance() {
       nextTime += stepDur;
       step++;
-      if (step >= total()) {
-        if (song.loop) step = 0;
+      const b = bounds();
+      if (step >= b.to || step >= total()) {
+        if (song.loop) step = b.from;
         else ended = true;
       }
       // Tempo changes apply from the next count.
@@ -1135,7 +1145,7 @@
         const due = stepsToSchedule(nextTime, now, LOOKAHEAD, stepDur);
         for (let i = 0; i < due.skipped && !ended; i++) advance();
         for (let i = 0; i < due.steps && !ended; i++) {
-          if (step >= total()) step = 0;
+          if (step >= total()) step = bounds().from;
           if (click && step % spc() === 0) {
             const o = makeClick(ctx, master.bus, nextTime, (step / spc()) % 4 === 0);
             live.push({ src: o, when: nextTime });
@@ -1166,6 +1176,7 @@
       if (handle !== null) api.stop();
       song = s;
       click = !!(opts && opts.click);
+      range = opts && opts.range ? { from: opts.range.from, to: opts.range.to } : null;
       master = makeMaster(ctx);
       fx = createReverb(ctx, master.bus);
       chains = createTrackChains(ctx);

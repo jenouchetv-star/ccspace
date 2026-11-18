@@ -4,7 +4,7 @@ import { loadSS } from "./helpers/soundSpace.js";
 describe("Sound Space model", () => {
   it("exposes the song constants from the design", () => {
     const SS = loadSS("model.js");
-    expect(SS.model.CONST).toEqual({ SCHEMA_VERSION: 1, STEPS_PER_COUNT: 2, COUNTS: [4, 8, 16], GRIDS: [2, 4], MAX_TRACKS: 8, TEMPO_MIN: 60, TEMPO_MAX: 160, TEMPO_DEFAULT: 120, GRID_DEFAULT: 4 });
+    expect(SS.model.CONST).toEqual({ SCHEMA_VERSION: 1, STEPS_PER_COUNT: 2, COUNTS: [4, 8, 16], MAX_COUNTS: 256, GRIDS: [2, 4], MAX_TRACKS: 8, TEMPO_MIN: 60, TEMPO_MAX: 160, TEMPO_DEFAULT: 120, GRID_DEFAULT: 4 });
   });
 
   const M = () => loadSS("model.js").model;
@@ -62,7 +62,7 @@ describe("Sound Space model", () => {
     expect(m.totalSteps(song)).toBe(16);
   });
 
-  it("lengthening repeats the song; shortening hides the rest and lengthening brings it back", () => {
+  it("lengthening adds empty counts (owner, 2026-11-18); shortening hides the rest and lengthening brings it back", () => {
     const { m, song } = mk(8, [1, 13]);
     const r1 = m.resizeSong(song, 4);
     expect(r1.song.counts).toBe(4);
@@ -72,7 +72,7 @@ describe("Sound Space model", () => {
     expect(stepsOf(r2.song.tracks[0])).toEqual([1, 13]);
     const b = mk(4, [3]);
     const r3 = b.m.resizeSong(b.song, 16);
-    expect(stepsOf(r3.song.tracks[0])).toEqual([3, 11, 19, 27]);
+    expect(stepsOf(r3.song.tracks[0])).toEqual([3]);
   });
 
   it("recorded presses snap to the nearest square", () => {

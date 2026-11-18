@@ -32,7 +32,10 @@ describe("Sound Space: Help opens as a visual modal", () => {
   });
 
   it("keeps every topic, its words and keywords; the search uses Sound Space's own words; no shortcut footer", () => {
-    expect(HELP.length).toBe(13);
+    expect(HELP.length).toBe(14);
+    // Copy and paste, and Length beside Counts (owner, 2026-11-18)
+    expect(HELP[at("Copy and paste")][0]).toBe("The grid");
+    expect(HELP[at("Length, loop and speed")][3]).toContain("up to 64 bars");
     expect(api.helpGroups()).toEqual(["Start", "Playing", "Recording", "The grid", "Saving"]);
     expect(HELP[at("Tracks")][2]).toContain("reverb sustain room hall pedal");
     expect(HELP[at("Tracks")][3]).toContain("Main sets how loud the whole song plays.");
@@ -121,13 +124,13 @@ describe("Sound Space: Help opens as a visual modal", () => {
     for (const n of HELP_ICON.concat(Object.values(HELP_GROUP_ICON))) expect(HELP_SVG[n], n).toMatch(/^<(path|rect|circle|ellipse)/);
     for (const g of api.helpGroups()) expect(HELP_GROUP_ICON[g], g).toBeTruthy();
     expect(api.helpIcon("piano")).toBe('<svg class="hi" viewBox="0 0 24 24" aria-hidden="true">' + HELP_SVG.piano + "</svg>");
-    const want = { "Piano keys": "piano", "Drum pads": "drum", "Record what you play": "record", "Light or dark": "moon" };
+    const want = { "Copy and paste": "copy", "Piano keys": "piano", "Drum pads": "drum", "Record what you play": "record", "Light or dark": "moon" };
     for (const [t, n] of Object.entries(want)) expect(HELP_ICON[at(t)], t).toBe(n);
   });
 
   it("opening Help at a topic goes straight to that topic's detail", () => {
-    const i = at("Counts and speed");
-    expect(api.helpAt("Counts and speed")).toEqual({ group: "The grid", q: "", topic: i });
+    const i = at("Length, loop and speed");
+    expect(api.helpAt("Length, loop and speed")).toEqual({ group: "The grid", q: "", topic: i });
     expect(api.helpAt(i)).toEqual({ group: "The grid", q: "", topic: i });
     expect(api.helpAt()).toEqual({ group: "Start", q: "", topic: -1 });
     expect(fnBody("openHelp")).toContain("helpState = helpAt(topic)");

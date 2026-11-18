@@ -123,7 +123,9 @@ describe("Sound Space app page", () => {
   });
 
   it("recording uses the song clock for a soft click, and Help says so", () => {
-    expect(html).toMatch(/player\.start\(song, \{ fromStep:0, click:true \}\)/);
+    expect(html).toMatch(/player\.start\(song, \{ fromStep:range\.from, click:true, range \}\)/);
+    // recording stays inside the loop (owner, 2026-11-18): it starts at the loop and goes round it
+    expect(html).toMatch(/const range = M\.loopSteps\(song\);/);
     expect(html).toMatch(/soft click on every beat/);
   });
 
@@ -1237,7 +1239,7 @@ describe("Sound Space app page", () => {
         const SS = env.SS, M = SS.model, E = SS.engine, I = SS.instruments;
         const song = env.song; let sel = env.track.id; const ctx = env.ctx, voices = env.voices;
         const liveBus = {}, liveFx = { wet: () => null }, liveChains = { input: () => null, sweep() {}, hold: () => () => {} };
-        let recording = false, countingIn = false, recTrackId = null, recStart = 0, recTotal = 16, recStepSec = 0.3, recTimers = [], recPending = [], recChanged = false;
+        let recording = false, countingIn = false, recTrackId = null, recStart = 0, recFrom = 0, recTotal = 16, recStepSec = 0.3, recTimers = [], recPending = [], recChanged = false;
         let pedalDown = false; const pedalRing = new Set();
         const held = new Map(), litKeys = new Map(), kbBase = new Map();
         const narrowMq = env.narrow, document = env.document;
@@ -2117,7 +2119,8 @@ describe("Sound Space: Main volume beside the play controls", () => {
   });
 
   it("Counts, Grid and Speed keep plain tooltips for when their words are hidden; Main's group has no duplicate name", () => {
-    expect(transport).toContain('id="ss-counts" role="radiogroup" aria-labelledby="counts-lbl" title="Counts: how long the song is"');
+    expect(transport).toContain('id="ss-counts" role="radiogroup" aria-labelledby="counts-lbl" title="Counts: how long the loop is. Recording stays inside it."');
+    expect(transport).toContain('<span class="num" title="Length: how long the whole song is, in bars of 4 counts (up to 64)">');
     expect(transport).toContain('id="ss-grid-res" role="radiogroup" aria-labelledby="gridres-lbl" title="Grid: eighths or sixteenths"');
     expect(transport).toContain('<span class="num" title="Speed: how fast the beat goes">');
     expect(transport).toMatch(/<div class="field vol" role="group" title=/);
