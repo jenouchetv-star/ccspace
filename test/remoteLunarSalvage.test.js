@@ -600,8 +600,13 @@ describe("the rocket", () => {
     expect(S.flightPhase(10, true).phase).toBe("land");
     expect(S.flightPhase(9 + S.FLIGHT.land + 0.1, true).phase).toBe("done");
   });
-  it("boards after the quiz", () => {
-    expect(S.MISSIONS.board.steps.map(s => s.flag)).toEqual(["quiz", "inRocket", "launched"]);
+  it("boards first, and the quiz only opens once the rover is inside the rocket (owner, 2026-11-18)", () => {
+    expect(S.MISSIONS.board.steps.map(s => s.flag)).toEqual(["inRocket", "quiz", "launched"]);
+    expect(game).not.toMatch(/function startBoard\(\)\{[^}]*openQuiz/);
+    expect(game).toContain("G.flags.inRocket = true; updateStep();\n    openQuiz();");
+    expect(game).toContain('if (QZ.forBoard && G.mission === "board"){ G.flags.quiz = true; updateStep(); if (G.flags.inRocket) readyToLaunch(); }');
+    expect(game).toContain('if (G.mission === "board" && G.flags.inRocket && !G.flags.quiz) openQuiz();');
+    expect(game).toContain('if (G.mission === "board") return s === 0 ? ROCKET.foot : null;');   /* the blue beam leads to the ramp on the first step */
   });
   it("Zech's briefing names Glacia and Yuna, and the kid's picture exists", () => {
     const b = S.BRIEFS.glacia;
@@ -678,8 +683,8 @@ describe("whole-branch review fixes", () => {
   it("keeps the phone connected during the landing and the flight", () => {
     expect(game).toMatch(/if \(G\.landing \|\| FL\.on\)\{ stepRocketShow\(dt\);[^\n]*phoneSendT/);
   });
-  it("a Start over can't be followed by an old quiz popping up", () => {
-    expect(game).toContain('setTimeout(() => { if (G.mission === "board" && !G.flags.quiz && !G.done) openQuiz(); }, 2600);');
+  it("a Start over can't be followed by an old quiz popping up (no timer opens it)", () => {
+    expect(game.replace(/\r\n/g, "\n").split("function startBoard(){")[1].split("\n}\n")[0]).not.toContain("setTimeout");
   });
   it("the Contest's pause menu has no campaign grade or quiz", () => {
     expect(game).toMatch(/body\.contest #bQuizAgain, body\.contest #gradeRow2, body\.contest #gradeQ2\{display:none !important\}/);

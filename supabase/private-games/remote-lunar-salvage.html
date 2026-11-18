@@ -1286,10 +1286,10 @@ const SAT_STEPS = [
   { id: "rack3", flag: "rack3", text: "Find two more and fill the rack.", hint: "Drill the other dashed rings. Each one hides an energy rock." },
   { id: "satTest", flag: "satTest", text: "Switch on the satellite dish!", hint: "Press Switch on the dish." }
 ];
-/* boarding the rocket: Chike's three questions first, then up the ramp, then Launch */
+/* boarding the rocket: up the ramp first, then the three questions inside the rocket, then Launch (owner, 2026-11-18) */
 const BOARD_STEPS = [
-  { id: "quiz", flag: "quiz", text: "Answer three questions about this world.", hint: "Tap the answer you think is right." },
   { id: "inRocket", flag: "inRocket", text: "Drive up the ramp into the rocket.", hint: "Follow the blue beam to the bottom of the ramp. The rover drives itself in." },
+  { id: "quiz", flag: "quiz", text: "Answer three questions about this world.", hint: "Tap the answer you think is right." },
   { id: "launched", flag: "launched", text: "Press Launch!", hint: "Press the big Launch button, or L on a keyboard." }
 ];
 /* the flight, in seconds: countdown, lift-off, out to space, then the briefing holds until it's read, then landing */
@@ -1373,7 +1373,7 @@ const MISSIONS = {
   supply: { goal: "Goal: bring in the supplies", steps: SUPPLY_STEPS, tool: ["arm", "arm", "drive", "arm"], pic: ["hatch", "package", "dome", "drop"] },
   beacon: { goal: "Goal: light Mateo's beacon", steps: BEACON_STEPS, tool: ["drill", "laser", "arm", "arm", "hose", "arm"], pic: ["footRing", "boulderMast", "mastUp", "brace", "panelDust", "energyBox"] },
   meteor: { goal: "Goal: save Averi's base", steps: METEOR_STEPS, tool: ["drill", "hose", "magnet", "magnet"], pic: ["iceRing", "fire", "meteorPiece", "ebin"] },
-  board: { goal: "Goal: fly to the next world", steps: BOARD_STEPS, tool: ["drive", "drive", "drive"], pic: ["star", "rocket", "rocket"] }
+  board: { goal: "Goal: fly to the next world", steps: BOARD_STEPS, tool: ["drive", "drive", "drive"], pic: ["rocket", "star", "rocket"] }
 };
 /* the laser: how long a boulder must be hit before it cracks open, and how far the beam reaches */
 const LASER = { range: 16, heat: 1.4, yawMax: 1.3, pitchMin: -0.55, pitchMax: 0.25 };
@@ -3875,7 +3875,7 @@ function beamTarget(){
     if (s === 1) return PLACES.sat;
     return null;
   }
-  if (G.mission === "board") return s === 1 ? ROCKET.foot : null;
+  if (G.mission === "board") return s === 0 ? ROCKET.foot : null;
   if (G.mission === "heat"){
     if (s === 3) return null;
     const carried = parts.some(p => p.type === "heat" && (p.state === "held" || p.state === "bed"));
@@ -5244,13 +5244,18 @@ function finishLanding(){
 addEventListener("keydown", () => { if (G.landing && G.landing.t > 0.3) finishLanding(); });
 canvas.addEventListener("pointerdown", () => { if (G.landing && G.landing.t > 0.3) finishLanding(); });
 
-/* boarding: once the quiz is done, drive to the bottom of the ramp and the rover drives itself in */
+/* boarding: drive to the bottom of the ramp and the rover drives itself in; the quiz opens once it's inside */
 function startBoard(){
   G.mission = "board"; G.step = 0;
   buildDash(); renderObjective(); sendPhoneState();
-  setTimeout(() => { if (G.mission === "board" && !G.flags.quiz && !G.done) openQuiz(); }, 2600);
 }
-const BOARD_TALK = { 1: "Great answers! Now drive to the rocket. Follow the blue beam to the ramp.", 2: "You're in! Press Launch!" };
+const BOARD_TALK = { 2: "Great answers! Press Launch!" };
+/* the questions are done and the rover is inside: Launch is ready */
+function readyToLaunch(){
+  G.canLaunch = true;
+  $("bLaunch").hidden = false; $("bLaunch").focus();
+  sendPhoneState();
+}
 function updateBoardStep(){
   const ns = stepIndex(BOARD_STEPS, G.flags);
   if (ns !== G.step){
@@ -5264,7 +5269,7 @@ function stepBoarding(dt){
   if (G.mission !== "board") return;
   const B = G.boarding;
   if (!B){
-    if (!G.flags.quiz || G.flags.inRocket || G.mode !== "drive") return;
+    if (G.flags.inRocket || G.mode !== "drive") return;
     if (Math.hypot(rover.x - ROCKET.foot.x, rover.z - ROCKET.foot.z) > 2.4) return;
     if (G.held.length){ if (!G.boardWarn){ G.boardWarn = true; radio("Put down what the arm is holding first. Then drive to the ramp."); } return; }
     G.boarding = { t: 0, x: rover.x, z: rover.z, yaw: rover.yaw };
@@ -5286,10 +5291,11 @@ function stepBoarding(dt){
   rover.v = 0;
   if (k >= 1){
     G.boarding = null; R.group.visible = false;
-    G.flags.inRocket = true; G.canLaunch = true; updateStep();
-    $("bLaunch").hidden = false; $("bLaunch").focus();
     ROCKET.hinge.rotation.z = ROCKET.CLOSED;
-    sfx("doorClose"); sendPhoneState();
+    sfx("doorClose");
+    G.flags.inRocket = true; updateStep();
+    openQuiz();
+    sendPhoneState();
   }
 }
 
@@ -5297,7 +5303,13 @@ function stepBoarding(dt){
 function launchRocket(){
   if (G.launching) return;
   if (G.paused) return;
-  if (!G.canLaunch){ if (G.mission === "board" && G.started) radio(G.flags.quiz ? "Drive up the ramp into the rocket first." : "Answer the three questions first."); return; }
+  if (!G.canLaunch){
+    if (G.mission === "board" && G.started){
+      if (!G.flags.inRocket) radio("Drive up the ramp into the rocket first.");
+      else if (!G.flags.quiz) openQuiz();
+    }
+    return;
+  }
   G.launching = true; G.canLaunch = false;
   $("bLaunch").hidden = true;
   G.flags.launched = true; updateStep();
@@ -5576,7 +5588,7 @@ function closeQuiz(){
   closeOv("ovQuiz");
   stopSpeaking();
   if (QZ.paused){ QZ.paused = false; G.paused = false; }
-  if (QZ.forBoard && G.mission === "board"){ G.flags.quiz = true; updateStep(); }
+  if (QZ.forBoard && G.mission === "board"){ G.flags.quiz = true; updateStep(); if (G.flags.inRocket) readyToLaunch(); }
   sendPhoneState();
 }
 $("bQuizAgain").onclick = () => { togglePause(false); openQuiz(true); };
@@ -6599,8 +6611,8 @@ const RESTORE = {
     () => placeNow(parts.find(p => p.type === "energy"), "gbat")
   ],
   board: [
-    () => { G.flags.quiz = true; },
-    () => { R.group.visible = false; G.flags.inRocket = true; G.canLaunch = true; $("bLaunch").hidden = false; ROCKET.hinge.rotation.z = ROCKET.CLOSED; putRover(ROCKET.bay.x, ROCKET.bay.z, Math.PI / 2); },
+    () => { R.group.visible = false; G.flags.inRocket = true; ROCKET.hinge.rotation.z = ROCKET.CLOSED; putRover(ROCKET.bay.x, ROCKET.bay.z, Math.PI / 2); },
+    () => { G.flags.quiz = true; G.canLaunch = true; $("bLaunch").hidden = false; },
     () => {}
   ]
 };
@@ -6649,6 +6661,8 @@ function continueGame(){
   sfx("start");
   const st = MISSIONS[G.mission] && MISSIONS[G.mission].steps[G.step];
   radio("Welcome back to " + w.name + "! " + (st ? st.text : ""), 7000);
+  /* saved inside the rocket before the questions: they come up again */
+  if (G.mission === "board" && G.flags.inRocket && !G.flags.quiz) openQuiz();
 }
 /* "2 hours ago" */
 function agoText(at){
