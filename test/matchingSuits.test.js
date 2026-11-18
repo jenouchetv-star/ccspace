@@ -317,6 +317,37 @@ describe("playing on this screen (owner, 2026-11-17: play against the robots wit
   });
 });
 
+describe("restarting from a phone (owner, 2026-11-18: any live player can restart the game from their device)", () => {
+  const player = readFileSync(new URL("../games/matching-suits-player.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const R = new Function(pure + "; return canRestart;")();
+  it("a seated person can restart once the game has begun; a computer player, a stranger or the lobby can't", () => {
+    for (const ph of ["race", "draw", "play", "over"]) expect(R(ph, { pk: "x", bot: false }), ph).toBe(true);
+    expect(R("lobby", { pk: "x", bot: false })).toBe(false);
+    expect(R("play", { id: "bot1", bot: true })).toBe(false);
+    expect(R("play", undefined)).toBe(false);
+  });
+  it("the table deals a fresh round for the same players when a phone asks", () => {
+    expect(game).toContain('if (p.t === "restart" && canRestart(G.phase, G.seats[i])) restartFrom(i);');
+    const fn = game.split("function restartFrom(i){")[1].split("\n}\n")[0];
+    expect(fn).toContain("startRound(");
+    expect(fn).toContain("restarted the game");
+  });
+  it("a restart stops the old round's moves: every waiting step checks the round is still the same one", () => {
+    expect(game).toMatch(/function startRound\([^)]*\)\{\n\s+G\.round\+\+;/);
+    const act = game.split("async function act(i, move){")[1].split("\n}\n")[0];
+    expect((act.match(/if \(G\.round !== r\) return;/g) || []).length).toBeGreaterThanOrEqual(3);
+    const race = game.split("async function finishRace(){")[1].split("\n}\n")[0];
+    expect((race.match(/if \(G\.round !== r\) return;/g) || []).length).toBeGreaterThanOrEqual(3);
+    const shuf = game.split("async function doShuffle(i){")[1].split("\n}\n")[0];
+    expect(shuf).toContain("if (G.round !== r) return;");
+  });
+  it("the phone has a Restart button that asks first, then sends the restart", () => {
+    expect(player).toContain('id="bRestart"');
+    expect(player).toContain('id="restartAsk"');
+    expect(player).toContain('send({ t: "restart" });');
+  });
+});
+
 describe("the riffle shuffle (owner's pick, 2026-11-17)", () => {
   const R = new Function(pure + "; return riffle;")();
   it("cards fall one at a time from each half, alternating, and none are lost", () => {

@@ -257,6 +257,8 @@ function legalRanks(s, p){
 function startsNew(s, p){ const l = legalRanks(s, p); return l.length > 0 && !l.some(r => s.slots[r] > 0); }
 /* each player may reshuffle the draw deck once a game, on their turn, before they move (owner, 2026-11-17) */
 function canShuffle(s, p){ return s.phase === "play" && s.turn === p && !s.players[p].shuffled && s.pile.length >= 2; }
+/* any person at the table (not a computer player) can restart once the game has begun (owner, 2026-11-18) */
+function canRestart(phase, seat){ return !!seat && !seat.bot && ["race", "draw", "play", "over"].includes(phase); }
 function reshuffle(s, p, rand){ if (!canShuffle(s, p)) return false; shuffle(s.pile, rand); s.players[p].shuffled = true; return true; }
 /* there is always something to drop, so there is no passing any more */
 function canPass(_s, _p){ return false; }
@@ -509,7 +511,7 @@ const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
 /* ===================== the game ===================== */
-const G = { code: "", seats: [], state: null, phase: "lobby", busy: false, revealed: {}, feed: [], shown: {}, raceWinner: -1 };
+const G = { code: "", seats: [], state: null, phase: "lobby", busy: false, revealed: {}, feed: [], shown: {}, raceWinner: -1, round: 0 };
 /* seats: { id, name, bot, pid, away } */
 
 function chike(pose, text){ $("chikeImg").src = "/assets/characters/chike-pose-" + pose + ".png"; $("chikeSay").textContent = text; }
@@ -709,6 +711,18 @@ function onMove(pk, p){
   if (p.t === "drop" && G.phase === "play" && RANKS.includes(p.rank)) act(i, { t: "drop", rank: p.rank });
   if (p.t === "pass" && G.phase === "play") act(i, { t: "pass" });
   if (p.t === "shuffle" && G.phase === "play") doShuffle(i);
+  if (p.t === "restart" && canRestart(G.phase, G.seats[i])) restartFrom(i);
+}
+/* a player restarts from their device (owner, 2026-11-18): the same players get fresh cards and a new Heart Race.
+   A second press within a few seconds (two phones at once) is ignored, so it only restarts once. */
+let lastRestart = 0;
+function restartFrom(i){
+  if (Date.now() - lastRestart < 3000) return;
+  lastRestart = Date.now();
+  const who = G.seats[i].name;
+  finishMoves();
+  startRound(who);
+  news("<b>" + esc(who) + "</b> restarted the game.");
 }
 /* what each player sees on their own device */
 function tell(i){
@@ -827,7 +841,8 @@ $("bBot").onclick = () => {
 $("bStart").onclick = () => { if (G.seats.length >= 2) startRound(); };
 
 /* --- a round --- */
-function startRound(){
+function startRound(by){
+  G.round++;   /* anything still waiting from the last round sees this and stops */
   sfx("start");
   G.state = startGame(G.seats.map(s => ({ id: s.id, name: s.name, bot: s.bot })), Math.random);
   G.phase = "race"; G.revealed = {}; G.busy = false; G.raceWinner = -1;
@@ -835,8 +850,9 @@ function startRound(){
   buildTable(); paintCounts(); paintSeats();
   banner("The Heart Race: who goes first?");
   const where = hereSeat() < 0 ? " on your device" : phonesHere() ? " on your phone or in the tray below" : " in the tray below";
-  chike("point-up", "Heart Race! Everyone, tap Show my highest heart" + where + ". Put it down on the table: the highest heart goes first.");
-  G.seats.forEach((s, i) => { if (s.bot) setTimeout(() => reveal(i), 900 + i * 500); });
+  chike("point-up", (by ? by + " restarted the game, so everyone gets new cards. " : "") + "Heart Race! Everyone, tap Show my highest heart" + where + ". Put it down on the table: the highest heart goes first.");
+  const r = G.round;
+  G.seats.forEach((s, i) => { if (s.bot) setTimeout(() => { if (G.round === r) reveal(i); }, 900 + i * 500); });
   tellAll();
 }
 function raceNote(i){
@@ -862,14 +878,16 @@ function reveal(i){
   if (Object.keys(G.revealed).length === G.seats.length) finishRace();
 }
 async function finishRace(){
-  const st = G.state, w = st.first, h = highestHeart(st.players[w].hand), anyHeart = st.players.some(p => highestHeart(p.hand));
+  const st = G.state, w = st.first, h = highestHeart(st.players[w].hand), anyHeart = st.players.some(p => highestHeart(p.hand)), r = G.round;
   await wait(900);
+  if (G.round !== r) return;
   G.raceWinner = w; paintSeats(); sfx("good");
   if (G.shown[w]){ glow.position.set(G.shown[w].position.x, TY + .004, G.shown[w].position.z); glowFlash = 2.6; }
   if (anyHeart) chike("thumbs-up", st.players[w].name + " has the " + cardName(rankOf(h)) + " of hearts, so they go first! The hearts stay on the table, and everyone who put one down draws a new card.");
   else chike("thumbs-up", "Nobody has a heart! " + st.players[w].name + " has the highest card, so they go first.");
   news(nm(w) + " won the Heart Race.");
   await wait(REDUCED ? 1500 : 2600);
+  if (G.round !== r) return;
   /* the hearts are already on their slots: they stay, and each of those players draws a card */
   const placed = placeHearts(st);
   G.shown = {};
@@ -883,8 +901,10 @@ async function finishRace(){
     draws.push(fly(top, fp.p, new THREE.Euler(0, fp.ry, 0), REDUCED ? .01 : .6, REDUCED ? 0 : .8));
     sfx("flip", { pitch: 1.1, volume: .5 });
     await wait(REDUCED ? 10 : 260);
+    if (G.round !== r) return;
   }
   await Promise.all(draws);
+  if (G.round !== r) return;
   if (placed.length) news("The hearts are on the table, and " + placed.length + (placed.length === 1 ? " player drew" : " players drew") + " a new card.");
   G.raceWinner = -1;
   layoutFans(false);
@@ -927,6 +947,7 @@ async function act(i, move){
     turnStarted(); return;
   }
   const rank = move.rank, ev = drop(st, i, rank); if (!ev) return;
+  const r = G.round;   /* a restart mid-move (owner, 2026-11-18) leaves the rest of this move undone */
   G.busy = true; tellAll();
   /* the dropped cards fly from the player's seat onto the stack, building upward */
   const fan = FANS[i], base = SLOTS[rank].meshes.length;
@@ -939,12 +960,13 @@ async function act(i, move){
   if (ev.started) news(nm(i) + " started a new rank.");
   news(nm(i) + " dropped " + (ev.cards.length === 1 ? (rank === "A" || rank === "8" ? "an " : "a ") + cardName(rank) : ["", "one", "two", "three", "four"][ev.cards.length] + " " + plural(rank)) + ".");
   await Promise.all(flights);
+  if (G.round !== r) return;
   paintCounts();
   /* draw one card from the pile */
   if (ev.drew){
     const top = PILE.meshes.pop();
-    if (top){ const spot = seatSpot(i, G.seats.length), fp = fanPos(spot, fan.length, fan.length + 1); await fly(top, fp.p, new THREE.Euler(0, fp.ry, 0), REDUCED ? .01 : .7, REDUCED ? 0 : .9); fan.push(top); sfx("flip", { pitch: 1.1, volume: .6 }); }
-    if (!st.pile.length){ news("The draw pile is empty!"); chike("arms-crossed", "The draw pile is empty! Now the first player with no cards wins."); await wait(1600); }
+    if (top){ const spot = seatSpot(i, G.seats.length), fp = fanPos(spot, fan.length, fan.length + 1); await fly(top, fp.p, new THREE.Euler(0, fp.ry, 0), REDUCED ? .01 : .7, REDUCED ? 0 : .9); if (G.round !== r) return; fan.push(top); sfx("flip", { pitch: 1.1, volume: .6 }); }
+    if (!st.pile.length){ news("The draw pile is empty!"); chike("arms-crossed", "The draw pile is empty! Now the first player with no cards wins."); await wait(1600); if (G.round !== r) return; }
   }
   layoutFans(false); paintCounts();
   if (ev.complete){
@@ -956,6 +978,7 @@ async function act(i, move){
     banner("4/4! The " + plural(rank) + " are done. " + st.players[i].name + " gets a bonus turn!");
     chike("thumbs-up", st.players[i].name + " finished the " + plural(rank) + "! When a stack gets all 4, it flips over. No card from the deck this time, but you get a bonus turn.");
     await wait(REDUCED ? 900 : 2200);
+    if (G.round !== r) return;
   }
   G.busy = false;
   if (ev.win) return gameOver();
@@ -967,6 +990,7 @@ let glowFlash = 0;
 async function doShuffle(i){
   const st = G.state;
   if (G.busy || !st || !reshuffle(st, i, Math.random)) return;
+  const r = G.round;
   G.busy = true; tellAll();
   news(nm(i) + " reshuffled the draw deck. Everyone gets one reshuffle a game.");
   chike("point", st.players[i].name + " reshuffled the draw deck! Each player can do that once a game, on their turn.");
@@ -983,6 +1007,7 @@ async function doShuffle(i){
     const ticks = Math.min(14, n);
     for (let t = 0; t < ticks; t++){ sfx("flip", { pitch: .92 + (t % 4) * .06, volume: .32 }); await wait(gap * 1000 * n / ticks); }
     await Promise.all(lands);
+    if (G.round !== r) return;
     PILE.meshes = order;
   }
   G.busy = false; tellAll();
@@ -1003,7 +1028,7 @@ function gameOver(){
 }
 $("bAgain").onclick = () => { sfx("click"); startRound(); };
 $("bNewRoom").onclick = () => {
-  sfx("click"); G.state = null; G.phase = "lobby"; clearTable(); paintCounts();
+  sfx("click"); G.round++; G.state = null; G.phase = "lobby"; clearTable(); paintCounts();
   G.seats = G.seats.filter(s => !s.bot);
   $("podium").hidden = true; $("again").hidden = true; $("confetti").innerHTML = ""; banner("");
   $("lobby").hidden = false; lobbyChanged(); tellAll();

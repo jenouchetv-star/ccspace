@@ -74,6 +74,10 @@
   .shuf{width:100%;font:900 16px Nunito;background:transparent;color:var(--cream);border:2px dashed rgba(255,255,255,.45);border-radius:14px;padding:10px;cursor:pointer}
   .shuf:disabled{opacity:.45;cursor:default}
   .shuf:focus-visible{outline:3px solid var(--sun);outline-offset:3px}
+  .restart .shuf{font-size:15px;padding:8px}
+  .ask{background:rgba(0,0,0,.4);border:2px solid var(--sun);border-radius:16px;padding:12px}
+  .ask p{margin:0 0 10px;font-weight:800;font-size:16px;line-height:1.35;text-align:center}
+  .ask .big{font-size:17px;padding:12px 8px}
   .count{text-align:center;font-weight:800;color:#d9ccff;font-size:14px}
   .place{font-family:"Baloo 2";font-weight:800;font-size:44px;color:var(--sun);text-align:center;line-height:1.1}
   @media (prefers-reduced-motion: reduce){ .card{transition:none} }
@@ -123,6 +127,14 @@
     <div class="place" id="placeLine"></div>
     <div class="msg" id="overMsg"></div>
   </section>
+  <!-- any player can restart from here (owner, 2026-11-18); it asks first, since it restarts for everyone -->
+  <div class="restart" id="restartBox" hidden>
+    <button class="shuf" id="bRestart" type="button">Restart the game</button>
+    <div class="ask" id="restartAsk" role="group" aria-labelledby="restartQ" hidden>
+      <p id="restartQ">Restart for everyone? Everyone gets new cards and a new Heart Race begins.</p>
+      <div class="acts"><button class="big" id="bRestartYes" type="button">Yes, restart</button><button class="big ghost" id="bRestartNo" type="button">Keep playing</button></div>
+    </div>
+  </div>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -170,10 +182,10 @@ const MSC = {
   }
 };
 /* who I am at this table: my key pair is kept on this device, so reopening the link puts me back in my seat */
-const P = { code: "", fp: "", pk: "", kp: null, key: null, hk: "", hostWait: null, n: 0, lastV: 0, ch: null, sb: null, id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"), view: null, sel: null, heard: false, wasTurn: false };
+const P = { code: "", fp: "", pk: "", kp: null, key: null, hk: "", hostWait: null, n: 0, lastV: 0, ch: null, sb: null, id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"), view: null, sel: null, heard: false, wasTurn: false, ask: false, phase: "" };
 function store(k, v){ try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (_e) {} }
 function load(k){ try { return localStorage.getItem(k); } catch (_e){ return null; } }
-function show(v){ ["vJoin", "vWait", "vRace", "vPlay", "vOver"].forEach(id => $(id).hidden = id !== v); }
+function show(v){ ["vJoin", "vWait", "vRace", "vPlay", "vOver"].forEach(id => $(id).hidden = id !== v); if (v === "vJoin" || v === "vWait"){ $("restartBox").hidden = true; P.ask = false; } }
 function loadScript(src){ return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error("load")); document.head.appendChild(s); }); }
 async function sb(){
   if (P.sb) return P.sb;
@@ -279,8 +291,22 @@ function cleanView(p){
     canPass: p.canPass === true, canShuffle: p.canShuffle === true, shuffled: p.shuffled === true, revealed: p.revealed === true, busy: p.busy === true,
     place: num(p.place, 4), winner: txt(p.winner) };
 }
+/* the Restart button: there once the game has begun; after a game it reads Play again */
+function paintRestart(v){
+  const on = ["race", "draw", "play", "over"].includes(v.phase), over = v.phase === "over";
+  if (!on) P.ask = false;
+  $("restartBox").hidden = !on;
+  $("bRestart").hidden = P.ask;
+  $("restartAsk").hidden = !P.ask;
+  $("bRestart").textContent = over ? "Play again" : "Restart the game";
+  $("restartQ").textContent = over ? "Start a new game for everyone? Everyone gets new cards." : "Restart for everyone? Everyone gets new cards and a new Heart Race begins.";
+  $("bRestartYes").textContent = over ? "Yes, play again" : "Yes, restart";
+  $("bRestartNo").textContent = over ? "Not yet" : "Keep playing";
+}
 function paint(v){
   P.view = v;
+  if (P.phase !== v.phase){ P.ask = false; P.phase = v.phase; }
+  paintRestart(v);
   /* on your own device, you are "You" (owner, 2026-11-17); the others see your name, or Player 1, Player 2... */
   $("who").hidden = false; $("who").textContent = "You"; $("who").title = "Everyone else sees you as " + v.name;
   if (v.phase === "lobby"){ show("vWait"); $("waitMsg").innerHTML = "You're in, <b>" + esc(v.name) + "</b>! Waiting for everyone to join. The game starts on the big screen."; return; }
@@ -295,7 +321,7 @@ function paint(v){
     show("vOver");
     const n = ["", "1st", "2nd", "3rd", "4th"][v.place] || "";
     $("placeLine").textContent = v.place === 1 ? "You won!" : "You came " + n;
-    $("overMsg").textContent = v.place === 1 ? "No cards left. Great matching!" : v.winner + " won this time. Play again from the big screen!";
+    $("overMsg").textContent = v.place === 1 ? "No cards left. Great matching!" : v.winner + " won this time. Press Play again below, or play again from the big screen!";
     if (v.place === 1) sfx("win");
     return;
   }
@@ -344,6 +370,9 @@ $("hand").addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key =
 $("bDrop").onclick = () => { if (!P.sel) return; sfx("place"); send({ t: "drop", rank: P.sel }); P.sel = null; $("bDrop").disabled = true; };
 $("bShuffle").onclick = () => { sfx("flip"); send({ t: "shuffle" }); $("bShuffle").disabled = true; };
 $("bReveal").onclick = () => { sfx("flip"); send({ t: "reveal" }); $("bReveal").disabled = true; };
+$("bRestart").onclick = () => { sfx("click"); P.ask = true; if (P.view) paintRestart(P.view); $("bRestartNo").focus(); };
+$("bRestartNo").onclick = () => { sfx("click"); P.ask = false; if (P.view) paintRestart(P.view); $("bRestart").focus(); };
+$("bRestartYes").onclick = () => { sfx("click"); P.ask = false; send({ t: "restart" }); if (P.view) paintRestart(P.view); };
 /* coming back to the page: say hello again so the table resends my cards */
 document.addEventListener("visibilitychange", () => { if (!document.hidden && P.ch) send({ t: "hi" }); });
 addEventListener("pagehide", () => { if (P.pk) post({ t: "bye", pk: P.pk }); });
