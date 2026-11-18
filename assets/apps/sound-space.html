@@ -256,6 +256,13 @@ svg.lucide{ width:16px; height:16px; stroke-width:1.9; flex:none; }
 .art__body{ padding:8px 6px 8px 12px; display:flex; align-items:center; gap:6px; border-top:1px solid var(--btn-edge); }
 .art__name{ flex:1; min-width:0; font-weight:600; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .art__when{ display:block; font-weight:400; font-size:11px; color:var(--mute); white-space:normal; }
+/* a song open in another tab or device (owner, 2026-11-18): greyed out, with a lock where the trash can was */
+.art--locked{ background:var(--well); }
+.art--locked .art__open > *{ filter:grayscale(1); opacity:.4; }
+.art--locked .art__name{ color:var(--mute); }
+.art--locked:hover, .art--locked:has(.art__open:focus-visible){ transform:none; box-shadow:none; }
+.art--locked:hover .art__open svg{ transform:none; }
+.art__lock{ display:inline-grid; place-items:center; width:32px; height:32px; flex:none; color:var(--mute); }
 .empty{ padding:28px; border:1px dashed var(--btn-edge); border-radius:var(--r); color:var(--mute); text-align:center; margin:0; grid-column:1/-1; }
 .btn--ghost{ border-color:transparent; background:transparent; box-shadow:none; color:var(--mute); }
 .btn--ghost:hover{ background:var(--accent-weak); color:var(--text); }
@@ -4087,15 +4094,45 @@ async function paintHome(){
   const g = $("#gallery");
   g.innerHTML = list.length ? list.map(s => {
     const title = s.title || "My song";
-    return '<article class="art">'
+    return '<article class="art" data-id="' + esc(s.id) + '" data-title="' + esc(title) + '">'
       + '<button type="button" class="art__open" data-open="' + esc(s.id) + '" aria-label="Open ' + esc(title) + '">' + miniPicture(s) + '</button>'
       + '<div class="art__body"><span class="art__name">' + esc(title) + '<span class="art__when">' + esc([when(s.updatedMs), fileSize(s)].filter(Boolean).join(" · ")) + '</span></span>'
-      + '<button type="button" class="btn btn--ghost icon" data-del="' + esc(s.id) + '" aria-label="Delete ' + esc(title) + '" title="Delete"><i data-lucide="trash-2"></i></button></div>'
+      + songCardFoot(s, false) + '</div>'
       + '</article>';
   }).join("") : '<p class="empty">Nothing yet. Pick a way to start above.</p>';
   icons();
   if (!dbOk && !blockedToastShown){ blockedToastShown = true; toast("This browser can’t keep songs between visits."); }
+  paintLocks();
 }
+/* A song open right now in another browser tab or device (owner, 2026-11-18): its card is greyed out and a lock sits
+   where the trash can was. Picking it still says where it's open (openStored). */
+function songCardFoot(s, locked){
+  const title = s.title || "My song";
+  if (locked) return '<span class="art__lock" role="img" aria-label="' + esc(title) + ' is open on another device" title="Open on another device or tab"><i data-lucide="lock"></i></span>';
+  return '<button type="button" class="btn btn--ghost icon" data-del="' + esc(s.id) + '" aria-label="Delete ' + esc(title) + '" title="Delete"><i data-lucide="trash-2"></i></button>';
+}
+let paintingLocks = null;
+function paintLocks(){
+  if (paintingLocks) return paintingLocks;
+  paintingLocks = (async () => {
+    const ids = cloud.on() && songLock ? await C.lockedElsewhere((a, x) => cloud.call(a, x), songLock.holder) : new Set();
+    let changed = false;
+    $$("#gallery .art[data-id]").forEach(el => {
+      const locked = ids.has(el.dataset.id);
+      if (el.classList.contains("art--locked") === locked) return;
+      el.classList.toggle("art--locked", locked);
+      const s = { id: el.dataset.id, title: el.dataset.title };
+      const foot = el.querySelector(".art__lock, [data-del]");
+      if (foot) foot.outerHTML = songCardFoot(s, locked);
+      el.querySelector(".art__open").setAttribute("aria-label", "Open " + s.title + (locked ? " (open on another device)" : ""));
+      changed = true;
+    });
+    if (changed) icons();
+  })().finally(() => { paintingLocks = null; });
+  return paintingLocks;
+}
+/* while Home is showing, check now and then: a song closed elsewhere unlocks here within about 20 seconds */
+setInterval(() => { if ($("#editor").hidden && !document.hidden) paintLocks(); }, 20000);
 async function openStored(id){
   let rec = null;
   try { rec = await loadRecord(id); } catch(e){ toast("That song couldn’t be opened just now. Try again."); return; }
@@ -4105,6 +4142,7 @@ async function openStored(id){
   if (!v.ok){ toast("That song couldn’t be opened."); return; }
   /* open somewhere else (another device or browser tab): say so, and offer to try again */
   if (songLock && cloud.on() && (await songLock.take(id)) === "locked"){
+    paintLocks();
     const m = C.lockedMessage(v.song.title);
     if (await ask(m.title, m.text, "Try again", { noLabel:"OK", calm:true })) return openStored(id);
     return;

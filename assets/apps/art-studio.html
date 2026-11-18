@@ -377,6 +377,13 @@ svg.lucide{ width:17px; height:17px; flex:none; stroke-width:1.75; }
 .art__body{ padding:8px 6px 8px 12px; display:flex; align-items:center; gap:6px; border-top:var(--line); }
 .art__name{ flex:1; min-width:0; font-weight:600; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .art__when{ display:block; font-weight:400; font-size:11px; color:var(--mute); }
+/* a picture open in another tab or device (owner, 2026-11-18): greyed out, with a lock where the trash can was */
+.art--locked{ background:var(--surface-2); }
+.art--locked .art__open > *{ filter:grayscale(1); opacity:.4; }
+.art--locked .art__name{ color:var(--mute); }
+.art--locked:hover, .art--locked:has(.art__open:focus-visible){ transform:none; box-shadow:none; }
+.art--locked:hover .art__open img{ transform:none; }
+.art__lock{ display:inline-grid; place-items:center; width:32px; height:32px; flex:none; color:var(--mute); }
 .empty{ padding:28px; border:1px dashed var(--border-2); border-radius:12px; color:var(--mute); text-align:center; margin:0; grid-column:1/-1; }
 
 /* ---------- editor ---------- */
@@ -1022,10 +1029,12 @@ document.addEventListener("keydown", e => {
 }, true);
 
 /* "Are you sure?" inside the app: the page this runs in blocks the browser's own confirm box */
-function ask(title, text, yesLabel){
-  const box = $("#ask"), back = document.activeElement;
+function ask(title, text, yesLabel, opts){
+  const box = $("#ask"), back = document.activeElement, o = opts || {};
   $("#ask-title").textContent = title; $("#ask-text").textContent = text;
   box.querySelector('[data-ask="yes"]').textContent = yesLabel || "OK";
+  box.querySelector('[data-ask="no"]').textContent = o.noLabel || "Cancel";
+  box.querySelector('[data-ask="yes"]').className = "btn " + (o.calm ? "btn--primary" : "btn--danger");
   box.hidden = false;
   box.querySelector('[data-ask="no"]').focus();
   return new Promise(done => {
@@ -1113,6 +1122,91 @@ const cloud = {
     return r;
   }
 };
+/* ============================================================
+   Picture locks (owner, 2026-11-18, like Sound Space's songs): a picture is open in one place at a time. Opening one
+   takes its lock in the account (art-cloud), renewed every 25 seconds while it stays open; another browser tab or
+   device sees it greyed out with a lock on the home page, and picking it says where it's open. A lock runs out by
+   itself about a minute after a tab closes or a device goes offline.
+   ============================================================ */
+/* BEGIN art-lock */
+const ART_LOCK_RENEW_MS = 25000;
+const ART_LOCK_KEY = "ccs-art-lock-holder";
+/** This browser tab's lock id, kept for the tab (sessionStorage), so a reload is still "this tab". */
+function artLockHolder(storage){
+  try { const had = storage && storage.getItem(ART_LOCK_KEY); if (had && /^[A-Za-z0-9_-]{8,64}$/.test(had)) return had; } catch(e){}
+  let id = "t";
+  for (let i = 0; i < 20; i++) id += "abcdefghijklmnopqrstuvwxyz0123456789".charAt(Math.floor(Math.random() * 36));
+  try { if (storage) storage.setItem(ART_LOCK_KEY, id); } catch(e){}
+  return id;
+}
+/** What someone sees when the picture they picked is open somewhere else. */
+function artLockedMessage(title){
+  return {
+    title: "This picture is open on another device",
+    text: "“" + (title || "Untitled") + "” is open right now on another device or browser tab. A picture can only be open in one place at a time, so your changes don’t overwrite each other. Close it there, then try again. If nobody is using it, it unlocks by itself in about a minute."
+  };
+}
+/** One picture's lock for this tab: take(id) answers "ok" (this tab has it, or the account couldn't say: nobody is
+    kept out of their own picture by a lost connection) or "locked". onLost(id) when another tab got it after this
+    tab's lock ran out (a sleeping laptop, say). release({ keepalive: true }) is the last word as a page closes. */
+function createArtLock(o){
+  const every = o.every || ((fn, ms) => setInterval(fn, ms)), stop = o.stop || (t => clearInterval(t));
+  let timer = 0;
+  const lock = {
+    current: null,
+    holder: o.holder,
+    async take(id){
+      if (lock.current && lock.current !== id) lock.release();
+      let r = null;
+      try { r = await o.call("lock", { id, holder: o.holder }); } catch(e){}
+      if (r && r.ok === false && r.error === "locked") return "locked";
+      if (lock.current !== id){
+        lock.current = id;
+        if (timer) stop(timer);
+        timer = every(() => lock.renew(), ART_LOCK_RENEW_MS);
+      }
+      return "ok";
+    },
+    async renew(){
+      const id = lock.current;
+      if (!id) return;
+      let r = null;
+      try { r = await o.call("lock", { id, holder: o.holder }); } catch(e){}
+      if (lock.current === id && r && r.ok === false && r.error === "locked"){
+        lock.current = null;
+        if (timer){ stop(timer); timer = 0; }
+        if (o.onLost) o.onLost(id);
+      }
+    },
+    release(opts){
+      const id = lock.current;
+      if (timer){ stop(timer); timer = 0; }
+      lock.current = null;
+      if (!id) return Promise.resolve();
+      const extra = Object.assign({ id, holder: o.holder }, opts && opts.keepalive ? { keepalive: true } : {});
+      try { return Promise.resolve(o.call("unlock", extra)).catch(() => {}); } catch(e){ return Promise.resolve(); }
+    }
+  };
+  return lock;
+}
+/** The pictures open right now in another tab or device, for the home page's locked cards. Empty when the account
+    can't answer, so a card is never locked by a lost connection. */
+async function artLockedElsewhere(call, holder){
+  let r = null;
+  try { r = await call("locks", { holder }); } catch(e){}
+  return new Set(r && r.ok && Array.isArray(r.ids) ? r.ids.filter(id => typeof id === "string") : []);
+}
+/* END art-lock */
+const artLock = createArtLock({
+  call: (action, extra) => cloud.call(action, extra),
+  holder: artLockHolder((() => { try { return window.sessionStorage; } catch(e){ return null; } })()),
+  onLost: id => {
+    if (!cur || cur.id !== id) return;
+    toast("“" + (cur.title || "Untitled") + "” was opened on another device, so it closed here. It’s saved.");
+    saveNow().then(flushPush).catch(() => {}).then(showHome);
+  }
+});
+
 /* The sign-in ended (after 30 days, or the grown-up left the mailing list), found on a save or a sync. Art Space is
    for list members, so: keep the open picture in this browser, go back to the pictures, and ask them to sign in again.
    (The site has already forgotten the old sign-in.) Pictures in this browser are never removed for this. */
@@ -1345,6 +1439,8 @@ document.addEventListener("visibilitychange", () => {
   if (!cur && document.body.classList.contains("editing") === false) cloudSync().then(c => { if (c && !cur) renderGallery(); });
 });
 window.addEventListener("pagehide", () => { if (cur) flushPush(); });
+window.addEventListener("pagehide", () => { artLock.release({ keepalive: true }); });
+window.addEventListener("pageshow", e => { if (e.persisted && cur && cloud.on()) artLock.take(cur.id); });
 
 /* ============================================================
    Projects and layers
@@ -1911,6 +2007,7 @@ function paintHome(){
   document.body.classList.remove("editing", "layers-open");
   paintSpace();
   cur = null;
+  artLock.release();
   $("#home-lede").textContent = cloud.on()
     ? "Pick a page to start. Your work saves to your account as you go, so it’s there in any browser where you sign in."
     : "Pick a page to start. Your work saves on this device as you go.";
@@ -1924,17 +2021,58 @@ async function showHome(){
 async function renderGallery(){
   const list = (await store.all().catch(() => [])).sort((a, b) => (b.updated || 0) - (a.updated || 0));
   const g = $("#gallery");
-  g.innerHTML = list.length ? list.map(p => '<article class="art">'
+  g.innerHTML = list.length ? list.map(p => '<article class="art" data-id="' + esc(p.id) + '" data-title="' + esc(p.title) + '">'
       + '<button type="button" class="art__open" data-open="' + esc(p.id) + '" aria-label="Open ' + esc(p.title) + '">'
       + (p.thumb ? '<img src="' + esc(p.thumb) + '" alt=""' + (p.kind === "pixel" ? ' class="px"' : "") + '>' : "") + '</button>'
       + '<div class="art__body"><span class="art__name">' + esc(p.title) + '<span class="art__when">' + esc([when(p.updated), fileSize(p)].filter(Boolean).join(" · ")) + '</span></span>'
-      + '<button type="button" class="btn btn--ghost iconbtn" data-del="' + esc(p.id) + '" aria-label="Delete ' + esc(p.title) + '" title="Delete"><i data-lucide="trash-2"></i></button></div>'
+      + artCardFoot(p, false) + '</div>'
       + '</article>').join("")
     : '<p class="empty">Nothing yet. Pick a page above to start.</p>';
   icons();
+  paintLocks();
   /* the examples use the app's font for their words, so wait for it */
   (document.fonts ? document.fonts.ready : Promise.resolve()).then(drawExamples, drawExamples);
   if (!store.ok && !cloud.on()) toast("This browser can’t keep art between visits. Use Save a project file to keep it.");
+}
+/* A picture open right now in another browser tab or device (owner, 2026-11-18): its card is greyed out and a lock
+   sits where the trash can was. Picking it still says where it's open (openStored). */
+function artCardFoot(p, locked){
+  if (locked) return '<span class="art__lock" role="img" aria-label="' + esc(p.title) + ' is open on another device" title="Open on another device or tab"><i data-lucide="lock"></i></span>';
+  return '<button type="button" class="btn btn--ghost iconbtn" data-del="' + esc(p.id) + '" aria-label="Delete ' + esc(p.title) + '" title="Delete"><i data-lucide="trash-2"></i></button>';
+}
+let paintingLocks = null;
+function paintLocks(){
+  if (paintingLocks) return paintingLocks;
+  paintingLocks = (async () => {
+    const ids = cloud.on() ? await artLockedElsewhere((a, x) => cloud.call(a, x), artLock.holder) : new Set();
+    let changed = false;
+    document.querySelectorAll("#gallery .art[data-id]").forEach(el => {
+      const locked = ids.has(el.dataset.id);
+      if (el.classList.contains("art--locked") === locked) return;
+      el.classList.toggle("art--locked", locked);
+      const p = { id: el.dataset.id, title: el.dataset.title };
+      const foot = el.querySelector(".art__lock, [data-del]");
+      if (foot) foot.outerHTML = artCardFoot(p, locked);
+      el.querySelector(".art__open").setAttribute("aria-label", "Open " + p.title + (locked ? " (open on another device)" : ""));
+      changed = true;
+    });
+    if (changed) icons();
+  })().finally(() => { paintingLocks = null; });
+  return paintingLocks;
+}
+/* while the home page shows, check now and then: a picture closed elsewhere unlocks here within about 20 seconds */
+setInterval(() => { if (!cur && !document.hidden) paintLocks(); }, 20000);
+/* open a saved picture: its lock first, and if it's open somewhere else, say so and offer to try again */
+async function openStored(id){
+  const p = (await store.all().catch(() => [])).find(x => x.id === id);
+  if (!p) return;
+  if (cloud.on() && (await artLock.take(id)) === "locked"){
+    paintLocks();
+    const m = artLockedMessage(p.title);
+    if (await ask(m.title, m.text, "Try again", { noLabel:"OK", calm:true })) return openStored(id);
+    return;
+  }
+  openProject(p);
 }
 /** How big the picture's file is (its project data, without the small gallery picture), e.g. "48 KB" or "1.2 MB". */
 function fileSize(p){
@@ -2065,6 +2203,7 @@ function useColor(c){
 function openProject(p){
   if (p.kind === "paint" && !Array.isArray(p.layers)) p.layers = [paintLayer("Layer 1")];
   cur = p; undoStack = []; redoStack = []; view.caches.clear(); renaming = null; drag = null;
+  if (cloud.on() && artLock.current !== p.id) artLock.take(p.id);   /* a new picture is this tab's too */
   if (p.kind === "paint"){ const top = [...p.layers].reverse().find(l => l.type === "paint"); activeId = (top || p.layers[0]).id; } else activeId = null;
   tool = p.kind === "pixel" ? "pencil" : "brush";
   /* Mirror & Pattern pages start with symmetry on (older square pages didn't record which start they came from) */
@@ -3033,7 +3172,7 @@ document.addEventListener("click", e => {
     if (b.dataset.start === "pattern"){ p = newPaint("square", 1500, 1500, "Untitled pattern"); p.pattern = true; }
     openProject(p); if (b.dataset.start === "pixel") pickPixelSize(); return;
   }
-  if (b.dataset.open){ store.all().then(list => { const p = list.find(x => x.id === b.dataset.open); if (p) openProject(p); }); return; }
+  if (b.dataset.open){ openStored(b.dataset.open); return; }
   if (b.dataset.del){
     const id = b.dataset.del, both = cloud.on();
     ask("Delete this picture?", both ? "It goes from your account and every browser you sign in on. This can’t be undone."

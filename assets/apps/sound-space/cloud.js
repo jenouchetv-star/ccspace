@@ -284,6 +284,7 @@
     let timer = 0;
     const lock = {
       current: null,
+      holder: o.holder,
       async take(id) {
         if (lock.current && lock.current !== id) lock.release();
         let r = null;
@@ -318,11 +319,18 @@
     };
     return lock;
   }
+  /** The songs open right now in another browser tab or device (owner, 2026-11-18), for Home's locked cards: a Set of
+      ids. Empty when the account can't answer, so a card is never locked by a lost connection. */
+  async function lockedElsewhere(call, holder) {
+    let r = null;
+    try { r = await call("locks", { holder }); } catch (e) {}
+    return new Set(r && r.ok && Array.isArray(r.ids) ? r.ids.filter((id) => typeof id === "string") : []);
+  }
 
   SS.cloud = {
     DB_NAME, DB_STORE, AUTOSAVE_MS, PUSH_GAP_MS, RETRY_MS, MAX_THUMB, STATUS,
     mergeSongLists, syncPlan, openStore, tombstone, songOf, host, forCloud, putStatus, syncSongs,
     mine, createPushGate, deleteSong,
-    LOCK_RENEW_MS, lockHolder, lockedMessage, createSongLock
+    LOCK_RENEW_MS, lockHolder, lockedMessage, createSongLock, lockedElsewhere
   };
 })(typeof window !== "undefined" ? window : globalThis);

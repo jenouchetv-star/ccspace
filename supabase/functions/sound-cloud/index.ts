@@ -21,6 +21,8 @@
 //            (owner, 2026-11-16). Another tab gets { ok:false, error:"locked" }. A lock runs out 75 seconds after the
 //            last renewal; the app renews it every 25 seconds while the song is open.
 //   unlock   let go of a song's lock, only when this tab holds it.
+//   locks    the songs open right now in another browser tab or device (`holder` is this tab), so Home can show them
+//            as locked (owner, 2026-11-18): { ok:true, ids:[...] }.
 //
 // The sound_projects table is service-role only under RLS; nothing in it is reachable with the public key.
 // Ordinary outcomes come back as HTTP 200 with { ok:false, error }; only a malformed call or a fault is non-200.
@@ -190,6 +192,14 @@ Deno.serve(async (req) => {
       const { error } = await db.from("sound_locks").delete().eq("subscriber_id", who.id).eq("project_id", id).eq("holder", holder);
       if (error) throw new Error(error.message);
       return json({ ok: true });
+    }
+
+    if (action === "locks") {
+      const holder = cleanHolder(body.holder);
+      const { data, error } = await db.from("sound_locks").select("project_id, holder, expires_at").eq("subscriber_id", who.id);
+      if (error) throw new Error(error.message);
+      const ids = (data ?? []).filter((r) => r.holder !== holder && Date.parse(r.expires_at) > now).map((r) => r.project_id as string);
+      return json({ ok: true, ids });
     }
 
     if (action === "get") {

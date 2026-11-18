@@ -603,3 +603,28 @@ describe("the app and the site use the song lock (owner, 2026-11-16)", () => {
     expect(fn).toContain("/functions/v1/sound-cloud");
   });
 });
+
+describe("Home shows songs open somewhere else as locked (owner, 2026-11-18)", () => {
+  it("asks the account which songs are open in another tab, and never locks a card because of a lost connection", async () => {
+    const { cloud: C } = SS();
+    const calls = [];
+    const ids = await C.lockedElsewhere(async (a, x) => { calls.push({ a, ...x }); return { ok: true, ids: ["s1", 7, "s2"] }; }, "tab-one-12345678");
+    expect(calls).toEqual([{ a: "locks", holder: "tab-one-12345678" }]);
+    expect([...ids]).toEqual(["s1", "s2"]);
+    expect((await C.lockedElsewhere(async () => { throw new Error("offline"); }, "tab-one-12345678")).size).toBe(0);
+    expect((await C.lockedElsewhere(async () => ({ ok: false, error: "network" }), "tab-one-12345678")).size).toBe(0);
+  });
+  it("greys the card and puts a lock where the trash can was", () => {
+    const fn = page.split("function songCardFoot(s, locked){")[1].split("\n}\n")[0];
+    expect(fn).toContain('<span class="art__lock" role="img"');
+    expect(fn).toContain('<i data-lucide="lock"></i>');
+    expect(fn).toContain('data-del="');
+    expect(page).toMatch(/\.art--locked \.art__open > \*\{[^}]*grayscale/);
+    expect(page).toContain('el.classList.toggle("art--locked", locked);');
+  });
+  it("checks again while Home is showing, and the locked song still says why when it's picked", () => {
+    expect(page).toContain("const ids = cloud.on() && songLock ? await C.lockedElsewhere((a, x) => cloud.call(a, x), songLock.holder) : new Set();");
+    expect(page).toMatch(/setInterval\(\(\) => \{ if \(\$\("#editor"\)\.hidden && !document\.hidden\) paintLocks\(\); \}, 20000\);/);
+    expect(page.split("async function openStored(id){")[1].split("\n}\n")[0]).toContain("C.lockedMessage(");
+  });
+});

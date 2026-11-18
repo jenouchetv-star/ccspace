@@ -14459,6 +14459,18 @@ function artCloudSignedIn(){ return !!portalSavedSession(); }
 async function artCloudCall(action, extra){
   const session = portalSavedSession();
   if (!session) return { ok: false, error: "no_session" };
+  /* Art Space letting go of a picture's lock as the page closes: a plain request the browser still sends after the
+     page is gone (keepalive), with no answer to wait for (owner, 2026-11-18, like Sound Space's) */
+  if (extra && extra.keepalive){
+    const body = Object.assign({}, extra, { action: action, session: session });
+    delete body.keepalive;
+    try {
+      fetch(SUPABASE_URL + "/functions/v1/art-cloud", { method: "POST", keepalive: true,
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY },
+        body: JSON.stringify(body) }).catch(() => {});
+    } catch(_e){}
+    return { ok: true };
+  }
   try {
     const res = await sb.functions.invoke("art-cloud", { body: Object.assign({}, extra || {}, { action: action, session: session }) });
     if (res.error || !res.data) return { ok: false, error: "network" };
