@@ -66,6 +66,8 @@
   .tag{position:absolute;transform:translate(-50%,-50%);font-weight:900;font-size:14px;white-space:nowrap}
   .cnt{background:rgba(0,0,0,.55);color:#fff;border-radius:999px;padding:1px 9px}
   .cnt.done{background:var(--sun);color:var(--ink)}
+  .cnt.pilecnt{font-size:15px;padding:3px 12px}
+  .cnt.pilecnt b{color:var(--sun);margin-left:3px}
   .seat{display:flex;flex-direction:column;align-items:center;gap:3px}
   .seat .nm{background:var(--ink);color:#fff;border-radius:999px;padding:3px 11px;border:2px solid transparent}
   .seat .ct{font-size:12px;background:rgba(0,0,0,.5);border-radius:999px;padding:1px 9px}
@@ -170,7 +172,7 @@
   if (document.readyState === "complete") done(); else window.addEventListener("load", done);
   setTimeout(function(){ hide(); }, 9000); })();</script>
 <div class="ui">
-  <div class="top"><!-- no logo here: the site's bar above the game already shows it (owner, 2026-11-17) --><span class="marq" id="marq">Stack 'Em Up!</span><span class="sp"></span><span class="pill">Room <b id="roomTop">----</b></span><span class="pill" id="pilePill" hidden>Draw pile <b id="pileN">0</b></span><span id="soundSlot" class="live"></span></div>
+  <div class="top"><!-- no logo here: the site's bar above the game already shows it (owner, 2026-11-17) --><span class="marq" id="marq">Stack 'Em Up!</span><span class="sp"></span><span class="pill">Room <b id="roomTop">----</b></span><span id="soundSlot" class="live"></span></div>
   <div class="banner" id="banner" hidden></div>
   <div class="feed" id="feedBox" hidden><h4>What just happened</h4><div id="feed"></div></div>
   <div class="panel lobby" id="lobby">
@@ -510,6 +512,9 @@ const tagsEl = $("tags"); let TAGS = [];
 function tag(html, cls, pos){ const el = document.createElement("div"); el.className = "tag " + cls; el.innerHTML = html; tagsEl.appendChild(el); const t = { el, pos }; TAGS.push(t); return t; }
 const SLOT_TAGS = {};
 RANKS.forEach(r => { SLOT_TAGS[r] = tag("", "cnt", new THREE.Vector3(SLOTS[r].x, TY, SLOTS[r].z + (SLOTS[r].z < 0 ? -.72 : .72)));   /* back row: counters behind the slots, clear of the deck */ SLOT_TAGS[r].el.hidden = true; });
+/* the draw pile's number sits beside the deck (owner, 2026-11-19), in the gap between the two rows of slots and clear
+   of the riffle's two halves */
+const PILE_TAG = tag("", "cnt pilecnt", new THREE.Vector3(PILE.x + 1.25, TY, PILE.z)); PILE_TAG.el.hidden = true;
 let SEAT_TAGS = [];
 const pv = new THREE.Vector3();
 function placeTags(){ TAGS.forEach(t => { if (t.el.hidden) return; pv.copy(t.pos).project(camera); t.el.style.left = ((pv.x + 1) / 2 * innerWidth) + "px"; t.el.style.top = ((1 - pv.y) / 2 * innerHeight) + "px"; }); }
@@ -565,7 +570,7 @@ function paintSeats(){
 function paintCounts(){
   const st = G.state;
   RANKS.forEach(r => { const t = SLOT_TAGS[r]; t.el.hidden = !st || G.phase === "race"; if (t.el.hidden) return; t.el.textContent = st.done[r] ? "4/4 done" : st.slots[r] + "/4"; t.el.className = "tag cnt" + (st.done[r] ? " done" : ""); });
-  $("pilePill").hidden = !st; if (st) $("pileN").textContent = st.pile.length;
+  PILE_TAG.el.hidden = !st; if (st) PILE_TAG.el.innerHTML = "Draw pile <b>" + st.pile.length + "</b>";
 }
 
 /* --- the table's 3D cards follow the game --- */

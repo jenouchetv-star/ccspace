@@ -500,6 +500,12 @@ describe("the phone's new look (owner, 2026-11-18; draft docs/mockups/stack-em-u
     expect(player).toContain('<svg class="arrow"');
     expect(player).toContain("Tap the deck to shuffle it");
   });
+  it("the draw pile number sits next to the deck on the table, not up in the top bar (owner, 2026-11-19)", () => {
+    const game = readFileSync(new URL("../supabase/private-games/matching-suits.html", import.meta.url), "utf8");
+    expect(game).not.toContain('id="pilePill"');
+    expect(game).toMatch(/const PILE_TAG = tag\("", "cnt pilecnt", new THREE\.Vector3\(PILE\.x \+ 1\.25, TY, PILE\.z\)\)/);
+    expect(game).toContain('PILE_TAG.el.innerHTML = "Draw pile <b>" + st.pile.length + "</b>"');
+  });
   it("says the shuffle swaps your cards for new ones (owner, 2026-11-19)", () => {
     const game = readFileSync(new URL("../supabase/private-games/matching-suits.html", import.meta.url), "utf8");
     expect(player).toContain("Tap the deck to shuffle it<small>Your cards go in, you get new ones</small>");
