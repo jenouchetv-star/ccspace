@@ -79,7 +79,7 @@ insert into activities (id, data) values ('act-ai-lesson-gesture-lab', jsonb_bui
   'id', 'act-ai-lesson-gesture-lab', 'slug', 'ai-lesson-gesture-lab',
   'kind', 'members', 'portalSlug', 'how-to-build-a-hands-free-reader',
   'title', 'AI Lesson 05: Control a Page with Hand Gestures',
-  'summary', 'Use AI to build a page you control without touching anything: swipe to turn the pages of a book, point to scroll, pinch to change the text size, and more.',
+  'summary', 'Use AI to build a page you control without touching anything: swipe to turn the pages of a book, pinch to scroll, make a fist to change the text size, and more.',
   'type', 'ai', 'access', 'members', 'character', 'chike',
   'ageMin', 7, 'ageMax', 12, 'timeMinutes', 30, 'difficulty', 'medium', 'setting', 'indoor', 'adultSupport', 'nearby',
   'materials', '[]'::jsonb, 'materialsDetail', '[]'::jsonb, 'safetyNotes', '[]'::jsonb, 'steps', '[]'::jsonb,

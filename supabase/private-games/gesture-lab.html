@@ -195,9 +195,10 @@
   .side .note svg{ width:14px; height:14px; margin-top:1px; }
   .btn--wide{ width:100%; }
 
-  /* floating things: the fingertip cursor, the text-size dial, hearts, toasts, x-ray */
-  #cursor{ position:fixed; left:0; top:0; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%; background:var(--accent); border:3px solid var(--surface);
-    box-shadow:0 0 0 1px var(--accent), 0 4px 14px rgba(0,0,0,.25); z-index:30; pointer-events:none; opacity:0; transition:opacity .15s; }
+  /* floating things: the laser dot, the text-size dial, hearts, toasts, x-ray */
+  /* pointing shows a laser pointer dot and nothing else (owner, 2026-11-19) */
+  #cursor{ position:fixed; left:0; top:0; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:#ff2d2d;
+    box-shadow:0 0 6px 2px rgba(255,45,45,.85), 0 0 18px 6px rgba(255,45,45,.35); z-index:30; pointer-events:none; opacity:0; transition:opacity .15s; }
   #cursor.on{ opacity:1; }
   .dial{ position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:31; padding:18px 22px 14px; text-align:center; pointer-events:none; opacity:0; transition:opacity .2s;
     background:var(--surface); border:1px solid var(--border); border-radius:20px; box-shadow:var(--shadow); }
@@ -340,7 +341,7 @@
   <div class="box">
     <div class="mark" id="mark2" aria-hidden="true"></div>
     <h2>Read this book with your hand</h2>
-    <p>This page uses <b>computer vision</b>: an AI looks through your camera, finds 21 points on your hand, and works out which gesture you are making. Swipe to turn the page, point to scroll, pinch to change the text size.</p>
+    <p>This page uses <b>computer vision</b>: an AI looks through your camera, finds 21 points on your hand, and works out which gesture you are making. Swipe to turn the page, pinch to scroll, make a fist to change the text size, and point for a laser dot.</p>
     <div class="note"><span id="lock"></span><span>You won't see your video, only your digital hand. The video stays on this device, and nothing is recorded, saved or sent anywhere. Ask a grown-up before you turn on a camera.</span></div>
     <p class="err hidden" id="start-err"></p>
     <div class="row">
@@ -409,13 +410,13 @@
   /* ---------------- the gestures, and what each one controls ---------------- */
   var GESTURES = {
     swipe:  { name:"Swipe",     does:"Turn the page forward or back",         kind:"motion" },
-    point:  { name:"Point",     does:"Point high or low to scroll the page",  kind:"pointer" },
-    pinch:  { name:"Pinch",     does:"Pinch and slide up or down for text size", kind:"slider" },
+    point:  { name:"Point",     does:"A laser dot follows your fingertip",    kind:"pointer" },
+    pinch:  { name:"Pinch",     does:"Pinch and move up or down to drag the page", kind:"slider" },
     thumbs: { name:"Thumbs up", does:"Hold to like the page",                 kind:"pose", hold:true },
     peace:  { name:"Peace",     does:"Hold to switch light and dark",         kind:"pose", hold:true },
     open:   { name:"Open hand", does:"Hold still for focus mode",             kind:"pose", hold:true },
     rock:   { name:"Rock on",   does:"Hold for X-ray: see what the computer sees", kind:"pose", hold:true },
-    fist:   { name:"Fist",      does:"Resting hand: does nothing",            kind:"rest" }
+    fist:   { name:"Fist",      does:"Make a fist and move up or down for text size", kind:"slider" }
   };
   var ORDER = ["swipe", "point", "pinch", "thumbs", "peace", "open", "rock", "fist"];
   var KIND = { pose:"Hold", motion:"Move", slider:"Slide", pointer:"Aim", rest:"Rest" };
@@ -524,8 +525,8 @@
     { title:"Turning points into gestures", art:artRules, table:true, body:[
       "The AI only gives us 21 points. Deciding what they mean is up to the code, and the rules are simpler than you might think.",
       "A finger counts as up when its tip is farther from the wrist than its middle joint. Then each gesture is a pattern of fingers:",
-      "There are different kinds of gestures in this book. Poses, like thumbs up, are shapes you hold still. Motions, like a swipe, are about how your hand moves over time. Sliders, like pinch for text size, turn how far you move into a number.",
-      "Good gesture controls also avoid mistakes. That's why you hold a pose until the ring fills up, and why a fist is a resting hand that does nothing." ] },
+      "There are different kinds of gestures in this book. Poses, like thumbs up, are shapes you hold still. Motions, like a swipe, are about how your hand moves over time. Sliders, like a fist for text size, turn how far you move into a number.",
+      "Good gesture controls also avoid mistakes. That's why you hold a pose until the ring fills up, and why only a quick sideways move counts as a swipe." ] },
     { title:"Where is computer vision used?", art:artUses, body:[
       "Computer vision is already part of many things people use every day. Here are a few:",
       "• Phones that unlock when they recognize their owner's face.",
@@ -635,6 +636,8 @@
     blip(880);
   }
   function scrollPage(px){ var f = readingFace(), b = f && f.querySelector(".pbody"); if (b) b.scrollTop += px; }
+  function getScroll(){ var f = readingFace(), b = f && f.querySelector(".pbody"); return b ? b.scrollTop : 0; }
+  function setScroll(y){ var f = readingFace(), b = f && f.querySelector(".pbody"); if (b) b.scrollTop = y; }
   /* size the pages to fit: a two-page spread when there's room, one page at a time when there isn't */
   function layoutBook(){
     var area = $("book-area"), W = area.clientWidth, H = area.clientHeight;
@@ -717,8 +720,10 @@
 
   /* ---------------- what the gestures do ---------------- */
   var HOLD_MS = 700, SWIPE_MS = 500;
+  /* how far the page moves when a pinched hand moves the whole height of the camera picture */
+  var PINCH_SCROLL = 1600;
   var state = { mode:"off", gesture:null, candidate:null, frames:0, holdStart:0, holdDone:false, seen:0,
-    track:[], cooldown:0, pinchY0:0, ts0:1, pointY:-1 };
+    track:[], cooldown:0, pinchY0:0, scroll0:0, fistY0:0, ts0:1 };
   function showGesture(g){
     var info = g ? GESTURES[g] : null;
     $("g-face").innerHTML = info ? handSVG(g) : icon(state.mode === "camera" ? "eye" : state.mode === "keys" ? "keys" : "camera", "hand");
@@ -895,7 +900,8 @@
     if (g === state.candidate) state.frames++; else { state.candidate = g; state.frames = 1; }
     if (state.frames >= 3 && g !== state.gesture){
       state.gesture = g; state.holdStart = now; state.holdDone = false; showGesture(g);
-      if (g === "pinch"){ state.pinchY0 = (lm[4].y + lm[8].y) / 2; state.ts0 = textSize; }
+      if (g === "pinch"){ state.pinchY0 = (lm[4].y + lm[8].y) / 2; state.scroll0 = getScroll(); }
+      if (g === "fist"){ state.fistY0 = lm[9].y; state.ts0 = textSize; }
     }
     var cur = state.gesture;
 
@@ -903,20 +909,25 @@
     var mx = 1 - lm[9].x, my = lm[9].y;
     state.track.push({ t:now, x:mx, y:my });
     while (state.track.length && now - state.track[0].t > SWIPE_MS) state.track.shift();
-    if (now > state.cooldown && cur !== "pinch" && cur !== "point" && state.track.length > 3){
+    if (now > state.cooldown && cur !== "pinch" && cur !== "point" && cur !== "fist" && state.track.length > 3){
       var a = state.track[0], dx = mx - a.x, dy = my - a.y;
       if (Math.abs(dx) > 0.18 && Math.abs(dx) > Math.abs(dy) * 1.8){ doSwipe(dx < 0 ? "left" : "right"); return; }
     }
 
-    /* pointer: the fingertip is a cursor; point high to scroll up, low to scroll down */
-    if (cur === "point"){
-      state.pointY = lm[8].y; moveCursor((1 - lm[8].x) * innerWidth, lm[8].y * innerHeight);
-    } else { state.pointY = -1; hideCursor(); }
+    /* pointer: the fingertip is a laser pointer dot, and that's all it does (owner, 2026-11-19) */
+    if (cur === "point") moveCursor((1 - lm[8].x) * innerWidth, lm[8].y * innerHeight); else hideCursor();
 
-    /* slider: pinch, then slide up or down to change the text size */
+    /* slider: pinch, then move up or down to drag the page, like dragging it on a phone (owner, 2026-11-19) */
+    var rf = readingFace(), hint = rf && rf.querySelector(".scrollhint");
     if (cur === "pinch"){
       var py = (lm[4].y + lm[8].y) / 2;
-      setTextSize(state.ts0 + (state.pinchY0 - py) * 1.8); $("dial").classList.add("on");
+      setScroll(state.scroll0 + (state.pinchY0 - py) * PINCH_SCROLL);
+      if (hint) hint.classList.add("on");
+    } else if (hint) hint.classList.remove("on");
+
+    /* slider: make a fist, then move it up or down to change the text size (owner, 2026-11-19) */
+    if (cur === "fist"){
+      setTextSize(state.ts0 + (state.fistY0 - lm[9].y) * 1.8); $("dial").classList.add("on");
     } else $("dial").classList.remove("on");
 
     /* poses: hold still until the ring fills up */
@@ -952,18 +963,12 @@
   }
   window.addEventListener("resize", function(){ if (xray){ xc.width = innerWidth; xc.height = innerHeight; } });
 
-  /* ---------------- every frame: scrolling while pointing ---------------- */
-  var lastFrame = performance.now();
+  /* ---------------- every frame: the laser dot goes away when the hand does ---------------- */
   (function loop(){
     requestAnimationFrame(loop);
-    var now = performance.now(), dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
-    var rf = readingFace(), hint = rf && rf.querySelector(".scrollhint");
-    if (state.pointY >= 0){
-      var y = state.pointY, speed = y < 0.4 ? -(0.4 - y) / 0.4 : y > 0.6 ? (y - 0.6) / 0.4 : 0;
-      if (speed) scrollPage(speed * 900 * dt);
-      if (hint) hint.classList.toggle("on", !!speed);
-    } else if (hint) hint.classList.remove("on");
-    if (state.mode === "camera" && now - state.seen > 350) hideCursor();
+    if (state.mode === "camera" && performance.now() - state.seen > 350){
+      hideCursor(); var rf = readingFace(), hint = rf && rf.querySelector(".scrollhint"); if (hint) hint.classList.remove("on");
+    }
   })();
 
   /* ---------------- buttons and keys (they work with or without the camera) ---------------- */
@@ -981,9 +986,9 @@
   $("start-mouse").addEventListener("click", function(){ $("start").classList.add("hidden"); state.mode = "keys"; showGesture(null); });
   function tryGesture(g){
     if (g === "swipe") turn(1);
-    else if (g === "point") scrollPage(160);
-    else if (g === "pinch") setTextSize(textSize >= 1.45 ? 0.9 : textSize + 0.15);
-    else if (g === "fist") toast("A fist is the resting hand: it does nothing on purpose");
+    else if (g === "point") toast("Point at the screen and a laser dot follows your fingertip");
+    else if (g === "pinch") scrollPage(160);
+    else if (g === "fist") setTextSize(textSize >= 1.45 ? 0.9 : textSize + 0.15);
     else doHold(g);
   }
   $("glist").addEventListener("click", function(e){ var li = e.target.closest("li"); if (li) tryGesture(li.getAttribute("data-g")); });

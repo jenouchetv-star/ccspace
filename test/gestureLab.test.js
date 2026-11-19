@@ -30,12 +30,25 @@ describe("Hands-Free Reader", () => {
   });
 
   it("gives every gesture a job, with a kind", () => {
-    for (const [g, kind] of [["swipe", "motion"], ["point", "pointer"], ["pinch", "slider"], ["thumbs", "pose"], ["peace", "pose"], ["open", "pose"], ["rock", "pose"], ["fist", "rest"]])
+    for (const [g, kind] of [["swipe", "motion"], ["point", "pointer"], ["pinch", "slider"], ["thumbs", "pose"], ["peace", "pose"], ["open", "pose"], ["rock", "pose"], ["fist", "slider"]])
       expect(page).toMatch(new RegExp("\\b" + g + ":\\s+\\{ name:[^\\n]*kind:\"" + kind + "\""));
     expect(page).toContain('if (g === "thumbs") like();');
     expect(page).toContain('if (g === "peace") setTheme(!dark);');
     expect(page).toContain('if (g === "open") setFocus(!focus);');
-    expect(page).toContain("setTextSize(state.ts0 + (state.pinchY0 - py) * 1.8);");
+    expect(page).toContain("setTextSize(state.ts0 + (state.fistY0 - lm[9].y) * 1.8);");
+  });
+
+  it("pinch drags the page up and down, a fist changes the text size, and point is only a laser dot (owner, 2026-11-19)", () => {
+    expect(page).toContain('pinch:  { name:"Pinch",     does:"Pinch and move up or down to drag the page"');
+    expect(page).toContain('fist:   { name:"Fist",      does:"Make a fist and move up or down for text size"');
+    expect(page).toContain('point:  { name:"Point",     does:"A laser dot follows your fingertip"');
+    expect(page).toContain("setScroll(state.scroll0 + (state.pinchY0 - py) * PINCH_SCROLL);");
+    /* pointing never scrolls any more */
+    expect(page).not.toContain("state.pointY");
+    expect(page).toMatch(/#cursor\{[^}]*background:#ff2d2d/);
+    /* a moving fist or pinch is never mistaken for a swipe */
+    expect(page).toContain('cur !== "pinch" && cur !== "point" && cur !== "fist"');
+    expect(page).not.toMatch(/resting hand/i);
     for (const gone of ["speechSynthesis", "SpeechSynthesisUtterance", "setReading", "Read aloud", "setVolume"]) expect(page).not.toContain(gone);
     expect(page).toContain('if (g === "rock") setXray(!xray);');
   });
