@@ -33,12 +33,14 @@ describe("Sound Space long songs", () => {
     expect(m.validateSong(o, ids).ok).toBe(true);
     o = good(); o.counts = 260;
     expect(m.validateSong(o, ids).ok).toBe(false);
-    /* a loop is any length from 1 to 16 counts, a sixteenth at a time (owner, 2026-11-18) */
+    /* a loop is any length from 1 count up to the whole song, a sixteenth at a time (owner, 2026-11-19) */
     o = good(); o.loopCounts = 12; o.loopStart = 1.5;
     expect(m.validateSong(o, ids).ok).toBe(true);
     o = good(); o.loopCounts = 2.75;
     expect(m.validateSong(o, ids).ok).toBe(true);
-    for (const bad of [17, 0.75, 1.3, "8"]){ o = good(); o.loopCounts = bad; expect(m.validateSong(o, ids).ok, String(bad)).toBe(false); }
+    o = good(); o.counts = 256; o.loopCounts = 256;
+    expect(m.validateSong(o, ids).ok).toBe(true);
+    for (const bad of [257, 0.75, 1.3, "8"]){ o = good(); o.loopCounts = bad; expect(m.validateSong(o, ids).ok, String(bad)).toBe(false); }
     o = good(); o.loopStart = -4;
     expect(m.validateSong(o, ids).ok).toBe(false);
     o = good(); o.loopStart = 1.3;
@@ -234,24 +236,33 @@ describe("Sound Space page: Length, the loop, Copy and Paste", () => {
 
 describe("the loop's bar: its ends resize it (owner, 2026-11-18: it looked draggable but did nothing on a song as long as the loop)", () => {
   const html = require("node:fs").readFileSync(require("node:path").join(__dirname, "../assets/apps/sound-space.html"), "utf8").replace(/\r\n/g, "\n");
-  it("dragging the right end makes the loop any length, a sixteenth at a time, from 1 to 16 counts, keeping the start", () => {
+  it("dragging the right end makes the loop any length, a sixteenth at a time, up to the end of the song, keeping the start", () => {
     const m = M(), { s } = songOf(m, 32, 4);
     s.loopStart = 0; s.loopCounts = 8;
     expect(m.dragLoopEnd(s, "b", 2.8)).toBe(true);         /* the pointer at 2.8 counts: the end snaps to 2.75 */
     expect(m.loopOf(s)).toEqual({ start: 0, counts: 2.75 });
     m.dragLoopEnd(s, "b", 0.2);                            /* never shorter than 1 count */
     expect(m.loopOf(s).counts).toBe(1);
-    m.dragLoopEnd(s, "b", 30);                             /* never longer than 16 counts */
-    expect(m.loopOf(s).counts).toBe(16);
-    expect(m.dragLoopEnd(s, "b", 16.1)).toBe(false);       /* no change */
+    m.dragLoopEnd(s, "b", 30);                             /* longer than 16 counts (owner, 2026-11-19: it covers the whole song) */
+    expect(m.loopOf(s).counts).toBe(30);
+    m.dragLoopEnd(s, "b", 40);                             /* but never past the song's end */
+    expect(m.loopOf(s)).toEqual({ start: 0, counts: 32 });
+    expect(m.dragLoopEnd(s, "b", 32.1)).toBe(false);       /* no change */
+  });
+  it("a long song's loop can cover the whole song (64 bars)", () => {
+    const m = M(), { s } = songOf(m, 256, 4);
+    s.loopStart = 0; s.loopCounts = 16;
+    m.dragLoopEnd(s, "b", 256);
+    expect(m.loopOf(s)).toEqual({ start: 0, counts: 256 });
+    expect(m.loopSteps(s)).toEqual({ from: 0, to: 1024 });
   });
   it("dragging the left end keeps the loop's end and moves its start a sixteenth at a time", () => {
     const m = M(), { s } = songOf(m, 32, 4);
     s.loopStart = 8; s.loopCounts = 16;                    /* the loop ends at count 24 */
     expect(m.dragLoopEnd(s, "a", 13.6)).toBe(true);
     expect(m.loopOf(s)).toEqual({ start: 13.5, counts: 10.5 });
-    m.dragLoopEnd(s, "a", 0);                              /* at most 16 counts long */
-    expect(m.loopOf(s)).toEqual({ start: 8, counts: 16 });
+    m.dragLoopEnd(s, "a", 0);                              /* all the way back to count 1 */
+    expect(m.loopOf(s)).toEqual({ start: 0, counts: 24 });
     m.dragLoopEnd(s, "a", 30);                             /* at least 1 count long */
     expect(m.loopOf(s)).toEqual({ start: 23, counts: 1 });
   });

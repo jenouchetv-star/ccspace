@@ -122,7 +122,7 @@ describe("Sound Space app page", () => {
     const fn = section(/function spaceKey\(e\)\{/, "\n}\n");
     expect(fn).toContain("typing(e.target)");
     expect(fn).toContain("e.stopPropagation()");
-    expect(fn).toContain("if ((player && player.playing) || countingIn) stopAll(); else play();");
+    expect(fn).toContain("if ((player && player.playing) || countingIn || waitingPlay) stopAll(); else play();");
     /* the grid adds notes with Enter now, and says so */
     expect(html).not.toMatch(/e\.key === " " \|\| e\.key === "Enter"\)\{ e\.preventDefault\(\); e\.stopPropagation\(\); toggleAt/);
     expect(html).toContain("arrow keys move, Enter adds or removes a note");
@@ -2381,5 +2381,72 @@ describe("Sound Space side panels", () => {
         expect(tok(block, "side-b")).not.toBe(tok(block, card));
       }
     }
+  });
+});
+
+describe("Play waits for recorded sounds to download", () => {
+  const fns = ["soundsToLoad", "play", "startPlaying", "cancelWaitingPlay"]
+    .map((n) => section(new RegExp("function " + n + "[(]"), "\nfunction ")).join("\n");
+  function rig(states) {
+    const SS = loadSS("model.js", "instruments.js");
+    const M = SS.model, I = SS.instruments;
+    const song = M.newSong();
+    M.addTrack(song, "classic-kit"); M.addTrack(song, "woodblocks-and-claps"); M.addTrack(song, "drum-machine");
+    const env = { started: [], toasts: [], loads: {}, loadState: new Map(Object.entries(states || {})) };
+    const body = `
+      const I = env.I, M = env.M, song = env.song, loadState = env.loadState;
+      const player = { playing:false, start(s, o){ env.started.push(o); this.playing = true; } };
+      let countingIn = false, playedOnce = true, waitingPlay = false, playTicket = 0;
+      const voices = { load: id => new Promise(r => { env.loads[id] = r; }) };
+      const audio = () => ({}), stopPatternPreview = () => {}, renderTransport = () => {}, renderTracks = () => {};
+      const toast = m => env.toasts.push(m), count = () => {};
+      ${fns}
+      return { play, cancelWaitingPlay, player, get waiting(){ return waitingPlay; } };`;
+    Object.assign(env, { I, M, song });
+    return { h: new Function("env", body)(env), env };
+  }
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it("holds Play until every recorded sound in the song has loaded, then starts", async () => {
+    const { h, env } = rig();
+    h.play();
+    expect(env.started.length).toBe(0);
+    expect(h.waiting).toBe(true);
+    expect(Object.keys(env.loads).sort()).toEqual(["classic-kit", "woodblocks-and-claps"]);   // code sounds need nothing
+    env.loads["classic-kit"]({ ok: true }); await tick();
+    expect(env.started.length).toBe(0);
+    env.loads["woodblocks-and-claps"]({ ok: true }); await tick();
+    expect(env.started.length).toBe(1);
+    expect(h.waiting).toBe(false);
+    expect(env.loadState.get("classic-kit")).toBe("ok");
+  });
+
+  it("starts at once when the sounds are already loaded", () => {
+    const { h, env } = rig({ "classic-kit": "ok", "woodblocks-and-claps": "ok" });
+    h.play();
+    expect(env.started.length).toBe(1);
+  });
+
+  it("a Stop while it waits means it never starts", async () => {
+    const { h, env } = rig();
+    h.play();
+    h.cancelWaitingPlay();
+    env.loads["classic-kit"]({ ok: true }); env.loads["woodblocks-and-claps"]({ ok: true }); await tick();
+    expect(env.started.length).toBe(0);
+    expect(h.waiting).toBe(false);
+  });
+
+  it("a sound that fails still lets the rest play, and says so", async () => {
+    const { h, env } = rig();
+    h.play();
+    env.loads["classic-kit"]({ ok: false }); env.loads["woodblocks-and-claps"]({ ok: true }); await tick();
+    expect(env.started.length).toBe(1);
+    expect(env.loadState.get("classic-kit")).toBe("failed");
+    expect(env.toasts.length).toBe(1);
+  });
+
+  it("Space and Stop also stop a Play that is still waiting", () => {
+    expect(section(/function spaceKey\(/, "\nfunction ")).toContain("|| waitingPlay) stopAll(); else play();");
+    expect(section(/function stopAll\(/, "\nfunction ")).toContain("cancelWaitingPlay();");
   });
 });

@@ -147,8 +147,9 @@
   }
 
   // The loop goes a sixteenth at a time (owner, 2026-11-18): its start and length are counts in quarters (one quarter
-  // of a count = one sixteenth note). A loop is 1 to 16 counts long (recording stays inside it).
-  const LOOP_MIN = 1, LOOP_MAX = 16;
+  // of a count = one sixteenth note). A loop is 1 count up to the whole song long (owner, 2026-11-19: it goes where
+  // it is dragged, as far as the song's end); recording stays inside it.
+  const LOOP_MIN = 1, LOOP_MAX = CONST.MAX_COUNTS;
   const isQuarter = (n) => typeof n === "number" && Number.isFinite(n) && Math.abs(n * 4 - Math.round(n * 4)) < 1e-9;
   const toQuarter = (n) => Math.round((Number(n) || 0) * 4) / 4;
   const validLoopCounts = (n) => isQuarter(n) && n >= LOOP_MIN && n <= LOOP_MAX;
@@ -183,7 +184,7 @@
   }
   // Dragging an end of the loop's bar (owner, 2026-11-18): end "b" (right) keeps the start, end "a" (left) keeps the
   // loop's end. `at` is where the pointer is, in counts from the song's start (2.5 = halfway through count 3); the end
-  // snaps to the nearest sixteenth, and the loop stays 1 to 16 counts long and inside the song. Returns whether it changed.
+  // snaps to the nearest sixteenth, and the loop stays at least 1 count long and inside the song. Returns whether it changed.
   function dragLoopEnd(song, end, at) {
     const l = loopOf(song), last = l.start + l.counts, p = toQuarter(at);
     let start = l.start, size = l.counts;
