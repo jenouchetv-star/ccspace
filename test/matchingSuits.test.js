@@ -506,6 +506,16 @@ describe("the phone's new look (owner, 2026-11-18; draft docs/mockups/stack-em-u
     expect(game).toMatch(/const PILE_TAG = tag\("", "cnt pilecnt", new THREE\.Vector3\(PILE\.x \+ 1\.25, TY, PILE\.z\)\)/);
     expect(game).toContain('PILE_TAG.el.innerHTML = "Draw pile <b>" + st.pile.length + "</b>"');
   });
+  it("lets players close Chike's narration and bring it back (owner, 2026-11-19)", () => {
+    const game = readFileSync(new URL("../supabase/private-games/matching-suits.html", import.meta.url), "utf8");
+    expect(game).toContain('<button class="chikex" id="chikeClose" type="button" aria-label="Hide Chike\'s tips">');
+    expect(game).toContain('<button class="chikeback" id="chikeBack" type="button" hidden>Show Chike</button>');
+    expect(game).toContain('$("chikeClose").onclick = () => { sfx("click"); setChikeShown(false); };');
+    expect(game).toContain('$("chikeBack").onclick = () => { sfx("click"); setChikeShown(true); };');
+    expect(game).toContain(".chike[hidden],.chikeback[hidden]{display:none}");   /* .chike is display:flex, which beats [hidden] */
+    /* remembered on this device when the frame allows it, never an error when it doesn't */
+    expect(game).toMatch(/function setChikeShown\(on\)\{[^\n]*try \{ localStorage\.setItem\("ms-chike", on \? "on" : "off"\); \} catch/);
+  });
   it("says the shuffle swaps your cards for new ones (owner, 2026-11-19)", () => {
     const game = readFileSync(new URL("../supabase/private-games/matching-suits.html", import.meta.url), "utf8");
     expect(player).toContain("Tap the deck to shuffle it<small>Your cards go in, you get new ones</small>");
