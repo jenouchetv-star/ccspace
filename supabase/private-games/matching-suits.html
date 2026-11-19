@@ -191,7 +191,7 @@
         <button class="tb" id="tReveal" type="button" hidden>Pick a heart first</button>
         <button class="tb dash" id="tNewHand" type="button" hidden>Get 5 new cards (free, once)</button>
         <button class="tb" id="tDrop" type="button">Drop</button>
-        <button class="tb dash" id="tShuffle" type="button">Shuffle the draw deck (once a game)</button>
+        <button class="tb dash" id="tShuffle" type="button">Shuffle in my cards for new ones (once a game)</button>
       </div>
     </div>
   </div>
@@ -277,7 +277,16 @@ function canShuffle(s, p){ return s.phase === "play" && s.turn === p && !s.playe
 /* any person at the table (not a computer player) can restart in the Heart Race, or play again after a game, but no one
    can restart while the game is in play (owner, 2026-11-18) */
 function canRestart(phase, seat){ return !!seat && !seat.bot && ["race", "over"].includes(phase); }
-function reshuffle(s, p, rand){ if (!canShuffle(s, p)) return false; shuffle(s.pile, rand); s.players[p].shuffled = true; return true; }
+/* the shuffle also gives you a new random hand (owner, 2026-11-19): your cards go into the deck, it's shuffled, and you
+   take the same number of new cards off the top. The deck keeps its size. */
+function reshuffle(s, p, rand){
+  if (!canShuffle(s, p)) return false;
+  const pl = s.players[p], n = pl.hand.length;
+  s.pile.push(...pl.hand); shuffle(s.pile, rand);
+  pl.hand = s.pile.splice(s.pile.length - n, n);
+  pl.shuffled = true;
+  return true;
+}
 /* there is always something to drop, so there is no passing any more */
 function canPass(_s, _p){ return false; }
 /* drop ALL your cards of a rank, then draw one card if the pile has any; the 4th card of a rank flips the stack and
@@ -828,7 +837,7 @@ function paintTray(){
   $("tDrop").disabled = !mine || !HERE.sel || covered;
   $("tDrop").textContent = HERE.sel ? "Drop " + (n === 1 ? "my " + cardName(HERE.sel) : ["", "one", "two", "three", "four"][n] + " " + plural(HERE.sel)) : "Drop";
   $("tShuffle").disabled = !mine || !v.canShuffle;
-  $("tShuffle").textContent = v.shuffled ? "Shuffle used" : "Shuffle the draw deck (once a game)";
+  $("tShuffle").textContent = v.shuffled ? "Shuffle used" : "Shuffle in my cards for new ones (once a game)";
 }
 function hereDrop(){ const i = hereSeat(); if (i < 0 || !HERE.sel) return; const rank = HERE.sel; HERE.sel = null; HERE.peek = false; sfx("place"); act(i, { t: "drop", rank }); }
 $("trayHand").addEventListener("click", (e) => {
@@ -1056,8 +1065,12 @@ async function doShuffle(i){
   if (G.busy || !st || !reshuffle(st, i, Math.random)) return;
   const r = G.round;
   G.busy = true; tellAll();
-  news(nm(i) + " reshuffled the draw deck. Everyone gets one reshuffle a game.");
-  chike("point", st.players[i].name + " reshuffled the draw deck! Each player can do that once a game, on their turn.");
+  news(nm(i) + " shuffled their cards into the draw deck and took new ones. Everyone gets one shuffle a game.");
+  chike("point", st.players[i].name + " shuffled their cards into the deck and got new ones! Each player can do that once a game, on their turn.");
+  /* the player's cards fly into the deck first (owner, 2026-11-19: the shuffle also gives them a new random hand) */
+  const fan = FANS[i], hn = fan.length, base = PILE.meshes.length;
+  await Promise.all(fan.splice(0).map((m, k) => { PILE.meshes.push(m); return fly(m, pilePos(base + k), new THREE.Euler(0, .05 * Math.sin((base + k) * 3), 0), REDUCED ? .01 : .45, REDUCED ? 0 : .5, k * .06); }));
+  if (G.round !== r) return;
   if (!REDUCED){
     const all = PILE.meshes.slice(), n = all.length, half = Math.ceil(n / 2);
     await Promise.all(all.map((m, k) => {
@@ -1074,7 +1087,14 @@ async function doShuffle(i){
     if (G.round !== r) return;
     PILE.meshes = order;
   }
-  G.busy = false; tellAll();
+  /* then the same number of new cards fly back to them off the top */
+  const spot = seatSpot(i, G.seats.length);
+  await Promise.all(Array.from({ length: hn }, (_, k) => {
+    const m = PILE.meshes.pop(); fan.push(m); const fp = fanPos(spot, k, hn);
+    return fly(m, fp.p, new THREE.Euler(0, fp.ry, 0), REDUCED ? .01 : .5, REDUCED ? 0 : .6, k * .08);
+  }));
+  if (G.round !== r) return;
+  G.busy = false; paintSeats(); paintCounts(); tellAll();
 }
 
 function gameOver(){

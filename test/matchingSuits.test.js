@@ -230,16 +230,32 @@ describe("reshuffling (owner, 2026-11-17: each player can reshuffle the draw dec
     expect(M.canShuffle(s, 1)).toBe(false);            /* not their turn */
     expect(M.canShuffle(s, 0)).toBe(true);
     expect(M.reshuffle(s, 0, M.seeded(3))).toBe(true);
-    expect(s.pile.slice().sort()).toEqual(["5s", "6s", "8s", "9s", "Ks"].sort());
+    expect(s.pile.length + s.players[0].hand.length).toBe(7);
     expect(s.turn).toBe(0);
     expect(M.canShuffle(s, 0)).toBe(false);            /* once */
     expect(M.reshuffle(s, 0, M.seeded(4))).toBe(false);
-    M.drop(s, 0, "7");
+    M.drop(s, 0, M.legalRanks(s, 0)[0]);                /* the shuffle gave them new cards, so drop whatever they can */
     expect(M.canShuffle(s, 1)).toBe(true);             /* everyone gets their own */
   });
   it("not with fewer than 2 cards in the deck", () => {
     const s = fixed([["7h", "2c"], ["3c"]], ["5s"]);
     expect(M.canShuffle(s, 0)).toBe(false);
+  });
+  it("puts your hand into the deck, shuffles it, and deals you the same number of new random cards (owner, 2026-11-19)", () => {
+    const hand = ["7h", "2c", "Kd"], pile = ["5s", "6s", "8s", "9s", "Ks", "4h", "Qc", "Jd", "3s", "Ah"];
+    const all = hand.concat(pile).sort();
+    let changed = 0;
+    for (let seed = 1; seed <= 20; seed++){
+      const s = fixed([hand.slice(), ["3c", "4c"]], pile.slice());
+      expect(M.reshuffle(s, 0, M.seeded(seed))).toBe(true);
+      const mine = s.players[0].hand;
+      expect(mine.length).toBe(3);                                   /* same number of cards */
+      expect(s.pile.length).toBe(10);                                /* the deck keeps its size */
+      expect(mine.concat(s.pile).sort()).toEqual(all);               /* nothing lost or made up */
+      expect(s.players[1].hand).toEqual(["3c", "4c"]);               /* no one else's cards move */
+      if (mine.slice().sort().join() !== hand.slice().sort().join()) changed++;
+    }
+    expect(changed).toBeGreaterThan(15);                             /* a new random set, nearly every time */
   });
 });
 
@@ -483,6 +499,12 @@ describe("the phone's new look (owner, 2026-11-18; draft docs/mockups/stack-em-u
     expect(btn).toContain('class="deck"');
     expect(player).toContain('<svg class="arrow"');
     expect(player).toContain("Tap the deck to shuffle it");
+  });
+  it("says the shuffle swaps your cards for new ones (owner, 2026-11-19)", () => {
+    const game = readFileSync(new URL("../supabase/private-games/matching-suits.html", import.meta.url), "utf8");
+    expect(player).toContain("Tap the deck to shuffle it<small>Your cards go in, you get new ones</small>");
+    expect(player).toContain('aria-label="Shuffle your cards into the draw deck and get new ones, once a game"');
+    expect(game).toContain("Shuffle in my cards for new ones (once a game)");
   });
   it("whose turn it is is a label over words, not a yellow box", () => {
     expect(player).toContain('<div class="status" id="turnLine"></div>');
