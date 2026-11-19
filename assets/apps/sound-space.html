@@ -561,9 +561,16 @@ body.kbd-collapsed #kbd{ display:none; }
 .gloopshade{ box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--loop) 55%,transparent); background:color-mix(in srgb,var(--loop) 6%,transparent); }
 /* the loop: a teal bar over the count numbers, dragged (or moved with the arrow keys) a bar at a time */
 .gloop{ align-self:start; height:7px; margin-top:1px; border-radius:4px; background:var(--loop); box-shadow:0 0 8px color-mix(in srgb,var(--loop) 60%,transparent); position:relative; cursor:grab; touch-action:none; outline-offset:2px; }
-.gloop::before, .gloop::after{ content:""; position:absolute; top:-3px; width:4px; height:13px; border-radius:2px; background:color-mix(in srgb,var(--loop) 55%,#fff); }
-.gloop::before{ left:-1px; } .gloop::after{ right:-1px; }
+/* its two ends are real handles (owner, 2026-11-18): drag one to make the loop 4, 8 or 16 counts. The hit area is wider
+   than the cap you see. */
+.gloop .lh{ position:absolute; top:-6px; width:16px; height:19px; cursor:ew-resize; touch-action:none; }
+.gloop .lh::after{ content:""; position:absolute; top:3px; width:4px; height:13px; border-radius:2px; background:color-mix(in srgb,var(--loop) 55%,#fff); }
+.gloop .lh[data-end="a"]{ left:-7px; } .gloop .lh[data-end="a"]::after{ left:6px; }
+.gloop .lh[data-end="b"]{ right:-7px; } .gloop .lh[data-end="b"]::after{ right:6px; }
+.gloop .lh:hover::after{ background:#fff; }
 .gloop:active{ cursor:grabbing; }
+/* a loop as long as the song has nowhere to move: no grab hand on its middle, only the ends resize it */
+.gloop.whole{ cursor:default; } .gloop.whole:active{ cursor:default; }
 .gloop:focus-visible{ outline:2px solid var(--focus); }
 /* Paste: a small menu under the button */
 .pastemenu{ position:fixed; z-index:42; width:300px; padding:6px; border-radius:var(--r); border:1px solid var(--tc-edge); background:linear-gradient(var(--tc-a),var(--tc-b)); box-shadow:var(--pop); }
@@ -1098,7 +1105,7 @@ body.kbd-collapsed #kbd{ display:none; }
   .fxg__eq{ gap:8px 16px; }
 }
 /* the transport (Play to Count-in, with Main) keeps to one row from 1024px up: first the main fader narrows, the small
-   words go and the gaps tighten; then below 1100px the box drops its %, and the Counts, Grid and Speed words stay for a
+   words go and the gaps tighten; then below 1100px the box drops its %, and the Counts and Speed words stay for a
    screen reader only */
 @media (max-width:1439px) and (min-width:641px){ .transport{ gap:8px; } .transport .field small{ display:none; } .fader--main{ width:80px; } }
 /* Length's box holds 1 to 64 */
@@ -1113,7 +1120,7 @@ body.kbd-collapsed #kbd{ display:none; }
 }
 @media (max-width:1100px) and (min-width:641px){
   .vol__box .track__unit{ display:none; } .vol__box{ width:46px; }
-  #counts-lbl, #gridres-lbl, .transport label[for="ss-tempo"], .transport #length-lbl{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  #counts-lbl, .transport label[for="ss-tempo"], .transport #length-lbl{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
   .transport .field{ gap:0; } .transport .well button{ padding:6px 9px; } .lcd{ min-width:46px; }
 }
 /* Help on phones: full screen, the categories in a sideways strip, one card a row */
@@ -1157,7 +1164,7 @@ body.kbd-collapsed #kbd{ display:none; }
 .songsheet__head .btn{ margin-left:auto; width:34px; height:34px; }
 .songsheet__rows{ display:grid; gap:2px; }
 .songsheet .field{ display:flex; align-items:center; gap:10px; min-height:44px; }
-.songsheet #counts-lbl, .songsheet #gridres-lbl, .songsheet label[for="ss-tempo"], .songsheet #length-lbl, .songsheet .vol__lab{ width:62px; flex:none; }
+.songsheet #counts-lbl, .songsheet label[for="ss-tempo"], .songsheet #length-lbl, .songsheet .vol__lab{ width:62px; flex:none; }
 .songsheet .vol > svg.lucide{ display:none; }
 .songsheet .well button{ padding:8px 12px; }
 .songsheet .num button{ width:34px; height:32px; }
@@ -1176,7 +1183,7 @@ body.kbd-collapsed #kbd{ display:none; }
   /* the Tracks panel item works here too: hidden tracks hide the row of track tabs */
   body.hide-tracks .left{ display:none; }
   /* the play controls in one row: Play, Record, Stop, the beat, Loop and Count-in as small switches with their lights,
-     then Song (Speed, Counts, Grid and Main are in its sheet). The switches keep their words for a screen reader. */
+     then Song (Speed, Counts, Length and Main are in its sheet). The switches keep their words for a screen reader. */
   .transport{ flex-wrap:nowrap; gap:6px; padding:8px; }
   .transport .round, .transport .stop{ width:42px; height:42px; }
   .transport .lcd{ min-width:38px; padding:0 8px; }
@@ -1268,9 +1275,8 @@ body.kbd-collapsed #kbd{ display:none; }
     <span class="sep" aria-hidden="true"></span>
     <div class="field"><span id="counts-lbl">Counts</span><div class="well" id="ss-counts" role="radiogroup" aria-labelledby="counts-lbl" title="Counts: how long the loop is. Recording stays inside it."><button type="button" role="radio" data-counts="4" aria-checked="false">4</button><button type="button" role="radio" data-counts="8" aria-checked="true">8</button><button type="button" role="radio" data-counts="16" aria-checked="false">16</button></div></div>
     <div class="field lenf"><label for="ss-length" id="length-lbl">Length</label><span class="num" title="Length: how long the whole song is, in bars of 4 counts (up to 64)"><button type="button" data-act="len-down" aria-label="One bar shorter" title="One bar shorter">&minus;</button><input id="ss-length" type="number" min="1" max="64" step="1" value="2" inputmode="numeric" aria-describedby="ss-length-time"><button type="button" data-act="len-up" aria-label="One bar longer" title="One bar longer">+</button></span><small id="ss-length-time">bars, 0:04</small></div>
-    <div class="field"><span id="gridres-lbl">Grid</span><div class="well" id="ss-grid-res" role="radiogroup" aria-labelledby="gridres-lbl" title="Grid: eighths or sixteenths"><button type="button" role="radio" data-grid="2" aria-checked="true">Eighths</button><button type="button" role="radio" data-grid="4" aria-checked="false">Sixteenths</button></div></div>
     <div class="field"><label for="ss-tempo">Speed</label><span class="num" title="Speed: how fast the beat goes"><button type="button" data-act="tempo-down" aria-label="Slower" title="Slower">&minus;</button><input id="ss-tempo" type="number" min="60" max="160" step="1" value="120" inputmode="numeric"><button type="button" data-act="tempo-up" aria-label="Faster" title="Faster">+</button></span><small>beats a minute</small></div>
-    <button type="button" class="btn songbtn" id="ss-song" aria-haspopup="dialog" aria-expanded="false" aria-controls="songsheet" title="Song settings: Speed, Counts, Length, Grid and Main"><i data-lucide="sliders-horizontal"></i>Song</button>
+    <button type="button" class="btn songbtn" id="ss-song" aria-haspopup="dialog" aria-expanded="false" aria-controls="songsheet" title="Song settings: Speed, Counts, Length and Main"><i data-lucide="sliders-horizontal"></i>Song</button>
   </div>
 
   <div class="main">
@@ -1422,7 +1428,7 @@ body.kbd-collapsed #kbd{ display:none; }
   <button type="button" role="menuitem" tabindex="-1" class="mi" data-act="sheet"><i data-lucide="file-music"></i>Sheet music</button>
   <button type="button" role="menuitem" tabindex="-1" class="mi mi--cta" data-act="export"><i data-lucide="download"></i>Export</button>
 </div><!-- /more-menu -->
-<!-- phones: the Song sheet. Speed, Counts, Grid and Main move into it from the play controls (placeSongFields), so
+<!-- phones: the Song sheet. Speed, Counts, Length and Main move into it from the play controls (placeSongFields), so
      their ids, handlers and lessons stay the same -->
 <div id="songsheet-scrim" class="songsheet__scrim" hidden></div>
 <div id="songsheet" class="songsheet" role="dialog" aria-modal="true" aria-label="Song settings" tabindex="-1" hidden>
@@ -1569,7 +1575,7 @@ const HELP = [
   ["The grid", "Length, loop and speed", "counts length long longer bars minutes loop speed tempo beats 4 8 16 64",
     "<p><b>Length</b> sets how long the whole song is, in bars. A bar is 4 counts. Press + and − to add or take away a bar, up to 64 bars (about 2 minutes). New bars start empty. Making the song shorter hides the end, and making it longer again brings it back.</p>"
     + "<p><b>Counts</b> sets the loop: 4, 8 or 16 counts, shown by the teal bar over the count numbers. Drag the teal bar to move the loop. With <b>Loop</b> on, Play goes round the loop; with Loop off, Play goes through the whole song. Recording always stays inside the loop.</p>"
-    + "<p>Each count has 4 squares (2 if you choose Eighths in Grid). <b>Speed</b> is how many counts a minute, from 60 to 160.</p>"],
+    + "<p>Each count has 4 squares, one for each sixteenth note. <b>Speed</b> is how many counts a minute, from 60 to 160.</p>"],
   ["The grid", "Copy and paste", "copy paste duplicate repeat part section counts track new",
     "<p>Drag across the count numbers above the grid to pick some counts. They light up blue. Press <b>Copy</b> (" + K("Ctrl+C") + "). If you don't pick any counts, Copy takes the whole track.</p>"
     + "<p>Tap a count number to choose where it goes. It turns yellow. Pick the track you want it on, then press <b>Paste</b> (" + K("Ctrl+V") + "): paste it here, or as a new track. Each paste moves the yellow count along, so pressing Paste again carries on down the song. Drum notes paste into drum tracks, and notes into tracks that play notes. What you copy stays on this device, so you can paste it into another song too. " + K("Esc") + " unpicks the counts.</p>"],
@@ -2247,13 +2253,16 @@ function openSong(s, opts){
   endLesson();
   stopAll();
   flushPush();
+  /* every song is on sixteenths (owner, 2026-11-18: notes start and record on the sixteenth, so there is no Grid choice);
+     a song saved on eighths moves over as it opens, each note keeping its exact time and length */
+  if ((s.grid || M.CONST.STEPS_PER_COUNT) !== 4) s = M.setGrid(s, 4).song;
   M.fillTrackDefaults(s);   /* songs saved before Reverb and Sustain open with them off */
   s.tracks.forEach(t => fxEqOnly(t, kindOf(t)));   /* effects tracks have EQ only */
   if (liveChains) liveChains.disconnect();   /* the last song's live effect chains (and their LFOs) go */
   song = s; stash = {}; playedOnce = false;
   pick = null; pasteAt = null;   /* what was copied stays, so it can go into this song too */
   openTrack = null;   /* the editor appears with the selected card already open, never animating */
-  pickedNote = finestNote(spc());   /* a new song starts on the sixteenth note, a song saved on eighths on the eighth */
+  pickedNote = "sixteenth";   /* a song opens with the sixteenth note picked */
   songOwner = (opts && opts.owner) || "";
   clearTimeout(saveTimer); saveTimer = 0;
   freshStatus();
@@ -2507,7 +2516,6 @@ function renderTransport(){
   $('[data-act="len-down"]').disabled = busy() || song.counts <= 4;
   $('[data-act="len-up"]').disabled = busy() || song.counts >= M.CONST.MAX_COUNTS;
   renderPasteBtn();
-  $$("#ss-grid-res button").forEach(b => { b.setAttribute("aria-checked", String(+b.dataset.grid === spc())); b.disabled = busy(); });
   const tempo = $("#ss-tempo");
   if (document.activeElement !== tempo) tempo.value = song.tempo;
   tempo.disabled = busy();
@@ -2688,7 +2696,7 @@ function renderGrid(scroll){
      loop's bar is read out */
   let h = '<div class="grow-row gcount"><span class="pk ghost" aria-hidden="true"></span><div class="cells" style="' + tmpl + '">';
   for (let c = 0; c < total; c++) h += '<span aria-hidden="true" style="grid-column:' + (c + 1) + '"' + (c % spc() === 0 ? ' data-cnum="' + (c / spc()) + '"' : "") + '>' + (c % spc() === 0 ? (c / spc() + 1) : "") + '</span>';
-  h += '<i class="gloop" id="ss-loopbar" role="slider" tabindex="0" aria-label="Loop: where it starts" aria-valuemin="1" title="The loop: Play and Record go round this part. Drag it to move it."></i>';
+  h += '<i class="gloop" id="ss-loopbar" role="slider" tabindex="0" aria-label="Loop: where it starts" aria-valuemin="1" title="The loop: Play and Record go round this part. Drag it to move it."><b class="lh" data-end="a" aria-hidden="true"></b><b class="lh" data-end="b" aria-hidden="true"></b></i>';
   h += '</div></div>';
   rows.forEach((row, r) => {
     const cls = row.drum ? "pk drum" : "pk" + (row.black ? " black" : "") + (row.out ? " out" : "");
@@ -2759,6 +2767,11 @@ function paintMarks(){
   bar.setAttribute("aria-valuemax", String(counts - L0.counts + 1));
   bar.setAttribute("aria-valuenow", String(L0.start + 1));
   bar.setAttribute("aria-valuetext", "Loop: " + countsText(L0.start, L0.start + L0.counts - 1));
+  /* a loop as long as the song can't move, so it says so and shows no grab hand; its ends still resize it */
+  bar.classList.toggle("whole", L0.counts >= counts);
+  bar.title = L0.counts >= counts
+    ? "The loop: Play and Record go round this part. It covers the whole song, so it can't move: drag an end to make it shorter, or make the song longer."
+    : "The loop: Play and Record go round this part. Drag it to move it, or drag an end to make it 4, 8 or 16 counts.";
   const band = (sel, a, n) => { const el = grid.querySelector(sel); if (!el) return; el.hidden = n <= 0; if (n > 0){ el.style.setProperty("--a", a / counts); el.style.setProperty("--w", Math.min(n, counts - a) / counts); } };
   band(".gloopshade", L0.start, L0.counts);
   band(".gsel", pick ? pick.a : 0, pick ? pick.b - pick.a + 1 : 0);
@@ -2805,12 +2818,17 @@ function endCountPick(){
 function startLoopDrag(e){
   e.preventDefault();
   if (busy()) return;
-  const L0 = M.loopOf(song);
-  ldrag = { id:e.pointerId, at:countAtX(e.clientX), start:L0.start };
-  try { e.target.setPointerCapture(e.pointerId); } catch(err){}
+  const L0 = M.loopOf(song), h = e.target.closest(".lh");
+  /* an end handle resizes the loop; the middle moves it */
+  ldrag = { id:e.pointerId, at:countAtX(e.clientX), start:L0.start, counts:L0.counts, end:h ? h.dataset.end : null };
+  try { (h || e.target.closest(".gloop")).setPointerCapture(e.pointerId); } catch(err){}
 }
-function moveLoopDrag(e){ if (M.moveLoop(song, ldrag.start + countAtX(e.clientX) - ldrag.at)) paintMarks(); }
-function endLoopDrag(){ const d = ldrag; ldrag = null; if (d && M.loopOf(song).start !== d.start) commit(); }
+function moveLoopDrag(e){
+  const c = countAtX(e.clientX);
+  if (ldrag.end){ if (M.dragLoopEnd(song, ldrag.end, c)){ paintMarks(); renderTransport(); } return; }
+  if (M.moveLoop(song, ldrag.start + c - ldrag.at)) paintMarks();
+}
+function endLoopDrag(){ const d = ldrag; ldrag = null; const L1 = song && M.loopOf(song); if (d && L1 && (L1.start !== d.start || L1.counts !== d.counts)) commit(); }
 function loopKey(e){
   if (busy()) return;
   const L0 = M.loopOf(song);
@@ -3160,12 +3178,12 @@ applyLayout();
 
 /* ============================================================
    Phones (up to 640px): the top bar's More menu, and the Song sheet beside the play controls. More's items carry the
-   real bar buttons' data-act, so the page's data-act handler runs them; Speed, Counts, Grid and Main move into the
+   real bar buttons' data-act, so the page's data-act handler runs them; Speed, Counts, Length and Main move into the
    Song sheet, so their handlers, ids and lessons stay the same. Wider screens never show either.
    ============================================================ */
 /* ---- phone parts the tests run on their own (test/soundSpacePhone.test.js) ---- */
 /* the lesson targets whose control sits in the Song sheet on a phone (Loop and Count-in stay in the row) */
-const SONG_SHEET_TARGETS = ["#ss-tempo", "#ss-counts", "#ss-length", "#ss-grid-res", "#ss-volume", "#ss-volnum"];
+const SONG_SHEET_TARGETS = ["#ss-tempo", "#ss-counts", "#ss-length", "#ss-volume", "#ss-volnum"];
 function songSheetFor(target){ return SONG_SHEET_TARGETS.indexOf(target) >= 0; }
 /* the arrows, Home and End in the More menu: the next item that can be used, round from one end to the other */
 function menuMove(enabled, i, key){
@@ -3231,10 +3249,10 @@ let moreWidth = window.innerWidth;
 function onResizeMore(){ const w = window.innerWidth; if (w === moreWidth) return; moreWidth = w; closeMore(false); }
 window.addEventListener("resize", onResizeMore);
 
-/* the Song sheet: on a phone, Speed, Counts, Grid and Main move into it (a marker keeps each one's place in the play
+/* the Song sheet: on a phone, Speed, Counts, Length and Main move into it (a marker keeps each one's place in the play
    controls), and go back when the window is wider */
 let songFieldsHome = null, sheetShutByHand = false;
-function songFields(){ return ["#ss-tempo", "#ss-counts", "#ss-length", "#ss-grid-res", "#ss-volume"].map(s => $(s).closest(".field")); }
+function songFields(){ return ["#ss-tempo", "#ss-counts", "#ss-length", "#ss-volume"].map(s => $(s).closest(".field")); }
 function placeSongFields(){
   if (narrowMq.matches && !songFieldsHome){
     const rows = $("#songsheet-rows");
@@ -3481,54 +3499,14 @@ $("#ss-counts").addEventListener("keydown", e => {
 });
 /* the note-length picker: what a tap on the grid adds */
 let pickedNote = "sixteenth";
-/* the finest note the grid can show: sixteenth on sixteenths, eighth on eighths */
-function finestNote(g){ return M.noteSquares("sixteenth", g) !== null ? "sixteenth" : "eighth"; }
 function renderNoteLen(){
-  $$("#ss-note-len button").forEach(b => {
-    b.setAttribute("aria-checked", String(b.dataset.note === pickedNote));
-    b.classList.toggle("dim", !!song && M.noteSquares(b.dataset.note, spc()) === null);
-  });
+  $$("#ss-note-len button").forEach(b => b.setAttribute("aria-checked", String(b.dataset.note === pickedNote)));
 }
-async function pickNote(id){
+/* every song is on sixteenths, so any note value can be picked (owner, 2026-11-18: no Grid choice) */
+function pickNote(id){
   if (!song || busy()) return;
-  if (M.noteSquares(id, spc()) === null){
-    if (!(await ask("Switch to Sixteenths?", "Sixteenth notes need the Sixteenths grid. Your notes stay just where they are. Undo changes it back.", "Switch"))) return;
-    if (busy()) return;
-    setGridTo(4);
-  }
   pickedNote = id; renderNoteLen();
 }
-/* move the notes Counts is hiding onto the new grid too, so they come back in the right place */
-function convertStash(from, to){
-  Object.keys(stash).forEach(id => {
-    const out = [];
-    stash[id].forEach(n => {
-      const step = to > from ? n.step * 2 : Math.floor((n.step + 1) / 2), len = to > from ? n.len * 2 : Math.max(1, Math.round(n.len / 2));
-      if (!out.some(k => k.step === step && k.pitch === n.pitch)) out.push({ step, pitch:n.pitch, len, vel:n.vel });
-    });
-    stash[id] = out;
-  });
-}
-function setGridTo(g){
-  const from = spc(), r = M.setGrid(song, g);
-  if (M.noteSquares(pickedNote, g) === null) pickedNote = finestNote(g);
-  convertStash(from, g);
-  song = r.song;
-  commit(); renderAll(true);
-}
-$("#ss-grid-res").addEventListener("click", async e => {
-  const b = e.target.closest("[data-grid]"); if (!b || !song || busy()) return;
-  const g = +b.dataset.grid; if (g === spc()) return;
-  if (g === 2 && M.setGrid(song, 2).moved && !(await ask("Switch to Eighths?", "Some notes sit between eighths. They will move to the closest one, and notes on the same spot will join into one. Undo brings them back.", "Switch"))) return;
-  if (busy()) return;
-  setGridTo(g);
-});
-$("#ss-grid-res").addEventListener("keydown", e => {
-  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-  e.preventDefault();
-  const b = $('#ss-grid-res [data-grid="' + (e.key === "ArrowRight" ? 4 : 2) + '"]');
-  if (b){ b.click(); b.focus(); }
-});
 $("#ss-note-len").addEventListener("click", e => { const b = e.target.closest("[data-note]"); if (b) pickNote(b.dataset.note); });
 $("#ss-note-len").addEventListener("keydown", e => {
   if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
@@ -3828,13 +3806,6 @@ function previewPattern(id){
 async function usePattern(id){
   const p = L.byId(id); if (!p || !song || busy()) return;
   if (!selTrack()){ toast("Add a track first, then press Use."); return; }
-  if (p.grid > spc()){
-    if (!(await ask("Switch to Sixteenths?", "This pattern has quick sixteenth notes, so the song needs the Sixteenths grid. Your notes stay just where they are. Undo changes it back.", "Switch"))) return;
-    if (busy() || !song) return;
-    const from = spc();
-    song = M.setGrid(song, 4).song;
-    convertStash(from, 4);
-  }
   const t = selTrack(); if (!t) return;
   stopPatternPreview();
   /* it fills the loop (on a short song, the whole song); the rest of a long song keeps its notes */
@@ -4040,7 +4011,7 @@ function nextLessonStep(){
    again, so the tip always has its control to point at */
 function revealLessonTarget(target){
   target = lessonTargetFor(target, song ? song.tracks.length : 0);
-  /* phones: Speed, Counts, Grid and Main are in the Song sheet, which opens for them; a step pointing elsewhere closes it */
+  /* phones: Speed, Counts, Length and Main are in the Song sheet, which opens for them; a step pointing elsewhere closes it */
   sheetShutByHand = false;
   if (narrowMq.matches){ if (songSheetFor(target)) openSongSheet(); else if (!$("#songsheet").hidden) closeSongSheet(false); }
   /* a control inside a closed track card: that card opens (its track is selected) first */

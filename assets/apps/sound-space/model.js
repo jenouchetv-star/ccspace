@@ -174,6 +174,21 @@
     song.loopStart = to;
     return to !== l.start;
   }
+  // Dragging an end of the loop's bar (owner, 2026-11-18): end "b" (right) keeps the start, end "a" (left) keeps the
+  // loop's end. The size snaps to the nearest of 4, 8 and 16 counts that fits inside the song. `count` is the count
+  // under the pointer (from 0). Returns whether the loop changed.
+  function dragLoopEnd(song, end, count) {
+    const l = loopOf(song), last = l.start + l.counts;
+    const fits = CONST.COUNTS.filter((s) => (end === "b" ? l.start + s <= song.counts : last - s >= 0));
+    if (!fits.length) return false;
+    const want = end === "b" ? count - l.start + 1 : last - count;
+    const size = fits.reduce((best, s) => (Math.abs(s - want) < Math.abs(best - want) ? s : best), fits[0]);
+    const start = end === "b" ? l.start : last - size;
+    if (size === l.counts && start === l.start) return false;
+    song.loopCounts = size;
+    song.loopStart = start;
+    return true;
+  }
   // A new loop size. A loop longer than the song makes the song that long (the new counts are empty).
   function setLoopSize(song, size, stash) {
     if (CONST.COUNTS.indexOf(size) < 0) return { song: clone(song), stash: stash || {} };
@@ -433,6 +448,7 @@
     NOTE_VALUES,
     noteSquares,
     setGrid,
+    dragLoopEnd,
     toggleNote,
     setNoteLength,
     validCounts,

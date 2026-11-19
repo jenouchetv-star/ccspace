@@ -222,3 +222,29 @@ describe("Sound Space page: Length, the loop, Copy and Paste", () => {
     expect(html).toContain("const EXPORT_MAX_SEC = 300;");
   });
 });
+
+describe("the loop's bar: its ends resize it (owner, 2026-11-18: it looked draggable but did nothing on a song as long as the loop)", () => {
+  const html = require("node:fs").readFileSync(require("node:path").join(__dirname, "../assets/apps/sound-space.html"), "utf8").replace(/\r\n/g, "\n");
+  it("dragging the right end picks the nearest loop size that fits, keeping the start", () => {
+    const m = M(), { s } = songOf(m, 8, 4);
+    s.loopStart = 0; s.loopCounts = 8;
+    expect(m.dragLoopEnd(s, "b", 3)).toBe(true);           /* count 4 (0-based 3): a 4-count loop */
+    expect(m.loopOf(s)).toEqual({ start: 0, counts: 4 });
+    expect(m.dragLoopEnd(s, "b", 30)).toBe(true);          /* past the end: the biggest that fits, 8 */
+    expect(m.loopOf(s)).toEqual({ start: 0, counts: 8 });
+    expect(m.dragLoopEnd(s, "b", 7)).toBe(false);          /* no change */
+  });
+  it("dragging the left end keeps the loop's end and moves its start", () => {
+    const m = M(), { s } = songOf(m, 32, 4);
+    s.loopStart = 8; s.loopCounts = 16;                    /* counts 9 to 24 */
+    expect(m.dragLoopEnd(s, "a", 16)).toBe(true);
+    expect(m.loopOf(s)).toEqual({ start: 16, counts: 8 });
+    expect(m.dragLoopEnd(s, "a", 0)).toBe(true);           /* as far left as it goes: 16 counts ending at 24 */
+    expect(m.loopOf(s)).toEqual({ start: 8, counts: 16 });
+  });
+  it("the bar has two real end handles, and says when it can't move", () => {
+    expect(html).toContain('<b class="lh" data-end="a" aria-hidden="true"></b><b class="lh" data-end="b" aria-hidden="true"></b>');
+    expect(html).toContain('bar.classList.toggle("whole", L0.counts >= counts);');
+    expect(html).toMatch(/\.gloop\.whole\{[^}]*cursor:default/);
+  });
+});

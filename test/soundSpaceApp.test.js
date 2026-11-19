@@ -107,13 +107,10 @@ describe("Sound Space app page", () => {
     expect(html).toMatch(/id="title-in"[^>]*maxlength="60"/);
   });
 
-  it("has the Grid control and the five note symbols, each named with its beats", () => {
-    expect(html.match(/id="ss-grid-res"/g) || []).toHaveLength(1);
+  it("has no Grid choice any more (owner, 2026-11-18: notes start and record on sixteenths), and the five note symbols, each named with its beats", () => {
+    expect(html).not.toMatch(/id="ss-grid-res"/);
+    expect(html).not.toMatch(/Switch to (Sixteenths|Eighths)/);
     expect(html.match(/id="ss-note-len"/g) || []).toHaveLength(1);
-    const res = section(/id="ss-grid-res"/, "</div>");
-    expect([...res.matchAll(/data-grid="(\d)"/g)].map((m) => Number(m[1]))).toEqual([2, 4]);
-    expect(res).toMatch(/Eighths/);
-    expect(res).toMatch(/Sixteenths/);
     const picker = section(/id="ss-note-len"/, "</div>");
     expect([...picker.matchAll(/data-note="(\w+)"/g)].map((m) => m[1])).toEqual(["whole", "half", "quarter", "eighth", "sixteenth"]);
     for (const l of ["Whole note, 4 beats", "Half note, 2 beats", "Quarter note, 1 beat", "Eighth note, 1/2 beat", "Sixteenth note, 1/4 beat"]) {
@@ -129,26 +126,24 @@ describe("Sound Space app page", () => {
     expect(html).toMatch(/soft click on every beat/);
   });
 
-  it("going back to eighths drops a sixteenth pick", () => {
-    const fn = section(/function setGridTo\(/, "}\nfunction");
-    expect(fn).toMatch(/noteSquares\(pickedNote, g\) === null\) pickedNote = finestNote\(g\)/);
-  });
-
-  it("the note-length pick starts at the finest note the song's grid allows: sixteenth on sixteenths, eighth on eighths", () => {
-    expect(html).toMatch(/function finestNote\(g\)\{ return M\.noteSquares\("sixteenth", g\) !== null \? "sixteenth" : "eighth"; \}/);
+  it("every song opens on sixteenths: a song saved on eighths is moved over when it opens, with nothing lost", () => {
     const open = section(/function openSong\(/, "async function showHome");
-    expect(open).toMatch(/pickedNote = finestNote\(spc\(\)\)/);
+    expect(open).toMatch(/if \(\(s\.grid \|\| M\.CONST\.STEPS_PER_COUNT\) !== 4\) s = M\.setGrid\(s, 4\)\.song;/);
+    expect(open).toMatch(/pickedNote = "sixteenth";/);
+    const M = loadSS("model.js").model;
+    const old = M.newSong(); delete old.grid; old.counts = 4;
+    old.tracks = [{ id: "t1", notes: [{ step: 1, pitch: 60, len: 2, vel: 0.9 }, { step: 6, pitch: 62, len: 1, vel: 0.9 }] }];
+    const r = M.setGrid(old, 4);
+    expect(r.song.grid).toBe(4);
+    expect(r.song.tracks[0].notes.map((n) => [n.step, n.len])).toEqual([[2, 4], [12, 2]]);
   });
 
-  it("the note-length pick logic gives sixteenth for a new song and eighth for a grid-2 song", () => {
-    const M = loadSS("model.js").model;
-    const fn = html.match(/function finestNote\(g\)\{[^\n]*\}/);
-    expect(fn).not.toBeNull();
-    const finestNote = new Function("M", fn[0] + "; return finestNote;")(M);
-    expect(finestNote(M.newSong().grid)).toBe("sixteenth");
-    const old = M.newSong(); delete old.grid;
-    expect(finestNote(old.grid || M.CONST.STEPS_PER_COUNT)).toBe("eighth");
-    expect(finestNote(2)).toBe("eighth");
+  it("the note picker never asks to switch grids, and a pattern never needs a switch", () => {
+    const pick = section(/async function pickNote\(/, "\n}\n");
+    expect(pick).not.toMatch(/ask\(/);
+    expect(html).not.toMatch(/function setGridTo\(/);
+    const use = section(/async function usePattern\(/, "\n}\n");
+    expect(use).not.toMatch(/setGrid/);
   });
 
   it("a new song shows Count-in on and Speed 120", () => {
@@ -2118,10 +2113,9 @@ describe("Sound Space: Main volume beside the play controls", () => {
     expect(css).toMatch(/\.transport\{[^}]*background:linear-gradient\(var\(--trans-a\),var\(--trans-b\)\); border-bottom:1px solid var\(--line\)/);
   });
 
-  it("Counts, Grid and Speed keep plain tooltips for when their words are hidden; Main's group has no duplicate name", () => {
+  it("Counts and Speed keep plain tooltips for when their words are hidden; Main's group has no duplicate name", () => {
     expect(transport).toContain('id="ss-counts" role="radiogroup" aria-labelledby="counts-lbl" title="Counts: how long the loop is. Recording stays inside it."');
     expect(transport).toContain('<span class="num" title="Length: how long the whole song is, in bars of 4 counts (up to 64)">');
-    expect(transport).toContain('id="ss-grid-res" role="radiogroup" aria-labelledby="gridres-lbl" title="Grid: eighths or sixteenths"');
     expect(transport).toContain('<span class="num" title="Speed: how fast the beat goes">');
     expect(transport).toMatch(/<div class="field vol" role="group" title=/);
     expect(transport).not.toMatch(/class="field vol"[^>]*aria-label/);

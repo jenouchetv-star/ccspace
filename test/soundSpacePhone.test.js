@@ -243,7 +243,7 @@ describe("Sound Space on phones: the play controls and the Song sheet", () => {
     expect(sheetHtml).toContain('<div class="songsheet__rows" id="songsheet-rows"></div>');
     expect(html).toContain('<div id="songsheet-scrim" class="songsheet__scrim" hidden></div>');
     // no copies: the real controls exist once, in the play controls, and move into the sheet on phones
-    for (const id of ["ss-tempo", "ss-counts", "ss-length", "ss-grid-res", "ss-volume", "ss-volnum"]) expect((html.match(new RegExp('id="' + id + '"', "g")) || []).length, id).toBe(1);
+    for (const id of ["ss-tempo", "ss-counts", "ss-length", "ss-volume", "ss-volnum"]) expect((html.match(new RegExp('id="' + id + '"', "g")) || []).length, id).toBe(1);
   });
 
   it("the sheet rises from the bottom with 14px top corners over 200ms, decelerating, under the lesson tip", () => {
@@ -282,7 +282,7 @@ describe("Sound Space on phones: the play controls and the Song sheet", () => {
     function setup(matches) {
       const doc = { activeElement: null, createComment: (t) => ({ t, parent: null, replaceWith(x) { x.parent = this.parent; this.parent = null; } }) };
       const field = (n) => ({ n, parent: "transport", before(m) { m.parent = this.parent; } });
-      const f = { "#ss-tempo": field("speed"), "#ss-counts": field("counts"), "#ss-length": field("length"), "#ss-grid-res": field("grid"), "#ss-volume": field("main") };
+      const f = { "#ss-tempo": field("speed"), "#ss-counts": field("counts"), "#ss-length": field("length"), "#ss-volume": field("main") };
       const rows = { kids: [], appendChild(x) { this.kids.push(x.n); x.parent = "sheet"; } };
       const closed = [];
       const $ = (s) => (s === "#songsheet-rows" ? rows : { closest: () => f[s] });
@@ -292,13 +292,13 @@ describe("Sound Space on phones: the play controls and the Song sheet", () => {
       return { api, f, rows, narrowMq, closed };
     }
 
-    it("Speed, Counts, Length, Grid and Main go into the sheet in that order, and come back to their places", () => {
+    it("Speed, Counts, Length and Main go into the sheet in that order, and come back to their places", () => {
       const { api, f, rows, narrowMq, closed } = setup(true);
       api.placeSongFields();
-      expect(rows.kids).toEqual(["speed", "counts", "length", "grid", "main"]);
+      expect(rows.kids).toEqual(["speed", "counts", "length", "main"]);
       expect(Object.values(f).every((x) => x.parent === "sheet")).toBe(true);
       api.placeSongFields();   // again: nothing moves twice
-      expect(rows.kids.length).toBe(5);
+      expect(rows.kids.length).toBe(4);
       narrowMq.matches = false;
       api.placeSongFields();
       expect(closed.length).toBe(1);   // the sheet closes first
@@ -407,9 +407,9 @@ describe("Sound Space on phones: the play controls and the Song sheet", () => {
     const SS = loadSS("model.js", "engine.js", "instruments.js", "icons.js", "library.js", "lessons.js");
     const targets = [...new Set(SS.lessons.LESSONS.flatMap((l) => l.steps.map((s) => s.target)))];
 
-    it("knows which lesson targets sit in the Song sheet: Speed (and Counts, Grid, Main), never Loop or Count-in", () => {
+    it("knows which lesson targets sit in the Song sheet: Speed (and Counts, Length, Main), never Loop or Count-in", () => {
       const { songSheetFor, SONG_SHEET_TARGETS } = parts;
-      expect(SONG_SHEET_TARGETS).toEqual(["#ss-tempo", "#ss-counts", "#ss-length", "#ss-grid-res", "#ss-volume", "#ss-volnum"]);
+      expect(SONG_SHEET_TARGETS).toEqual(["#ss-tempo", "#ss-counts", "#ss-length", "#ss-volume", "#ss-volnum"]);
       expect(targets).toContain("#ss-tempo");
       for (const t of targets) expect(songSheetFor(t), t).toBe(SONG_SHEET_TARGETS.includes(t));
       for (const t of ["#ss-loop", "#ss-countin", "#ss-play", "#ss-record", "#ss-grid", "#ss-tracks"]) expect(songSheetFor(t), t).toBe(false);
