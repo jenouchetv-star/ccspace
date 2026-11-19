@@ -1567,7 +1567,7 @@ const HELP = [
   ["Recording", "Record what you play", "record count-in click overdub",
     "<p>Press <b>Record</b>, then play the keys or pads. Your notes snap to the nearest square. You hear a soft click on every beat while you record, so you can keep time. With <b>Count-in</b> on, you hear 1, 2, 3, 4 first. Recording happens inside the loop (the teal bar). With <b>Loop</b> on, recording keeps going and each time round adds more notes. With Loop off, it records once and stops. Recording keeps notes, never sound from a microphone.</p>"],
   ["The grid", "Add and change notes", "grid notes tap square longer length drag",
-    "<p>Tap a square to add a note, and tap a note to take it away. Higher notes are higher up. Each square is a sixteenth note: drag the right edge of a note to make it longer. On drums, a longer hit just draws a longer bar. The drum sounds the same.</p><p>With the keyboard: the arrow keys move around the grid, " + K("Space") + " or " + K("Enter") + " adds or removes a note, and " + K("Shift") + " with the left and right arrows makes a note shorter or longer.</p>"],
+    "<p>Tap a square to add a note, and tap a note to take it away. Higher notes are higher up. Each square is a sixteenth note: drag the right edge of a note to make it longer. On drums, a longer hit just draws a longer bar. The drum sounds the same.</p><p>With the keyboard: the arrow keys move around the grid, " + K("Enter") + " adds or removes a note, and " + K("Shift") + " with the left and right arrows makes a note shorter or longer.</p>"],
   ["The grid", "Length, loop and speed", "counts length long longer bars minutes loop speed tempo beats 4 8 16 64",
     "<p><b>Length</b> sets how long the whole song is, in bars. A bar is 4 counts. Press + and − to add or take away a bar, up to 64 bars (about 2 minutes). New bars start empty. Making the song shorter hides the end, and making it longer again brings it back.</p>"
     + "<p><b>Counts</b> sets the loop to 4, 8 or 16 counts, shown by the teal bar over the count numbers. Drag the teal bar to move the loop, or drag either end to make it any length from 1 to 16 counts, a sixteenth at a time. With <b>Loop</b> on, Play goes round the loop; with Loop off, Play goes through the whole song. Recording always stays inside the loop.</p>"
@@ -2697,7 +2697,7 @@ function renderGrid(scroll){
   });
   h += '<span class="gph" aria-hidden="true"></span>';
   h += '<span class="gband gloopshade" aria-hidden="true"></span><span class="gband gsel" aria-hidden="true" hidden></span><span class="gband gpaste" aria-hidden="true" hidden></span>';
-  grid.setAttribute("aria-label", "Notes for " + trackLabel(t) + ": arrow keys move, Space adds or removes a note");
+  grid.setAttribute("aria-label", "Notes for " + trackLabel(t) + ": arrow keys move, Enter adds or removes a note");
   grid.innerHTML = h;
   /* where the squares start and end, for the bands over the grid */
   const cellsEl = grid.querySelector(".grow-row[data-r] .cells");
@@ -3104,7 +3104,7 @@ gridEl.addEventListener("keydown", e => {
   if (e.key === "ArrowUp") r--; else if (e.key === "ArrowDown") r++;
   else if (e.key === "ArrowLeft") c--; else if (e.key === "ArrowRight") c++;
   else if (e.key === "Home") c = 0; else if (e.key === "End") c = total - 1;
-  else if (e.key === " " || e.key === "Enter"){ e.preventDefault(); e.stopPropagation(); toggleAt(r, c); focusCell(r, c); return; }
+  else if (e.key === "Enter"){ e.preventDefault(); e.stopPropagation(); toggleAt(r, c); focusCell(r, c); return; }   /* Space plays and stops */
   else return;
   e.preventDefault(); e.stopPropagation();
   focusCell(clamp(r, 0, rows.length - 1), clamp(c, 0, total - 1));
@@ -3363,11 +3363,20 @@ document.addEventListener("keydown", e => {
     }
   }
   if (e.repeat && (KEYMAP[e.code] !== undefined)) { e.preventDefault(); return; }
-  if (e.key === " " && (e.target === document.body || !e.target.closest("button,input,a,[role=gridcell],summary"))){
-    e.preventDefault();
-    if ((player && player.playing) || countingIn) stopAll(); else play();
-  }
 });
+/* Space always plays and stops (owner, 2026-11-18), whatever was clicked last: a button, a grid square, a slider or the
+   loop's bar. It listens first (capture), so none of them can use the key; only a text box keeps it for typing. The
+   keyup is held back too, or a focused button would still be pressed by it. */
+let spaceTook = false;
+function spaceKey(e){
+  if (e.key !== " " || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!song || $("#editor").hidden || dialogOpen() || typing(e.target) || pasteMenuOpen()) return;
+  e.preventDefault(); e.stopPropagation(); spaceTook = true;
+  if (e.repeat) return;
+  if ((player && player.playing) || countingIn) stopAll(); else play();
+}
+document.addEventListener("keydown", spaceKey, true);
+document.addEventListener("keyup", e => { if (e.key === " " && spaceTook){ spaceTook = false; e.preventDefault(); } }, true);
 document.addEventListener("keyup", e => { if (held.has("k" + e.code)) noteOff("k" + e.code, e.timeStamp); });
 window.addEventListener("blur", releaseAll);
 

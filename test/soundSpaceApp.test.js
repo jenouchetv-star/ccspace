@@ -115,6 +115,19 @@ describe("Sound Space app page", () => {
     expect(html).not.toMatch(/\.notelen/);
   });
 
+  it("Space always plays and stops (owner, 2026-11-18), whatever was clicked last, except while typing in a text box", () => {
+    /* a capturing listener runs before any button, grid square or slider can use the key */
+    expect(html).toContain('document.addEventListener("keydown", spaceKey, true);');
+    expect(html).toContain('document.addEventListener("keyup", e => { if (e.key === " " && spaceTook){ spaceTook = false; e.preventDefault(); } }, true);');
+    const fn = section(/function spaceKey\(e\)\{/, "\n}\n");
+    expect(fn).toContain("typing(e.target)");
+    expect(fn).toContain("e.stopPropagation()");
+    expect(fn).toContain("if ((player && player.playing) || countingIn) stopAll(); else play();");
+    /* the grid adds notes with Enter now, and says so */
+    expect(html).not.toMatch(/e\.key === " " \|\| e\.key === "Enter"\)\{ e\.preventDefault\(\); e\.stopPropagation\(\); toggleAt/);
+    expect(html).toContain("arrow keys move, Enter adds or removes a note");
+  });
+
   it("recording uses the song clock for a soft click, and Help says so", () => {
     expect(html).toMatch(/player\.start\(song, \{ fromStep:range\.from, click:true, range \}\)/);
     // recording stays inside the loop (owner, 2026-11-18): it starts at the loop and goes round it
