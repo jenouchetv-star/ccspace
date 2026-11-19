@@ -107,16 +107,12 @@ describe("Sound Space app page", () => {
     expect(html).toMatch(/id="title-in"[^>]*maxlength="60"/);
   });
 
-  it("has no Grid choice any more (owner, 2026-11-18: notes start and record on sixteenths), and the five note symbols, each named with its beats", () => {
+  it("has no Grid choice and no note-length picker any more (owner, 2026-11-18: everything is on sixteenths)", () => {
     expect(html).not.toMatch(/id="ss-grid-res"/);
     expect(html).not.toMatch(/Switch to (Sixteenths|Eighths)/);
-    expect(html.match(/id="ss-note-len"/g) || []).toHaveLength(1);
-    const picker = section(/id="ss-note-len"/, "</div>");
-    expect([...picker.matchAll(/data-note="(\w+)"/g)].map((m) => m[1])).toEqual(["whole", "half", "quarter", "eighth", "sixteenth"]);
-    for (const l of ["Whole note, 4 beats", "Half note, 2 beats", "Quarter note, 1 beat", "Eighth note, 1/2 beat", "Sixteenth note, 1/4 beat"]) {
-      expect(picker).toContain(`aria-label="${l}"`);
-    }
-    expect(picker).toMatch(/<svg/);
+    expect(html).not.toMatch(/id="ss-note-len"/);
+    expect(html).not.toMatch(/pickedNote/);
+    expect(html).not.toMatch(/\.notelen/);
   });
 
   it("recording uses the song clock for a soft click, and Help says so", () => {
@@ -129,7 +125,6 @@ describe("Sound Space app page", () => {
   it("every song opens on sixteenths: a song saved on eighths is moved over when it opens, with nothing lost", () => {
     const open = section(/function openSong\(/, "async function showHome");
     expect(open).toMatch(/if \(\(s\.grid \|\| M\.CONST\.STEPS_PER_COUNT\) !== 4\) s = M\.setGrid\(s, 4\)\.song;/);
-    expect(open).toMatch(/pickedNote = "sixteenth";/);
     const M = loadSS("model.js").model;
     const old = M.newSong(); delete old.grid; old.counts = 4;
     old.tracks = [{ id: "t1", notes: [{ step: 1, pitch: 60, len: 2, vel: 0.9 }, { step: 6, pitch: 62, len: 1, vel: 0.9 }] }];
@@ -138,9 +133,8 @@ describe("Sound Space app page", () => {
     expect(r.song.tracks[0].notes.map((n) => [n.step, n.len])).toEqual([[2, 4], [12, 2]]);
   });
 
-  it("the note picker never asks to switch grids, and a pattern never needs a switch", () => {
-    const pick = section(/async function pickNote\(/, "\n}\n");
-    expect(pick).not.toMatch(/ask\(/);
+  it("nothing asks to switch grids, and a pattern never needs a switch", () => {
+    expect(html).not.toMatch(/function pickNote\(/);
     expect(html).not.toMatch(/function setGridTo\(/);
     const use = section(/async function usePattern\(/, "\n}\n");
     expect(use).not.toMatch(/setGrid/);
@@ -165,8 +159,7 @@ describe("Sound Space app page", () => {
     expect(fn).not.toContain("Math.round");
   });
 
-  it("the note-length picker is for pitched and drum tracks, not effects", () => {
-    expect(html).toContain('if (kind === "pitched" || kind === "kit"){ $("#edhead").insertBefore(nl');
+  it("a tap adds a sixteenth on pitched and drum tracks, and effects keep their own length", () => {
     const fn = section(/function toggleAt\(/, "function lengthen");
     expect(fn).toMatch(/kindOf\(t\) !== "fx"/);
     expect(fn).not.toMatch(/kindOf\(t\) === "pitched"\)\{\s*const want/);
@@ -1682,14 +1675,14 @@ describe("Sound Space song lessons in the page", () => {
     expect(out.renders).toEqual([true, false]);
   });
 
-  it("a tap inside an outline fills that outline; in the rhythm lesson the kid still picks the length", () => {
+  it("a tap adds a sixteenth; a tap inside a lesson's outline fills that outline, in every lesson", () => {
     const SS = load(), M = SS.model;
-    function tap(l, step, pitch, c, picked) {
+    function tap(l, step, pitch, c) {
       const song = copy((l || SS.lessons.LESSONS[1]).startSong), t = song.tracks[0];
       const rows = [{ pitch }];
-      new Function("song", "lesson", "rows", "M", "E", "LS", "pickedNote", "spc", "selTrack", "instOf", "kindOf", "blip", "lessonEvent", "commit", "paintRow", "renderOverview", "scrollToGuide",
+      new Function("song", "lesson", "rows", "M", "E", "LS", "spc", "selTrack", "instOf", "kindOf", "blip", "lessonEvent", "commit", "paintRow", "renderOverview", "scrollToGuide",
         fnSource("guideFor") + "\n" + fnSource("guideAt") + "\n" + fnSource("coverAt") + "\n" + fnSource("toggleAt") + "; toggleAt(0, " + c + ");")(
-        song, l && { l, step, finished: false }, rows, M, { stepSeconds: () => 0.1 }, SS.lessons, picked || "sixteenth", () => song.grid, () => t,
+        song, l && { l, step, finished: false }, rows, M, { stepSeconds: () => 0.1 }, SS.lessons, () => song.grid, () => t,
         (x) => SS.instruments.byId(x.instrumentId), () => "pitched", () => {}, () => {}, () => {}, () => {}, () => {}, () => {});
       return t.notes.map((n) => [n.step, n.pitch, n.len]);
     }
@@ -1699,12 +1692,8 @@ describe("Sound Space song lessons in the page", () => {
     expect(tap(twinkle, 0, 61, 2)).toEqual([[2, 61, 1]]);       // no outline there: an ordinary tap
     expect(tap(twinkle, 2, 60, 2)).toEqual([[2, 60, 1]]);       // the Play step has no outlines
     expect(tap(null, 0, 60, 2)).toEqual([[2, 60, 1]]);
-    expect(tap(jingle, 0, 64, 6, "quarter")).toEqual([[4, 64, 4]]);   // the start snaps, the length is the kid's pick
-    expect(tap(jingle, 0, 64, 6)).toEqual([[4, 64, 1]]);
-    expect(tap(jingle, 0, 64, 6, "half")).toEqual([[4, 64, 4]]);      // longer than the outline: the outline's length
-    expect(tap(jingle, 1, 60, 41)).toEqual([[40, 60, 6]]);            // the dotted quarter has no button: its start fills all 6 squares
-    expect(tap(jingle, 1, 60, 41, "quarter")).toEqual([[40, 60, 6]]);
-    expect(tap(jingle, 1, 60, 41, "half")).toEqual([[40, 60, 6]]);
+    expect(tap(jingle, 0, 64, 6)).toEqual([[4, 64, 4]]);              // the rhythm lesson too: the outline's start and length
+    expect(tap(jingle, 1, 60, 41)).toEqual([[40, 60, 6]]);
   });
 
   it("the tip says so when Counts hides a whole guide line, and a drum step spreads its beat once it passes", () => {

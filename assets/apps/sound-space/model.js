@@ -146,18 +146,25 @@
     return isInt(n) && n >= BAR && n <= CONST.MAX_COUNTS && n % BAR === 0;
   }
 
-  // The loop: { start, counts } in counts. With none set, it is the biggest loop size that fits, from count 1. A set one
-  // is shrunk to fit a shorter song, and moved back inside it.
+  // The loop goes a sixteenth at a time (owner, 2026-11-18): its start and length are counts in quarters (one quarter
+  // of a count = one sixteenth note). A loop is 1 to 16 counts long (recording stays inside it).
+  const LOOP_MIN = 1, LOOP_MAX = 16;
+  const isQuarter = (n) => typeof n === "number" && Number.isFinite(n) && Math.abs(n * 4 - Math.round(n * 4)) < 1e-9;
+  const toQuarter = (n) => Math.round((Number(n) || 0) * 4) / 4;
+  const validLoopCounts = (n) => isQuarter(n) && n >= LOOP_MIN && n <= LOOP_MAX;
+  // The loop: { start, counts } in counts. With none set, it is the biggest of 4, 8 and 16 that fits, from count 1. A
+  // set one is shrunk to fit a shorter song, and moved back inside it.
   function loopOf(song) {
     const total = validCounts(song.counts) ? song.counts : 8;
-    let size = CONST.COUNTS.indexOf(song.loopCounts) >= 0 ? song.loopCounts : CONST.COUNTS[CONST.COUNTS.length - 1];
-    while (size > total && size > CONST.COUNTS[0]) size = CONST.COUNTS[CONST.COUNTS.indexOf(size) - 1];
-    const start = isInt(song.loopStart) ? Math.max(0, Math.min(song.loopStart, total - size)) : 0;
+    let size;
+    if (validLoopCounts(song.loopCounts)) size = Math.min(song.loopCounts, total);
+    else { size = CONST.COUNTS[CONST.COUNTS.length - 1]; while (size > total && size > CONST.COUNTS[0]) size = CONST.COUNTS[CONST.COUNTS.indexOf(size) - 1]; }
+    const start = isQuarter(song.loopStart) && song.loopStart >= 0 ? Math.min(song.loopStart, total - size) : 0;
     return { start, counts: size };
   }
   function loopSteps(song) {
     const l = loopOf(song), g = song.grid || CONST.STEPS_PER_COUNT;
-    return { from: l.start * g, to: (l.start + l.counts) * g };
+    return { from: Math.round(l.start * g), to: Math.round((l.start + l.counts) * g) };
   }
   // writes the loop down as it is now, so a later change of length never moves or grows it by itself
   function pinLoop(song) {
@@ -165,25 +172,23 @@
     song.loopStart = l.start;
     song.loopCounts = l.counts;
   }
-  // Moves the loop to start at `start` (a count), snapped to a bar and kept inside the song. true when it moved.
+  // Moves the loop to start at `start` (a count), snapped to a sixteenth and kept inside the song. true when it moved.
   function moveLoop(song, start) {
     const l = loopOf(song);
-    const to = Math.max(0, Math.min(Math.round((Number(start) || 0) / BAR) * BAR, song.counts - l.counts));
+    const to = Math.max(0, Math.min(toQuarter(start), song.counts - l.counts));
     song.loopCounts = l.counts;
     if (to === l.start && song.loopStart === to) return false;
     song.loopStart = to;
     return to !== l.start;
   }
   // Dragging an end of the loop's bar (owner, 2026-11-18): end "b" (right) keeps the start, end "a" (left) keeps the
-  // loop's end. The size snaps to the nearest of 4, 8 and 16 counts that fits inside the song. `count` is the count
-  // under the pointer (from 0). Returns whether the loop changed.
-  function dragLoopEnd(song, end, count) {
-    const l = loopOf(song), last = l.start + l.counts;
-    const fits = CONST.COUNTS.filter((s) => (end === "b" ? l.start + s <= song.counts : last - s >= 0));
-    if (!fits.length) return false;
-    const want = end === "b" ? count - l.start + 1 : last - count;
-    const size = fits.reduce((best, s) => (Math.abs(s - want) < Math.abs(best - want) ? s : best), fits[0]);
-    const start = end === "b" ? l.start : last - size;
+  // loop's end. `at` is where the pointer is, in counts from the song's start (2.5 = halfway through count 3); the end
+  // snaps to the nearest sixteenth, and the loop stays 1 to 16 counts long and inside the song. Returns whether it changed.
+  function dragLoopEnd(song, end, at) {
+    const l = loopOf(song), last = l.start + l.counts, p = toQuarter(at);
+    let start = l.start, size = l.counts;
+    if (end === "b") size = Math.max(LOOP_MIN, Math.min(p - l.start, LOOP_MAX, song.counts - l.start));
+    else { start = Math.max(0, last - LOOP_MAX, Math.min(p, last - LOOP_MIN)); size = last - start; }
     if (size === l.counts && start === l.start) return false;
     song.loopCounts = size;
     song.loopStart = start;
@@ -318,8 +323,8 @@
     if (Object.keys(obj).some((k) => SONG_KEYS.indexOf(k) < 0)) return bad("unknown_field");
     if (obj.schemaVersion !== CONST.SCHEMA_VERSION) return bad("bad_schema_version");
     if (!validCounts(obj.counts)) return bad("bad_counts");
-    if (obj.loopCounts !== undefined && CONST.COUNTS.indexOf(obj.loopCounts) < 0) return bad("bad_field");
-    if (obj.loopStart !== undefined && (!isInt(obj.loopStart) || obj.loopStart < 0 || obj.loopStart >= obj.counts)) return bad("bad_field");
+    if (obj.loopCounts !== undefined && !validLoopCounts(obj.loopCounts)) return bad("bad_field");
+    if (obj.loopStart !== undefined && (!isQuarter(obj.loopStart) || obj.loopStart < 0 || obj.loopStart >= obj.counts)) return bad("bad_field");
     if (!isNum(obj.tempo) || obj.tempo < CONST.TEMPO_MIN || obj.tempo > CONST.TEMPO_MAX) return bad("bad_tempo");
     if (typeof obj.id !== "string" || !obj.id) return bad("bad_field");
     if (typeof obj.title !== "string" || obj.title.length > 60) return bad("bad_field");

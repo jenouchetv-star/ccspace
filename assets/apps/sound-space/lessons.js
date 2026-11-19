@@ -180,9 +180,9 @@
         { instrumentId: "classic-kit", pattern: "Sunny pop beat", volume: 0.5 },
       ]),
       steps: [
-        fill("Fill in the first line. Make each note as long as its outline: pick the quarter note for short ones and the half note for long ones.",
+        fill("Fill in the first line. Tap each outline: short outlines make short notes, and long outlines make long notes.",
           isTune, part(SONGS.jingleBells, 0, 16), { exactLen: true }),
-        fill("Now the next line. Pick a note length at the top, or drag a note's right edge until it fills its outline.",
+        fill("Now the next line. Before you tap, look at each outline: is it a long note or a short one? Tap to fill it.",
           isTune, part(SONGS.jingleBells, 16, 32), { exactLen: true }),
         { text: "Press Play. The pattern of long and short notes is the rhythm.", target: PLAY, check: (s, ui) => played(ui) },
       ],
