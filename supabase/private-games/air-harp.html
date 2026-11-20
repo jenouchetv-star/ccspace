@@ -200,7 +200,7 @@
   <div class="box">
     <span class="mark" id="mark2" aria-hidden="true"></span>
     <h2>Build your own harp</h2>
-    <p>This game uses <b>computer vision</b>: an AI looks through your camera and finds 21 points on each hand. <b>Pinch</b> your thumb and pointer finger together on both hands and pull them apart to stretch a string. Then sweep a finger across your strings to play them.</p>
+    <p>This game uses <b>computer vision</b>: an AI looks through your camera and finds 21 points on each hand. <b>Pinch</b> your thumb and pointer finger together on both hands, touch your two pinches together, then pull them apart to stretch a string. Then sweep a finger across your strings to play them.</p>
     <p class="note" id="start-note"></p>
     <p class="err hidden" id="start-err"></p>
     <div class="row">
@@ -267,6 +267,9 @@
     pairs.forEach(function(q){ if (q.d <= maxDist && !used[q.key] && out[q.j] === null){ used[q.key] = true; out[q.j] = q.key; } });
     return out;
   }
+  /* a new string starts only when the two pinches touch (owner, 2026-11-19: pinch, touch the fingers together, then
+     pull apart); two pinches held apart make nothing */
+  function pinchesTouch(a, b, diag){ return Math.hypot(a.x - b.x, a.y - b.y) <= Math.max(36, diag * 0.045); }
   /* low notes warm, high notes cool, along the draft's colors */
   var COLORS = ["#F472B6", "#FBBF24", "#4ADE80", "#38BDF8", "#A78BFA"];
   function colorFor(midi){
@@ -299,7 +302,7 @@
   function icon(n){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[n] + '</svg>'; }
 
   var GESTURES = [
-    { k:"make", name:"Pinch both hands", kind:"Make", does:"Pinch with both hands and pull apart to stretch a new string" },
+    { k:"make", name:"Pinch both hands", kind:"Make", does:"Pinch with both hands, touch the pinches together, then pull apart to stretch a new string" },
     { k:"move", name:"Pinch a ball", kind:"Move", does:"Pull an end to make the string longer or shorter. You can play it while you pull." },
     { k:"play", name:"Sweep a finger", kind:"Play", does:"With an open hand, run your fingertip across a string to pluck it. Slow is soft, fast is loud." },
     { k:"gone", name:"Fling a ball away", kind:"Remove", does:"Pinch a ball and throw it off the stage to take that string away" }
@@ -654,7 +657,7 @@
       drawCamIdle("The AI couldn't load"); setLive(false, "Check your internet"); return;
     }
     running = true; setLive(true, "Live"); camNote("looking");
-    chike("wave", "Pinch with both hands, then pull them apart to stretch your first string!", "startCam", true);
+    chike("wave", "Pinch with both hands, touch your pinches together, then pull them apart to stretch your first string!", "startCam", true);
     if (!relay.on) pump();
   }
   function stopCamera(){
@@ -743,16 +746,28 @@
       if (st.pluck) pluck(s, loudness(speed, DIAG), k);
     });
   }
-  /* two hands pinching in open space stretch a new string between them */
+  /* two pinches that touch, then pull apart, stretch a new string between them (owner, 2026-11-19). Pinches held
+     apart wait: they can still come together and touch to start one. */
+  var apartSince = 0;
   function pairPinch(now){
     var ks = Object.keys(H2).filter(function(k){ return H2[k].pinched && (H2[k].mode === "wait" || H2[k].mode === "make"); });
     if (ks.length >= 2){
       var A = H2[ks[0]], B = H2[ks[1]];
-      if (A.mode === "wait" && B.mode === "wait" && strings.length >= MAX_STRINGS){ A.mode = B.mode = "full"; fullHint(); return; }
-      A.mode = B.mode = "make";
-      draft = { a:A.pin, b:B.pin, who:"pair" }; showGesture("make", 300);
+      if (A.mode === "wait" && B.mode === "wait"){
+        if (!pinchesTouch(A.pin, B.pin, DIAG)){
+          /* a gentle reminder if both hands keep pinching apart */
+          if (!apartSince) apartSince = now;
+          else if (now - apartSince > 900 && !chikeSaid.touchHint){ chikeSaid.touchHint = true; toast("Touch your two pinches together, then pull them apart to make a string."); }
+          return;
+        }
+        apartSince = 0;
+        if (strings.length >= MAX_STRINGS){ A.mode = B.mode = "full"; fullHint(); return; }
+        A.mode = B.mode = "make";
+      }
+      if (A.mode === "make" && B.mode === "make"){ draft = { a:A.pin, b:B.pin, who:"pair" }; showGesture("make", 300); }
       return;
     }
+    apartSince = 0;
     /* one of the two let go: keep the string if it is long enough */
     if (draft && draft.who === "pair") finishDraft();
   }

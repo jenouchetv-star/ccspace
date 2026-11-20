@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 
 const html = readFileSync(new URL("../supabase/private-games/air-harp.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const pure = html.split("/* AH:PURE */")[1].split("/* /AH:PURE */")[0];
-const R = new Function(pure + "; return { MAX_STRINGS, SCALE, rawMidi, noteFor, noteName, loudness, crosses, nearestBall, minLen, isFling, colorFor, strumStep, sideDist, inSpan, matchHands };")();
+const R = new Function(pure + "; return { MAX_STRINGS, SCALE, rawMidi, noteFor, noteName, loudness, crosses, nearestBall, minLen, isFling, colorFor, strumStep, sideDist, inSpan, matchHands, pinchesTouch };")();
 const D = 1000;   /* a stage whose diagonal is 1000 px */
 
 describe("the rules of the strings", () => {
@@ -59,6 +59,20 @@ describe("strumming", () => {
     expect(R.crosses({ x:50, y:-10 }, { x:50, y:-1 }, a, b)).toBe(false);
     expect(R.crosses({ x:150, y:-10 }, { x:150, y:10 }, a, b)).toBe(false);   /* past the end ball */
     expect(R.crosses({ x:10, y:5 }, { x:90, y:5 }, a, b)).toBe(false);        /* sliding alongside */
+  });
+});
+
+describe("making a string with two hands (owner, 2026-11-19)", () => {
+  it("starts only when the two pinches touch, not when they pinch apart", () => {
+    expect(R.pinchesTouch({ x:500, y:300 }, { x:530, y:310 }, D)).toBe(true);
+    expect(R.pinchesTouch({ x:500, y:300 }, { x:544, y:300 }, D)).toBe(true);
+    expect(R.pinchesTouch({ x:200, y:300 }, { x:700, y:300 }, D)).toBe(false);
+    expect(R.pinchesTouch({ x:500, y:300 }, { x:560, y:300 }, D)).toBe(false);
+  });
+  it("only stretches a new string from two pinches that touched first", () => {
+    const pair = html.split("function pairPinch(now){")[1].split("\n  }\n")[0];
+    expect(pair).toContain("if (!pinchesTouch(A.pin, B.pin, DIAG))");
+    expect(html).toContain('does:"Pinch with both hands, touch the pinches together, then pull apart to stretch a new string"');
   });
 });
 
