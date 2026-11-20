@@ -163,6 +163,26 @@ describe("the page", () => {
   });
 });
 
+describe("on the Digital Activities page (owner, 2026-11-20: moved there from the Play page)", () => {
+  const index = readFileSync(new URL("../index.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const fn = (name) => index.split("function " + name + "(")[1].split("\nfunction ")[0];
+  it("a subscribers-only Computer activity is a portal game: its card says play, not lesson", () => {
+    const card = fn("membersActivityCard");
+    expect(card).toContain('const game = a.type === "computer";');
+    expect(card).toContain("Join our mailing list to play this game and other exclusive content.");
+    expect(card).toContain("(game ? ' Play the game' : ' Open the lesson')");
+    expect(card).toContain("(game ? ' Join free to play' : ' Join free to see it')");
+    /* the join box speaks of playing a game unless it is told this is a lesson */
+    expect(card).toContain(`'" data-game="' + E(a.title) + '"' + (game ? "" : ' data-what="lesson"')`);
+  });
+  it("a shared link to it shows the game's poster, where a subscriber plays it right there", () => {
+    expect(fn("viewActivity")).toContain('membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: typeMeta(a.type).p1, p2: typeMeta(a.type).p2 }, a.type === "computer" ? "game" : "lesson")');
+  });
+  it("the activity editor can point a card at a portal game as well as a lesson", () => {
+    expect(index).toContain('{ key:"portalSlug", label:"Subscriber’s Portal lesson or game", type:"select", wide:true, options:() => [{ value:"", label:"Choose a portal entry..." }].concat(db.list("portalEntries").filter(e => e.layout === "lesson" || e.layout === "game" || String(e.aiPrompt || "").trim())');
+  });
+});
+
 describe("colors", () => {
   it("gives low notes warm colors and high notes cool ones, as the draft shows", () => {
     expect(R.colorFor(48)).toBe("#F472B6");

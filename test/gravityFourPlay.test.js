@@ -167,10 +167,10 @@ describe("the AI lessons on the Create page", () => {
     expect(fn("activityCard")).toContain('if (a.kind === "members") return membersActivityCard(a);');
     const card = fn("membersActivityCard");
     expect(card).toContain("' Subscribers only</span>'");
-    expect(card).toContain(`'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(a.title) + '" data-what="lesson"'`);
+    expect(card).toContain(`'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(a.title) + '"' + (game ? "" : ' data-what="lesson"')`);
     expect(card).toContain(`'data-act="go" data-hash="#/newsletter/' + E(slug) + '"'`);
     expect(card).not.toContain("#/activity/");
-    expect(fn("viewActivity")).toContain('membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: "#D9C2E3", p2: "#7A4A86" }, "lesson")');
+    expect(fn("viewActivity")).toContain('membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: typeMeta(a.type).p1, p2: typeMeta(a.type).p2 }, a.type === "computer" ? "game" : "lesson")');
   });
   it("stay out of the sitemap and need only a card's fields in the editor", () => {
     const gen = readFileSync(new URL("../supabase/generate-sitemap.mjs", import.meta.url), "utf8");

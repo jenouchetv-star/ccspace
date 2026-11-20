@@ -9601,8 +9601,10 @@ function cardShareBtn(path, title, atEnd){
 function membersActivityCard(a){
   const slug = encodeURIComponent(a.portalSlug || "");
   const sub = portalHasAccess();
+  /* a subscribers-only Computer activity is a game in the portal (Air Harp, owner 2026-11-20): it is played, not read */
+  const game = a.type === "computer";
   const open = sub ? 'data-act="go" data-hash="#/newsletter/' + E(slug) + '"'
-    : 'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(a.title) + '" data-what="lesson"';
+    : 'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(a.title) + '"' + (game ? "" : ' data-what="lesson"');
   return '<article class="card card--members" ' + open + ' tabindex="0" role="link" aria-label="' + E(a.title + ", subscribers only") + '">'
     + '<div class="card__media">' + cover(a, a.type, typeMeta(a.type).label, true)
     + '<span class="card__badge chip chip--members">' + ic("lock") + ' Subscribers only</span>'
@@ -9611,9 +9613,9 @@ function membersActivityCard(a){
     + '<h3 class="card__title">' + E(a.title) + '</h3>'
     /* a visitor reads what joining gets them; a subscriber, who has it, just reads what it is */
     /* a visitor is told what joining opens; a subscriber reads what the lesson is */
-    + '<p class="tiny mute" style="margin:0">' + (sub ? E(a.summary) : '<b class="card__join">Join our mailing list to view this lesson and other exclusive content.</b>') + '</p>'
+    + '<p class="tiny mute" style="margin:0">' + (sub ? E(a.summary) : '<b class="card__join">' + (game ? 'Join our mailing list to play this game and other exclusive content.' : 'Join our mailing list to view this lesson and other exclusive content.') + '</b>') + '</p>'
     + '<div class="card__foot">'
-    + '<button type="button" class="btn btn--sm btn--sun" ' + open + '>' + ic(sub ? "sparkles" : "lock") + (sub ? ' Open the lesson' : ' Join free to see it') + '</button>'
+    + '<button type="button" class="btn btn--sm btn--sun" ' + open + '>' + ic(sub ? (game ? "play" : "sparkles") : "lock") + (sub ? (game ? ' Play the game' : ' Open the lesson') : (game ? ' Join free to play' : ' Join free to see it')) + '</button>'
     + '</div>'
     + '</div></article>';
 }
@@ -12305,7 +12307,7 @@ function viewActivity(id){
     return '<section class="section"><div class="shell" style="max-width:860px">'
       + '<div class="crumb no-print"><a href="#/create/tech">' + E(createCrumbLabel("tech")) + '</a>' + ic("chevron-right") + '<span>' + E(a.title) + '</span></div>'
       + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem)">' + E(a.title) + '</h1><p class="lede">' + E(a.summary) + '</p>'
-      + membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: "#D9C2E3", p2: "#7A4A86" }, "lesson")
+      + membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: typeMeta(a.type).p1, p2: typeMeta(a.type).p2 }, a.type === "computer" ? "game" : "lesson")
       + '</div></section>';
   }
   noteView(a.id, "activities");
@@ -17315,7 +17317,7 @@ const FIELDS = {
   activities: [
     { key:"image", label:"Cover image", type:"media", wide:true },
     { key:"kind", label:"What is this?", type:"select", wide:true, options:() => [{ value:"", label:"An activity" },{ value:"members", label:"A subscribers-only AI lesson (its card opens the Subscriber’s Portal)" }], help:"An AI lesson only needs a cover, title, summary and the portal lesson below; set Kind of making to AI Lesson and Access to Subscribers only. Its card shows a lock, and clicking it asks visitors to join first." },
-    { key:"portalSlug", label:"Subscriber’s Portal lesson", type:"select", wide:true, options:() => [{ value:"", label:"Choose a portal entry..." }].concat(db.list("portalEntries").filter(e => e.layout === "lesson" || String(e.aiPrompt || "").trim()).map(e => ({ value:e.slug || e.id, label:e.title }))), help:"Only for a subscribers-only AI lesson: the portal entry its card opens." },
+    { key:"portalSlug", label:"Subscriber’s Portal lesson or game", type:"select", wide:true, options:() => [{ value:"", label:"Choose a portal entry..." }].concat(db.list("portalEntries").filter(e => e.layout === "lesson" || e.layout === "game" || String(e.aiPrompt || "").trim()).map(e => ({ value:e.slug || e.id, label:e.title }))), help:"Only for a subscribers-only AI lesson or game: the portal entry its card opens. A subscribers-only game's Kind of making is Computer." },
     { key:"title", label:"Title", type:"text", wide:true },
     { key:"summary", label:"Summary", type:"textarea", wide:true, help:"One or two sentences. Shown on cards and in search." },
     { key:"type", label:"Kind of making", type:"select", options:() => opt(TYPES) },
