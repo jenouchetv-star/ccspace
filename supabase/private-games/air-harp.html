@@ -249,6 +249,24 @@
   }
   /* a pinched ball let go while moving faster than 2.4 diagonals a second was thrown: that string goes away */
   function isFling(vx, vy, diag){ return Math.hypot(vx, vy) > diag * 2.4; }
+  /* a camera fingertip shakes a little even when still, so it plucks only when it goes clearly past the string
+     (more than `dead` px) to the other side from where it last clearly was; resting on a string plays nothing */
+  function sideDist(p, a, b){ var dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1; return ((p.x - a.x) * dy - (p.y - a.y) * dx) / L; }
+  function inSpan(p, a, b){ var dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1, u = ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2; return u >= 0 && u <= 1; }
+  function strumStep(side, d, dead){
+    var now = d > dead ? 1 : d < -dead ? -1 : 0;
+    if (!now) return { side:side, pluck:false };
+    return { side:now, pluck:side !== 0 && now !== side };
+  }
+  /* the AI lists the hands in no fixed order and can call both "Right", so each hand keeps its identity by being
+     nearest to where a known hand was last time; returns the known key for each point, or null for a new hand */
+  function matchHands(prev, pts, maxDist){
+    var pairs = [], out = pts.map(function(){ return null; }), used = {};
+    prev.forEach(function(h){ pts.forEach(function(p, j){ pairs.push({ key:h.key, j:j, d:Math.hypot(h.x - p.x, h.y - p.y) }); }); });
+    pairs.sort(function(a, b){ return a.d - b.d; });
+    pairs.forEach(function(q){ if (q.d <= maxDist && !used[q.key] && out[q.j] === null){ used[q.key] = true; out[q.j] = q.key; } });
+    return out;
+  }
   /* low notes warm, high notes cool, along the draft's colors */
   var COLORS = ["#F472B6", "#FBBF24", "#4ADE80", "#38BDF8", "#A78BFA"];
   function colorFor(midi){
@@ -666,22 +684,30 @@
   function handLost(k){
     var h = H2[k]; if (!h) return;
     if (h.mode === "grab") releaseGrab(k, false);   /* a hand that leaves the picture just lets go: no throw */
-    if (draft && (draft.who === "pair")) draft = null;
     delete H2[k];
+    /* stretching wide can take one hand out of the camera's view: a string long enough is kept, like letting go */
+    if (draft && draft.who === "pair") finishDraft();
   }
-  var lastHands = [];
+  function finishDraft(){
+    if (draft && Math.hypot(draft.b.x - draft.a.x, draft.b.y - draft.a.y) >= minLen(DIAG)) addString(draft.a, draft.b);
+    draft = null;
+    Object.keys(H2).forEach(function(k){ if (H2[k].mode === "make") H2[k].mode = "done"; });
+  }
+  var handKey = 0;
   function onResults(res){
-    var now = performance.now(), lms = res.multiHandLandmarks || [], sides = res.multiHandedness || [];
-    lastHands = lms;
+    if (!running || state.mode !== "camera") return;   /* a last picture that arrives after the camera was turned off */
+    var now = performance.now(), lms = res.multiHandLandmarks || [];
     drawCamBackdrop();
     var r = { x:0, y:0, w:camCanvas.width, h:camCanvas.height };
     var seen = {};
+    /* each hand keeps its identity by where its wrist was a moment ago (the AI's left/right labels can swap) */
+    var prev = Object.keys(H2).map(function(k){ return { key:k, x:H2[k].wrist.x, y:H2[k].wrist.y }; });
+    var keys = matchHands(prev, lms.map(function(lm){ return toStage(lm[0]); }), DIAG * 0.25);
     lms.forEach(function(lm, n){
-      var label = (sides[n] && sides[n].label) || ("h" + n);
-      if (seen[label]) label = label + n;   /* two hands the AI calls the same side: keep them apart */
-      seen[label] = true;
-      drawSkeleton(camCtx, lm, r.x, r.y, r.w, r.h, H2[label] && H2[label].pinched);
-      handFrame(label, lm, now);
+      var key = keys[n] || ("h" + (++handKey));
+      seen[key] = true;
+      drawSkeleton(camCtx, lm, r.x, r.y, r.w, r.h, H2[key] && H2[key].pinched);
+      handFrame(key, lm, now);
     });
     Object.keys(H2).forEach(function(k){ if (!seen[k] && now - H2[k].seen > 300) handLost(k); });
     var n = lms.length;
@@ -690,8 +716,8 @@
     pairPinch(now);
   }
   function handFrame(k, lm, now){
-    var h = H2[k] || (H2[k] = { pinched:false, mode:"open", tip:null, tipT:0 });
-    h.seen = now; h.lm = lm;
+    var h = H2[k] || (H2[k] = { pinched:false, mode:"open", tip:null, tipT:0, sides:{} });
+    h.seen = now; h.lm = lm; h.wrist = toStage(lm[0]);
     var palm = d3(lm[0], lm[9]) || 0.1, gap = d3(lm[4], lm[8]) / palm;
     var mid = toStage({ x:(lm[4].x + lm[8].x) / 2, y:(lm[4].y + lm[8].y) / 2 }), tip = toStage(lm[8]);
     /* pinch on when thumb and pointer tips touch (with the pointer reaching out, not curled in a fist); off once they
@@ -704,8 +730,18 @@
     }
     h.pin = mid;
     if (h.mode === "grab") moveGrab(k, mid);
-    /* an open hand plays: its pointer fingertip strums whatever strings it crosses */
-    if (!h.pinched){ if (h.tip) strum(h.tip, tip, now - h.tipT, k); h.tip = tip; h.tipT = now; }
+    /* an open hand plays: its pointer fingertip strums whatever strings it goes clearly past */
+    if (!h.pinched){ if (h.tip) strumHand(h, tip, now, k); h.tip = tip; h.tipT = now; }
+    else h.sides = {};
+  }
+  function strumHand(h, tip, now, k){
+    var dt = now - h.tipT, speed = dt > 0 && dt <= 150 ? Math.hypot(tip.x - h.tip.x, tip.y - h.tip.y) / (dt / 1000) : 0, dead = Math.max(6, DIAG * 0.008);
+    strings.forEach(function(s){
+      if (!inSpan(tip, s.a, s.b)){ h.sides[s.id] = 0; return; }   /* going around the end of a string doesn't play it */
+      var st = strumStep(h.sides[s.id] || 0, sideDist(tip, s.a, s.b), dead);
+      h.sides[s.id] = st.side;
+      if (st.pluck) pluck(s, loudness(speed, DIAG), k);
+    });
   }
   /* two hands pinching in open space stretch a new string between them */
   function pairPinch(now){
@@ -718,11 +754,7 @@
       return;
     }
     /* one of the two let go: keep the string if it is long enough */
-    if (draft && draft.who === "pair"){
-      if (Math.hypot(draft.b.x - draft.a.x, draft.b.y - draft.a.y) >= minLen(DIAG)) addString(draft.a, draft.b);
-      draft = null;
-      Object.keys(H2).forEach(function(k){ if (H2[k].mode === "make") H2[k].mode = "done"; });
-    }
+    if (draft && draft.who === "pair") finishDraft();
   }
   function drawSkeleton(c, lm, rx, ry, rw, rh, pinched){
     var accent = TK["--accent"] || "#38BDF8";

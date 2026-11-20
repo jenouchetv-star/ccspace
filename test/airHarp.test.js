@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 
 const html = readFileSync(new URL("../supabase/private-games/air-harp.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const pure = html.split("/* AH:PURE */")[1].split("/* /AH:PURE */")[0];
-const R = new Function(pure + "; return { MAX_STRINGS, SCALE, rawMidi, noteFor, noteName, loudness, crosses, nearestBall, minLen, isFling, colorFor };")();
+const R = new Function(pure + "; return { MAX_STRINGS, SCALE, rawMidi, noteFor, noteName, loudness, crosses, nearestBall, minLen, isFling, colorFor, strumStep, sideDist, inSpan, matchHands };")();
 const D = 1000;   /* a stage whose diagonal is 1000 px */
 
 describe("the rules of the strings", () => {
@@ -62,6 +62,38 @@ describe("strumming", () => {
   });
 });
 
+describe("a camera fingertip (it shakes a little even when still)", () => {
+  it("plucks once when it goes clearly past the string, and not while it rests on it", () => {
+    let side = 0, plucks = 0;
+    const step = d => { const r = R.strumStep(side, d, 8); side = r.side; if (r.pluck) plucks++; };
+    step(-20);                                   /* one side of the string */
+    for (const d of [-3, 4, -5, 6, -2, 5]) step(d);   /* resting on it: tiny shakes across */
+    expect(plucks).toBe(0);
+    step(20); expect(plucks).toBe(1);            /* a real pass */
+    step(25); expect(plucks).toBe(1);
+    step(-30); expect(plucks).toBe(2);           /* and back again */
+  });
+  it("measures which side of the string a point is on, and whether it is between the balls", () => {
+    const a = { x:0, y:0 }, b = { x:100, y:0 };
+    expect(Math.sign(R.sideDist({ x:50, y:10 }, a, b))).toBe(-Math.sign(R.sideDist({ x:50, y:-10 }, a, b)));
+    expect(Math.abs(R.sideDist({ x:50, y:10 }, a, b))).toBeCloseTo(10);
+    expect(R.inSpan({ x:50, y:30 }, a, b)).toBe(true);
+    expect(R.inSpan({ x:130, y:0 }, a, b)).toBe(false);
+  });
+});
+
+describe("telling the two hands apart", () => {
+  it("keeps each hand's identity by where it was, even when the AI lists them in the other order", () => {
+    const prev = [{ key:"h1", x:100, y:200 }, { key:"h2", x:600, y:220 }];
+    expect(R.matchHands(prev, [{ x:610, y:225 }, { x:95, y:205 }], 250)).toEqual(["h2", "h1"]);
+  });
+  it("treats a hand far from any it knew as a new hand", () => {
+    const prev = [{ key:"h1", x:100, y:200 }];
+    expect(R.matchHands(prev, [{ x:110, y:190 }, { x:700, y:300 }], 250)).toEqual(["h1", null]);
+    expect(R.matchHands([], [{ x:1, y:1 }], 250)).toEqual([null]);
+  });
+});
+
 describe("grabbing and throwing away", () => {
   const strings = [{ a:{ x:0, y:0 }, b:{ x:200, y:0 } }, { a:{ x:0, y:100 }, b:{ x:200, y:100 } }];
   it("grabs the nearest ball within reach, and nothing when no ball is near", () => {
@@ -100,6 +132,13 @@ describe("the page", () => {
   });
   it("lets a hand that leaves the picture just let go, never throw a string away", () => {
     expect(html).toContain('if (h.mode === "grab") releaseGrab(k, false);');
+  });
+  it("keeps a long-enough string when one hand leaves the picture while stretching it", () => {
+    const lost = html.split("function handLost(k){")[1].split("\n  }\n")[0];
+    expect(lost).toContain("finishDraft();");
+  });
+  it("ignores a last picture from the AI that arrives after the camera was turned off", () => {
+    expect(html).toContain('function onResults(res){\n    if (!running || state.mode !== "camera") return;');
   });
   it("starts sound only after the player clicks, taps or turns the camera on", () => {
     expect(html).not.toMatch(/\n\s*audio\(\);\s*\n\s*\}\)\(\);/);
