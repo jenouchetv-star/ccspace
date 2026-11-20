@@ -3281,6 +3281,13 @@ h1.admin-page-title{ font-size:1.7rem; }
 .admin-callout--bad{ background:var(--admin-bad-soft); color:var(--admin-bad); }
 .admin-callout--info{ background:var(--admin-info-soft); color:var(--admin-accent-ink); }
 .admin-callout ul{ margin:6px 0 0; padding-left:18px; }
+/* a newsletter's "Who gets it" choice (owner, 2026-11-20) */
+.nl-aud{ border:1px solid var(--admin-border); }
+.nl-aud legend{ padding:0 6px; margin-left:-6px; }
+.nl-aud__opt{ display:flex; align-items:flex-start; gap:10px; padding:7px 0; font-size:.88rem; cursor:pointer; }
+.nl-aud__opt input[type="radio"]{ margin:3px 0 0; flex:none; accent-color:var(--admin-accent); }
+.nl-aud__opt b{ font-weight:600; }
+.nl-aud__since{ display:inline-block; width:auto; min-width:0; max-width:100%; margin:4px 6px 0 0; padding:4px 8px; font-size:.82rem; vertical-align:middle; }
 
 /* -- Tables -- */
 .admin-table-wrap{ overflow-x:auto; border:1px solid var(--admin-border); border-radius:10px; background:var(--admin-surface); }
@@ -9479,7 +9486,8 @@ let PENDING_DELETE = null;
     it" is clicked - same "explicit typed-intent confirm" rule as
     confirmDelete() above, for the same reason: nothing here can be
     undone from inside the app once it happens. */
-function confirmSendNewsletter(subject, count, onYes){
+function confirmSendNewsletter(subject, count, onYes, whoText){
+  whoText = whoText || "everyone on the list";
   openModal(
     '<div class="admin-scope" style="font-family:var(--admin-font-body);color:var(--admin-ink)">'
     + '<div class="modal__head"><div>'
@@ -9487,7 +9495,7 @@ function confirmSendNewsletter(subject, count, onYes){
     + '<h3 class="admin-section-title" style="margin-top:4px;text-transform:none">Send &#8220;' + E(subject) + '&#8221; to ' + count + ' subscriber' + (count === 1 ? '' : 's') + '?</h3>'
     + '</div><button class="admin-btn admin-btn--ghost admin-btn--icon" data-act="close-modal" aria-label="Close">' + ic("x","i-lg") + '</button></div>'
     + '<div class="admin-callout admin-callout--bad">' + ic("triangle-alert")
-    + '<span>This sends real email to everyone on the list right now. There is no draft, no undo, and no way to recall it once sent.</span></div>'
+    + '<span>This sends real email to ' + E(whoText) + ' right now. There is no draft, no undo, and no way to recall it once sent.</span></div>'
     + '<div class="modal__foot">'
     + '<button class="admin-btn admin-btn--ghost" data-act="close-modal">Go back</button>'
     + '<button class="admin-btn admin-btn--primary" data-act="confirm-send-newsletter-yes">' + ic("send") + ' Yes, send it</button>'
@@ -20176,6 +20184,7 @@ function adminNewsletterCompose(id){
       Object.assign(nc, { editingId:null, templateId:null, mode:"now", scheduledAt:"",
         subject:"", previewText:"", heroLabel:"", headline:"", heroImage:{src:"",alt:""}, intro:"",
         details:{}, ctaLabel:"", ctaUrl:"", secondaryLabel:"", secondaryText:"", footerNote:"" });
+      nc.audience = "all"; nc.audienceSince = nlLastSentAt();
     } else {
       const rec = db.find("newsletters", id);
       if (!rec){
@@ -20193,6 +20202,10 @@ function adminNewsletterCompose(id){
         secondaryLabel: rec.secondaryLabel || "", secondaryText: rec.secondaryText || "",
         footerNote: rec.footerNote || ""
       });
+      /* a newsletter that already went out starts on "haven't received this", so it never goes to everyone again by
+         default; a scheduled one keeps the choice it was scheduled with */
+      nc.audience = rec.status === "scheduled" && rec.audience ? rec.audience : rec.status === "sent" ? "unsent" : "all";
+      nc.audienceSince = (rec && rec.audienceSince) || nlLastSentAt();
     }
   }
 
@@ -20215,6 +20228,27 @@ function adminNewsletterCompose(id){
   const count = db.list("subscribers").filter(s => s.status === "published").length;
   const scheduling = nc.mode === "schedule";
   const portalProblem = nlPortalProblem(nc.ctaUrl);
+  const editingRec = nc.editingId ? db.find("newsletters", nc.editingId) : null;
+  /* "haven't received this" only means something once this newsletter has gone out */
+  const sentBefore = !!(editingRec && (editingRec.status === "sent" || editingRec.sentAt));
+  if (nc.audience === "unsent" && !sentBefore) nc.audience = "all";
+  const chosen = nlWho().list;
+  const subs = db.list("subscribers");
+  const audOpt = (value, title, extra) => '<label class="nl-aud__opt">'
+    + '<input type="radio" name="audience" value="' + value + '" data-act="nl-audience"' + (nc.audience === value ? " checked" : "") + '>'
+    + '<span><b>' + title + '</b>' + (extra || "") + ' <span class="admin-meta" data-aud-count="' + value + '">'
+    + E(nlCountLabel(nlAudiencePick(subs, value, value === "unsent" ? nlSentIds(nc.editingId) : null, nc.audienceSince))) + '</span></span></label>';
+  const lastSent = nlLastSentAt();
+  const whoBox = '<fieldset class="admin-card admin-card--flat nl-aud" style="margin:0 0 20px">'
+    + '<legend class="admin-section-title" style="font-size:.92rem">Who gets it</legend>'
+    + audOpt("all", "Everyone on the list")
+    + (sentBefore ? audOpt("unsent", "Only people who haven’t received this newsletter") : "")
+    + audOpt("new", "Only new subscribers who joined after",
+        ' <input class="admin-input nl-aud__since" type="datetime-local" name="audienceSince" data-act="nl-audience-since" value="' + E(isoToLocalDatetimeInput(nc.audienceSince)) + '" aria-label="Joined after">')
+    + '<p class="admin-meta" style="margin:8px 0 0">'
+    + (lastSent ? 'Your last newsletter went out ' + E(fmtDate(lastSent, true)) + '. ' : "")
+    + 'Anyone who unsubscribed is always left out, and every email gets a working unsubscribe link automatically.</p>'
+    + '</fieldset>';
 
   return backLink
     + '<div class="row-between" style="margin-bottom:20px;align-items:flex-start;gap:12px">'
@@ -20223,13 +20257,12 @@ function adminNewsletterCompose(id){
     + '<p class="admin-meta">Write once, then send right away or schedule it for later. It’s saved automatically once you send or schedule it, or any time you save it as a draft.</p></div>'
     + (nc.editingId ? "" : '<button type="button" class="admin-btn admin-btn--sm admin-btn--ghost" data-act="nl-change-template">' + ic("refresh-cw") + ' Change template</button>')
     + '</div>'
-    + '<div class="admin-callout' + (count ? ' admin-callout--info' : ' admin-callout--warn') + '" style="margin-bottom:20px">' + ic(count ? "info" : "triangle-alert")
-    + '<span>' + (count
-        ? 'Will send to <b>' + count + '</b> active subscriber' + (count === 1 ? '' : 's') + '. Every email gets a working unsubscribe link automatically - nothing to add yourself.'
-        : 'No active subscribers yet, so there is no one to send to.') + '</span></div>'
+    + (count ? "" : '<div class="admin-callout admin-callout--warn" style="margin-bottom:20px">' + ic("triangle-alert")
+        + '<span>No active subscribers yet, so there is no one to send to.</span></div>')
     + (portalProblem ? '<div class="admin-callout admin-callout--warn" role="alert" style="margin-bottom:20px">' + ic("triangle-alert")
         + '<span>' + E(portalProblem.text) + ' <a href="#/admin/portalEntries">Open Portal content</a></span></div>' : "")
     + '<form id="nl-form" data-act="nl-form-submit">'
+    + (count ? whoBox : "")
     + '<div class="row" role="group" aria-label="When to send" style="margin-bottom:14px">'
     + '<button type="button" class="admin-btn admin-btn--sm' + (scheduling ? ' admin-btn--ghost' : ' admin-btn--primary') + '" data-act="nl-mode" data-mode="now">' + ic("send") + ' Send now</button>'
     + '<button type="button" class="admin-btn admin-btn--sm' + (scheduling ? ' admin-btn--primary' : ' admin-btn--ghost') + '" data-act="nl-mode" data-mode="schedule">' + ic("clock") + ' Schedule for later</button>'
@@ -20304,10 +20337,67 @@ function adminNewsletterCompose(id){
     + '<button type="button" class="admin-btn admin-btn--ghost" data-act="nl-save-draft">' + ic("save") + ' Save as draft</button>'
     + (scheduling
         ? '<button type="button" class="admin-btn admin-btn--primary" data-act="nl-schedule">' + ic("clock") + ' Schedule</button>'
-        : '<button type="button" class="admin-btn admin-btn--primary"' + (count ? '' : ' disabled') + ' data-act="nl-send-now">' + ic("send") + ' Send to ' + count + ' subscriber' + (count === 1 ? '' : 's') + '</button>')
+        : '<button type="button" class="admin-btn admin-btn--primary"' + (chosen && chosen.length ? '' : ' disabled') + ' data-act="nl-send-now">' + ic("send") + ' Send to ' + nlCountLabel(chosen) + '</button>')
     + '</div>'
     + '</div>'
     + '</form>';
+}
+
+/* ---- Who gets it (owner, 2026-11-20: "give me the option to only send to new followers or people who hasn't
+   received this message"). The same rules as supabase/functions/_shared/audience.ts, which makes the real choice on
+   the server; here they only count. "unsent" needs to know who this newsletter reached (newsletter_sends): null while
+   that is still loading. Anything unclear picks nobody, never the whole list. ---- */
+function nlAudiencePick(subs, audience, sentIds, since){
+  const active = (subs || []).filter(s => s.status === "published" && s.email);
+  if (audience === "all") return active;
+  if (audience === "unsent"){ if (!sentIds) return null; return active.filter(s => !sentIds.has(s.id)); }
+  if (audience === "new"){
+    const t = Date.parse(since || "");
+    if (isNaN(t)) return [];
+    return active.filter(s => { const a = Date.parse(s.at || ""); return !isNaN(a) && a > t; });
+  }
+  return [];
+}
+/** When the most recent newsletter went out ("" if none has). */
+function nlLastSentAt(){
+  return db.list("newsletters").filter(n => n.status === "sent" && n.sentAt).map(n => n.sentAt).sort().pop() || "";
+}
+function nlCountLabel(list){ return list === null ? "…" : list.length + " subscriber" + (list.length === 1 ? "" : "s"); }
+/** Who this newsletter has reached so far, by subscriber id, loaded once per visit to its page. */
+function nlSentIds(id){
+  const cache = AppState.admin.nlSentIds || (AppState.admin.nlSentIds = {});
+  if (!id) return new Set();
+  if (cache[id] instanceof Set) return cache[id];
+  if (cache[id] !== "loading" && typeof sb !== "undefined" && sb){
+    cache[id] = "loading";
+    sb.from("newsletter_sends").select("subscriber_id").eq("newsletter_id", id).then(({ data, error }) => {
+      if (error){ delete cache[id]; return; }
+      cache[id] = new Set((data || []).map(r => r.subscriber_id));
+      nlPaintAudience();
+    });
+  }
+  return undefined;
+}
+/** The choice as the form shows it right now. */
+function nlWho(){
+  const nc = AppState.admin.newsletterCompose;
+  const audience = nc.audience || "all";
+  const since = audience === "new" ? (nc.audienceSince || "") : "";
+  const list = nlAudiencePick(db.list("subscribers"), audience, audience === "unsent" ? nlSentIds(nc.editingId) : null, since);
+  return { audience, since, list };
+}
+/** Updates the counts and the send button in place: choosing never redraws the page, so nothing typed is lost. */
+function nlPaintAudience(){
+  const form = document.getElementById("nl-form");
+  if (!form) return;
+  const nc = AppState.admin.newsletterCompose;
+  const subs = db.list("subscribers");
+  ["all", "unsent", "new"].forEach(a => {
+    const el = form.querySelector('[data-aud-count="' + a + '"]');
+    if (el) el.textContent = nlCountLabel(nlAudiencePick(subs, a, a === "unsent" ? nlSentIds(nc.editingId) : null, nc.audienceSince));
+  });
+  const btn = form.querySelector('[data-act="nl-send-now"]');
+  if (btn){ const w = nlWho(); btn.disabled = !(w.list && w.list.length); btn.innerHTML = ic("send") + " Send to " + nlCountLabel(w.list); }
 }
 
 /** The Subscriber's Portal post an email's button opens, when subscribers could not see it yet: it is still a
@@ -20393,8 +20483,12 @@ async function nlSchedule(form){
     toast("Add a postal mailing address in Settings before sending a newsletter - required by law.", "bad");
     return;
   }
+  const who = nlWho();
+  if (who.audience === "new" && isNaN(Date.parse(who.since))){ toast("Pick the date new subscribers joined after.", "bad"); return; }
   confirmScheduleNewsletter(f.subject, whenLabel, async () => {
-    const patch = Object.assign({ templateId: nc.templateId, body: html, status:"scheduled", scheduledAt: iso }, f);
+    /* the server makes the choice again when it sends, so "haven't received this" and "new subscribers" count the
+       people on the list at that moment */
+    const patch = Object.assign({ templateId: nc.templateId, body: html, status:"scheduled", scheduledAt: iso, audience: who.audience, audienceSince: who.audience === "new" ? who.since : "" }, f);
     try {
       if (nc.editingId){
         await db.update("newsletters", nc.editingId, patch);
@@ -20412,13 +20506,28 @@ async function nlSchedule(form){
   });
 }
 
+/** A function call's error, unwrapped: a non-2xx response's error.message is only a generic wrapper, and the
+    function's own {error:"..."} body sits on error.context. */
+async function nlFunctionError(res){
+  let detail = res.error ? res.error.message : (res.data && res.data.error);
+  if (res.error){
+    try {
+      if (res.error.context && typeof res.error.context.json === "function"){
+        const body = await res.error.context.json();
+        if (body && body.error) detail = body.error;
+      }
+    } catch(_e){ /* body wasn't JSON (or already read) - keep the generic message */ }
+  }
+  return detail || "";
+}
+
 async function nlSendNow(form){
   const f = nlReadForm(form);
   if (!f.subject){ toast("Add a subject line first.", "bad"); return; }
   if (!f.intro || f.intro === "<p></p>"){ toast("Write a message first.", "bad"); return; }
-  const count = db.list("subscribers").filter(s => s.status === "published").length;
-  if (!count){ toast("No active subscribers to send to.", "bad"); return; }
   const nc = AppState.admin.newsletterCompose;
+  const who = nlWho();
+  if (who.audience === "new" && isNaN(Date.parse(who.since))){ toast("Pick the date new subscribers joined after.", "bad"); return; }
   const html = renderNewsletterHTML(Object.assign({}, nc, f));
   if (html.includes(NO_POSTAL_ADDRESS_MARKER)){
     toast("Add a postal mailing address in Settings before sending a newsletter - required by law.", "bad");
@@ -20426,8 +20535,30 @@ async function nlSendNow(form){
   }
   const portalProblem = nlPortalProblem(f.ctaUrl);
   if (portalProblem){ toast(portalProblem.text, "bad"); return; }
+  /* The server counts the chosen people first. This call carries no subject or message, so a server function from
+     before this choice existed answers "A subject and a message are both required" and sends nothing; only one that
+     answers dryRun:true knows how to send to just these people. */
+  const dry = await sb.functions.invoke("send-newsletter", { body: { dryRun: true, audience: who.audience, newsletterId: nc.editingId || "", since: who.since } });
+  const dryError = await nlFunctionError(dry);
+  if (!(dry.data && dry.data.dryRun === true)){
+    toast("Could not check who this goes to" + (dryError ? ": " + dryError : "") + ". The send function on the server may need updating; nothing was sent.", "bad");
+    return;
+  }
+  const count = dry.data.total || 0;
+  if (!count){ toast("No one to send to with this choice.", "bad"); return; }
+  const n = count + " subscriber" + (count === 1 ? "" : "s");
+  const whoText = who.audience === "unsent" ? "the " + n + " who haven’t received this newsletter"
+    : who.audience === "new" ? "the " + n + " who joined after " + fmtDate(who.since, true)
+    : "everyone on the list";
   confirmSendNewsletter(f.subject, count, async () => {
-    const res = await sb.functions.invoke("send-newsletter", { body: { subject: f.subject, html: html } });
+    /* the server records who each send reached against this newsletter, so a new one is saved first */
+    if (!nc.editingId){
+      try {
+        const rec = await db.add("newsletters", Object.assign({ templateId: nc.templateId, body: html, status: "draft" }, f), true);
+        nc.editingId = rec.id;
+      } catch(_e){ return; /* already toasted; nothing was sent */ }
+    }
+    const res = await sb.functions.invoke("send-newsletter", { body: { subject: f.subject, html: html, audience: who.audience, newsletterId: nc.editingId, since: who.since } });
     /* Same unwrap as "send-invite" elsewhere: a non-2xx response's
        error.message is just a generic wrapper - the function's own
        {error:"..."} body sits on error.context and has to be read
@@ -20443,23 +20574,26 @@ async function nlSendNow(form){
     }
     if (detail){ toast("Could not send newsletter: " + detail, "bad"); return; }
     const sent = (res.data && res.data.sent) || 0;
-    const patch = Object.assign({ templateId: nc.templateId, body: html, status:"sent", sentAt: nowISO(), sentCount: sent, scheduledAt:"", lastError:"" }, f);
+    if (AppState.admin.nlSentIds) delete AppState.admin.nlSentIds[nc.editingId];   /* read again next time */
+    /* "Sent to N" counts everyone this newsletter has reached across its sends */
+    const patch = Object.assign({ templateId: nc.templateId, body: html, status:"sent", sentAt: nowISO(), sentCount: (res.data && typeof res.data.reached === "number") ? res.data.reached : sent, lastSentCount: sent, scheduledAt:"", lastError:"" }, f);
     /* The email is already sent by this point - saving the record here is
        best-effort bookkeeping, so a failure here must not swallow the
        "sent" confirmation the admin needs to see. Silent - the custom
        db.log() call right below gives a clearer, more specific audit
        entry than the generic create/update one would. */
     try {
-      if (nc.editingId) await db.update("newsletters", nc.editingId, patch, true);
-      else await db.add("newsletters", patch, true);
+      await db.update("newsletters", nc.editingId, patch, true);
     } catch(_e){ /* already toasted; the send itself still succeeded */ }
     db.log("send", "subscribers", "newsletter", "Sent newsletter \"" + f.subject + "\" to " + sent + " subscriber" + (sent === 1 ? "" : "s"));
     closeModal();
     toast("Sent to " + sent + " subscriber" + (sent === 1 ? "" : "s") + ".");
+    /* the next "Create newsletter" starts fresh, never on this one's record */
+    AppState.admin.lastNewsletterId = null;
     /* Sent is terminal - back to the newsletters list to see it there,
        rather than staying on a compose page with nothing left to do. */
     Router.go("#/admin/send-newsletter");
-  });
+  }, whoText);
 }
 
 /** A one-off, one-recipient send of the exact draft on screen - for
@@ -30765,6 +30899,15 @@ function restoreFocusAfter(fn, selector){
 document.addEventListener("change", (ev) => {
   const el = ev.target;
   const pact = el.getAttribute && el.getAttribute("data-act");
+  if (pact === "nl-audience"){ AppState.admin.newsletterCompose.audience = el.value; nlPaintAudience(); return; }
+  if (pact === "nl-audience-since"){
+    const iso = el.value ? localDatetimeToISO(el.value) : "";
+    AppState.admin.newsletterCompose.audienceSince = iso || "";
+    /* changing the date picks "new subscribers" too */
+    const r = el.form && el.form.querySelector('input[name="audience"][value="new"]');
+    if (r && !r.checked){ r.checked = true; AppState.admin.newsletterCompose.audience = "new"; }
+    nlPaintAudience(); return;
+  }
   if (el.getAttribute && el.getAttribute("data-cpm")){ copilotEdit(el); return; }
   if (el.getAttribute && el.getAttribute("data-ehrow")){ ehEdit(el); return; }
   if (pact === "writer-url"){
