@@ -439,6 +439,25 @@ describe("the riffle shuffle (owner's pick, 2026-11-17)", () => {
   });
 });
 
+describe("card backs on the table (owner, 2026-11-19: the logo was upside down)", () => {
+  const up = new Function(pure + "; return uprightTurn;")();
+  /* a card turned by r shows the top of its back picture toward (-sin r, -cos r); the table camera sits at +z */
+  const topZ = (r) => -Math.cos(r);
+  it("every seat's face-down cards show the logo the right way up from the screen", () => {
+    for (const a of [Math.PI * .75, Math.PI * .25, -Math.PI * .25, -Math.PI * .75]){
+      for (const tilt of [-.16, 0, .16]){
+        const r = up(a + tilt);
+        expect(topZ(r)).toBeLessThanOrEqual(0);
+        expect(Math.abs(Math.sin(r - (a + tilt)))).toBeLessThan(1e-9);   /* same spot on the felt, just turned half round */
+        expect(Math.abs(r)).toBeLessThanOrEqual(Math.PI);                /* never spins the long way round */
+      }
+    }
+  });
+  it("the fans use it", () => {
+    expect(game).toContain("ry: uprightTurn(a + (i - (n - 1) / 2) * .08)");
+  });
+});
+
 describe("private links (security review, 2026-11-17)", () => {
   const player = readFileSync(new URL("../games/matching-suits-player.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const mscOf = (src) => new Function(src.split("const MSC = {")[1].split("\n};\n")[0].replace(/^/, "const MSC = {") + "\n};\nreturn MSC;")();
