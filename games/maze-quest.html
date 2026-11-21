@@ -1060,6 +1060,7 @@
                 <b id="gradeLabel">Your grade:</b>
                 <span id="mq-grades" style="display:contents"></span>
             </div>
+            <p class="mq-char-help" id="mq-grade-fixed" hidden></p>
             <div class="mq-modes">
                 <button type="button" id="charDone">Play on my own</button>
                 <button type="button" id="raceBtn" class="mq-sun" aria-haspopup="dialog">Race a friend</button>
@@ -1158,6 +1159,7 @@
 
     <script src="game-sound.js"></script>
     <script>
+        const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSearchParams(location.search).get("grade"); const n = typeof raw === "number" ? raw : /^[0-6]$/.test(String(raw)) ? Number(raw) : NaN; return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null; } catch (_e) { return null; } })();
         /* =====================================================================
            THE RULES, kept apart from the page so test/mazeQuestRace.test.js
            can check them without a browser: the seeded maze and its lanterns,
@@ -2361,6 +2363,23 @@
             }
         }
 
+        // with a picked child the card says "Playing at 2nd grade. Change"; Change shows the grade row again
+        function showGradeRow(show) {
+            const row = document.querySelector('.mq-grade-row');
+            const fixed = document.getElementById('mq-grade-fixed');
+            row.style.display = show ? '' : 'none';
+            if (!fixed) return;
+            if (show || CCS_CHILD_GRADE === null) { fixed.hidden = true; return; }
+            fixed.textContent = 'Playing at ' + GRADE_LIST[gradeIndex].name + '. ';
+            const c = document.createElement('button');
+            c.type = 'button'; c.id = 'mq-grade-change'; c.textContent = 'Change';
+            c.style.background = 'none'; // the skin styles every button without an inline background as a pill
+            c.style.cssText += ';border:0;box-shadow:none;padding:0;min-width:0;text-decoration:underline;font:inherit;cursor:pointer;color:inherit';
+            c.addEventListener('click', () => { sfx('click'); showGradeRow(true); const on = document.querySelector('#mq-grades .mq-grade[aria-pressed="true"]'); if (on) on.focus(); });
+            fixed.appendChild(c);
+            fixed.hidden = false;
+        }
+
         // the picker card: open from the face on the level sign; the maze
         // and its clock wait while it is open
         let pickerOpen = false;
@@ -2419,7 +2438,9 @@
                 b.addEventListener('click', () => setGrade(i, true));
                 grades.appendChild(b);
             });
-            setGrade(gradeIndex, false);
+            // a picked child starts at their own grade (K to 5th); this is not saved, only a pick in the card is
+            setGrade(CCS_CHILD_GRADE !== null ? Math.min(CCS_CHILD_GRADE, GRADE_LIST.length - 1) : gradeIndex, false);
+            showGradeRow(CCS_CHILD_GRADE === null);
             document.getElementById('raceBtn').addEventListener('click', () => { sfx('click'); openRoomCard(); });
             document.getElementById('char-button').addEventListener('click', openPicker);
             document.getElementById('charDone').addEventListener('click', () => { sfx('click'); closePicker(); });
