@@ -137,6 +137,19 @@ Games report questions answered inside them (Remote Lunar Mission's quiz first: 
 answer and a "why"), through a new message from the game to the page, recorded for the playing child and shown in the
 report under what they finished. Each game needs its own change, so this comes last and game by game.
 
+## STEAMM subjects (owner, 2026-11-21: "include Lessons in STEAMM subject (Science, Technology, Engineering, Art, Math, and Music)")
+
+- Every fact nugget is filed under one STEAMM subject: Science, Technology, Engineering, Art, Math or Music (or none, when
+  it truly fits none). The subject is the same at every grade level; the question gets harder with the grade.
+- The report's "What they learned" container opens with the six subjects (the site's own STEAMM icons from About > STEAMM
+  Methodology, in ink, no colors): how many things the child came across in each so far, and how many they know. Each
+  nugget in the list shows its subject. Chike's note can say which subjects the week was mostly about.
+- The admin sets the subject in the same panel as the quiz questions; Copilot suggests one when it drafts. An activity's
+  `learning.topic` gives a starting suggestion (structures → Engineering, sound → Music, color → Art, nature, space,
+  weather, recycling → Science).
+- A quiz mixes subjects when it can: its 3 questions come from different subjects before any subject repeats.
+- Mockup: docs/mockups/progress-report-draft-5.html.
+
 ## How the quiz keeps going (owner, 2026-11-21: "how will this scale on its own. Is the quizzes finite?" ... "The games, books, and activities will be added to the site so the content isn't going to always be finite")
 
 - **New content brings its own questions.** Publishing anything with a nugget drafts 2 or 3 quiz questions from the
