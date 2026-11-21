@@ -2573,6 +2573,43 @@ body.has-bottom-nav .tour-bubble{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 7
    already tappable) is enough; the bubble competing with a narrow
    viewport's own content is the tradeoff this skips. */
 @media (max-width:767px){ .tour-bubble{ display:none; } }
+/* The name tag of the child who's playing, just left of Chike (docs/mockups/progress-report-draft-5.html). No
+   animation at all: the corner is drawn again on every page, and the tag must never replay anything. */
+.tour-tag{
+  position:fixed; right:calc(18px + 72px + 6px); bottom:12px; z-index:960;
+  max-width:min(180px, calc(100vw - 132px)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font:inherit; font-size:.85rem; font-weight:800; line-height:1.4; color:var(--ink);
+  background:var(--paper-card); border:2px solid var(--ink); border-radius:999px; padding:4px 12px; cursor:pointer;
+}
+.tour-tag--alone{ right:18px; }
+.tour-tag--quiet{ font-weight:700; color:var(--ink-mute); }
+body.has-bottom-nav .tour-tag{ bottom:calc(12px + var(--bottom-nav-h, 0px)); }
+body:has(.tour-card) .tour-tag:not(.tour-tag--alone), body.is-admin .tour-tag,
+body.qu-panel-open .tour-tag, body.cp-panel-open .tour-tag{ display:none; }
+/* "Who's playing today?": its own layer, over the page or over a book or game that is open */
+.who{
+  position:fixed; inset:0; z-index:1250; display:grid; place-items:center; padding:16px; overflow-y:auto;
+  background:rgba(30,34,38,.55); animation:fade .16s ease-out;
+}
+@media (prefers-reduced-motion: reduce){ .who{ animation:none; } }
+.who__card{
+  width:min(500px,100%); background:var(--paper-card); border:var(--line); border-radius:22px;
+  box-shadow:10px 10px 0 rgba(0,0,0,.55); padding:clamp(18px,2.4vw,26px);
+}
+.who__row{ display:flex; gap:14px; align-items:center; margin:0 0 16px; }
+.who__row img{ width:84px; height:84px; border-radius:50%; object-fit:cover; flex:none; border:2px solid var(--ink); background:#fff; filter:brightness(1.22); }
+.who h3{ font-size:1.4rem; line-height:1.15; margin:0; }
+.who__row p{ color:var(--ink-soft); font-size:1rem; margin:4px 0 0; }
+.who__names{ display:flex; flex-wrap:wrap; gap:10px; }
+.who__names button{ font:inherit; font-weight:800; font-size:1.15rem; color:var(--ink); border:var(--line); border-radius:999px; background:var(--sun); padding:10px 26px; box-shadow:3px 3px 0 var(--ink); cursor:pointer; }
+.who__names .who__grown{ background:none; border:0; box-shadow:none; padding:10px 6px; font-size:.95rem; color:var(--ink-mute); text-decoration:underline; text-underline-offset:3px; }
+.who__names .who__grown small{ font-weight:600; font-size:inherit; }
+/* "We made it!" under an activity's steps */
+.made{ display:flex; flex-wrap:wrap; align-items:center; gap:12px 22px; margin-top:26px; }
+.made:empty{ display:none; }
+.made p{ font-weight:700; margin:0; }
+.made__done{ display:inline-flex; align-items:center; gap:10px; font-weight:800; color:var(--leaf-deep); }
+.made__done .pr-mark{ margin-top:0; flex:none; }
 
 /* The dim + outline are one element (a giant box-shadow spread doubles as
    the dim layer), positioned over the live target's own rect in JS - see
@@ -10627,7 +10664,8 @@ function renderTourRoot(){
   if (!root) return;
   const state = tourState();
   if (AppState.route.name === "admin" || state.hidden){
-    root.innerHTML = "";
+    /* with the tour put away for good, who's playing still shows in the corner on its own */
+    root.innerHTML = AppState.route.name === "admin" ? "" : progressChipHTML(true);
     teardownTourStep();
     return;
   }
@@ -10637,6 +10675,8 @@ function renderTourRoot(){
        gets the still picture */
     + '<picture><source media="(prefers-reduced-motion: reduce)" srcset="assets/characters/chike-avatar.webp">'
     + '<img src="assets/characters/chike-avatar-moving.webp" width="140" height="140" decoding="async" alt="" role="presentation"></picture></button>'
+    /* the name tag of the child who's playing, beside Chike (never animated, so a redraw doesn't replay anything) */
+    + progressChipHTML(false)
     + (state.status === "not_started"
         ? '<div class="tour-bubble" role="status">Welcome! I would love to give you a tour of our new site.</div>'
         : "");
@@ -12448,7 +12488,9 @@ function viewActivity(id){
     + '</div>'
 
     + '<div class="section section--tight" style="margin-top:26px"><h2>' + slot("templates/activity", "stepsTitle") + '</h2>'
-    + quEditable("activity-steps", a.id, stepsHTML(a.steps || [], a.stepPictures)) + '</div>'
+    + quEditable("activity-steps", a.id, stepsHTML(a.steps || [], a.stepPictures))
+    /* under the steps, for a child who's playing on a signed-in device: "We made it!" */
+    + progressMadeHTML(a) + '</div>'
     + '</div>'
     + '<div><div class="detail__cover">' + quEditable("activity-image", a.id, cover(a, a.type, t.label)) + '</div>'
     + (a.printable && a.printable.path
@@ -15547,6 +15589,224 @@ async function progressRemoveChild(id){
   toast("We couldn’t remove that just now. Check your connection and try again.", "bad");
   if (progressOnRoute()) rerender();
 }
+
+/* ---- Who's playing, and recording what a child finishes ----
+   On a device signed in to the Subscriber's Portal, with children added, the site asks once "Who's playing today?"
+   and remembers the pick on this device (PLAYING_KEY: a child's id, or "grownup" for "Just me, the grown-up", which
+   records nothing). A watched episode, a book read to its last page, an opened portal entry (a game entry when it is
+   played) and an activity marked "We made it!" are then recorded for that child. Nothing is recorded, and the picker
+   never shows, without a portal session (recordTarget in assets/lib/progress.js decides). The look is
+   docs/mockups/progress-report-draft-5.html. */
+const PLAYING_KEY = "ccs_playing_child";
+let PLAYING_MEM = "";             /* a private window that can't keep it: remembered until the tab closes */
+let PROGRESS_ASKED = false;       /* the picker opened by itself on this page load (it does that at most once) */
+let PROGRESS_KIDS_P = null;
+let PROGRESS_ENTRY_SEEN = "";     /* the portal entry already recorded on this visit to its page */
+let PROGRESS_BOOK_FRAME = null;   /* the book already recorded since it was opened */
+const PROGRESS_MADE = {};         /* "<activity id>:<child id>" -> when We made it! was pressed on this page load */
+
+function progressPlaying(){ try { return localStorage.getItem(PLAYING_KEY) || ""; } catch(_e){ return PLAYING_MEM; } }
+function progressSetPlaying(v){
+  PLAYING_MEM = v || "";
+  try { if (v) localStorage.setItem(PLAYING_KEY, v); else localStorage.removeItem(PLAYING_KEY); } catch(_e){ /* private window */ }
+}
+/** The member's children, loaded once when nothing has loaded them yet. No session: none. */
+function progressKids(){
+  const S = ProgressState;
+  if (!portalSavedSession()) return Promise.resolve([]);
+  if (Array.isArray(S.children)) return Promise.resolve(S.children);
+  if (!PROGRESS_KIDS_P) PROGRESS_KIDS_P = (S.loading ? Promise.resolve() : progressLoadChildren()).finally(() => { PROGRESS_KIDS_P = null; });
+  return PROGRESS_KIDS_P.then(() => Array.isArray(S.children) ? S.children : []);
+}
+
+/** Records one finished item for the child who's playing. With no pick yet the picker asks (by itself once per page
+    load; every time We made it! is pressed) and the item is recorded for whoever is picked. opts: { pressed, done(kid),
+    fail() }. */
+async function progressRecord(kind, itemId, opts){
+  const o = opts || {};
+  if (!itemId || !portalSavedSession()) return;
+  const kids = await progressKids();
+  const target = recordTarget(!!portalSavedSession(), progressPlaying(), kids);
+  if (!target) return;
+  if (target === "ask"){
+    if (PROGRESS_ASKED && !o.pressed) return;
+    PROGRESS_ASKED = true;
+    openWhoIsPlaying(() => progressRecord(kind, itemId, Object.assign({}, o, { pressed: false })));
+    return;
+  }
+  const r = await kidCall("record", { child: target, kind: kind, item: itemId });
+  if (progressSessionEnded(r)) return;
+  if (r && r.error === "not_found"){
+    /* removed on another device: the pick and the list are forgotten, and the picker asks again (no error shown) */
+    progressSetPlaying("");
+    ProgressState.children = null;
+    PROGRESS_ASKED = false;
+    renderTourRoot();
+    progressPaintMade();
+    if (!o.retried) return progressRecord(kind, itemId, Object.assign({}, o, { retried: true }));
+    return;
+  }
+  if (r && r.ok){
+    const kid = (ProgressState.children || []).find(c => c.id === target);
+    if (o.done && kid) o.done(kid);
+  } else if (o.fail) o.fail();
+}
+
+/** The picker's inside: Chike waving, one button per child, and "Just me, the grown-up". */
+function progressWhoHTML(kids){
+  return '<div class="who__card">'
+    + '<div class="who__row"><img src="assets/characters/chike-pose-wave.png" alt="" width="84" height="84" decoding="async">'
+    + '<div><h3 id="who-title">Who’s playing today?</h3><p>Tell me, and I’ll remember what you do.</p></div></div>'
+    + '<div class="who__names">'
+    + kids.map(c => '<button type="button" data-who="' + E(c.id) + '">' + E(c.name) + '</button>').join("")
+    + '<button type="button" class="who__grown" data-who="grownup">Just me, the grown-up <small>(nothing saved)</small></button>'
+    + '</div></div>';
+}
+function closeWhoIsPlaying(){
+  const box = document.getElementById("who-root");
+  if (!box) return false;
+  box.remove();
+  if (!$("#modal-root").innerHTML) document.body.classList.remove("no-scroll");
+  return true;
+}
+/** "Who's playing today?" Its own layer, so it can sit over a book or a game that is open. after() runs once a name
+    (or the grown-up) is picked; closing it without picking does nothing. */
+async function openWhoIsPlaying(after){
+  const kids = await progressKids();
+  if (!kids.length) return;
+  closeWhoIsPlaying();
+  const back = document.activeElement;
+  const box = document.createElement("div");
+  box.id = "who-root"; box.className = "who";
+  box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "who-title");
+  box.innerHTML = progressWhoHTML(kids);
+  rootAssetPaths(box);
+  document.body.appendChild(box);
+  document.body.classList.add("no-scroll");
+  const done = () => { closeWhoIsPlaying(); if (back && document.contains(back)) back.focus(); };
+  box.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-who]");
+    if (b){
+      progressSetPlaying(b.getAttribute("data-who"));
+      done();
+      renderTourRoot();
+      progressPaintMade();
+      if (after) after();
+      return;
+    }
+    if (ev.target === box) done();
+  });
+  box.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape"){ ev.stopPropagation(); done(); return; }
+    if (ev.key === "Tab"){
+      const all = Array.from(box.querySelectorAll("button"));
+      const first = all[0], last = all[all.length - 1];
+      if (ev.shiftKey && document.activeElement === first){ ev.preventDefault(); last.focus(); }
+      else if (!ev.shiftKey && document.activeElement === last){ ev.preventDefault(); first.focus(); }
+    }
+  });
+  const first = box.querySelector("[data-who]");
+  if (first) first.focus();
+}
+
+/** The name tag next to Chike in the corner: who's playing on this device. Pressing it asks again. */
+function progressChipHTML(alone){
+  if (!portalSavedSession() || !Array.isArray(ProgressState.children) || !ProgressState.children.length) return "";
+  const cls = "tour-tag" + (alone ? " tour-tag--alone" : "");
+  const playing = progressPlaying();
+  /* "Just me, the grown-up" was picked: the tag still lets a child say it's their turn */
+  if (playing === "grownup") return '<button type="button" class="' + cls + ' tour-tag--quiet" data-act="who-open">Who’s playing?</button>';
+  const kid = ProgressState.children.find(c => c.id === playing);
+  if (!kid) return "";
+  return '<button type="button" class="' + cls + '" data-act="who-open"'
+    + ' aria-label="' + E(kid.name) + ' is playing. Change who’s playing">' + E(kid.name) + '</button>';
+}
+
+/** "We made it!" under an activity's steps, for a child who's playing; afterwards, when they made it. */
+function progressMadeInner(id){
+  const kids = ProgressState.children;
+  if (!Array.isArray(kids)) return "";
+  const target = recordTarget(!!portalSavedSession(), progressPlaying(), kids);
+  if (!target) return "";
+  const kid = kids.find(c => c.id === target);
+  const at = kid && PROGRESS_MADE[id + ":" + kid.id];
+  if (at){
+    return '<span class="made__done"><span class="pr-mark pr-mark--knows" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>'
+      + E(kid.name) + ' made this on ' + E(progressWhen(at, "day")) + '</span>';
+  }
+  return '<p>' + (kid ? "Did " + E(kid.name) + " make it?" : "Did you make it?") + '</p>'
+    + '<button type="button" class="btn btn--sun" data-act="progress-made" data-id="' + E(id) + '">We made it!</button>';
+}
+function progressMadeHTML(a){
+  if (!portalSavedSession()) return "";
+  return '<div class="made no-print" id="progress-made" data-id="' + E(a.id) + '">' + progressMadeInner(a.id) + '</div>';
+}
+function progressPaintMade(){
+  const el = document.getElementById("progress-made");
+  if (el) el.innerHTML = progressMadeInner(el.getAttribute("data-id") || "");
+}
+
+/** The episode page's player, for a child who's playing: once 90% has played (checked every 5 seconds while it
+    plays) or it ends, the episode is recorded, once. YouTube's own player script loads only then. */
+async function progressWatchEpisode(videoId){
+  if (!portalSavedSession()) return;
+  const kids = await progressKids();
+  if (!recordTarget(!!portalSavedSession(), progressPlaying(), kids)) return;
+  try { await loadYouTubeApi(); } catch(_e){ return; }
+  const frame = document.getElementById("ep-player");
+  if (!frame || !window.YT || !window.YT.Player) return;
+  let done = false, timer = 0, player = null;
+  const finish = () => {
+    if (done) return;
+    done = true; clearInterval(timer);
+    progressRecord("episode", videoId);
+  };
+  player = new YT.Player("ep-player", { events: {
+    onReady: () => {
+      timer = setInterval(() => {
+        if (!frame.isConnected){ clearInterval(timer); return; }
+        try { if (player.getPlayerState() === 1 && watchedEnough(player.getCurrentTime(), player.getDuration())) finish(); } catch(_e){}
+      }, 5000);
+    },
+    onStateChange: (ev) => { if (ev.data === 0) finish(); }
+  } });
+}
+
+/** A portal entry on screen: recorded once per visit to its page, by its record id. A game entry waits until it is
+    played (progressEntryPlayed). */
+function progressEntryOpened(e){
+  if (!e || !e.id || e.layout === "game" || PROGRESS_ENTRY_SEEN === e.id) return;
+  PROGRESS_ENTRY_SEEN = e.id;
+  progressRecord("entry", e.id);
+}
+function progressEntryPlayed(){
+  const e = portalCurrentEntry();
+  if (e && e.id && e.layout === "game") progressRecord("entry", e.id);
+}
+/** After every page is drawn: the entry page left behind can be recorded again next time, and the children are loaded
+    (once) for the name tag and We made it! */
+function progressAfterRender(){
+  const r = AppState.route;
+  if (!r || r.name !== "newsletter-detail") PROGRESS_ENTRY_SEEN = "";
+  if (!r || r.name === "admin") return;
+  const S = ProgressState;
+  if (portalSavedSession() && S.children === null && !S.loading && !S.error){
+    progressKids().then(() => { renderTourRoot(); progressPaintMade(); });
+  }
+}
+/* a book read to its last page in the reading stage (books/reader.html says so on each page turn); only this site's
+   own page counts, and the book is recorded once each time it is opened */
+window.addEventListener("message", (ev) => {
+  const d = typeof doneFromMessage === "function" ? doneFromMessage(ev.data, ev.origin, location.origin) : null;
+  if (!d || d.kind !== "book") return;
+  const frame = $("#gamestage-frame");
+  if (!frame || ev.source !== frame.contentWindow || PROGRESS_BOOK_FRAME === frame) return;
+  let id = "";
+  try { id = new URL(frame.getAttribute("src") || "", location.href).searchParams.get("story") || ""; } catch(_e){ return; }
+  if (!id || !findBook(id)) return;
+  PROGRESS_BOOK_FRAME = frame;
+  progressRecord("book", id);
+});
 /** The Top 5 picked in the page's fields (one web address per line), in that order. A line that doesn't match an
     entry the reader can see is skipped, so a draft or a typo never shows a broken row. */
 function portalTop(list){
@@ -15840,6 +16100,7 @@ function viewNewsletterEntry(slug){
   if (PortalState.phase === "keyed"){
     if (!portalKeyedHere()){ portalLeaveKeyed(); return portalDecoy(); }
     const fromEmail = PortalState.detail[slug];
+    if (fromEmail) progressEntryOpened(fromEmail);
     return fromEmail ? portalEntryHTML(fromEmail, [], portalKeyedBar()) : portalDecoy();
   }
   if (!(PortalState.phase === "ready" && PortalState.entries)) return portalDecoy();
@@ -15851,6 +16112,7 @@ function viewNewsletterEntry(slug){
   }
   const e = PortalState.detail[slug];
   if (!e) return notFound("entry");
+  progressEntryOpened(e);
   const others = (PortalState.entries || []).filter(x => x.id !== e.id).slice(0, 3);
   return portalEntryHTML(e, others, portalMemberBar());
 }
@@ -28189,6 +28451,7 @@ function render(){
   renderQuickUpdatePanel();
   copilotRender();
   renderTourRoot();
+  progressAfterRender();
   portalSync();
 
   document.title = routeTitle() + " | " + BRAND.name;
@@ -28289,6 +28552,16 @@ const ACTIONS = {
   "progress-edit-cancel": () => { const S = ProgressState; S.editing = ""; S.formMsg = ""; S.draft = null; rerender(); },
   "progress-remove": (el) => { ProgressState.removing = el.getAttribute("data-id") || ""; ProgressState.editing = ""; ProgressState.formMsg = ""; rerender(); const k = document.getElementById("pr-keep"); if (k) k.focus(); },
   "progress-remove-no": () => { ProgressState.removing = ""; rerender(); },
+  "who-open": () => openWhoIsPlaying(),
+  "progress-made": (el) => {
+    const id = el.getAttribute("data-id") || "";
+    el.disabled = true;
+    progressRecord("activity", id, {
+      pressed: true,
+      done: (kid) => { PROGRESS_MADE[id + ":" + kid.id] = new Date().toISOString(); toast("Nice work, " + kid.name + "!"); progressPaintMade(); },
+      fail: () => toast("That didn’t save just now. Try again in a moment.", "bad")
+    }).finally(() => progressPaintMade());
+  },
   "progress-remove-yes": (el) => progressRemoveChild(el.getAttribute("data-id") || ""),
   "portal-cat": (el) => { AppState.portalCat = el.getAttribute("data-cat") || ""; rerender(); },
   "portal-photo": (el) => portalLightbox(el.getAttribute("data-src-list"), parseInt(el.getAttribute("data-i"), 10) || 0, el),
@@ -28302,6 +28575,7 @@ const ACTIONS = {
     const e = portalCurrentEntry();
     openGameStage({ id: "portal", title: el.getAttribute("data-title") || "Game", path: el.getAttribute("data-path"), icon: el.getAttribute("data-icon") || "dices",
       sharePath: e ? "/newsletter/" + encodeURIComponent(e.slug || e.id) : "/newsletter" });
+    progressEntryPlayed();
   },
   /* a subscribers-only game on the Play page: a subscriber (or an admin) plays it right there, without going to the
      Subscriber's Portal page first. Its code still only ever comes from the portal, for a signed-in subscriber. */
@@ -28347,6 +28621,8 @@ const ACTIONS = {
     if (!html){ toast("This game couldn\u2019t be loaded. Try again in a moment.", "bad"); return; }
     openGameStage({ id: "portal", title: el.getAttribute("data-title") || e.title || "Game", icon: "dices", hasFile: true, srcdoc: html,
       sharePath: "/newsletter/" + encodeURIComponent(e.slug || e.id) });
+    /* a game entry counts for the progress report once it is played */
+    progressEntryPlayed();
   },
   "portal-say-word": (el) => {
     const word = el.getAttribute("data-word") || "";
@@ -29091,7 +29367,8 @@ const ACTIONS = {
     rerender();
   },
 
-  "open-game": (el) => openGameStage(el.getAttribute("data-id")),
+  /* on a portal game entry's page, playing it records the entry (anywhere else progressEntryPlayed does nothing) */
+  "open-game": (el) => { openGameStage(el.getAttribute("data-id")); progressEntryPlayed(); },
   "close-game": () => closeGameStage(),
   "game-reload": () => {
     const frame = $("#gamestage-frame");
@@ -29133,11 +29410,16 @@ const ACTIONS = {
     if (!wrap || !isVideoId(id)) return;
     const title = el.getAttribute("data-title") || "Episode";
     wrap.setAttribute("data-title", title);
-    wrap.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + E(id)
-      + '?autoplay=1&controls=1&rel=0&modestbranding=1&playsinline=1&cc_load_policy=1&cc_lang_pref=en" title="' + E(title)
+    /* the episode's own page: the player can tell the page how far it has played, for the progress report */
+    const r = AppState.route;
+    const episode = r && r.name === "video-detail" ? r.params.id : "";
+    wrap.innerHTML = '<iframe' + (episode ? ' id="ep-player"' : "") + ' src="https://www.youtube-nocookie.com/embed/' + E(id)
+      + '?autoplay=1&controls=1&rel=0&modestbranding=1&playsinline=1&cc_load_policy=1&cc_lang_pref=en'
+      + (episode ? "&enablejsapi=1&origin=" + encodeURIComponent(location.origin) : "") + '" title="' + E(title)
       + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"'
       + ' referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>';
     drawIcons();
+    if (episode) progressWatchEpisode(episode);
   },
 
   /* ---- mock commerce ---- */
