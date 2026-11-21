@@ -8794,6 +8794,7 @@ const AppState = {
   finder: { materials:[], theme:"", time:"",
             age:"", place:"", support:"", challenge:"", character:"", topic:"", access:"" },
   finderRun: false,
+  finderAgeAuto: false,   /* the picked child's age band was filled in once for this finder */
   finderStep: 1,
   createFilter: { type:"", access:"", collection:"", q:"", page:1 },
   /* News & Articles: the search, the page, and cards or a list (the last one is remembered on this device) */
@@ -9838,6 +9839,7 @@ function activityCard(a){
     + '<span class="card__badge chip chip--ink">' + (a.status === "draft" ? ic("eye-off") + ' Draft · ' : "") + E(t.label) + '</span>'
     + '</div>'
     + '<div class="card__body">'
+    + gradeTagHTML(a)
     + '<h3 class="card__title">' + E(a.title) + '</h3>'
     + '<p class="tiny mute" style="margin:0">' + E(a.summary) + '</p>'
     + '<div class="card__foot">'
@@ -12285,6 +12287,8 @@ function viewCreate(sub){
   }
   /* on Computer Activities the free ones come first, then the subscribers' lessons */
   list = list.slice().sort((a,b) => (tech ? (a.access === "members") - (b.access === "members") : 0) || a.title.localeCompare(b.title));
+  /* a picked child: activities that fit their grade first, the rest nearest in difficulty first (before paging) */
+  list = gradeOrderActivities(list, progressPickedGrade());
   const poolSize = createPoolActivities().length;
 
   /* Twelve to a page - four rows of the three-column grid - so a long
@@ -15721,6 +15725,28 @@ function progressPickedGrade(){
   if (!id || id === "ask") return null;
   const child = kids.find(c => c && c.id === id);
   return child ? childGradeFrom(child.grade) : null;
+}
+/** A picked child's grade puts the activities that fit it first, the rest by how close their difficulty is; ties
+    keep the order given (progress.js: activityFitsGrade, difficultyDistance). No grade: the list unchanged. */
+function gradeOrderActivities(list, g){
+  if (g === null || g === undefined) return list;
+  const rank = a => activityFitsGrade(a, g) ? -1 : difficultyDistance(a, g);
+  return list.map((a, i) => ({ a, i, r: rank(a) })).sort((x, y) => (x.r - y.r) || (x.i - y.i)).map(x => x.a);
+}
+/** "Good for 2nd grade" chip on a card that fits the picked child's grade; nothing for anyone else. */
+function gradeTagHTML(a){
+  const g = progressPickedGrade();
+  if (g === null || !activityFitsGrade(a, g)) return "";
+  return '<span class="chip chip--sun" style="align-self:flex-start">' + ic("check") + ' Good for ' + E(gradeLabel(g)) + '</span>';
+}
+/** The Activity Finder's age starts at the picked child's age band, once per finder (find-clear starts it over);
+    an age the child or grown-up chose is never replaced. */
+function finderFillAge(){
+  if (AppState.finderAgeAuto) return;
+  const g = progressPickedGrade();
+  if (g === null) return;
+  AppState.finderAgeAuto = true;
+  if (!AppState.finder.age) AppState.finder.age = findAgeForGrade(g);
 }
 function progressSetPlaying(v){
   PLAYING_MEM = v || "";
@@ -29814,12 +29840,14 @@ const ACTIONS = {
   "find-set": (el) => {
     const key = el.getAttribute("data-key");
     const value = el.getAttribute("data-value");
+    if (key === "age") AppState.finderAgeAuto = true; else finderFillAge();
     /* pressing the chosen one again clears it */
     AppState.finder[key] = (AppState.finder[key] === value) ? "" : value;
     rerender();
     refreshFinderModal();
   },
   "find-multi": (el) => {
+    finderFillAge();
     const value = el.getAttribute("data-value");
     const list = AppState.finder.materials;
     const at = list.indexOf(value);
@@ -29851,6 +29879,7 @@ const ACTIONS = {
     AppState.finder = { materials:[], theme:"", time:"",
                         age:"", place:"", support:"", challenge:"", character:"", topic:"", access:"" };
     AppState.finderRun = false;
+    AppState.finderAgeAuto = false;
     AppState.finderStep = 1;
     AppState.keepScroll = true;
     rerender();

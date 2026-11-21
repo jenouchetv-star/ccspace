@@ -2,7 +2,7 @@
 // openGameStage), and every game reads it with the same one-line snippet (assets/lib/childGrade.snippet.js).
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { recordTarget, childGradeFrom, withChildGrade } from "../assets/lib/progress.js";
+import { recordTarget, childGradeFrom, withChildGrade, activityFitsGrade, difficultyDistance, findAgeForGrade, gradeLabel } from "../assets/lib/progress.js";
 
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const SNIPPET_LINE = 'const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSearchParams(location.search).get("grade"); const n = typeof raw === "number" ? raw : /^[0-6]$/.test(String(raw)) ? Number(raw) : NaN; return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null; } catch (_e) { return null; } })();';
@@ -114,5 +114,51 @@ describe("the child-grade snippet", () => {
     expect(run({ CCS_GRADE: 2.5 }, "")).toBeNull();
     // a page with no way to read its address still starts
     expect(new Function("window", snippet + "; return CCS_CHILD_GRADE;")({})).toBeNull();
+  });
+});
+
+describe("activities fit the child's age first", () => {
+  const act = (id, ageMin, ageMax, difficulty, title) => ({ id, title: title || id, ageMin, ageMax, difficulty });
+  const order = new Function("activityFitsGrade", "difficultyDistance", fn("gradeOrderActivities") + "; return gradeOrderActivities;")(activityFitsGrade, difficultyDistance);
+  const tagFor = (g) => new Function("progressPickedGrade", "activityFitsGrade", "gradeLabel", "E", "ic", fn("gradeTagHTML") + "; return gradeTagHTML;")(
+    () => g, activityFitsGrade, gradeLabel, (x) => String(x), () => "<svg></svg>");
+
+  it("fitting activities come first for a picked child", () => {
+    const list = [act("hard", 6, 10, "challenge"), act("fit", 6, 10, "medium"), act("easy", 6, 10, "easy"), act("old", 11, 14, "medium"), act("fit2", 7, 9, "medium")];
+    // 2nd grade: ages 7-8, medium. Fitting first (given order), then the rest nearest in difficulty, ties in the given order.
+    expect(order(list, 2).map((a) => a.id)).toEqual(["fit", "fit2", "old", "hard", "easy"]);
+  });
+
+  it("an activity without ages is not tagged", () => {
+    const tag = tagFor(2);
+    expect(tag({ id: "x", difficulty: "medium" })).toBe("");
+    expect(tag({ id: "x", ageMin: 6, ageMax: 9 })).toBe("");
+    expect(tag(act("x", 6, 9, "medium"))).toContain("Good for 2nd grade");
+    expect(tagFor(0)(act("x", 4, 6, "easy"))).toContain("Good for Kindergarten");
+    expect(tag(act("x", 6, 9, "medium"))).toContain("chip--sun");
+  });
+
+  it("no pick: same order and no tag", () => {
+    const list = [act("b", 6, 10, "challenge"), act("a", 6, 10, "medium")];
+    expect(order(list, null)).toBe(list);
+    expect(tagFor(null)(act("x", 6, 9, "medium"))).toBe("");
+    // the Create list sorts before paging, only through the one helper
+    expect(fn("viewCreate")).toMatch(/gradeOrderActivities\(list, progressPickedGrade\(\)\)/);
+    expect(fn("activityCard")).toMatch(/gradeTagHTML\(a\)/);
+  });
+
+  it("the finder age is filled in", () => {
+    const make = (g, finder, auto = false) => {
+      const AppState = { finder, finderAgeAuto: auto };
+      new Function("AppState", "progressPickedGrade", "findAgeForGrade", fn("finderFillAge") + "; finderFillAge();")(AppState, () => g, findAgeForGrade);
+      return AppState;
+    };
+    expect(make(0, { age: "" }).finder.age).toBe("3-5");
+    expect(make(2, { age: "" }).finder.age).toBe("6-8");
+    expect(make(5, { age: "" }).finder.age).toBe("9-12");
+    expect(make(2, { age: "3-5" }).finder.age).toBe("3-5");
+    expect(make(null, { age: "" }).finder.age).toBe("");
+    expect(make(2, { age: "" }, true).finder.age).toBe("");
+    expect(index).toMatch(/"find-clear": \(\) => \{[\s\S]*?finderAgeAuto = false/);
   });
 });
