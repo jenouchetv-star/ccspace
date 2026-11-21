@@ -19,8 +19,8 @@
 //   report        { child } what the child finished, the facts they came across, the approved lessons of what they
 //                 finished, each fact's STEAMM subject and the 5 newest quizzes.
 //   quiz_offer    { child } -> { ok, due }: due when no quiz started in the last 7 days and 3 or more facts are eligible.
-//   quiz_start    { child } -> { ok, quizId, level, questions: [{ nuggetId, question, choices }] } or "not_due". Never
-//                 sends the answer or the why.
+//   quiz_start    { child } -> { ok, quizId, level, questions: [{ nuggetId, question, choices, subject }] } or "not_due"
+//                 (subject: the fact's STEAMM subject id, or ""). Never sends the answer or the why.
 //   quiz_answer   { child, quizId, nuggetId, choice } -> { ok, correct, answer, why }. Counts once per nugget per quiz;
 //                 sending it again returns the first result and changes nothing.
 //
@@ -321,7 +321,10 @@ Deno.serve(async (req) => {
       if (error || !data) throw new Error(error?.message || "quiz not saved");
       return json({
         ok: true, quizId: data.id, level,
-        questions: picked.map((e) => { const q = pickVariant(e.rows, e.state?.last_variant)!; return { nuggetId: e.id, question: q.question, choices: q.choices }; }),
+        questions: picked.map((e) => {
+          const q = pickVariant(e.rows, e.state?.last_variant)!;
+          return { nuggetId: e.id, question: q.question, choices: q.choices, subject: subjects.get(e.id) ?? "" };
+        }),
       });
     }
 

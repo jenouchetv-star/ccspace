@@ -432,7 +432,7 @@ describe("kid-progress function", () => {
     expect(zed.level).toBe("g46");
     // the browser never gets the right answer or the why before answering
     for (const r of [maya, leo, zed]) {
-      for (const q of r.questions) expect(Object.keys(q).sort()).toEqual(["choices", "nuggetId", "question"]);
+      for (const q of r.questions) expect(Object.keys(q).sort()).toEqual(["choices", "nuggetId", "question", "subject"]);
       expect(JSON.stringify(r)).not.toMatch(/"answer"|"why"|Because|needs the why/);
     }
     // two Augusts later Maya is in 4th grade, so she gets the 4th to 6th grade questions
@@ -577,6 +577,9 @@ describe("kid-progress function", () => {
     // no subject is a group of its own; once every group has had a turn, a subject may repeat, in order
     const k1 = { level: "k1", choices: ["Yes", "No"] };
     seedQuiz(A_CHILD2, [["book:k1:fact", "science", k1], ["book:k2:fact", "science", k1], ["book:k3:fact", null, k1], ["book:k4:fact", "science", k1]]);
-    expect(ids(await a("quiz_start", { child: A_CHILD2 }))).toEqual(["book:k1:fact", "book:k3:fact", "book:k2:fact"]);
+    const leo = await a("quiz_start", { child: A_CHILD2 });
+    expect(ids(leo)).toEqual(["book:k1:fact", "book:k3:fact", "book:k2:fact"]);
+    // each question says its STEAMM subject, for the label under it on the quiz card ("" when it has none)
+    expect(leo.questions.map((q) => q.subject)).toEqual(["science", "", "science"]);
   });
 });
