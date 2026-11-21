@@ -199,3 +199,58 @@ describe("the page", () => {
     expect(page).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 });
+
+describe("grade adjust: starts at the picked child's grade", () => {
+  const part = page.split("const gradeIdForChild")[1].split("  function radioKeys")[0];
+  /* a tiny page: the grade row's label and buttons, and the "Playing at" line */
+  function setup(childGrade) {
+    const mk = () => ({ style: {}, hidden: false, innerHTML: "", children: [], listeners: {}, appendChild(c) { this.children.push(c); }, addEventListener(t, f) { this.listeners[t] = f; }, focus() {} });
+    const els = { "grade-label": mk(), grades: mk(), "grade-fixed": mk() };
+    els["grade-fixed"].hidden = true;
+    const doc = { createTextNode: (t) => ({ text: t }), createElement: () => mk(), querySelector: () => null };
+    const st = { grade: "K" };
+    const api = new Function("CCS_CHILD_GRADE", "GRADE_ORDER", "GRADES", "st", "$", "document", "S",
+      "const gradeIdForChild" + part + "; return { gradeIdForChild, showGradeRow };")(
+      childGrade, R.GRADE_ORDER, R.GRADES, st, (id) => els[id], doc, () => {});
+    if (childGrade !== null) st.grade = api.gradeIdForChild(childGrade);
+    api.showGradeRow(childGrade === null);
+    return { els, st, api };
+  }
+  const line = (els) => els["grade-fixed"].children.map((c) => c.text || ("[" + c.textContent + "]")).join("");
+
+  it("preselects the child's grade and hides the grade row", () => {
+    const { els, st } = setup(2);
+    expect(st.grade).toBe("2");
+    expect(els.grades.hidden).toBe(true);
+    expect(els["grade-label"].hidden).toBe(true);
+    expect(els["grade-fixed"].hidden).toBe(false);
+    expect(line(els)).toBe("Playing at 2nd grade. [Change]");
+    expect(setup(0).st.grade).toBe("K");
+    expect(line(setup(0).els)).toBe("Playing at Kindergarten. [Change]");
+    expect(page).toContain("if (CCS_CHILD_GRADE !== null) st.grade = gradeIdForChild(CCS_CHILD_GRADE);");
+    // the child's grade is never written to the game's own saved pick
+    expect(part).not.toMatch(/store\.set/);
+  });
+  it("clamps to the game's range", () => {
+    expect(setup(6).st.grade).toBe("5");
+    expect([0, 1, 2, 3, 4, 5, 6].map((n) => setup(n).st.grade)).toEqual(["K", "1", "2", "3", "4", "5", "5"]);
+  });
+  it("no grade: the picker shows as today", () => {
+    const { els, st } = setup(null);
+    expect(st.grade).toBe("K");
+    expect(els.grades.hidden).toBe(false);
+    expect(els["grade-label"].hidden).toBe(false);
+    expect(els["grade-fixed"].hidden).toBe(true);
+  });
+  it("Change shows the grades again", () => {
+    const { els, api } = setup(3);
+    els["grade-fixed"].children[1].listeners.click();
+    expect(els.grades.hidden).toBe(false);
+    expect(els["grade-label"].hidden).toBe(false);
+    expect(els["grade-fixed"].hidden).toBe(true);
+    // the in-game "Change grade" buttons go back to the title with the row showing
+    expect(page).toMatch(/function toMenu\(\)\{\r?\n\s*showGradeRow\(true\);/);
+    api.showGradeRow(true);
+    expect(els.grades.hidden).toBe(false);
+  });
+});

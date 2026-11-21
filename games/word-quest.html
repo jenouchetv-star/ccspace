@@ -102,6 +102,7 @@ body{
 .wq .grade[aria-checked="true"]{background:var(--sun)}
 .wq .grade .sup{font-size:.6em;vertical-align:.45em;margin-left:1px}
 .grade-name{margin:8px 0 0;font-weight:700;color:var(--muted);font-size:.92rem}
+.grade-name .grade-change{font:inherit;font-weight:800;color:var(--ink);background:none !important;border:0 !important;box-shadow:none !important;border-radius:0 !important;padding:0 !important;min-height:0 !important;width:auto !important;transform:none !important;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .modes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 /* #title wins over the shared skin's pill shape (its button rule is very specific) */
 #title .modes .mode{border-radius:16px !important}
@@ -365,6 +366,7 @@ body{
 
       <div class="controls">
         <div>
+          <p class="grade-name" id="grade-fixed" hidden></p>
           <p class="step-label" id="grade-label">Your grade</p>
           <div class="grades" role="radiogroup" aria-labelledby="grade-label" id="grades"></div>
           <p class="grade-name" id="grade-name"></p>
@@ -517,6 +519,7 @@ body{
 </main>
 
 <script>
+const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSearchParams(location.search).get("grade"); const n = typeof raw === "number" ? raw : /^[0-6]$/.test(String(raw)) ? Number(raw) : NaN; return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null; } catch (_e) { return null; } })();
 /* BEGIN pure */
 /* ---------- grades: board size, how many words, the clock, which ways words can run ---------- */
 const DIRS = { R:[0,1], D:[1,0], DR:[1,1], UR:[-1,1], L:[0,-1], U:[-1,0], DL:[1,-1], UL:[-1,-1] };
@@ -777,6 +780,21 @@ function stars(o){
       box.appendChild(b);
     });
     radioKeys(box, ".grade");
+  }
+  /* a picked child: the game starts at their grade (never saved as the game's own pick); the grade row waits behind "Change" */
+  const gradeIdForChild = (n) => GRADE_ORDER[Math.min(n, 5)];
+  function showGradeRow(show){
+    const fixed = $("grade-fixed");
+    $("grade-label").hidden = !show; $("grades").hidden = !show;
+    if (!fixed) return;
+    if (show || CCS_CHILD_GRADE === null){ fixed.hidden = true; return; }
+    fixed.innerHTML = "";
+    fixed.appendChild(document.createTextNode("Playing at " + GRADES[st.grade].name + ". "));
+    const c = document.createElement("button");
+    c.type = "button"; c.className = "grade-change"; c.id = "grade-change"; c.style.background = "none";   /* the skin styles every button without an inline background as a chunky pill */ c.textContent = "Change";
+    c.addEventListener("click", () => { S("click"); showGradeRow(true); const on = document.querySelector('.grade[aria-checked="true"]'); if (on) on.focus(); });
+    fixed.appendChild(c);
+    fixed.hidden = false;
   }
   function radioKeys(box, sel){
     box.addEventListener("keydown", (e) => {
@@ -1265,6 +1283,7 @@ function stars(o){
     focusCell(st.kb, true);
   }
   function toMenu(){
+    showGradeRow(true);
     st.playing = false; st.paused = false; board.classList.remove("paused");
     hideOverlays(); showScreen("title"); paintTitle();
     setTimeout(() => { const b = document.querySelector('.grade[aria-checked="true"]'); if (b) b.focus(); }, 30);
@@ -1373,7 +1392,9 @@ function stars(o){
   /* ============================================================
      START
      ============================================================ */
-  buildGrades(); paintTitle();
+  buildGrades();
+  if (CCS_CHILD_GRADE !== null) st.grade = gradeIdForChild(CCS_CHILD_GRADE);
+  paintTitle(); showGradeRow(CCS_CHILD_GRADE === null);
   if (window.CCSSound){
     $("sound-slot-title").appendChild(CCSSound.button());
     $("sound-slot-pause").appendChild(CCSSound.button());

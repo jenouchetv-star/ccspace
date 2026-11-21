@@ -97,6 +97,7 @@ body{
 .cb .grade[aria-checked="true"]{background:var(--sun)}
 .cb .grade .sup{font-size:.6em;vertical-align:.45em;margin-left:1px}
 .grade-name{margin:8px 0 0;font-weight:700;color:var(--muted);font-size:.92rem}
+.grade-name .grade-change{font:inherit;font-weight:800;color:var(--ink);background:none !important;border:0 !important;box-shadow:none !important;border-radius:0 !important;padding:0 !important;min-height:0 !important;width:auto !important;transform:none !important;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 /* the Hints switch: a toggle with an inline background, so the shared skin's pill rule leaves it alone */
 .hint-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border:3px solid var(--ink);border-radius:16px;padding:9px 12px}
@@ -357,6 +358,7 @@ body.pad-nav button:focus,body.pad-nav input:focus{outline:3px solid var(--ink) 
 
       <div class="controls">
         <div>
+          <p class="grade-name" id="grade-fixed" hidden></p>
           <p class="step-label" id="grade-label">Your grade</p>
           <div class="grades" role="radiogroup" aria-labelledby="grade-label" id="grades"></div>
           <p class="grade-name" id="grade-name"></p>
@@ -538,6 +540,7 @@ body.pad-nav button:focus,body.pad-nav input:focus{outline:3px solid var(--ink) 
 </main>
 
 <script>
+const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSearchParams(location.search).get("grade"); const n = typeof raw === "number" ? raw : /^[0-6]$/.test(String(raw)) ? Number(raw) : NaN; return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null; } catch (_e) { return null; } })();
 /* BEGIN pure */
 /* ---------- the table, in meters. x runs along the long side, z across it; the white ball starts on the left ---------- */
 const TABLE = { L:2.24, W:1.12, R:0.042, RAIL:0.15, CUSH:0.05, RAIL_H:0.05, NOSE_H:0.036, BODY:0.24 };
@@ -1301,6 +1304,21 @@ function renderScene(v, world, o){
     });
     radioKeys(box, ".grade");
   }
+  /* a picked child: the game starts at their grade (never saved as the game's own pick); the grade row waits behind "Change" */
+  const gradeIdForChild = (n) => GRADE_ORDER[Math.min(n, 5)];
+  function showGradeRow(show){
+    const fixed = $("grade-fixed");
+    $("grade-label").hidden = !show; $("grades").hidden = !show;
+    if (!fixed) return;
+    if (show || CCS_CHILD_GRADE === null){ fixed.hidden = true; return; }
+    fixed.innerHTML = "";
+    fixed.appendChild(document.createTextNode("Playing at " + GRADES[st.grade].name + ". "));
+    const c = document.createElement("button");
+    c.type = "button"; c.className = "grade-change"; c.id = "grade-change"; c.style.background = "none";   /* the skin styles every button without an inline background as a chunky pill */ c.textContent = "Change";
+    c.addEventListener("click", () => { S("click"); showGradeRow(true); const on = document.querySelector('.grade[aria-checked="true"]'); if (on) on.focus(); });
+    fixed.appendChild(c);
+    fixed.hidden = false;
+  }
   function radioKeys(box, sel){
     box.addEventListener("keydown", (e) => {
       const items = [...box.querySelectorAll(sel)], i = items.indexOf(document.activeElement);
@@ -1947,6 +1965,7 @@ function renderScene(v, world, o){
     st.paused = false; $("pause").hidden = true; S("click");
   }
   function toMenu(){
+    showGradeRow(true);
     if (MP.ch) leaveRoom();
     st.duo = null;
     st.paused = false; st.phase = "idle"; st.aim.on = false;
@@ -2202,7 +2221,9 @@ function renderScene(v, world, o){
   /* ============================================================
      START
      ============================================================ */
-  buildGrades(); paintTitle();
+  buildGrades();
+  if (CCS_CHILD_GRADE !== null) st.grade = gradeIdForChild(CCS_CHILD_GRADE);
+  paintTitle(); showGradeRow(CCS_CHILD_GRADE === null);
   if (window.CCSSound){
     $("sound-slot-title").appendChild(CCSSound.button());
     $("sound-slot-pause").appendChild(CCSSound.button());
