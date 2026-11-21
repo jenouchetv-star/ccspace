@@ -42,6 +42,9 @@ So the report answers one question for a parent: **what is my child getting out 
    quick questions about things you watched." Remembering after a break is the better proof for the parent.
 4. **Quiz frequency:** **at most once a week per child**, and only when the child has **3 or more fact nuggets** they have
    met but not yet been quizzed on. "Later" waits for the next visit; never asked twice on the same day.
+5. **Grown-up lock:** the report and "Your children" screens open only after a quick grown-up check (a question a young
+   child cannot easily answer, such as a two-digit multiplication typed in). The check is remembered for that visit only.
+   The child can still use "Who's playing?" and take Chike's quizzes. No extra email codes.
 
 ## Goals
 
