@@ -6,6 +6,11 @@ import { readFileSync } from "node:fs";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const body = (name) => html.split("function " + name + "(")[1].split("\nfunction ")[0];
+/* one of the page's functions, built on its own with the names it uses passed in (the last argument may be "async ") */
+const fn = (name, ...deps) => {
+  const prefix = deps.length && /^async $/.test(deps[deps.length - 1]) ? deps.pop() : "";
+  return (...vals) => new Function(...deps, "return " + prefix + "function " + name + "(" + body(name))(...vals);
+};
 /* the report page and the pieces it is drawn from */
 const view = () => ["viewProgress", "progressCheckHTML", "progressReportHTML", "progressChildrenHTML"].map(body).join("\n");
 
@@ -100,6 +105,71 @@ describe("the progress report page", () => {
     const m = body("portalMemberBar");
     expect(m).toContain('href="#/newsletter/progress"');
     expect(m).toContain("Progress report");
+  });
+
+  it("leaves out anything that is not published any more (draft, sent back for revision, archived)", () => {
+    const lists = {
+      videos: ["published", "draft", "revision", "archived"].map((s) => ({ id: "v-" + s, title: s, status: s })),
+      stories: [{ id: "s1", title: "S", status: "draft" }, { id: "s2", title: "S2", status: "published" }],
+      activities: [{ id: "a1", title: "A", status: "review" }, { id: "a2", title: "A2", status: "published" }],
+    };
+    const fakeDb = { find: (col, id) => (lists[col] || []).find((r) => r.id === id) || null, list: (col) => lists[col] || [] };
+    const content = fn("progressContent", "db", "PortalState", "portalIsAdmin")(fakeDb, { detail: {}, entries: [{ id: "e1", slug: "e-one", title: "E" }] }, () => false)();
+    expect(content.find("episode", "v-published")).toBeTruthy();
+    for (const s of ["draft", "revision", "archived"]) expect(content.find("episode", "v-" + s)).toBe(null);
+    expect(content.find("book", "s1")).toBe(null);
+    expect(content.find("book", "s2")).toBeTruthy();
+    expect(content.find("activity", "a1")).toBe(null);
+    expect(content.find("activity", "a2")).toBeTruthy();
+    expect(content.find("entry", "e-one")).toBeTruthy();     // the portal's entries come back published only
+  });
+
+  it("forgets the last family's report whenever the portal session changes or ends", () => {
+    const store = {};
+    const ls = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; }, removeItem: (k) => { delete store[k]; } };
+    let forgot = 0;
+    const save = fn("portalSaveSession", "localStorage", "PORTAL_SESSION_KEY", "portalSavedSession", "progressForget")(
+      ls, "k", () => ls.getItem("k") || "", () => { forgot++; });
+    save("first-member"); expect(forgot).toBe(1);
+    save("first-member"); expect(forgot).toBe(1);             // the same sign-in restored on a reload keeps it
+    save("second-member"); expect(forgot).toBe(2);            // another member signs in on this tab
+    save(""); expect(forgot).toBe(3);                         // the session ends (list failure, an entry or a game finding it gone)
+    save(""); expect(forgot).toBe(3);
+    for (const f of ["portalLoadEntry", "portalUnlock"]) expect(body(f)).toContain('portalSaveSession("")');
+    expect(body("progressForget")).toContain("S.grownUpOk = false");
+  });
+
+  it("keeps no stale error when kid-progress says no_session, so a new sign-in starts fresh", async () => {
+    const S = { loading: false, error: "", children: null, reports: {}, reportLoading: {}, reportFor: "" };
+    let forgot = 0, signedOut = 0;
+    const forget = () => { forgot++; S.error = ""; S.children = null; S.reports = {}; S.reportLoading = {}; };
+    const ended = fn("progressSessionEnded", "progressForget", "portalSavedSession", "PortalState", "artCloudForget", "progressOnRoute", "rerender")(
+      forget, () => "", { phase: "ready" }, () => { signedOut++; }, () => true, () => {});
+    const noSession = async () => ({ ok: false, error: "no_session" });
+    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressOnRoute", "rerender", "async ")(S, noSession, ended, () => true, () => {});
+    await load();
+    expect(S.error).toBe("");
+    expect(S.children).toBe(null);
+    expect(forgot).toBe(1);
+    expect(signedOut).toBe(1);                                 // the portal's sign-in gate shows
+    const report = fn("progressLoadReport", "ProgressState", "kidCall", "progressSessionEnded", "progressOnRoute", "rerender", "async ")(S, noSession, ended, () => true, () => {});
+    await report("c1");
+    expect(S.reports.c1).toBe(undefined);
+    for (const f of ["progressSaveChild", "progressRemoveChild"]) {
+      const b = body(f);
+      expect(b.indexOf("if (progressSessionEnded(r)) return;")).toBeGreaterThan(-1);
+      expect(b.indexOf("if (progressSessionEnded(r)) return;")).toBeLessThan(b.indexOf("toast("));
+    }
+  });
+
+  it("takes a phone's curly apostrophe in a name (D’Andre) as a straight one", () => {
+    const clean = fn("progressCleanName")();
+    expect(clean("D’Andre")).toBe("D'Andre");
+    expect(clean(" ‘Bo’ ")).toBe("'Bo'");
+    expect(/^[\p{L} '.-]{1,24}$/u.test(clean("D’Andre"))).toBe(true);
+    const save = body("progressSaveChild");
+    expect(save).toContain("const name = progressCleanName(form.elements.name.value);");
+    expect(save.indexOf("progressCleanName(")).toBeLessThan(save.indexOf('kidCall("child_save"'));
   });
 
   it("no em dashes and no he/she in the new copy", () => {

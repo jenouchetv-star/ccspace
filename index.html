@@ -14536,7 +14536,11 @@ const PortalState = {
 };
 
 function portalSavedSession(){ try { return localStorage.getItem(PORTAL_SESSION_KEY) || ""; } catch(_e){ return ""; } }
-function portalSaveSession(tok){ try { if (tok) localStorage.setItem(PORTAL_SESSION_KEY, tok); else localStorage.removeItem(PORTAL_SESSION_KEY); } catch(_e){ /* private window: the session lasts until the tab closes */ } }
+function portalSaveSession(tok){
+  /* a session that ends, or another member signing in on this tab: nothing of the last family's progress report is kept */
+  if ((tok || "") !== portalSavedSession()) progressForget();
+  try { if (tok) localStorage.setItem(PORTAL_SESSION_KEY, tok); else localStorage.removeItem(PORTAL_SESSION_KEY); } catch(_e){ /* private window: the session lasts until the tab closes */ }
+}
 function portalIsAdmin(){ return isAuthed() && isActiveAdmin(); }
 /** Signed in to the Subscriber’s Portal on this device: the top bar then shows a link to it beside Join. */
 function portalIsSubscriber(){ return PortalState.phase === "ready" || !!portalSavedSession(); }
@@ -15134,6 +15138,15 @@ function progressForget(){
   S.editing = ""; S.removing = ""; S.draft = null; S.busy = false; S.formMsg = "";
 }
 function progressOnRoute(){ return !!AppState.route && AppState.route.name === "progress"; }
+/** kid-progress no longer takes the sign-in (it ran out, or the member left the list): no error is kept, the state is
+    cleared, and the portal's sign-in gate shows; a new sign-in then loads everything fresh. True when that happened. */
+function progressSessionEnded(r){
+  if (!r || r.error !== "no_session") return false;
+  progressForget();
+  if (!portalSavedSession() && PortalState.phase !== "idle") artCloudForget();
+  if (progressOnRoute()) rerender();
+  return true;
+}
 
 async function progressLoadChildren(){
   const S = ProgressState;
@@ -15141,6 +15154,7 @@ async function progressLoadChildren(){
   S.loading = true; S.error = "";
   const r = await kidCall("children");
   S.loading = false;
+  if (progressSessionEnded(r)) return;
   if (r && r.ok){
     S.children = Array.isArray(r.children) ? r.children : [];
     if (!S.children.some(c => c.id === S.reportFor)) S.reportFor = S.children.length ? S.children[0].id : "";
@@ -15156,13 +15170,14 @@ async function progressLoadReport(id){
   S.reportLoading[id] = true;
   const r = await kidCall("report", { child: id });
   delete S.reportLoading[id];
+  if (progressSessionEnded(r)) return;
   /* removed on another device: load the children again, and the report of whoever is first */
   if (r && r.error === "not_found"){ S.children = null; S.reportFor = ""; }
   else S.reports[id] = r && r.ok ? r : { ok: false, error: (r && r.error) || "network" };
   if (progressOnRoute()) rerender();
 }
 
-/** The site's own content for the report: an item that is gone or archived is left out. */
+/** The site's own content for the report: an item that is gone or no longer published is left out. */
 function progressContent(){
   return {
     find(kind, id){
@@ -15175,7 +15190,10 @@ function progressContent(){
         rec = (P.detail && P.detail[id]) || (P.entries || []).find(e => e.slug === id || e.id === id) || null;
         if (!rec && portalIsAdmin()) rec = db.list("portalEntries").find(e => e.slug === id || e.id === id) || null;
       }
-      if (!rec || rec.status === "archived") return null;
+      if (!rec) return null;
+      /* only what is live on the site: a draft, an item sent back for revision or an archived one is left out (the
+         portal's own entries come back published only, and may not carry a status at all) */
+      if (kind === "entry" ? (rec.status && rec.status !== "published") : rec.status !== "published") return null;
       /* the site keeps a book's word to know and card picture at the top of its record, and an activity's picture
          as its image; buildReport reads them as data.learn, data.card and cover */
       if (kind === "book" && !rec.data) return Object.assign({}, rec, { data: { learn: rec.learn, card: rec.card } });
@@ -15465,12 +15483,18 @@ function progressChildrenHTML(){
     + '</div></section>';
 }
 
+/** A child's name as typed, ready to check and send: a phone's curly apostrophes (D’Andre) become straight ones, as the
+    server allows only ', then composed and trimmed. */
+function progressCleanName(v){
+  return String(v || "").replace(/[\u2018\u2019]/g, "'").normalize("NFC").trim();
+}
+
 /** Add a child, or rename one or give them a new grade. The server checks the same rules again. */
 async function progressSaveChild(form){
   const S = ProgressState;
   if (S.busy) return;
   const id = form.getAttribute("data-id") || "";
-  const name = String(form.elements.name.value || "").normalize("NFC").trim();
+  const name = progressCleanName(form.elements.name.value);
   const grade = String(form.elements.grade.value || "");
   S.draft = { id: id, name: name, grade: grade };
   if (!/^[\p{L} '.-]{1,24}$/u.test(name) || !/\p{L}/u.test(name)){
@@ -15484,6 +15508,7 @@ async function progressSaveChild(form){
   rerender();
   const r = await kidCall("child_save", { child: child });
   S.busy = false;
+  if (progressSessionEnded(r)) return;
   if (r && r.ok){
     S.editing = ""; S.draft = null;
     toast(id ? "Saved." : name + " is added.");
@@ -15508,6 +15533,7 @@ async function progressRemoveChild(id){
   rerender();
   const r = await kidCall("child_remove", { id: id });
   S.busy = false;
+  if (progressSessionEnded(r)) return;
   if (r && (r.ok || r.error === "not_found")){
     S.removing = "";
     delete S.reports[id];
