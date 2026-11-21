@@ -3,18 +3,34 @@
 // All addresses are made-up ones on example.test.
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 
-const db = vi.hoisted(() => ({ tables: {}, rate: { allow: true, calls: [] }, fail: new Set() }));
+// cap: like hosted PostgREST, a read returns at most 1000 rows, so a read that is not scoped quietly loses rows.
+const db = vi.hoisted(() => ({ tables: {}, rate: { allow: true, calls: [] }, fail: new Set(), cap: 1000 }));
 vi.mock("jsr:@supabase/supabase-js@2", () => {
   const copy = (v) => JSON.parse(JSON.stringify(v));
+  // timestamps written by the function (".000Z") and by the tests ("Z") compare as times
+  const cmp = (x, y) => { const a = Date.parse(x), b = Date.parse(y); if (typeof x === "string" && !isNaN(a) && !isNaN(b)) return a - b; return x < y ? -1 : x > y ? 1 : 0; };
+  // a LIKE pattern as PostgREST takes it: * (or %) is any run of characters and _ is any one character
+  const like = (p) => new RegExp("^" + p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/[*%]/g, ".*").replace(/_/g, ".") + "$");
   class Q {
     constructor(t) { this.t = t; this.op = "select"; this.f = []; this.one = false; this.ord = null; this.lim = null; this.ret = false; }
-    select() { if (this.op === "insert") this.ret = true; return this; }
+    select() { if (this.op === "insert" || this.op === "update") this.ret = true; return this; }
     insert(v) { this.op = "insert"; this.v = v; return this; }
     update(v) { this.op = "update"; this.v = v; return this; }
     delete() { this.op = "delete"; return this; }
     upsert(v, o) { this.op = "upsert"; this.v = v; this.on = o.onConflict.split(","); return this; }
     eq(c, v) { this.f.push((r) => r[c] === v); return this; }
+    gt(c, v) { this.f.push((r) => r[c] != null && cmp(r[c], v) > 0); return this; }
     in(c, vs) { this.f.push((r) => vs.includes(r[c])); return this; }
+    or(s) {
+      const parts = s.split(",").map((p) => {
+        const m = p.match(/^(\w+)\.like\.(.+)$/);
+        if (!m) throw new Error("the fake only knows like inside or(): " + p);
+        const re = like(m[2]);
+        return (r) => typeof r[m[1]] === "string" && re.test(r[m[1]]);
+      });
+      this.f.push((r) => parts.some((p) => p(r)));
+      return this;
+    }
     order(c, o) { this.ord = { c, asc: !o || o.ascending !== false }; return this; }
     limit(n) { this.lim = n; return this; }
     maybeSingle() { this.one = true; return this; }
@@ -24,7 +40,11 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
       if (db.fail.has(this.t)) return { data: null, error: { message: `relation "public.${this.t}" does not exist` } };
       const rows = (db.tables[this.t] = db.tables[this.t] || []);
       const hit = (r) => this.f.every((f) => f(r));
-      if (this.op === "update") { rows.filter(hit).forEach((r) => Object.assign(r, copy(this.v))); return { data: null, error: null }; }
+      if (this.op === "update") {
+        const changed = rows.filter(hit);
+        changed.forEach((r) => Object.assign(r, copy(this.v)));
+        return { data: this.ret ? changed.map(copy) : null, error: null };
+      }
       if (this.op === "delete") {
         const gone = rows.filter(hit);
         db.tables[this.t] = rows.filter((r) => !hit(r));
@@ -35,6 +55,7 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
       if (this.op === "insert") {
         const row = copy(this.v);
         if (this.t === "children") { row.id = crypto.randomUUID(); row.created_at = new Date(Date.now() + rows.length).toISOString(); }
+        if (this.t === "child_quizzes" && !row.id) row.id = crypto.randomUUID();
         rows.push(row);
         return { data: this.ret ? (this.one ? copy(row) : [copy(row)]) : null, error: null };
       }
@@ -46,6 +67,7 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
       let found = rows.filter(hit).map(copy);
       if (this.ord) { const { c, asc } = this.ord; found.sort((x, y) => (x[c] < y[c] ? -1 : x[c] > y[c] ? 1 : 0) * (asc ? 1 : -1)); }
       if (this.lim !== null) found = found.slice(0, this.lim);
+      if (db.cap) found = found.slice(0, db.cap);
       if (this.one) return { data: found[0] ?? null, error: null };
       return { data: found, error: null };
     }
@@ -72,6 +94,30 @@ async function call(body, raw) {
 const as = (session) => (action, rest = {}) => call({ action, session, ...rest });
 const a = as(TOKEN_A), b = as(TOKEN_B);
 const table = (t) => db.tables[t] || [];
+const rowsOf = (t) => (db.tables[t] = db.tables[t] || []);
+
+// Quiz helpers. A question at grades 2-3 (Maya's level) whose right choice is "two" (index 1).
+const quizQ = (nugget_id, o = {}) => ({
+  nugget_id, level: "g23", variant: 1, question: `Question about ${nugget_id}`, choices: ["one", "two", "three"], answer: 1, why: `Because of ${nugget_id}`, approved: true, ...o,
+});
+/** The child finished the item of each nugget, oldest first in the order given, and each nugget gets a question.
+ *  specs: [nuggetId, subject or null, question overrides, or false for no question]. */
+function seedQuiz(child, specs) {
+  for (const [id, subject, o] of specs) {
+    const [kind, item_id] = id.split(":");
+    if (!table("child_progress").some((p) => p.child_id === child && p.kind === kind && p.item_id === item_id)) {
+      const stamp = new Date(Date.UTC(2026, 9, 1 + table("child_progress").length)).toISOString();
+      rowsOf("child_progress").push({ child_id: child, kind, item_id, first_at: stamp, last_at: stamp, times: 1 });
+    }
+    if (o !== false) rowsOf("nugget_questions").push(quizQ(id, o || {}));
+    if (subject) rowsOf("nugget_subjects").push({ nugget_id: id, subject });
+  }
+}
+const ids = (r) => r.questions.map((q) => q.nuggetId);
+const nug = (child, id) => table("child_nuggets").find((n) => n.child_id === child && n.nugget_id === id);
+const quizRow = (id) => table("child_quizzes").find((q) => q.id === id);
+const at = (iso) => vi.setSystemTime(new Date(iso));
+const NOW = "2026-11-21T12:00:00.000Z";
 
 describe("kid-progress function", () => {
   beforeAll(async () => {
@@ -99,13 +145,13 @@ describe("kid-progress function", () => {
         { id: B_CHILD, subscriber_id: "sub-b", name: "Zed", grade: 4, grade_year: 2026, created_at: "2026-09-03T00:00:00Z" },
       ],
     };
-    db.rate.allow = true; db.rate.calls.length = 0; db.fail.clear();
+    db.rate.allow = true; db.rate.calls.length = 0; db.fail.clear(); db.cap = 1000;
   });
   afterEach(() => { vi.useRealTimers(); });
 
   it("refuses a call with no session, an expired one, or a member who left the list", async () => {
     for (const session of [undefined, "short", TOKEN_GONE, TOKEN_OLD, "z".repeat(40)]) {
-      for (const action of ["children", "child_save", "child_remove", "record", "report"]) {
+      for (const action of ["children", "child_save", "child_remove", "record", "report", "quiz_offer", "quiz_start", "quiz_answer"]) {
         expect((await call({ action, session, child: A_CHILD, id: A_CHILD })).error, action).toBe("no_session");
       }
     }
@@ -126,6 +172,9 @@ describe("kid-progress function", () => {
     expect(await b("report", { child: A_CHILD })).toMatchObject({ ok: false, error: "not_found" });
     expect(await b("child_remove", { id: A_CHILD })).toMatchObject({ ok: false, error: "not_found" });
     expect(await b("child_save", { child: { id: A_CHILD, name: "Hacked", grade: 1 } })).toMatchObject({ ok: false, error: "not_found" });
+    expect(await b("quiz_offer", { child: A_CHILD })).toMatchObject({ ok: false, error: "not_found" });
+    expect(await b("quiz_start", { child: A_CHILD })).toMatchObject({ ok: false, error: "not_found" });
+    expect(await b("quiz_answer", { child: A_CHILD, quizId: crypto.randomUUID(), nuggetId: "episode:abc:x", choice: 0 })).toMatchObject({ ok: false, error: "not_found" });
     for (const bad of ["not-a-uuid", "", 5, null, undefined, { id: A_CHILD }]) {
       expect((await a("report", { child: bad })).error, String(bad)).toBe("not_found");
     }
@@ -283,5 +332,251 @@ describe("kid-progress function", () => {
     // a child with nothing finished gets an empty report
     expect(await a("report", { child: A_CHILD2 })).toMatchObject({ ok: true, lessons: ["entry:en-9:lesson"], subjects: { "entry:en-9:fact": "technology" }, quizzes: [], progress: [{ item_id: "en-9" }] });
     expect(await b("report", { child: B_CHILD })).toMatchObject({ ok: true, lessons: [], quizzes: [{ right_count: 3 }] });
+  });
+
+  it("report and quiz read only the rows of things the child finished, however many others there are", async () => {
+    db.tables.child_progress = [{ child_id: A_CHILD, kind: "episode", item_id: "ep_1", first_at: "2026-10-01T00:00:00Z", last_at: "2026-10-01T00:00:00Z", times: 1 }];
+    const others = Array.from({ length: 1200 }, (_, i) => `episode:other-${i}:`);
+    db.tables.nugget_questions = others.flatMap((p) => [quizQ(p + "lesson", { level: "lesson" }), quizQ(p + "fact")]);
+    db.tables.nugget_subjects = others.map((p) => ({ nugget_id: p + "fact", subject: "art" }));
+    // "_" is a LIKE wildcard, so episode:epX1: matches the like for ep_1, but Maya never finished it
+    db.tables.nugget_questions.push(
+      quizQ("episode:epX1:lesson", { level: "lesson" }), quizQ("episode:epX1:fact"),
+      quizQ("episode:ep_1:lesson", { level: "lesson" }), quizQ("episode:ep_1:a"), quizQ("episode:ep_1:b"),
+    );
+    db.tables.nugget_subjects.push({ nugget_id: "episode:epX1:fact", subject: "music" }, { nugget_id: "episode:ep_1:a", subject: "math" });
+
+    const r = await a("report", { child: A_CHILD });
+    expect(r.lessons).toEqual(["episode:ep_1:lesson"]);
+    expect(r.subjects).toEqual({ "episode:ep_1:a": "math" });
+
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(false);   // only ep_1:a and ep_1:b
+    db.tables.nugget_questions.push(quizQ("episode:ep_1:c"));
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(true);
+    expect(ids(await a("quiz_start", { child: A_CHILD })).sort()).toEqual(["episode:ep_1:a", "episode:ep_1:b", "episode:ep_1:c"]);
+  });
+
+  it("report lists only approved lessons", async () => {
+    db.tables.child_progress = [{ child_id: A_CHILD, kind: "episode", item_id: "ep-1", first_at: "2026-10-01T00:00:00Z", last_at: "2026-10-01T00:00:00Z", times: 1 }];
+    db.tables.nugget_questions = [
+      { nugget_id: "episode:ep-1:lesson", level: "lesson", variant: 1, approved: true },
+      { nugget_id: "episode:ep-1:kindness", level: "lesson", variant: 1, approved: false },
+      { nugget_id: "episode:ep-1:sharing", level: "lesson", variant: 1, approved: null },
+    ];
+    expect((await a("report", { child: A_CHILD })).lessons).toEqual(["episode:ep-1:lesson"]);
+  });
+
+  it("names are kept composed and need at least one letter", async () => {
+    for (const name of [".", "-'", " . ", "'", "- -", "...."]) expect((await a("child_save", { child: { name, grade: 1 } })).error, name).toBe("invalid");
+    expect(table("children")).toHaveLength(3);
+    // "Zoe" with a separate combining diaeresis (U+0308) is the same name as "Zoë"
+    const r = await a("child_save", { child: { name: "Zoë", grade: 1 } });
+    expect(r.ok).toBe(true);
+    expect(table("children").find((c) => c.id === r.id).name).toBe("Zoë");
+    expect((await a("child_save", { child: { name: "J.", grade: 1 } })).ok).toBe(true);
+  });
+
+  // ---- Chike's pop quiz ----
+
+  it("offers a quiz only with 3 eligible nuggets", async () => {
+    seedQuiz(A_CHILD, [["episode:e1:fact"], ["episode:e2:fact"]]);
+    rowsOf("nugget_questions").push(quizQ("episode:e9:fact"));          // an item Maya did not finish
+    seedQuiz(A_CHILD2, [["entry:n1:fact"]]);                             // finished by Leo, not Maya
+    seedQuiz(A_CHILD, [["book:b1:fact"]]);                               // known, and not due for review yet
+    db.tables.child_nuggets = [{ child_id: A_CHILD, nugget_id: "book:b1:fact", status: "knows", review_step: 1, review_due: "2026-12-01T00:00:00Z", known_at: "2026-11-01T00:00:00Z", last_asked: "2026-11-01T00:00:00Z", last_variant: 1 }];
+
+    expect(await a("quiz_offer", { child: A_CHILD })).toEqual({ status: 200, ok: true, due: false });
+    expect(await a("quiz_start", { child: A_CHILD })).toMatchObject({ ok: false, error: "not_due" });
+    expect(table("child_quizzes")).toEqual([]);
+
+    db.tables.child_nuggets[0].review_due = "2026-11-21T12:00:00Z";      // the review comes due
+    expect(await a("quiz_offer", { child: A_CHILD })).toEqual({ status: 200, ok: true, due: true });
+    const r = await a("quiz_start", { child: A_CHILD });
+    expect(r).toMatchObject({ ok: true, level: "g23", quizId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+    expect(r.questions).toHaveLength(3);
+    expect(ids(r).sort()).toEqual(["book:b1:fact", "episode:e1:fact", "episode:e2:fact"]);
+    expect(table("child_quizzes")).toEqual([{ id: r.quizId, child_id: A_CHILD, started_at: NOW, nuggets: ids(r), answered: [], asked: 0, right_count: 0 }]);
+  });
+
+  it("never asks a nugget whose question is not approved", async () => {
+    seedQuiz(A_CHILD, [["episode:e1:fact", null, { approved: false }], ["episode:e2:fact"], ["episode:e3:fact"]]);
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(false);
+    expect((await a("quiz_start", { child: A_CHILD })).error).toBe("not_due");
+    // a second way of asking e2 that is not approved yet is never used, even when it is e2's turn for variant 2
+    rowsOf("nugget_questions").push(quizQ("episode:e2:fact", { variant: 2, approved: false, question: "Not checked yet" }));
+    db.tables.child_nuggets = [{ child_id: A_CHILD, nugget_id: "episode:e2:fact", status: "met", review_step: 0, review_due: null, known_at: null, last_asked: null, last_variant: 1 }];
+    seedQuiz(A_CHILD, [["episode:e4:fact"]]);
+    const r = await a("quiz_start", { child: A_CHILD });
+    expect(ids(r).sort()).toEqual(["episode:e2:fact", "episode:e3:fact", "episode:e4:fact"]);
+    expect(JSON.stringify(r)).not.toContain("Not checked yet");
+  });
+
+  it("asks the question at the child's level", async () => {
+    const items = [["episode:e1:fact", null, false], ["episode:e2:fact", null, false], ["episode:e3:fact", null, false]];
+    for (const child of [A_CHILD, A_CHILD2, B_CHILD]) seedQuiz(child, items);
+    for (const [id] of items) {
+      rowsOf("nugget_questions").push(
+        quizQ(id, { level: "k1", question: "k1 question", choices: ["Yes", "No"], answer: 0 }),
+        quizQ(id, { level: "g23", question: "g23 question" }),
+        quizQ(id, { level: "g46", question: "g46 question", choices: ["a", "b", "c"], answer: 2, why: "needs the why" }),
+        quizQ(id, { level: "lesson", question: null, choices: null, answer: null, why: null }),
+      );
+    }
+    const maya = await a("quiz_start", { child: A_CHILD });                // grade 2
+    expect(maya).toMatchObject({ ok: true, level: "g23" });
+    expect(maya.questions.map((q) => q.question)).toEqual(["g23 question", "g23 question", "g23 question"]);
+    const leo = await a("quiz_start", { child: A_CHILD2 });                // Kindergarten
+    expect(leo.level).toBe("k1");
+    expect(leo.questions.map((q) => q.choices)).toEqual([["Yes", "No"], ["Yes", "No"], ["Yes", "No"]]);
+    const zed = await b("quiz_start", { child: B_CHILD });                 // grade 4
+    expect(zed.level).toBe("g46");
+    // the browser never gets the right answer or the why before answering
+    for (const r of [maya, leo, zed]) {
+      for (const q of r.questions) expect(Object.keys(q).sort()).toEqual(["choices", "nuggetId", "question"]);
+      expect(JSON.stringify(r)).not.toMatch(/"answer"|"why"|Because|needs the why/);
+    }
+    // two Augusts later Maya is in 4th grade, so she gets the 4th to 6th grade questions
+    at("2028-08-02T12:00:00Z");
+    expect(await a("quiz_start", { child: A_CHILD })).toMatchObject({ ok: true, level: "g46", questions: [{ question: "g46 question" }, {}, {}] });
+  });
+
+  it("asks the other way of asking than last time, and checks the answer against it", async () => {
+    seedQuiz(A_CHILD, [["episode:e1:fact"], ["episode:e2:fact"], ["episode:e3:fact"]]);
+    rowsOf("nugget_questions").push(
+      quizQ("episode:e1:fact", { variant: 2, question: "Second way to ask e1", answer: 2, why: "Second why" }),
+      quizQ("episode:e2:fact", { variant: 2, question: "Second way to ask e2" }),
+    );
+    db.tables.child_nuggets = [
+      { child_id: A_CHILD, nugget_id: "episode:e1:fact", status: "met", review_step: 0, review_due: null, known_at: null, last_asked: null, last_variant: 1 },
+      { child_id: A_CHILD, nugget_id: "episode:e2:fact", status: "met", review_step: 0, review_due: null, known_at: null, last_asked: null, last_variant: 2 },
+    ];
+    const r = await a("quiz_start", { child: A_CHILD });
+    const byId = Object.fromEntries(r.questions.map((q) => [q.nuggetId, q.question]));
+    expect(byId).toEqual({ "episode:e1:fact": "Second way to ask e1", "episode:e2:fact": "Question about episode:e2:fact", "episode:e3:fact": "Question about episode:e3:fact" });
+    expect(await a("quiz_answer", { child: A_CHILD, quizId: r.quizId, nuggetId: "episode:e1:fact", choice: 2 })).toEqual({ status: 200, ok: true, correct: true, answer: 2, why: "Second why" });
+    expect(nug(A_CHILD, "episode:e1:fact").last_variant).toBe(2);
+    expect(await a("quiz_answer", { child: A_CHILD, quizId: r.quizId, nuggetId: "episode:e2:fact", choice: 1 })).toMatchObject({ correct: true, answer: 1 });
+    expect(nug(A_CHILD, "episode:e2:fact").last_variant).toBe(1);
+  });
+
+  it("a second quiz in the same week is not due", async () => {
+    seedQuiz(A_CHILD, [1, 2, 3, 4, 5, 6].map((n) => [`episode:e${n}:fact`]));
+    seedQuiz(A_CHILD2, [1, 2, 3].map((n) => [`book:k${n}:fact`, null, { level: "k1", choices: ["Yes", "No"] }]));
+    expect((await a("quiz_start", { child: A_CHILD })).ok).toBe(true);
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(false);
+    expect(await a("quiz_start", { child: A_CHILD })).toMatchObject({ ok: false, error: "not_due" });
+    expect(table("child_quizzes")).toHaveLength(1);
+    // another child in the family is not held back
+    expect((await a("quiz_offer", { child: A_CHILD2 })).due).toBe(true);
+    at("2026-11-28T11:59:00Z");
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(false);
+    expect((await a("quiz_start", { child: A_CHILD })).error).toBe("not_due");
+    // due again 7 days after the last one started
+    at("2026-11-28T12:00:00Z");
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(true);
+    expect((await a("quiz_start", { child: A_CHILD })).ok).toBe(true);
+    expect(table("child_quizzes").filter((q) => q.child_id === A_CHILD)).toHaveLength(2);
+  });
+
+  it("an answer counts once", async () => {
+    seedQuiz(A_CHILD, [["episode:e1:fact"], ["episode:e2:fact"], ["episode:e3:fact"]]);
+    const r = await a("quiz_start", { child: A_CHILD });
+    const [n1, n2, n3] = ids(r);
+    const answer = (nuggetId, choice, child = A_CHILD, quizId = r.quizId) => a("quiz_answer", { child, quizId, nuggetId, choice });
+    const right = { status: 200, ok: true, correct: true, answer: 1, why: `Because of ${n1}` };
+    expect(await answer(n1, 1)).toEqual(right);
+    const kept = JSON.stringify(db.tables);
+    expect(await answer(n1, 1)).toEqual(right);
+    expect(await answer(n1, 0)).toEqual(right);                          // a different tap after the first changes nothing
+    expect(JSON.stringify(db.tables)).toBe(kept);
+    expect(quizRow(r.quizId)).toMatchObject({ answered: [n1], asked: 1, right_count: 1 });
+    expect(nug(A_CHILD, n1)).toMatchObject({ status: "knows", review_step: 1 });
+
+    const wrong = { status: 200, ok: true, correct: false, answer: 1, why: `Because of ${n2}` };
+    expect(await answer(n2, 0)).toEqual(wrong);
+    expect(await answer(n2, 1)).toEqual(wrong);
+    expect(quizRow(r.quizId)).toMatchObject({ answered: [n1, n2], asked: 2, right_count: 1 });
+
+    const before = JSON.stringify(db.tables);
+    for (const [nuggetId, quizId] of [["episode:e9:fact", r.quizId], [n3, crypto.randomUUID()], [n3, "nope"], [5, r.quizId], [undefined, r.quizId]]) {
+      expect((await answer(nuggetId, 1, A_CHILD, quizId)).error, `${nuggetId} ${quizId}`).toBe("not_found");
+    }
+    expect((await answer(n3, 1, A_CHILD2)).error).toBe("not_found");            // the quiz is Maya's, not Leo's
+    expect((await b("quiz_answer", { child: B_CHILD, quizId: r.quizId, nuggetId: n3, choice: 1 })).error).toBe("not_found");
+    for (const choice of [-1, 1.5, "1", null, undefined, 3, 99]) expect((await answer(n3, choice)).error, String(choice)).toBe("invalid");
+    expect(JSON.stringify(db.tables)).toBe(before);
+  });
+
+  it("a right answer comes back after 21 days, then 60, then not again", async () => {
+    seedQuiz(A_CHILD, [["episode:e1:fact"], ["episode:e2:fact"], ["episode:e3:fact"]]);
+    const answerAll = async () => {
+      const r = await a("quiz_start", { child: A_CHILD });
+      expect(ids(r).sort()).toEqual(["episode:e1:fact", "episode:e2:fact", "episode:e3:fact"]);
+      for (const nuggetId of ids(r)) expect((await a("quiz_answer", { child: A_CHILD, quizId: r.quizId, nuggetId, choice: 1 })).correct).toBe(true);
+      expect(quizRow(r.quizId)).toMatchObject({ asked: 3, right_count: 3 });
+    };
+    await answerAll();
+    for (const n of table("child_nuggets")) {
+      expect(n).toEqual({ child_id: A_CHILD, nugget_id: n.nugget_id, status: "knows", review_step: 1, review_due: "2026-12-12T12:00:00.000Z", known_at: NOW, last_asked: NOW, last_variant: 1 });
+    }
+    at("2026-12-12T11:00:00Z");
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(false);
+    at("2026-12-12T12:00:00Z");
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(true);
+    await answerAll();
+    for (const n of table("child_nuggets")) expect(n).toMatchObject({ status: "knows", review_step: 2, review_due: "2027-02-10T12:00:00.000Z", known_at: NOW, last_asked: "2026-12-12T12:00:00.000Z" });
+    at("2027-02-10T11:00:00Z");
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(false);
+    at("2027-02-10T12:00:00Z");
+    await answerAll();
+    for (const n of table("child_nuggets")) expect(n).toMatchObject({ status: "knows", review_step: 3, review_due: null, known_at: NOW });
+    // still remembered it: never asked again (same school year, so the level is still g23)
+    at("2027-07-01T12:00:00Z");
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(false);
+    expect((await a("quiz_start", { child: A_CHILD })).error).toBe("not_due");
+  });
+
+  it("a wrong answer goes back to came across it", async () => {
+    seedQuiz(A_CHILD, [["episode:e1:fact"], ["episode:e2:fact"], ["episode:e3:fact"]]);
+    db.tables.child_nuggets = [{ child_id: A_CHILD, nugget_id: "episode:e1:fact", status: "knows", review_step: 2, review_due: "2026-11-01T00:00:00Z", known_at: "2026-09-01T00:00:00Z", last_asked: "2026-09-20T00:00:00Z", last_variant: 1 }];
+    const r = await a("quiz_start", { child: A_CHILD });
+    expect(ids(r)).toContain("episode:e1:fact");
+    expect(await a("quiz_answer", { child: A_CHILD, quizId: r.quizId, nuggetId: "episode:e1:fact", choice: 0 })).toEqual({ status: 200, ok: true, correct: false, answer: 1, why: "Because of episode:e1:fact" });
+    expect(nug(A_CHILD, "episode:e1:fact")).toMatchObject({ status: "met", review_step: 0, review_due: null, last_asked: NOW, last_variant: 1 });
+    expect(await a("quiz_answer", { child: A_CHILD, quizId: r.quizId, nuggetId: "episode:e2:fact", choice: 2 })).toMatchObject({ correct: false });
+    expect(nug(A_CHILD, "episode:e2:fact")).toEqual({ child_id: A_CHILD, nugget_id: "episode:e2:fact", status: "met", review_step: 0, review_due: null, last_asked: NOW, last_variant: 1 });
+    expect(quizRow(r.quizId)).toMatchObject({ asked: 2, right_count: 0 });
+  });
+
+  it("asks facts never asked first, then reviews, then ones answered wrong before", async () => {
+    seedQuiz(A_CHILD, [1, 2, 3, 4, 5].map((n) => [`episode:e${n}:fact`]));
+    const row = (n, o) => ({ child_id: A_CHILD, nugget_id: `episode:e${n}:fact`, review_step: 0, review_due: null, known_at: null, last_asked: null, last_variant: null, ...o });
+    db.tables.child_nuggets = [
+      row(1, { status: "met", last_asked: "2026-10-10T00:00:00Z", last_variant: 1 }),                         // answered wrong before
+      row(2, { status: "knows", review_step: 1, review_due: "2026-11-20T00:00:00Z", last_asked: "2026-10-30T00:00:00Z" }), // due for review
+      row(3, { status: "met" }),                                                                                // came across it, never asked
+      row(5, { status: "knows", review_step: 1, review_due: "2026-11-20T00:00:00Z", last_asked: "2026-10-30T00:00:00Z" }),
+    ];                                                                                                          // e4: never asked
+    expect(ids(await a("quiz_start", { child: A_CHILD }))).toEqual(["episode:e3:fact", "episode:e4:fact", "episode:e2:fact"]);
+  });
+
+  it("a half-finished quiz still counts for the week", async () => {
+    seedQuiz(A_CHILD, [1, 2, 3, 4].map((n) => [`episode:e${n}:fact`]));
+    const r = await a("quiz_start", { child: A_CHILD });
+    await a("quiz_answer", { child: A_CHILD, quizId: r.quizId, nuggetId: ids(r)[0], choice: 1 });
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(false);
+    at("2026-11-22T12:00:00Z");
+    expect((await a("quiz_offer", { child: A_CHILD })).due).toBe(false);
+    expect((await a("quiz_start", { child: A_CHILD })).error).toBe("not_due");
+    expect((await a("report", { child: A_CHILD })).quizzes).toEqual([{ started_at: NOW, asked: 1, right_count: 1 }]);
+  });
+
+  it("a quiz mixes subjects before repeating one", async () => {
+    seedQuiz(A_CHILD, [["episode:e1:fact", "science"], ["episode:e2:fact", "science"], ["episode:e3:fact", "math"], ["episode:e4:fact", "music"]]);
+    expect(ids(await a("quiz_start", { child: A_CHILD }))).toEqual(["episode:e1:fact", "episode:e3:fact", "episode:e4:fact"]);
+    // no subject is a group of its own; once every group has had a turn, a subject may repeat, in order
+    const k1 = { level: "k1", choices: ["Yes", "No"] };
+    seedQuiz(A_CHILD2, [["book:k1:fact", "science", k1], ["book:k2:fact", "science", k1], ["book:k3:fact", null, k1], ["book:k4:fact", "science", k1]]);
+    expect(ids(await a("quiz_start", { child: A_CHILD2 }))).toEqual(["book:k1:fact", "book:k3:fact", "book:k2:fact"]);
   });
 });
