@@ -14,6 +14,14 @@ describe("small files for small pictures", () => {
     expect(index.split("assets/characters/chike-avatar.webp").length - 1).toBe(3);
     expect(size("assets/characters/chike-avatar.webp")).toBeLessThan(30 * 1024);
   });
+  it("Chike's corner avatar moves again (owner, 2026-11-21: 'What happened to the animation?'), as a small animated WebP, with the still for reduced motion", () => {
+    const btn = index.split('class="tour-avatar"')[1].split("</button>")[0];
+    expect(btn).toContain('<source media="(prefers-reduced-motion: reduce)" srcset="assets/characters/chike-avatar.webp">');
+    expect(btn).toContain('src="assets/characters/chike-avatar-moving.webp"');
+    const webp = readFileSync(new URL("../assets/characters/chike-avatar-moving.webp", import.meta.url));
+    expect(webp.includes(Buffer.from("ANIM"))).toBe(true);
+    expect(size("assets/characters/chike-avatar-moving.webp")).toBeLessThan(300 * 1024);
+  });
   it("plays the home page's game reel as an animated WebP, with the GIF kept for older browsers", () => {
     const pic = index.split('<source type="image/webp" srcset="assets/newsletter/arcade-update/reel.webp">')[1];
     expect(pic).toBeTruthy();
