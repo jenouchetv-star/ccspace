@@ -33,7 +33,7 @@ Ollama chat (`WriterLib.chat`) for drafting questions.
 - Quiz: at most one started per child per 7 days; offered only when 3 or more eligible fact nuggets have an approved question at the child's level; 3 questions; a started quiz counts for the week; "Later" hides it until the next calendar day.
 - Review: right answer → due again in 21 days; right on that review → due in 60 days; right on that one → no more reviews ("still remembered it"). Any wrong answer → back to "Came across it", step 0.
 - Nothing is recorded without a portal session (`ccs_portal_session`) and a picked child. "Just me, the grown-up" records nothing.
-- Grown-up check guards only the report and "Your children": a two-digit by one-digit multiplication (a in 12..19, b in 3..9) typed in; remembered in memory for that page load only.
+- Grown-up check guards only the report and "Your children": a single-digit multiplication (3 to 9 times 3 to 9; owner 2026-11-21, was 12..19 x 3..9) typed in; remembered in memory for that page load only.
 - Quiz bubble shows only on list pages (never on an episode, book, game, Studio app or activity page).
 - Motion: decelerating, never bouncy; reduced-motion respected.
 - Push flow (only on "push"): bump `sw.js` CACHE_VERSION, `npx vitest run --exclude ".worktrees/**"`, fetch/merge origin, `git push origin sound-space:main` via run_in_terminal, verify at www.chikescreativespace.com. Deploy order: SQL, then the function, then the site.
@@ -118,7 +118,7 @@ Done 2026-11-21 as `docs/mockups/progress-report-draft-5.html` (draft 4 + STEAMM
 - `recordTarget(hasSession: boolean, playing: string, children: Array<{id}>) -> string | "ask" | null`: null without a session or with no children or `playing === "grownup"`; the id when it is in `children`; otherwise `"ask"`
 - `watchedEnough(current: number, duration: number) -> boolean` (duration > 0 and current / duration >= 0.9)
 - `doneFromMessage(data: unknown, origin: string, siteOrigin: string) -> null | { kind: "book" } | { kind: string, id: string }`: only when `origin === siteOrigin`; `{source:"ccs-book", atLastPage:true}` → `{kind:"book"}`; the shared shape for later games `{source:"ccs-done", kind, id}` → `{kind, id}`
-- `grownUpQuestion(rand: () => number) -> { a, b, answer }` (a in 12..19, b in 3..9)
+- `grownUpQuestion(rand: () => number) -> { a, b, answer }` (a and b in 3..9, owner 2026-11-21)
 - `buildReport({ progress, nuggets, lessons, subjects, quizzes, content, childName, now }) -> { week, allTime, facts, talk, quizzes, bySubject, weekSubjects }`:
   - `progress` and `nuggets` as the `report` action returns them (Task 4); `content.find(kind, itemId) -> record | null`
   - `week`: items with `last_at` in the last 7 days, newest first, as `{ kind, id, title, img }`; `allTime`: all of them

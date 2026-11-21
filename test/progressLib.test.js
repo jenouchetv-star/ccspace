@@ -101,9 +101,9 @@ describe("doneFromMessage", () => {
 });
 
 describe("grownUpQuestion", () => {
-  it("grownUpQuestion stays in range", () => {
-    expect(grownUpQuestion(() => 0)).toEqual({ a: 12, b: 3, answer: 36 });
-    expect(grownUpQuestion(() => 0.999)).toEqual({ a: 19, b: 9, answer: 171 });
+  it("grownUpQuestion is a single-digit multiplication (owner, 2026-11-21)", () => {
+    expect(grownUpQuestion(() => 0)).toEqual({ a: 3, b: 3, answer: 9 });
+    expect(grownUpQuestion(() => 0.999)).toEqual({ a: 9, b: 9, answer: 81 });
   });
 });
 

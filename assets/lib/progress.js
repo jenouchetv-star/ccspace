@@ -109,9 +109,9 @@ export function doneFromMessage(data, origin, siteOrigin) {
   return null;
 }
 
-/** The grown-up check: a two-digit by one-digit multiplication. */
+/** The grown-up check: a single-digit multiplication, 3 to 9 times 3 to 9 (owner, 2026-11-21). */
 export function grownUpQuestion(rand) {
-  const a = 12 + Math.floor(rand() * 8);
+  const a = 3 + Math.floor(rand() * 7);
   const b = 3 + Math.floor(rand() * 7);
   return { a, b, answer: a * b };
 }
