@@ -197,6 +197,56 @@ export function buildReport({ progress, nuggets, lessons, subjects, quizzes, con
   };
 }
 
+/* ---- the admin's "Draft with Copilot" for a fact's quiz question ---- */
+
+const DRAFT_LEVELS = {
+  k1: { who: "children in Kindergarten and 1st grade (ages 5 to 7). It is read aloud to them, so keep it very short", n: 2 },
+  g23: { who: "children in 2nd and 3rd grade (ages 7 to 9)", n: 3 },
+  g46: { who: "children in 4th to 6th grade (ages 9 to 12). Make the other choices believable, so picking the right one takes knowing why", n: 3 },
+};
+
+/** The messages that ask the admin's own Copilot (Ollama) for one quiz question about one fact, at one level. */
+export function questionDraftMessages(nugget, level) {
+  const L = DRAFT_LEVELS[level] || DRAFT_LEVELS.g23;
+  const n = nugget || {};
+  const system = [
+    "You write one quiz question for Chike's Creative Space, a STEAMM website for children.",
+    "The question is for " + L.who + ".",
+    "Use short, kid-friendly words a child that age knows. Be warm and clear. No trick questions.",
+    "Ask only about the fact you are given, so a child who met it can answer.",
+    "Give exactly " + L.n + " choices. Exactly one is right; the others are wrong to a child who remembers the fact.",
+    "Add a why: one short sentence that says why the right answer is right.",
+    "Pick the one STEAMM subject the fact belongs to: science, technology, engineering, art, math or music. Use \"\" when none fits.",
+    "Never use em dashes. No emojis.",
+    'Reply with JSON only, like {"question": "...", "choices": ["...", "..."], "answer": 0, "why": "...", "subject": "science"}, where answer is the position of the right choice, counting from 0.',
+  ].join("\n");
+  const user = "The fact" + (clean(n.title) ? " (from \"" + clean(n.title) + "\")" : "") + ": " + clean(n.text);
+  return [{ role: "system", content: system }, { role: "user", content: user }];
+}
+
+/** Copilot's reply read back: {question, choices, answer, why, subject}, or null when it is not a usable question.
+    K to 1st keeps the first 2 choices, the other levels the first 3; the right answer has to be one of them, and the
+    subject is one of the six or "". */
+export function parseQuestionDraft(text, level) {
+  const need = DRAFT_LEVELS[level] ? DRAFT_LEVELS[level].n : 0;
+  if (!need) return null;
+  const s = String(text || "");
+  const a = s.indexOf("{"), b = s.lastIndexOf("}");
+  if (a < 0 || b <= a) return null;
+  let o;
+  try { o = JSON.parse(s.slice(a, b + 1)); } catch (_e) { return null; }
+  if (!o || typeof o !== "object") return null;
+  const tidy = (v) => (typeof v === "string" ? v.replace(/\s*\u2014\s*/g, ", ").replace(/\s+/g, " ").trim() : "");
+  const question = tidy(o.question);
+  const choices = (Array.isArray(o.choices) ? o.choices : []).slice(0, need).map((c) => tidy(typeof c === "number" ? String(c) : c));
+  if (!question || choices.length !== need || choices.some((c) => !c)) return null;
+  if (new Set(choices.map((c) => c.toLowerCase())).size !== need) return null;
+  const answer = typeof o.answer === "string" && /^\d+$/.test(o.answer.trim()) ? Number(o.answer) : o.answer;
+  if (!Number.isInteger(answer) || answer < 0 || answer >= need) return null;
+  const subj = tidy(o.subject).toLowerCase();
+  return { question, choices, answer, why: tidy(o.why), subject: STEAMM_SUBJECTS.some((x) => x.id === subj) ? subj : "" };
+}
+
 /** The pages where Chike's quiz bubble may show: list pages only (the list
     routes are named as parseRoute() in index.html names them). */
 export const QUIZ_ROUTES = ["home", "watch", "stories", "play", "create", "newsletter"];

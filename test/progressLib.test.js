@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   STEAMM_SUBJECTS, subjectFromTopic, GRADE_LABELS, gradeLabel, nuggetId, parseNuggetId,
   nuggetsFor, recordTarget, watchedEnough, doneFromMessage, grownUpQuestion,
-  buildReport, QUIZ_ROUTES, quizBubbleAllowed,
+  buildReport, QUIZ_ROUTES, quizBubbleAllowed, questionDraftMessages, parseQuestionDraft,
 } from "../assets/lib/progress.js";
 
 const NOW = new Date("2026-11-21T12:00:00Z");
@@ -198,5 +198,61 @@ describe("quiz bubble", () => {
     expect(quizBubbleAllowed({ name: "video-detail", params: { id: "v1" } })).toBe(false);
     expect(quizBubbleAllowed({ name: "create", params: { sub: "studio", app: "art" } })).toBe(false);
     expect(quizBubbleAllowed({ name: "admin", params: {} })).toBe(false);
+  });
+});
+
+describe("drafting quiz questions with Copilot", () => {
+  const fact = { id: "episode:v1:discovery", type: "fact", text: "Triangles make bridges strong.", title: "The Bridge" };
+  const draft = (o) => JSON.stringify(Object.assign({ question: "What shape makes a bridge strong?", choices: ["A triangle", "A circle", "A star"], answer: 0, why: "Triangles keep their shape.", subject: "engineering" }, o));
+
+  it("parseQuestionDraft keeps 2 choices for k1 and 3 otherwise and rejects an answer outside them", () => {
+    expect(parseQuestionDraft(draft({}), "g23")).toEqual({ question: "What shape makes a bridge strong?", choices: ["A triangle", "A circle", "A star"], answer: 0, why: "Triangles keep their shape.", subject: "engineering" });
+    expect(parseQuestionDraft(draft({}), "g46").choices).toHaveLength(3);
+    const k1 = parseQuestionDraft(draft({}), "k1");
+    expect(k1.choices).toEqual(["A triangle", "A circle"]);
+    expect(k1.answer).toBe(0);
+    expect(parseQuestionDraft(draft({ answer: 2 }), "k1")).toBe(null);           // the right one was cut off
+    expect(parseQuestionDraft(draft({ answer: 3 }), "g23")).toBe(null);
+    expect(parseQuestionDraft(draft({ answer: -1 }), "g23")).toBe(null);
+    expect(parseQuestionDraft(draft({ answer: 1.5 }), "g23")).toBe(null);
+    expect(parseQuestionDraft(draft({ answer: "1" }), "g23").answer).toBe(1);
+    expect(parseQuestionDraft(draft({ choices: ["A triangle", "A circle"] }), "g23")).toBe(null);   // too few
+    expect(parseQuestionDraft(draft({ choices: ["A triangle", "a triangle", "A star"] }), "g23")).toBe(null);  // one right answer only
+    expect(parseQuestionDraft(draft({ question: " " }), "g23")).toBe(null);
+    expect(parseQuestionDraft("not json", "g23")).toBe(null);
+    expect(parseQuestionDraft(draft({}), "lesson")).toBe(null);
+    // the model's chatter around the JSON, and an em dash, are tidied away
+    const t = parseQuestionDraft("Here you go:\n" + draft({ why: "Triangles \u2014 they keep their shape." }) + "\nDone", "g23");
+    expect(t.why).toBe("Triangles, they keep their shape.");
+    expect(t.why.includes("\u2014")).toBe(false);
+  });
+
+  it("parseQuestionDraft drops a subject that is not one of the six", () => {
+    expect(parseQuestionDraft(draft({ subject: "Science" }), "g23").subject).toBe("science");
+    expect(parseQuestionDraft(draft({ subject: "history" }), "g23").subject).toBe("");
+    expect(parseQuestionDraft(draft({ subject: "STEM" }), "g23").subject).toBe("");
+    expect(parseQuestionDraft(draft({ subject: 3 }), "g23").subject).toBe("");
+    expect(parseQuestionDraft(draft({ subject: undefined }), "g23").subject).toBe("");
+  });
+
+  it("questionDraftMessages asks for kid-friendly words, no em dashes, one right answer and one STEAMM subject", () => {
+    for (const level of ["k1", "g23", "g46"]) {
+      const m = questionDraftMessages(fact, level);
+      expect(m.map((x) => x.role)).toEqual(["system", "user"]);
+      const all = m.map((x) => x.content).join("\n");
+      expect(all).toMatch(/kid-friendly/i);
+      expect(all).toMatch(/never use em dashes/i);
+      expect(all.includes("\u2014")).toBe(false);
+      expect(all).toMatch(/exactly one (choice )?is right/i);
+      expect(all).toMatch(/one STEAMM subject/);
+      for (const s of STEAMM_SUBJECTS) expect(all).toContain(s.id);
+      expect(all).toContain("Triangles make bridges strong.");
+      expect(all).toMatch(/JSON/);
+      expect(all).not.toMatch(/\b(he|she|her|his|him)\b/i);
+    }
+    expect(questionDraftMessages(fact, "k1")[0].content).toMatch(/exactly 2 choices/);
+    expect(questionDraftMessages(fact, "k1")[0].content).toMatch(/Kindergarten and 1st grade/);
+    expect(questionDraftMessages(fact, "g23")[0].content).toMatch(/exactly 3 choices/);
+    expect(questionDraftMessages(fact, "g46")[0].content).toMatch(/4th to 6th grade/);
   });
 });

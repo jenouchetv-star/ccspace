@@ -3,7 +3,9 @@
 // live in assets/lib/progress.js and are tested in test/progressLib.test.js; this reads the page's own code.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { recordTarget, quizBubbleAllowed } from "../assets/lib/progress.js";
+import {
+  recordTarget, quizBubbleAllowed, GRADE_LABELS, gradeLabel, STEAMM_SUBJECTS, nuggetsFor, parseNuggetId, subjectFromTopic,
+} from "../assets/lib/progress.js";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const body = (name) => html.split("function " + name + "(")[1].split("\nfunction ")[0];
@@ -133,7 +135,7 @@ describe("the progress report page", () => {
       activities: [{ id: "a1", title: "A", status: "review" }, { id: "a2", title: "A2", status: "published" }],
     };
     const fakeDb = { find: (col, id) => (lists[col] || []).find((r) => r.id === id) || null, list: (col) => lists[col] || [] };
-    const content = fn("progressContent", "db", "PortalState", "portalIsAdmin")(fakeDb, { detail: {}, entries: [{ id: "e1", slug: "e-one", title: "E" }] }, () => false)();
+    const content = fn("progressContent", "db", "PortalState", "portalIsAdmin", "progressRecShape")(fakeDb, { detail: {}, entries: [{ id: "e1", slug: "e-one", title: "E" }] }, () => false, fn("progressRecShape")())();
     expect(content.find("episode", "v-published")).toBeTruthy();
     for (const s of ["draft", "revision", "archived"]) expect(content.find("episode", "v-" + s)).toBe(null);
     expect(content.find("book", "s1")).toBe(null);
@@ -466,7 +468,7 @@ describe("Chike's pop quiz", () => {
   it("asks kid-progress whether a quiz is due at most once per page load per child", async () => {
     const offer = {}, calls = [];
     let shown = 0;
-    const ask = fn("progressQuizOffer", "QUIZ_OFFER", "kidCall", "progressSessionEnded", "progressQuizBubble", "async ")(
+    const ask = fn("progressQuizOffer", "QUIZ_OFFER", "kidCall", "progressSessionEnded", "renderTourRoot", "async ")(
       offer, async (action, extra) => { calls.push([action, extra]); return { ok: true, due: true }; }, () => false, () => { shown++; });
     await ask(MAYA);
     await ask(MAYA);
@@ -476,7 +478,7 @@ describe("Chike's pop quiz", () => {
     await ask(KIDS[1]);
     expect(calls).toHaveLength(2);
     const none = {};
-    await fn("progressQuizOffer", "QUIZ_OFFER", "kidCall", "progressSessionEnded", "progressQuizBubble", "async ")(
+    await fn("progressQuizOffer", "QUIZ_OFFER", "kidCall", "progressSessionEnded", "renderTourRoot", "async ")(
       none, async () => ({ ok: false, error: "network" }), () => false, () => {})(MAYA);
     expect(none.c1).toBe(false);                                // not asked again on this page load
   });
@@ -569,8 +571,8 @@ describe("Chike's pop quiz", () => {
     const o = body("openPopQuiz");
     expect(o).toContain("if (st.busy || st.result) return;");
     expect(o).toContain('kidCall("quiz_answer", { child: childId, quizId: quizId, nuggetId: q.nuggetId, choice: choice })');
-    expect(o).toContain('res.error === "not_found"');
-    expect(o).toContain("st.answered++");
+    expect(o).toContain("progressQuizOutcome(res)");
+    expect(o).toContain("if (out.counted){ st.answered++;");
     expect(o).toContain('kidCall("quiz_start", { child: childId })');
     expect(o).toContain("progressSessionEnded(");
   });
@@ -581,7 +583,8 @@ describe("Chike's pop quiz", () => {
     expect(o).toContain('level === "k1"');
     expect(o).toContain('"speechSynthesis" in window');
     expect(o).toContain("speechSynthesis.cancel()");                         // and quiet again when the card closes
-    expect(o.indexOf("speechSynthesis.cancel()", o.indexOf("const close"))).toBeGreaterThan(-1);
+    expect(body("closePopQuiz")).toContain("speechSynthesis.cancel()");
+    expect(o).toMatch(/const close = \(\) => \{\s*closePopQuiz\(\);/);
     const hear = questionHTML(Q, 0, 3, { result: null }, null, true);
     expect(hear).toContain('data-quiz="hear"');
     expect(hear).toContain("Hear it");
@@ -604,5 +607,243 @@ describe("Chike's pop quiz", () => {
     expect(code).not.toMatch(/\p{Extended_Pictographic}/u);
     const words = (code.match(/'[^']*'|"[^"]*"/g) || []).join(" ");
     expect(words).not.toMatch(/\b(he|she|her|hers|his|him)\b/i);
+  });
+
+  /* renderTourRoot built with a pretend corner: the tour state and whether the quiz bubble shows */
+  const corner = (status, quizOn) => {
+    const root = { innerHTML: "" };
+    fn("renderTourRoot", "$", "tourState", "progressQuizBubble", "AppState", "progressChipHTML", "teardownTourStep", "TOUR_STOPS", "tourStopMatchesRoute", "mountTourStep")(
+      () => root, () => ({ status, hidden: false, stepIndex: 0 }), () => quizOn, { route: { name: "home", params: {} } }, () => "", () => {}, [], () => false, () => {})();
+    return root.innerHTML;
+  };
+
+  it("only one bubble in Chike's corner: a quiz offer that comes back due, Later and Let's go redraw the whole corner", async () => {
+    expect(corner("not_started", false)).toContain("tour-bubble");
+    expect(corner("not_started", true)).not.toContain("tour-bubble");      // the welcome waits while the quiz is offered
+    const offer = {};
+    let drawn = 0;
+    const ask = fn("progressQuizOffer", "QUIZ_OFFER", "kidCall", "progressSessionEnded", "renderTourRoot", "async ")(
+      offer, async () => ({ ok: true, due: true }), () => false, () => { drawn++; });
+    await ask(MAYA);
+    expect(drawn).toBe(1);                                                  // the corner decides both bubbles
+    expect(body("progressQuizOffer")).not.toContain("progressQuizBubble(");
+    expect(action("quiz-later")).toContain("renderTourRoot()");
+    expect(action("quiz-later")).not.toContain("progressQuizBubble(");
+    expect(body("openPopQuiz")).toContain("renderTourRoot()");             // Let's go takes the bubble away and gives the welcome back
+    expect(body("openPopQuiz")).not.toContain("progressQuizBubble(");
+  });
+
+  it("an answer the server calls invalid is skipped kindly, like a question taken back, and not counted", () => {
+    const outcome = fn("progressQuizOutcome")();
+    expect(outcome({ ok: true, correct: true, answer: 1, why: "Because." })).toEqual({ result: { correct: true, answer: 1, why: "Because." }, counted: true, error: false });
+    expect(outcome({ ok: true, correct: false, answer: "x" })).toEqual({ result: { correct: false, answer: -1, why: "" }, counted: true, error: false });
+    expect(outcome({ ok: false, error: "not_found" })).toEqual({ result: { skipped: true }, counted: false, error: false });
+    expect(outcome({ ok: false, error: "invalid" })).toEqual({ result: { skipped: true }, counted: false, error: false });
+    expect(outcome({ ok: false, error: "network" })).toEqual({ result: null, counted: false, error: true });   // try that tap again
+    expect(outcome(null)).toEqual({ result: null, counted: false, error: true });
+  });
+
+  it("the quiz card closes, and stops reading aloud, when the page changes (Back mid-quiz)", () => {
+    const hash = html.split('window.addEventListener("hashchange"')[1].split("\n")[0];
+    expect(hash).toContain("closePopQuiz()");
+    let cancelled = 0, removed = 0, unlocked = 0;
+    const card = { remove: () => { removed++; } };
+    const doc = (open) => ({
+      getElementById: (id) => (id === "quiz-root" && open ? card : null),
+      body: { classList: { remove: (c) => { if (c === "no-scroll") unlocked++; } } },
+    });
+    const close = (open, win) => fn("closePopQuiz", "document", "window", "speechSynthesis", "$")(
+      doc(open), win, { cancel: () => { cancelled++; } }, () => ({ innerHTML: "" }))();
+    expect(close(true, { speechSynthesis: {} })).toBe(true);
+    expect([removed, cancelled, unlocked]).toEqual([1, 1, 1]);
+    expect(close(false, { speechSynthesis: {} })).toBe(false);              // no card: nothing to do, no voice stopped
+    expect([removed, cancelled]).toEqual([1, 1]);
+    expect(close(true, {})).toBe(true);                                     // a browser with no voices
+    expect(removed).toBe(2);
+    const o = body("openPopQuiz");
+    expect(o).toMatch(/const close = \(\) => \{\s*closePopQuiz\(\);/);
+    // a quiz that starts after the child already left the list page doesn't pop up on the new page
+    expect(o.indexOf("if (!quizBubbleAllowed(AppState.route)) return;")).toBeGreaterThan(o.indexOf('kidCall("quiz_start"'));
+  });
+});
+
+describe("Your children: edit and remove as icons (owner, 2026-11-21)", () => {
+  const ICON = (n) => '<svg data-i="' + n + '"></svg>';
+  const kids = (S) => fn("progressChildrenHTML", "ProgressState", "GRADE_LABELS", "gradeLabel", "E", "ic", "PROGRESS_MAX_CHILDREN")(
+    Object.assign({ children: [{ id: "c1", name: "<Maya>", grade: 2 }], editing: "", removing: "", formMsg: "", draft: null, busy: false }, S),
+    GRADE_LABELS, gradeLabel, esc, ICON, 6)();
+
+  it("each child has two round icons: edit, then a red trash can", () => {
+    const h = kids({});
+    expect(h).not.toMatch(/>Rename<|>Change grade<|>Remove</);
+    expect(h).toContain('data-act="progress-edit" data-id="c1" data-focus="name" aria-label="Edit &lt;Maya&gt;" title="Edit &lt;Maya&gt;">' + ICON("pencil") + "</button>");
+    expect(h).toContain('data-act="progress-remove" data-id="c1" aria-label="Remove &lt;Maya&gt;" title="Remove &lt;Maya&gt;">' + ICON("trash-2") + "</button>");
+    expect(h.indexOf(ICON("pencil"))).toBeLessThan(h.indexOf(ICON("trash-2")));
+    expect(h).not.toContain("<Maya>");
+    expect((h.match(/class="btn btn--ghost btn--sm pr-iconbtn/g) || []).length).toBe(2);
+    expect(h).toMatch(/class="btn btn--ghost btn--sm pr-iconbtn pr-iconbtn--remove" data-act="progress-remove"/);
+    expect(h).not.toMatch(/pr-iconbtn--remove" data-act="progress-edit"/);
+    expect(html).toMatch(/\.pr-iconbtn\{[^}]*border-radius:50%/);
+    expect(html).toContain(".pr-iconbtn--remove svg{ color:var(--berry); }");
+  });
+
+  it("the edit icon opens one form with both the name and the grade, the name box focused", () => {
+    const h = kids({ editing: "c1" });
+    expect(h).toContain('name="name"');
+    expect(h).toContain('name="grade"');
+    expect(h).toContain("data-autofocus");
+    expect(action("progress-edit")).toContain('"name"');
+  });
+
+  it("removing still asks first, as before", () => {
+    const h = kids({ removing: "c1" });
+    expect(h).toContain("Remove &lt;Maya&gt;? Everything recorded for &lt;Maya&gt; goes too.");
+    expect(h).toContain('data-act="progress-remove-yes"');
+  });
+});
+
+describe("Quiz questions in the admin editor", () => {
+  /* one of the page's constants, read from its declaration */
+  const constant = (name) => new Function("return " + html.split("const " + name + " = ")[1].split(";\n")[0])();
+  const shape = (...a) => fn("progressRecShape")()(...a);
+  const lessonable = (...a) => fn("quizLessonable", "parseNuggetId")(parseNuggetId)(...a);
+  const panel = (col, rec, id) => fn("quizPanelHTML", "QUIZ_KINDS", "QUIZ_LEVELS", "STEAMM_SUBJECTS", "nuggetsFor", "progressRecShape", "quizLessonable", "subjectFromTopic", "E", "ic")(
+    constant("QUIZ_KINDS"), constant("QUIZ_LEVELS"), STEAMM_SUBJECTS, nuggetsFor, shape, lessonable, subjectFromTopic, esc, () => "")(col, rec, id);
+  const VIDEO = { id: "v1", slug: "the-bridge", title: "The Bridge", status: "published", learning: "Triangles make <bridges> strong.", moral: "Keep trying." };
+
+  it("progressContent and the editor read a record through the same helper", () => {
+    expect(body("progressContent")).toContain("return progressRecShape(kind, rec);");
+    expect(shape("book", { id: "s1", learn: { word: "Pharaoh" }, card: { src: "c.jpg" } }).data).toEqual({ learn: { word: "Pharaoh" }, card: { src: "c.jpg" } });
+    expect(shape("activity", { id: "a1", image: { src: "a.jpg" } }).cover).toEqual({ src: "a.jpg" });
+    const v = { id: "v1" };
+    expect(shape("episode", v)).toBe(v);
+    expect(body("quizPanelHTML")).toContain("nuggetsFor(kind, progressRecShape(kind,");
+  });
+
+  it("lists each fact of the item by the record's id, with a STEAMM subject and the three levels", () => {
+    const h = panel("videos", VIDEO, "v1");
+    expect(h).toContain("Quiz questions");
+    expect(h).toContain('data-prefix="episode:v1:"');
+    expect(h).not.toContain("the-bridge");
+    expect(h).toContain('data-nugget="episode:v1:discovery"');
+    expect(h).not.toContain("episode:v1:lesson");                          // a life lesson is never quizzed
+    expect(h).toContain("Triangles make &lt;bridges&gt; strong.");
+    expect(h).not.toContain("<bridges>");
+    expect(h).toContain('<option value="">None</option>');
+    for (const s of STEAMM_SUBJECTS) expect(h).toContain('<option value="' + s.id + '">' + s.label + "</option>");
+    for (const l of ["K to 1st", "2nd to 3rd", "4th to 6th"]) expect(h).toContain(l);
+    expect((h.match(/data-qz="choice"/g) || []).length).toBe(2 + 3 + 3);
+    expect((h.match(/type="radio"/g) || []).length).toBe(2 + 3 + 3);
+    expect((h.match(/data-qz="why"/g) || []).length).toBe(3);
+    expect(h).not.toContain("life lesson, not quizzed");                   // an episode's discovery is always a fact
+    expect(h).toContain('data-act="qz-draft"');
+    expect(h).toMatch(/<fieldset class="qz__body" disabled>/);             // nothing can be typed until the saved questions are in
+    expect(h).not.toMatch(/ name="(title|learning|status|__status)"/);     // never read as one of the record's own fields
+  });
+
+  it("offers the life lesson switch on book takeaways and activity facts only", () => {
+    const book = panel("stories", { id: "s1", learn: { word: "Pharaoh", say: "FAIR-oh", takeaways: [{ title: "Big", text: "Pyramids are big." }] } }, "s1");
+    expect(book).toContain('data-nugget="book:s1:word"');
+    expect(book).toContain('data-nugget="book:s1:t1"');
+    expect((book.match(/This is a life lesson, not quizzed/g) || []).length).toBe(1);
+    const act = panel("activities", { id: "a1", learning: { topic: "structures", title: "Triangles", text: "They are strong." }, discussionPrompt: "What else?" }, "a1");
+    expect(act).toContain('data-prefix="activity:a1:"');
+    expect(act).toContain("This is a life lesson, not quizzed");
+    expect(act).toContain('<option value="engineering" selected>Engineering</option>');   // starts from the activity's topic
+    const entry = panel("portalEntries", { id: "e1", slug: "e-one", vocabWord: "gravity", vocabMeaning: "The pull down." }, "e1");
+    expect(entry).toContain('data-nugget="entry:e1:word"');
+    expect(entry).not.toContain("life lesson");
+  });
+
+  it("a new record, or one with no fact yet, says so instead", () => {
+    expect(panel("videos", Object.assign({}, VIDEO, { id: "" }), "")).toContain("Save this first");
+    expect(panel("videos", Object.assign({}, VIDEO, { learning: "" }), "v1")).toContain("Nothing to quiz yet");
+    expect(panel("games", { id: "g1" }, "g1")).toBe("");
+    for (const f of ["openEditor", "openPortalEditor"]) {
+      expect(body(f)).toContain("quizPanelHTML(");
+      expect(body(f)).toContain("quizPanelLoad(");
+    }
+  });
+
+  it("loads the item's questions and subjects by its prefix", () => {
+    const l = body("quizPanelLoad");
+    expect(l).toContain('sb.rpc("nugget_questions_for", { p_prefix: prefix })');
+    expect(l).toContain('sb.rpc("nugget_subjects_for", { p_prefix: prefix })');
+    expect(l).toContain("quizErrorText(");
+    expect(fn("quizPrefix", "QUIZ_KINDS")(constant("QUIZ_KINDS"))("stories", "s1")).toBe("book:s1:");
+    expect(fn("quizPrefix", "QUIZ_KINDS")(constant("QUIZ_KINDS"))("videos", "")).toBe("");
+  });
+
+  it("saves only filled rows: an empty level is just not quizzed, a half-filled one is left out and counted", () => {
+    const rows = fn("quizRowsFrom")();
+    const lv = (level, question, choices, answer, why) => ({ level, question, choices, answer, why: why || "" });
+    const out = rows([
+      { nugget: "episode:v1:discovery", subject: "engineering", lesson: false, levels: [
+        lv("k1", " What makes a bridge strong? ", ["Triangles", "Circles"], 0, " Triangles keep their shape. "),
+        lv("g23", "", ["", "", ""], -1),
+        lv("g46", "Which shape?", ["Triangle", "", "Star"], 0) ] },
+      { nugget: "book:s1:t1", subject: "", lesson: true, levels: [lv("k1", "Q", ["a", "b"], 1)] },
+      { nugget: "book:s1:word", subject: "", lesson: false, levels: [lv("g23", "Q?", ["a", "b", "c"], -1)] },
+    ]);
+    expect(out.rows).toEqual([
+      { nugget_id: "episode:v1:discovery", level: "k1", variant: 1, question: "What makes a bridge strong?", choices: ["Triangles", "Circles"], answer: 0, why: "Triangles keep their shape." },
+      { nugget_id: "book:s1:t1", level: "lesson", variant: 1, question: null, choices: null, answer: null, why: null },
+    ]);
+    expect(out.subjects).toEqual({ "episode:v1:discovery": "engineering" });
+    expect(out.skipped).toBe(2);                                            // a missing choice, and no right answer picked
+  });
+
+  it("publishing approves that item's questions", async () => {
+    const run = async (publish, fail) => {
+      const calls = [], toasts = [];
+      const sb = { rpc: async (name, args) => { calls.push([name, args]); return fail === name ? { error: { message: "invalid question" } } : { data: 1, error: null }; } };
+      const save = fn("quizPanelSave", "sb", "toast", "quizErrorText", "async ")(sb, (m, k) => toasts.push([m, k]), (e) => e.message);
+      const ok = await save({ prefix: "episode:v1:", rows: [{ nugget_id: "episode:v1:discovery" }], subjects: {}, skipped: 0 }, publish);
+      return { calls: calls.map((c) => c[0]), args: calls, toasts, ok };
+    };
+    const pub = await run(true);
+    expect(pub.calls).toEqual(["nugget_questions_save", "nugget_questions_approve"]);
+    expect(pub.args[0][1]).toEqual({ p_prefix: "episode:v1:", p_rows: [{ nugget_id: "episode:v1:discovery" }], p_subjects: {} });
+    expect(pub.args[1][1]).toEqual({ p_prefix: "episode:v1:" });
+    expect(pub.ok).toBe(true);
+    expect((await run(false)).calls).toEqual(["nugget_questions_save"]);   // a draft stays unapproved
+    const bad = await run(true, "nugget_questions_save");
+    expect(bad.calls).toEqual(["nugget_questions_save"]);                  // nothing approved when the save failed
+    expect(bad.toasts[0][1]).toBe("bad");
+    expect(bad.toasts[0][0]).toMatch(/saved, but its quiz questions/);
+    const s = body("quizPanelSave");
+    expect(s.indexOf('"nugget_questions_approve"')).toBeGreaterThan(s.indexOf('"nugget_questions_save"'));
+    expect(s.indexOf('"nugget_questions_approve"')).toBeGreaterThan(s.indexOf("if (publish)"));
+    // the save-record handler: the panel is read before the editor closes, and saved only after the record is
+    const h = html.split('if (act === "save-record"){')[1].split('if (act === "quick-parse")')[0];
+    expect(h.indexOf("const quiz = quizPanelRead(form);")).toBeLessThan(h.indexOf("closeModal()"));
+    expect(h).toContain("quizPanelSave(quiz, false);");                     // publishing blocked: saved as a draft, not approved
+    expect(h).toContain('quizPanelSave(quiz, !!saved && saved.status === "published");');
+    expect(h.indexOf('quizPanelSave(quiz, !!saved')).toBeGreaterThan(h.indexOf("await db.update(col, id, candidate); saved ="));
+    expect(h.indexOf('quizPanelSave(quiz, !!saved')).toBeLessThan(h.indexOf("portalPrepareEmail(saved)"));
+  });
+
+  it("never wipes questions it could not load", () => {
+    const r = body("quizPanelRead");
+    expect(r).toContain('if (!p || !body || body.disabled) return null;');
+    expect(fn("quizErrorText")()({ code: "PGRST202", message: "Could not find the function public.nugget_questions_for" })).toMatch(/kid-progress\.sql/);
+    expect(fn("quizErrorText")()({ message: "invalid question" })).toMatch(/every choice/);
+  });
+
+  it("drafts empty rows with Copilot, and says so when Copilot isn't running", () => {
+    expect(constant("QUIZ_NO_COPILOT")).toBe("Copilot isn't running. Type the questions, or leave them empty for now.");
+    const d = body("quizPanelDraft");
+    expect(d).toContain("WriterLib.chat({ base: WriterState.base, model: WriterState.model, messages: questionDraftMessages(j.nugget, j.level), json: true");
+    expect(d).toContain("parseQuestionDraft(text, j.level)");
+    expect(d).toContain("writerConnect()");
+    expect((d.match(/QUIZ_NO_COPILOT/g) || []).length).toBe(2);           // not reachable at the start, or stopped answering
+    expect(d).toContain("quizRowEmpty(");
+    expect(action("qz-draft")).toContain("quizPanelDraft()");
+  });
+
+  it("no em dashes and no emojis in the panel", () => {
+    const code = ["quizPanelHTML", "quizPanelLoad", "quizPanelDraft", "quizPanelSave", "quizErrorText"].map(body).join("\n");
+    expect(code.includes("—")).toBe(false);
+    expect(code).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 });

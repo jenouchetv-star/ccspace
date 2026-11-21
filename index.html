@@ -4548,6 +4548,9 @@ body.portal-locked{ overflow:hidden; }
 .pr-who{ flex:1 1 220px; }
 .pr-who b{ display:block; font-size:1.25rem; }
 .pr-who span{ color:var(--ink-mute); font-weight:700; font-size:.95rem; }
+.pr-iconbtn{ width:44px; height:44px; min-height:44px; padding:0; border-radius:50%; justify-content:center; flex:none; }
+.pr-iconbtn svg{ width:20px; height:20px; }
+.pr-iconbtn--remove svg{ color:var(--berry); }
 .pr-form{ display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; width:100%; }
 .pr-form .pr-field{ width:auto; flex:0 1 200px; }
 .pr-form .pr-field--name{ flex:1 1 220px; }
@@ -4895,6 +4898,28 @@ body.cp-dragging #app{ transition:none !important; pointer-events:none; }
 .pemail h4{ margin:0 0 10px; font-size:.95rem; display:flex; gap:8px; align-items:center; }
 .pemail .admin-field{ margin:0; }
 .pemail__fields{ margin-top:12px; }
+/* the admin editor's Quiz questions panel (Chike's pop quiz): compact, one fact at a time */
+.qz{ margin-top:18px; padding:14px 16px; border:1px solid var(--admin-border-strong); border-radius:12px; background:var(--admin-surface-2); }
+.qz > h4{ margin:0 0 4px; font-size:.95rem; display:flex; gap:8px; align-items:center; }
+.qz .admin-hint{ display:block; font-size:.8rem; color:var(--admin-faint); margin:0 0 10px; }
+.qz__body{ border:0; margin:0; padding:0; min-width:0; }
+.qz__body[disabled]{ opacity:.6; }
+.qz__bar{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin-bottom:10px; }
+.qz__status{ font-size:.84rem; color:var(--admin-mute); }
+.qz__status[data-bad]{ color:var(--admin-bad); font-weight:600; }
+.qz__nugget{ border:1px solid var(--admin-border); border-radius:10px; padding:10px 12px 12px; margin:0 0 10px; background:var(--admin-surface); min-width:0; }
+.qz__nugget legend{ padding:0 4px; font-weight:700; font-size:.9rem; max-width:100%; }
+.qz__top{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin-bottom:8px; }
+.qz__top .admin-select{ width:auto; padding:5px 8px; font-size:.84rem; }
+.qz__lesson{ display:flex; gap:7px; align-items:center; font-size:.84rem; font-weight:600; cursor:pointer; }
+.qz__lesson input{ width:16px; height:16px; }
+.qz__level{ display:grid; grid-template-columns:96px minmax(0,1fr); gap:5px 10px; padding:7px 0; border-top:1px dashed var(--admin-border); }
+.qz__lvl{ grid-row:span 3; font-size:.72rem; font-weight:700; color:var(--admin-mute); text-transform:uppercase; letter-spacing:.04em; padding-top:7px; }
+.qz__level .admin-input{ padding:5px 8px; font-size:.86rem; }
+.qz__choices{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:5px 8px; }
+.qz__choice{ display:flex; align-items:center; gap:6px; }
+.qz__choice input[type="radio"]{ width:16px; height:16px; flex:none; accent-color:var(--admin-accent); }
+@media (max-width:640px){ .qz__level{ grid-template-columns:1fr; } .qz__lvl{ grid-row:auto; padding-top:0; } }
 .pemail:not(:has(input[name="email.on"]:checked)) .pemail__fields{ display:none; }
 .ptiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); gap:10px; }
 .ptile{ display:flex; flex-direction:column; align-items:center; gap:4px; padding:14px 8px; text-align:center; cursor:pointer; font:inherit;
@@ -15299,13 +15324,17 @@ function progressContent(){
       /* only what is live on the site: a draft, an item sent back for revision or an archived one is left out (the
          portal's own entries come back published only, and may not carry a status at all) */
       if (kind === "entry" ? (rec.status && rec.status !== "published") : rec.status !== "published") return null;
-      /* the site keeps a book's word to know and card picture at the top of its record, and an activity's picture
-         as its image; buildReport reads them as data.learn, data.card and cover */
-      if (kind === "book" && !rec.data) return Object.assign({}, rec, { data: { learn: rec.learn, card: rec.card } });
-      if (kind === "activity" && !rec.cover && rec.image) return Object.assign({}, rec, { cover: rec.image });
-      return rec;
+      return progressRecShape(kind, rec);
     }
   };
+}
+/** A site record in the shape assets/lib/progress.js reads (nuggetsFor, buildReport). The site keeps a book's word to
+    know and card picture at the top of its record, and an activity's picture as its image; progress.js reads them as
+    data.learn, data.card and cover. The report, the quiz and the admin's Quiz questions panel all go through here. */
+function progressRecShape(kind, rec){
+  if (kind === "book" && !rec.data) return Object.assign({}, rec, { data: { learn: rec.learn, card: rec.card } });
+  if (kind === "activity" && !rec.cover && rec.image) return Object.assign({}, rec, { cover: rec.image });
+  return rec;
 }
 
 function progressWhen(iso, style){
@@ -15562,9 +15591,11 @@ function progressChildrenHTML(){
         + '<button class="btn btn--ghost btn--sm" type="button" data-act="progress-edit-cancel">Cancel</button></form></li>';
     }
     return '<li><div class="pr-who"><b>' + E(c.name) + '</b><span>' + E(gradeLabel(c.grade)) + '. ' + level(c.grade) + '</span></div>'
-      + '<button type="button" class="btn btn--ghost btn--sm" data-act="progress-edit" data-id="' + E(c.id) + '" data-focus="name">Rename</button>'
-      + '<button type="button" class="btn btn--ghost btn--sm" data-act="progress-edit" data-id="' + E(c.id) + '" data-focus="grade">Change grade</button>'
-      + '<button type="button" class="btn btn--ghost btn--sm" data-act="progress-remove" data-id="' + E(c.id) + '">Remove</button></li>';
+      /* owner, 2026-11-21: two round icons, edit (the name box and the grade together) then a red trash can */
+      + '<button type="button" class="btn btn--ghost btn--sm pr-iconbtn" data-act="progress-edit" data-id="' + E(c.id) + '" data-focus="name"'
+      + ' aria-label="Edit ' + E(c.name) + '" title="Edit ' + E(c.name) + '">' + ic("pencil") + '</button>'
+      + '<button type="button" class="btn btn--ghost btn--sm pr-iconbtn pr-iconbtn--remove" data-act="progress-remove" data-id="' + E(c.id) + '"'
+      + ' aria-label="Remove ' + E(c.name) + '" title="Remove ' + E(c.name) + '">' + ic("trash-2") + '</button></li>';
   }).join("");
   const d = draft("");
   const add = kids.length >= PROGRESS_MAX_CHILDREN
@@ -15943,7 +15974,8 @@ async function progressQuizOffer(kid){
   const r = await kidCall("quiz_offer", { child: kid.id });
   if (progressSessionEnded(r)){ delete QUIZ_OFFER[kid.id]; return; }
   QUIZ_OFFER[kid.id] = !!(r && r.ok && r.due);
-  if (QUIZ_OFFER[kid.id]) progressQuizBubble();
+  /* the whole corner, so the tour's welcome steps aside for the quiz bubble: only one bubble ever shows */
+  if (QUIZ_OFFER[kid.id]) renderTourRoot();
 }
 
 /** Where a question's fact came from: the item's title and picture, or null when it can't be found any more. */
@@ -16007,13 +16039,33 @@ function progressQuizEndHTML(right, answered){
     + '<h3 id="quiz-title" class="quiz__q" tabindex="-1">' + (answered ? "You got " + right + " of " + answered + " right. " : "") + "See you next week!</h3></div>"
     + '<div class="quiz__foot quiz__foot--end"><button type="button" class="btn btn--sm btn--cyan" data-quiz="close">Done</button></div>';
 }
+/** What kid-progress's reply to one answer means for the card: a result (counted), a question skipped kindly (it was
+    taken back mid-quiz, or the server can't use it: not counted, and never "tap again" forever), or a hiccup to try
+    again. */
+function progressQuizOutcome(res){
+  if (res && res.ok){
+    return { result: { correct: !!res.correct, answer: Number.isInteger(res.answer) ? res.answer : -1, why: typeof res.why === "string" ? res.why : "" }, counted: true, error: false };
+  }
+  if (res && (res.error === "not_found" || res.error === "invalid")) return { result: { skipped: true }, counted: false, error: false };
+  return { result: null, counted: false, error: true };
+}
+/** Takes Chike's quiz card away (its Close button, Escape, or the page changing under it) and stops any reading aloud.
+    True when there was a card. */
+function closePopQuiz(){
+  const box = document.getElementById("quiz-root");
+  if (!box) return false;
+  if ("speechSynthesis" in window){ try { speechSynthesis.cancel(); } catch(_e){ /* nothing to stop */ } }
+  box.remove();
+  if (!$("#modal-root").innerHTML && !document.getElementById("who-root")) document.body.classList.remove("no-scroll");
+  return true;
+}
 /** Chike's quiz card: its own layer, like "Who's creating today?". A started quiz counts for the week (kid-progress
     keeps it), so closing the card part way through just ends it. */
 async function openPopQuiz(childId){
   const kid = (ProgressState.children || []).find(c => c.id === childId);
   if (!kid || document.getElementById("quiz-root")) return;
   QUIZ_OFFER[childId] = false;
-  progressQuizBubble();
+  renderTourRoot();
   const r = await kidCall("quiz_start", { child: childId });
   if (progressSessionEnded(r)) return;
   if (!r || !r.ok){
@@ -16025,7 +16077,7 @@ async function openPopQuiz(childId){
     }
     if (r && r.error === "not_due") return;          /* already taken this week, on another device */
     QUIZ_OFFER[childId] = true;
-    progressQuizBubble();
+    renderTourRoot();
     toast("Chike’s quiz didn’t start just now. Try again in a moment.", "bad");
     return;
   }
@@ -16033,6 +16085,8 @@ async function openPopQuiz(childId){
   const qs = (Array.isArray(r.questions) ? r.questions : [])
     .filter(q => q && q.nuggetId && q.question && Array.isArray(q.choices) && q.choices.length >= 2);
   if (!qs.length || document.getElementById("quiz-root")) return;
+  /* the child left the list page while it started: the card doesn't pop up on an episode, a book or a game */
+  if (!quizBubbleAllowed(AppState.route)) return;
 
   /* Kindergarten and 1st grade: read aloud, with a voice that lives on this device */
   const canSay = level === "k1" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance === "function";
@@ -16067,9 +16121,7 @@ async function openPopQuiz(childId){
     if (f) f.focus();
   };
   const close = () => {
-    if (canSay) { try { speechSynthesis.cancel(); } catch(_e){ /* nothing to stop */ } }
-    box.remove();
-    if (!$("#modal-root").innerHTML && !document.getElementById("who-root")) document.body.classList.remove("no-scroll");
+    closePopQuiz();
     if (back && document.contains(back)) back.focus();
   };
   const pick = async (choice) => {
@@ -16085,16 +16137,9 @@ async function openPopQuiz(childId){
     if (!box.isConnected || st.i !== at || st.result) return;
     st.busy = false;
     if (progressSessionEnded(res)){ close(); return; }
-    if (res && res.ok){
-      st.result = { correct: !!res.correct, answer: Number.isInteger(res.answer) ? res.answer : -1, why: typeof res.why === "string" ? res.why : "" };
-      st.answered++;
-      if (st.result.correct) st.right++;
-    } else if (res && res.error === "not_found"){
-      /* the question was taken back while the quiz was open: on to the next one, kindly, and not counted */
-      st.result = { skipped: true };
-    } else {
-      st.error = true;
-    }
+    const out = progressQuizOutcome(res);
+    st.result = out.result; st.error = out.error;
+    if (out.counted){ st.answered++; if (st.result.correct) st.right++; }
     paint(st.result ? '[data-quiz="next"]' : '[data-quiz="pick"]');
     const words = plain(progressQuizReplyHTML(q, st));
     live.textContent = words;
@@ -18926,6 +18971,258 @@ async function portalApplyPrivateGame(c){
   return true;
 }
 
+/* ============================================================
+   QUIZ QUESTIONS IN THE ADMIN EDITOR (Chike's pop quiz)
+   Under an episode's, book's, activity's or portal entry's fields: each fact a child can come away with
+   (nuggetsFor in assets/lib/progress.js, read through progressRecShape like the report and the quiz), its STEAMM
+   subject, and a question at each of the three levels. Saved with the admin RPCs in supabase/kid-progress.sql after
+   the record itself saves, and approved when the record is published. Only approved questions are ever asked.
+   ============================================================ */
+const QUIZ_KINDS = { videos: "episode", stories: "book", activities: "activity", portalEntries: "entry" };
+const QUIZ_LEVELS = [{ id: "k1", label: "K to 1st", n: 2 }, { id: "g23", label: "2nd to 3rd", n: 3 }, { id: "g46", label: "4th to 6th", n: 3 }];
+const QUIZ_NO_COPILOT = "Copilot isn't running. Type the questions, or leave them empty for now.";
+/* what the open panel loaded but doesn't show (a second variant, a fact no longer on the record), so a save keeps it */
+const QuizEdit = { prefix: "", keep: [], keepSubjects: {}, busy: false };
+
+/** "episode:<id>:" for a record that has been saved, else "". */
+function quizPrefix(col, id){
+  return QUIZ_KINDS[col] && id ? QUIZ_KINDS[col] + ":" + id + ":" : "";
+}
+/** A fact that may really be a life lesson (a book's takeaway, an activity's discovery): it can be switched to "not quizzed". */
+function quizLessonable(n){
+  const p = parseNuggetId(n && n.id);
+  return !!p && ((p.kind === "book" && /^t\d$/.test(p.part)) || (p.kind === "activity" && p.part === "fact"));
+}
+function quizPanelHTML(col, rec, id){
+  const kind = QUIZ_KINDS[col];
+  if (!kind) return "";
+  const head = '<section class="qz" id="qz-panel" aria-labelledby="qz-h"' + (id ? ' data-prefix="' + E(kind + ":" + id + ":") + '"' : "") + '>'
+    + '<h4 id="qz-h">' + ic("list-checks") + ' Quiz questions</h4>';
+  if (!id) return head + '<p class="admin-hint">Save this first. Then you can add the questions Chike’s pop quiz asks about it.</p></section>';
+  const facts = nuggetsFor(kind, progressRecShape(kind, Object.assign({}, rec, { id: id }))).filter(n => n.type === "fact");
+  if (!facts.length){
+    return head + '<p class="admin-hint">Nothing to quiz yet. This has no fact a child comes away with (a discovery, a word to know or a takeaway). Add one, save, and open it again.</p></section>';
+  }
+  const start = kind === "activity" ? subjectFromTopic(rec.learning && rec.learning.topic) : "";
+  const subjects = (picked) => '<option value="">None</option>'
+    + STEAMM_SUBJECTS.map(s => '<option value="' + s.id + '"' + (s.id === picked ? " selected" : "") + '>' + E(s.label) + '</option>').join("");
+  const levels = (ni) => QUIZ_LEVELS.map(L => {
+    const group = "qz-" + ni + "-" + L.id;
+    let choices = "";
+    for (let i = 0; i < L.n; i++){
+      choices += '<label class="qz__choice"><input type="radio" name="' + group + '" value="' + i + '" data-qz="answer" title="The right answer" aria-label="' + E(L.label) + ': choice ' + (i + 1) + ' is the right answer">'
+        + '<input class="admin-input" data-qz="choice" autocomplete="off" placeholder="Choice ' + (i + 1) + '" aria-label="' + E(L.label) + ' choice ' + (i + 1) + '"></label>';
+    }
+    return '<div class="qz__level" data-level="' + L.id + '"><span class="qz__lvl">' + E(L.label) + '</span>'
+      + '<input class="admin-input" data-qz="question" autocomplete="off" placeholder="Question" aria-label="' + E(L.label) + ' question">'
+      + '<div class="qz__choices">' + choices + '</div>'
+      + '<input class="admin-input" data-qz="why" autocomplete="off" placeholder="Why (Chike says this after the answer)" aria-label="' + E(L.label) + ' why"></div>';
+  }).join("");
+  return head
+    + '<p class="admin-hint">Each fact gets one STEAMM subject and a question for each grade level: 2 choices for K to 1st (read aloud), 3 for the others. Tick the right answer. Leave a level empty and it just isn’t quizzed. Questions are asked only once this is published.</p>'
+    + '<fieldset class="qz__body" disabled>'
+    + '<div class="qz__bar"><button type="button" class="admin-btn admin-btn--sm" data-act="qz-draft">' + ic("wand-sparkles") + ' Draft with Copilot</button>'
+    + '<span class="qz__status" aria-live="polite">Loading the questions...</span></div>'
+    + facts.map((n, ni) => '<fieldset class="qz__nugget" data-nugget="' + E(n.id) + '" data-title="' + E(n.title) + '">'
+      + '<legend>' + E(n.text) + '</legend>'
+      + '<div class="qz__top"><label class="qz__lesson">STEAMM subject <select class="admin-select" data-qz="subject" aria-label="STEAMM subject">' + subjects(start) + '</select></label>'
+      + (quizLessonable(n) ? '<label class="qz__lesson"><input type="checkbox" data-qz="lesson"> This is a life lesson, not quizzed</label>' : "")
+      + '</div><div class="qz__levels">' + levels(ni) + '</div></fieldset>').join("")
+    + '</fieldset></section>';
+}
+function quizPanelStatus(p, text, bad){
+  const s = p && p.querySelector(".qz__status");
+  if (!s) return;
+  s.textContent = text || "";
+  if (bad) s.setAttribute("data-bad", ""); else s.removeAttribute("data-bad");
+}
+/** What an admin RPC's error means, in plain words. */
+function quizErrorText(err){
+  const m = String((err && err.message) || "");
+  if ((err && err.code === "PGRST202") || /could not find the function|does not exist/i.test(m)) return "the quiz tables aren’t set up yet (supabase/kid-progress.sql).";
+  if (/invalid question/i.test(m)) return "each question needs every choice filled in and one right answer.";
+  if (/invalid subject/i.test(m)) return "a STEAMM subject wasn’t one of the six.";
+  if (/not allowed/i.test(m)) return "only a signed-in admin can change them.";
+  return "check your connection and try again.";
+}
+/** Shows one level's saved question in its row. */
+function quizFillRow(row, q){
+  const choices = Array.isArray(q.choices) ? q.choices : [];
+  row.querySelector('[data-qz="question"]').value = q.question || "";
+  row.querySelectorAll('[data-qz="choice"]').forEach((c, i) => { c.value = choices[i] != null ? String(choices[i]) : ""; });
+  row.querySelectorAll('[data-qz="answer"]').forEach((r, i) => { r.checked = i === q.answer; });
+  row.querySelector('[data-qz="why"]').value = q.why || "";
+}
+function quizRowEmpty(row){
+  return !Array.from(row.querySelectorAll('[data-qz="question"], [data-qz="choice"], [data-qz="why"]')).some(i => i.value.trim());
+}
+function quizLessonPaint(box){
+  const f = box.closest(".qz__nugget");
+  const lv = f && f.querySelector(".qz__levels");
+  if (lv) lv.hidden = box.checked;
+}
+/** Reads the item's saved questions and subjects into the panel. Until they are in (or if they can't be read), the
+    panel can't be typed in and a save leaves the item's questions exactly as they are. */
+async function quizPanelLoad(prefix){
+  QuizEdit.prefix = prefix; QuizEdit.keep = []; QuizEdit.keepSubjects = {};
+  if (!prefix) return;
+  let q, s;
+  try {
+    [q, s] = await Promise.all([sb.rpc("nugget_questions_for", { p_prefix: prefix }), sb.rpc("nugget_subjects_for", { p_prefix: prefix })]);
+  } catch(e){ q = { error: e }; }
+  const p = document.getElementById("qz-panel");
+  if (!p || p.getAttribute("data-prefix") !== prefix || QuizEdit.prefix !== prefix) return;     // another editor opened meanwhile
+  const err = (q && q.error) || (s && s.error);
+  if (err){
+    quizPanelStatus(p, "The quiz questions couldn’t be loaded: " + quizErrorText(err) + " Saving leaves them as they are.", true);
+    return;
+  }
+  const shown = {};
+  p.querySelectorAll(".qz__nugget").forEach(f => { shown[f.getAttribute("data-nugget")] = f; });
+  (Array.isArray(s && s.data) ? s.data : []).forEach(r => {
+    const f = shown[r.nugget_id];
+    if (f) f.querySelector('[data-qz="subject"]').value = r.subject;
+    else QuizEdit.keepSubjects[r.nugget_id] = r.subject;
+  });
+  (Array.isArray(q && q.data) ? q.data : []).forEach(r => {
+    const f = shown[r.nugget_id];
+    if (!f || Number(r.variant || 1) !== 1){
+      QuizEdit.keep.push({ nugget_id: r.nugget_id, level: r.level, variant: r.variant, question: r.question, choices: r.choices, answer: r.answer, why: r.why });
+      return;
+    }
+    if (r.level === "lesson"){
+      const box = f.querySelector('[data-qz="lesson"]');
+      if (box){ box.checked = true; quizLessonPaint(box); }
+      return;
+    }
+    const row = f.querySelector('.qz__level[data-level="' + r.level + '"]');
+    if (row) quizFillRow(row, r);
+  });
+  p.querySelector(".qz__body").disabled = false;
+  quizPanelStatus(p, "");
+}
+/** The rows and subjects to save from what the panel holds. An empty level is left out (not quizzed); one only half
+    filled in (no question, a choice missing, or no right answer ticked) is left out too, and counted in skipped. */
+function quizRowsFrom(values){
+  const rows = [], subjects = {};
+  let skipped = 0;
+  values.forEach(v => {
+    if (v.subject) subjects[v.nugget] = v.subject;
+    if (v.lesson){ rows.push({ nugget_id: v.nugget, level: "lesson", variant: 1, question: null, choices: null, answer: null, why: null }); return; }
+    v.levels.forEach(l => {
+      const question = String(l.question || "").trim(), why = String(l.why || "").trim();
+      const choices = (l.choices || []).map(c => String(c || "").trim());
+      if (!question && !why && !choices.some(Boolean)) return;
+      if (!question || choices.some(c => !c) || !(Number.isInteger(l.answer) && l.answer >= 0 && l.answer < choices.length)){ skipped++; return; }
+      rows.push({ nugget_id: v.nugget, level: l.level, variant: 1, question: question, choices: choices, answer: l.answer, why: why });
+    });
+  });
+  return { rows: rows, subjects: subjects, skipped: skipped };
+}
+/** The panel read before the editor closes: { prefix, rows, subjects, skipped }, or null when there is nothing to save
+    (no panel, a new record, no facts, or the saved questions never loaded). */
+function quizPanelRead(form){
+  const p = form ? form.querySelector("#qz-panel") : null;
+  const body = p && p.querySelector(".qz__body");
+  if (!p || !body || body.disabled) return null;
+  const prefix = p.getAttribute("data-prefix") || "";
+  if (!prefix || prefix !== QuizEdit.prefix) return null;
+  const values = Array.from(p.querySelectorAll(".qz__nugget")).map(f => {
+    const lesson = f.querySelector('[data-qz="lesson"]');
+    return {
+      nugget: f.getAttribute("data-nugget"),
+      subject: f.querySelector('[data-qz="subject"]').value,
+      lesson: !!(lesson && lesson.checked),
+      levels: Array.from(f.querySelectorAll(".qz__level")).map(row => {
+        const picked = row.querySelector('[data-qz="answer"]:checked');
+        return {
+          level: row.getAttribute("data-level"),
+          question: row.querySelector('[data-qz="question"]').value,
+          choices: Array.from(row.querySelectorAll('[data-qz="choice"]')).map(c => c.value),
+          answer: picked ? Number(picked.value) : -1,
+          why: row.querySelector('[data-qz="why"]').value,
+        };
+      }),
+    };
+  });
+  const out = quizRowsFrom(values);
+  return {
+    prefix: prefix,
+    rows: out.rows.concat(QuizEdit.keep),
+    subjects: Object.assign({}, QuizEdit.keepSubjects, out.subjects),
+    skipped: out.skipped,
+  };
+}
+/** Saves the item's questions after the record itself has saved (a failure here never undoes that), then approves them
+    when the record is published, so the quiz may ask them. */
+async function quizPanelSave(quiz, publish){
+  if (!quiz) return false;
+  let r;
+  try { r = await sb.rpc("nugget_questions_save", { p_prefix: quiz.prefix, p_rows: quiz.rows, p_subjects: quiz.subjects }); }
+  catch(e){ r = { error: e }; }
+  if (!r || r.error){ toast("The record saved, but its quiz questions didn’t: " + quizErrorText(r && r.error), "bad"); return false; }
+  if (publish){
+    let a;
+    try { a = await sb.rpc("nugget_questions_approve", { p_prefix: quiz.prefix }); }
+    catch(e){ a = { error: e }; }
+    if (!a || a.error){ toast("The quiz questions saved, but aren’t approved yet: " + quizErrorText(a && a.error) + " Publish again to approve them.", "bad"); return false; }
+  }
+  if (quiz.skipped){
+    toast(quiz.skipped + (quiz.skipped === 1 ? " quiz question wasn’t" : " quiz questions weren’t") + " saved. Each one needs the question, every choice and the right answer ticked.", "bad");
+  }
+  return true;
+}
+/** Draft with Copilot: fills every empty level of every fact (not the life lessons) with a question from the admin's own
+    Ollama. Nothing is saved until the record is. */
+async function quizPanelDraft(){
+  const p = document.getElementById("qz-panel");
+  if (!p || QuizEdit.busy) return;
+  const btn = p.querySelector('[data-act="qz-draft"]');
+  if (WriterState.status !== "ready"){
+    quizPanelStatus(p, "Looking for Copilot...");
+    await writerConnect();
+  }
+  if (!p.isConnected) return;
+  if (WriterState.status !== "ready"){ quizPanelStatus(p, QUIZ_NO_COPILOT, true); return; }
+  const jobs = [];
+  p.querySelectorAll(".qz__nugget").forEach(f => {
+    const lesson = f.querySelector('[data-qz="lesson"]');
+    if (lesson && lesson.checked) return;
+    const nugget = { id: f.getAttribute("data-nugget"), type: "fact", text: (f.querySelector("legend") || {}).textContent || "", title: f.getAttribute("data-title") || "" };
+    f.querySelectorAll(".qz__level").forEach(row => { if (quizRowEmpty(row)) jobs.push({ f: f, row: row, nugget: nugget, level: row.getAttribute("data-level") }); });
+  });
+  if (!jobs.length){ quizPanelStatus(p, "Every level already has words in it. Empty one to draft it again."); return; }
+  QuizEdit.busy = true;
+  if (btn) btn.disabled = true;
+  let made = 0, missed = 0;
+  try {
+    for (let i = 0; i < jobs.length; i++){
+      const j = jobs[i];
+      if (!p.isConnected) return;
+      quizPanelStatus(p, "Drafting " + (i + 1) + " of " + jobs.length + "...");
+      let text;
+      try {
+        text = await WriterLib.chat({ base: WriterState.base, model: WriterState.model, messages: questionDraftMessages(j.nugget, j.level), json: true, temperature: 0.5, maxTokens: 400 });
+      } catch(_e){
+        WriterState.status = "off"; writerPaintStatus();
+        quizPanelStatus(p, QUIZ_NO_COPILOT, true);
+        return;
+      }
+      const d = parseQuestionDraft(text, j.level);
+      if (!d || !quizRowEmpty(j.row)){ missed++; continue; }      // not usable, or the admin typed there meanwhile
+      quizFillRow(j.row, d);
+      const subj = j.f.querySelector('[data-qz="subject"]');
+      if (subj && !subj.value && d.subject) subj.value = d.subject;
+      made++;
+    }
+    quizPanelStatus(p, (made ? "Drafted " + made + ". Read each one before you save." : "Nothing drafted.")
+      + (missed ? " " + missed + " didn’t come out right. Type " + (missed === 1 ? "that one" : "those") + ", or press Draft again." : ""), !made);
+  } finally {
+    QuizEdit.busy = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
 function openPortalEditor(id){
   const existing = id ? db.find("portalEntries", id) : null;
   const rec = existing ? JSON.parse(JSON.stringify(existing)) : BLANKS.portalEntries();
@@ -18949,6 +19246,7 @@ function openPortalEditor(id){
     + '<span class="admin-hint" style="display:block;margin-top:10px">Leave a box empty and we fill it in from the entry. When you publish, the email opens ready to review, test and send. Nothing is sent until you say so.'
     + (rec.emailId && db.find("newsletters", rec.emailId) ? ' <a href="#/admin/send-newsletter/' + E(rec.emailId) + '">Open this entry\u2019s email</a>.' : "") + '</span></div></section>'
     + '<details class="pmore"><summary>More options</summary><div class="admin-form-grid">' + fields.filter(f => f.more).map(f => fieldControl(f, rec)).join("") + '</div></details>'
+    + quizPanelHTML("portalEntries", rec, id || "")
     + '<input type="hidden" name="__status" value="' + E(rec.status === "archived" ? "draft" : (rec.status || "draft")) + '">'
     + '</div>'
     + '<div class="modal__foot">'
@@ -18964,6 +19262,7 @@ function openPortalEditor(id){
   const wf = writerForm();
   if (wf){ portalChipsMount(wf); portalChipsPaint(wf); portalStartPaint(wf); }
   writerConnect();
+  quizPanelLoad(quizPrefix("portalEntries", id || ""));
 }
 
 function openEditor(col, id, overlay){
@@ -18997,6 +19296,7 @@ function openEditor(col, id, overlay){
     + ehCardHTML(col, rec)
     + '<div class="admin-form-grid">' + (FIELDS[col] || []).filter(f => fieldOnPage(f, rec.key)).map(f => fieldControl(f, rec)).join("") + '</div>'
     + (col === "pages" ? slotFieldsHTML(rec) : "")
+    + quizPanelHTML(col, rec, id || "")
     + '<div class="admin-field col-2" style="margin-top:18px"><label for="f-status">Workflow status</label>'
     + '<select class="admin-select" id="f-status" name="__status">'
     + STATUSES.map(s => '<option value="' + s.id + '"' + (rec.status === s.id ? " selected" : "") + '>' + E(s.label) + '</option>').join("")
@@ -19012,6 +19312,7 @@ function openEditor(col, id, overlay){
     null, "modal--sheet modal--full admin-modal"
   );
   if (ehFields(col).length) writerConnect();
+  quizPanelLoad(quizPrefix(col, id || ""));
 }
 
 /* One authored, plain-language coaching line per field - written once, not
@@ -28895,7 +29196,7 @@ const ACTIONS = {
     const id = b ? b.getAttribute("data-child") || "" : "";
     if (!id) return;
     progressQuizSetLater(id);
-    progressQuizBubble();
+    renderTourRoot();
   },
   "progress-made": (el) => {
     const id = el.getAttribute("data-id") || "";
@@ -29056,6 +29357,8 @@ const ACTIONS = {
   "writer-run": (el) => { const f = el.closest("form"); if (f) writerRun(el.getAttribute("data-task"), f); },
   "writer-apply": (el) => { const f = el.closest("form"); if (f) writerApply(f, el.getAttribute("data-what"), parseInt(el.getAttribute("data-i"), 10)); },
   "writer-check": () => { writerConnect(); },
+  /* the editor's Quiz questions panel */
+  "qz-draft": () => { quizPanelDraft(); },
   "writer-accept": () => { writerAccept(); },
   "portal-chip": (el) => {
     const f = el.closest("form"); const box = f && f.elements[el.getAttribute("data-for")];
@@ -31360,6 +31663,8 @@ async function handleSubmit(form, act){
     const id  = form.getAttribute("data-id");
     const existing = id ? db.find(col, id) : null;
     const patch = readForm(form, col);
+    /* the Quiz questions panel, read now (the editor closes below) and saved only once the record has */
+    const quiz = quizPanelRead(form);
     const wanted = form.elements["__status"] ? form.elements["__status"].value : (existing ? existing.status : "draft");
     const candidate = Object.assign({}, existing || BLANKS[col](), patch, { status: wanted });
     /* a page's words and pictures from its "Words and pictures on this page" boxes */
@@ -31386,6 +31691,7 @@ async function handleSubmit(form, act){
         else await db.add(col, candidate);
       } catch(_e){ return; }
       closeModal();
+      quizPanelSave(quiz, false);
       toast("Saved as " + statusMeta(candidate.status).label + ". Publishing is blocked until the problems are fixed.", "bad");
       rerender();
       return;
@@ -31397,6 +31703,8 @@ async function handleSubmit(form, act){
       else saved = await db.add(col, candidate);
     } catch(_e){ return; }
     closeModal();
+    /* its own toast if it fails; the record is saved either way */
+    quizPanelSave(quiz, !!saved && saved.status === "published");
     if (col === "portalEntries" && saved && saved.status === "published" && await portalPrepareEmail(saved)) return;
     toast("Saved as " + statusMeta(candidate.status).label);
     rerender();
@@ -32123,6 +32431,7 @@ document.addEventListener("change", (ev) => {
   }
   if (el.getAttribute && el.getAttribute("data-cpm")){ copilotEdit(el); return; }
   if (el.getAttribute && el.getAttribute("data-ehrow")){ ehEdit(el); return; }
+  if (el.getAttribute && el.getAttribute("data-qz") === "lesson"){ quizLessonPaint(el); return; }
   if (pact === "writer-url"){
     const u = WriterLib.ollamaUrl(el.value);
     if (!u){ toast("Use an address on this computer or your network, like http://localhost:11434.", "bad"); el.value = WriterState.base; return; }
@@ -32340,7 +32649,7 @@ document.addEventListener("error", (ev) => {
   }
 }, true);
 
-window.addEventListener("hashchange", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); render(); });
+window.addEventListener("hashchange", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); closePopQuiz(); render(); });
 window.addEventListener("popstate", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); AppState.restoringScroll = true; render(); });
 window.addEventListener("scroll", () => Parallax.onScroll(), { passive:true });
 window.addEventListener("scroll", () => BackToTop.onScroll(), { passive:true });
