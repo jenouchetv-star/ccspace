@@ -554,3 +554,12 @@ describe("the phone's new look (owner, 2026-11-18; draft docs/mockups/stack-em-u
     expect(player).toContain("newHand: p.newHand === true");
   });
 });
+
+describe("the table holds still (owner, 2026-11-21: the slow spin made people dizzy)", () => {
+  it("never moves the camera with time", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../supabase/private-games/matching-suits.html", import.meta.url), "utf8");
+    expect(src).toContain("camera.position.set(0, 8.2, 8.6);");
+    expect(src).not.toMatch(/camera\.position\.set\([^)]*Math\.sin\(t/);
+  });
+});
