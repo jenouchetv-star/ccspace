@@ -138,9 +138,11 @@ answer and a "why"), through a new message from the game to the page, recorded f
 report under what they finished. Each game needs its own change, so this comes last and game by game.
 
 **How game answers show (owner, 2026-11-21: "a progress report with a grade based on the questions they encountered during
-the games"; picked "right out of answered"):** per game and per STEAMM subject, as "Math: 18 of 22 right this week" (and
-all time), plus the questions they missed with the right answer and the "why". No letter grades, no percentages, no
-scores out of 100. Games that ask questions: Remote Lunar Mission first (QUIZ_BANKS), then the math games (Robo Math
+the games"; then "Level per subject is good"):** a word level per STEAMM subject, worked out from the questions the
+child answered in games and in Chike's pop quizzes: **Getting started**, **Growing**, **Strong**. No numbers, letter
+grades or percentages shown. Under it, the questions they missed with the right answer and the "why". Claude's call on
+the cut-offs (owner may change): fewer than 5 answers in a subject, or under half right = Getting started; half to
+under 80% right = Growing; 80% or more of at least 5 answers = Strong; counted over the last 8 weeks so a level can grow. Games that ask questions: Remote Lunar Mission first (QUIZ_BANKS), then the math games (Robo Math
 Buddy, Math Runner, Balloon Pop Math) one at a time.
 
 ## STEAMM subjects (owner, 2026-11-21: "include Lessons in STEAMM subject (Science, Technology, Engineering, Art, Math, and Music)")
