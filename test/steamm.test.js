@@ -74,7 +74,7 @@ describe("the calmer What we believe layout (owner, 2026-11-16)", () => {
     for (const src of ["assets/grownups/rubber-band-guitar.jpg", "assets/activities/cardboard-house.jpg", "assets/grownups/while-they-make-birdhouse.jpg"]) {
       expect(panel + beliefs).toContain(src);
     }
-    expect((panel + beliefs).match(/believePhoto\("assets\/[^"]+\.jpg", "[^"]{20,}"\)/g).length).toBe(4);
+    expect((panel + beliefs).match(/believePhoto\("assets\/[^"]+\.jpg", "[^"]{20,}"(, \d+, \d+)?\)/g).length).toBe(4);
     expect(panel + beliefs).not.toContain('alt=""');
   });
   it("gives every section room to breathe", () => {
@@ -139,8 +139,13 @@ describe("containers and check marks (owner, 2026-11-16)", () => {
 });
 
 describe("taped photos (owner, 2026-11-16)", () => {
+  it("keeps a cropped photo's own shape (owner, 2026-11-21: the bridge sketch cropped at the ear)", () => {
+    expect(site).toContain('a ruler and paper cups ready to build it", 990, 900)');
+    const fn = site.split("function believePhoto(src, alt, w, h){")[1].split("\n}\n")[0];
+    expect(fn).toContain("aspect-ratio:");
+  });
   it("gives every What we believe photo the site's yellow tape", () => {
-    const fn = site.split("function believePhoto(src, alt){")[1].split("\n}\n")[0];
+    const fn = site.split("function believePhoto(src, alt, w, h){")[1].split("\n}\n")[0];
     expect(fn).toContain('class="believe__photo taped"');
   });
 });
