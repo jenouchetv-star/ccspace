@@ -56,7 +56,7 @@ So the report answers one question for a parent: **what is my child getting out 
 ## Non-goals
 
 - No tracking of anyone who is not signed in. A visitor without a parent session is never recorded.
-- No grades, rankings, streak pressure or comparing children. No leaderboards.
+- No marks or scores out of 100, rankings, streak pressure or comparing children. No leaderboards.
 - No emails or notifications about progress (owner rule: never message subscribers). The report is something the parent
   opens.
 - Not a school gradebook; not shared with anyone but the parent.
