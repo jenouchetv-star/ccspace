@@ -9,7 +9,7 @@ const SNIPPET_LINE = 'const CCS_CHILD_GRADE = (() => { try { const raw = window.
 const snippet = readFileSync(new URL("../assets/lib/childGrade.snippet.js", import.meta.url), "utf8");
 
 /** The games that start at the picked child's grade. Tasks 4 to 7 add each game file here. */
-const GAME_FILES = [];
+const GAME_FILES = ["games/balloon-pop-math.html", "games/spelling-detective.html"];
 
 /** The text of one top-level function in index.html (plain or async), from its name to the closing brace at the start of a line. */
 function fn(name) {

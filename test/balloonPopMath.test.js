@@ -144,3 +144,25 @@ describe("Chike shows the work", () => {
     expect(page.split("function showWork(){")[1].split("\n}\n")[0]).toContain("if (!misses) misses = 1;");
   });
 });
+
+describe("grade adjust: starts at the picked child's grade", () => {
+  const start = page.split("function gradeIdFor(")[1].split("\n")[0];
+  const gradeIdFor = new Function("return function gradeIdFor(" + start.replace(/\s*$/, "") + "; ")();
+  const idFor = gradeIdFor;
+  it("starts at the child's grade without the picker", () => {
+    expect(["k", "1", "2", "3", "4", "5"].map((id, n) => idFor(n))).toEqual(["k", "1", "2", "3", "4", "5"]);
+    expect(page).toContain('if (CCS_CHILD_GRADE !== null){ grade = GRADES.find((g) => g.id === gradeIdFor(CCS_CHILD_GRADE)); startRound(); }');
+    expect(M.GRADES.map((g) => g.id)).toContain(idFor(2));
+  });
+  it("clamps to the game's range", () => {
+    expect(idFor(6)).toBe("5");
+  });
+  it("no grade: the picker shows as today", () => {
+    expect(page).toContain('else { const firstGrade = loadSave() ? $("resumeBtn") : document.querySelector(".grade"); if (firstGrade) firstGrade.focus(); }');
+    expect(page).toContain("drawGrades();\n/* a picked child");
+  });
+  it("the in-game change still works", () => {
+    expect(page).toContain('$("gradeBtn").addEventListener("click", openGrades);');
+    expect(page).toContain('$("regrade").addEventListener("click", openGrades);');
+  });
+});
