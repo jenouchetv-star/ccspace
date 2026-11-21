@@ -133,6 +133,17 @@ Games report questions answered inside them (Remote Lunar Mission's quiz first: 
 answer and a "why"), through a new message from the game to the page, recorded for the playing child and shown in the
 report under what they finished. Each game needs its own change, so this comes last and game by game.
 
+## How the quiz keeps going (owner, 2026-11-21: "how will this scale on its own. Is the quizzes finite?" ... "The games, books, and activities will be added to the site so the content isn't going to always be finite")
+
+- **New content brings its own questions.** Publishing anything with a nugget drafts 2 or 3 quiz questions from the
+  nugget text (AI drafting; which service, and its cost, is settled in the plan). They appear on that item's publish screen;
+  publishing approves them with it. No separate approval queue. Existing nuggets get the same drafting once, at launch.
+- **Review rounds.** A nugget answered right comes back after about 3 weeks, then about 2 months (simple spaced review).
+  Review-due nuggets count toward the "3 or more" quiz rule, so quizzes continue between new releases. Still at most one
+  quiz a week per child. The report can say "still remembered it 2 months later".
+- **Variety.** 2 or 3 questions per nugget, including simpler wording for ages 4 to 7, so a review rarely repeats the
+  same question.
+
 ## Calls made after the builder check (Claude's, owner may overrule)
 
 - **Signing in on the kid's device:** recording needs the parent signed in on the device the child uses (sessions already
