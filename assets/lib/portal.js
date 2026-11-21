@@ -151,6 +151,9 @@ export function portalSlug(title) {
     .slice(0, 60);
 }
 
+/** Portal addresses the site keeps for its own pages (the progress report). */
+export const PORTAL_TAKEN_SLUGS = ["progress", "children"];
+
 /** Publication checks for the admin editor. Errors stop an entry going live;
     warnings do not. `others` is every other entry, to keep addresses unique. */
 export function portalValidate(e, others) {
@@ -168,6 +171,8 @@ export function portalValidate(e, others) {
   if (!(e.cover && e.cover.src)) warn("cover.src", "No cover image. The index card will show a plain colored block.");
   if (e.slug && (others || []).some((o) => o && o.id !== e.id && o.slug === e.slug)) err("slug", "Another entry already uses this address.");
   if (e.slug && !/^[a-z0-9][a-z0-9-]{0,80}$/.test(e.slug)) err("slug", "Use lowercase letters, numbers and dashes only.");
+  /* /newsletter/progress is the progress report, and "children" is kept for it too, so no entry may take them */
+  else if (PORTAL_TAKEN_SLUGS.includes(e.slug)) err("slug", "That address is already used by the site. Pick another one.");
 
   if (!blank(e.vocabWord) && blank(e.vocabMeaning)) err("vocabMeaning", "A word card needs its meaning. Add it, or clear the word.");
   if (!blank(e.aiPrompt) && String(e.aiPrompt).length > 1200) warn("aiPrompt", "That prompt is long. Short, simple prompts are easiest for kids to read and paste.");

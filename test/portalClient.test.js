@@ -201,6 +201,13 @@ describe("what an entry needs before it can be published", () => {
     expect(errors({ ...base, id: "1", slug: "mine" }, [{ id: "1", slug: "mine" }, { id: "2", slug: "other" }])).toEqual([]);
     expect(errors({ ...base, slug: "Bad Slug!" })).toEqual(["slug"]);
   });
+
+  it("an entry cannot use the slug progress or children", () => {
+    expect(errors({ ...base, slug: "progress" })).toEqual(["slug"]);
+    expect(errors({ ...base, slug: "children" })).toEqual(["slug"]);
+    expect(errors({ ...base, slug: "progress-update" })).toEqual([]);
+    expect(portalValidate({ ...base, slug: "progress" }).find((v) => v.field === "slug").message).toContain("already used by the site");
+  });
 });
 
 describe("what the gate says", () => {
