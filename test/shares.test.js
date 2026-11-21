@@ -126,7 +126,7 @@ describe("share-events.sql", () => {
 describe("share counting in index.html", () => {
   it("imports the counting rules for the page", () => {
     expect(html).toContain('import * as Shares from "./assets/lib/shares.js";');
-    expect(html).toContain("Object.assign(window, ActivityFinder, AcceptInvite, Mfa, PlayAll, Portal, Shares);");
+    expect(html).toContain("Object.assign(window, ActivityFinder, AcceptInvite, Mfa, PlayAll, Portal, Progress, Shares);");
   });
 
   it("counts an actual share, not the dialog being opened", () => {
