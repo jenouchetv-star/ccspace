@@ -137,6 +137,12 @@ Games report questions answered inside them (Remote Lunar Mission's quiz first: 
 answer and a "why"), through a new message from the game to the page, recorded for the playing child and shown in the
 report under what they finished. Each game needs its own change, so this comes last and game by game.
 
+**How game answers show (owner, 2026-11-21: "a progress report with a grade based on the questions they encountered during
+the games"; picked "right out of answered"):** per game and per STEAMM subject, as "Math: 18 of 22 right this week" (and
+all time), plus the questions they missed with the right answer and the "why". No letter grades, no percentages, no
+scores out of 100. Games that ask questions: Remote Lunar Mission first (QUIZ_BANKS), then the math games (Robo Math
+Buddy, Math Runner, Balloon Pop Math) one at a time.
+
 ## STEAMM subjects (owner, 2026-11-21: "include Lessons in STEAMM subject (Science, Technology, Engineering, Art, Math, and Music)")
 
 - Every fact nugget is filed under one STEAMM subject: Science, Technology, Engineering, Art, Math or Music (or none, when
