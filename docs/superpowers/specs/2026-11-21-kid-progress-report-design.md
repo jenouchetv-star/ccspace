@@ -36,7 +36,7 @@ So the report answers one question for a parent: **what is my child getting out 
 ## Decisions the owner made
 
 1. **Where:** the report lives in the **Subscriber's Portal**, visible only to the signed-in parent.
-2. **Children:** **a child picker.** The parent adds each child (first name or nickname + age band). A **"Who's playing?"**
+2. **Children:** **a child picker.** The parent adds each child (first name or nickname + school grade). A **"Who's playing?"**
    picker on the device says which child is using it. Each child has their own report and quizzes.
 3. **Quiz timing:** **on a later visit**, not right after finishing. Chike's bubble (the corner avatar) offers "Pop quiz! 3
    quick questions about things you watched." Remembering after a break is the better proof for the parent.
@@ -71,7 +71,7 @@ So the report answers one question for a parent: **what is my child getting out 
 
 - Owner rules: mockups of every new screen before building; never push, publish or email without being told; commit with
   explicit file lists; no em dashes, no emojis; STEAMM not STEM; kid-friendly words.
-- Children's privacy (COPPA-minded): only first name or nickname + age band, entered by the parent; data tied to the
+- Children's privacy (COPPA-minded): only first name or nickname + grade, entered by the parent; data tied to the
   parent's account; the parent can delete a child and everything recorded for them; deleting the subscriber (unsubscribe)
   deletes it all (foreign key cascade, as `newsletter_sends` does).
 - Parent sign-in already exists: email + 6-digit code via the `portal` edge function; the browser keeps
@@ -91,8 +91,8 @@ So the report answers one question for a parent: **what is my child getting out 
 
 ### Stage 1: children and the report
 
-**Children.** In the portal, a "Your children" section: add a child (name or nickname, age band: 4 to 5, 6 to 7, 8 to 9,
-10 to 12), rename, remove (removes their record). Limit 6 per parent.
+**Children.** In the portal, a "Your children" section: add a child (name or nickname, grade: Kindergarten to 6th), rename,
+change grade, remove (removes their record). Limit 6 per parent. The grade moves up one each August on its own.
 
 **"Who's playing?"** On a device with a parent session and at least one child, the first time something would be recorded
 in a visit, a small picker asks "Who's playing?" (child names + "Just me, the grown-up", which records nothing). The pick
@@ -125,7 +125,11 @@ Each recorded thing brings its nuggets into that child's "met" list.
 - **The quiz:** a card by Chike, one question at a time, picture of the episode or book it came from. A right answer:
   Chike cheers, the nugget becomes "Knows it". A wrong answer: Chike gives the right one kindly with the "why"; the nugget
   stays "Came across it" and can come back in a later quiz. Read-aloud with the site's existing voice is a nice-to-have.
-- Ages: the age band picks easier wording where a question has a younger version (builder's call whether to store two).
+- **Grade levels (owner, 2026-11-21: "would the quizzes change based on the child's grade level?"):** each nugget has one
+  question per level, the same three levels Remote Lunar Mission uses: **K to 1st** (2 picture-friendly answers, Chike reads
+  the question aloud), **2nd to 3rd** (3 answers), **4th to 6th** (3 answers that need the why). The child's grade picks the
+  level. Questions drafted on publish come in all three levels.
+- Later: a game opened by a picked child (Remote Lunar Mission, Robo Math Buddy) can take the child's grade instead of asking.
 
 ### Stage 3: game questions
 
@@ -141,8 +145,8 @@ report under what they finished. Each game needs its own change, so this comes l
 - **Review rounds.** A nugget answered right comes back after about 3 weeks, then about 2 months (simple spaced review).
   Review-due nuggets count toward the "3 or more" quiz rule, so quizzes continue between new releases. Still at most one
   quiz a week per child. The report can say "still remembered it 2 months later".
-- **Variety.** 2 or 3 questions per nugget, including simpler wording for ages 4 to 7, so a review rarely repeats the
-  same question.
+- **Variety.** one question per grade level per nugget (see Stage 2), plus a second wording where it helps, so a review
+  rarely repeats the same question.
 
 ## Calls made after the builder check (Claude's, owner may overrule)
 
