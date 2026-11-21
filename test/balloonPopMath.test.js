@@ -151,8 +151,11 @@ describe("grade adjust: starts at the picked child's grade", () => {
   const idFor = gradeIdFor;
   it("starts at the child's grade without the picker", () => {
     expect(["k", "1", "2", "3", "4", "5"].map((id, n) => idFor(n))).toEqual(["k", "1", "2", "3", "4", "5"]);
-    expect(page).toContain('if (CCS_CHILD_GRADE !== null){ grade = GRADES.find((g) => g.id === gradeIdFor(CCS_CHILD_GRADE)); startRound(); }');
+    expect(page).toContain('if (CCS_CHILD_GRADE !== null){\n  grade = GRADES.find((g) => g.id === gradeIdFor(CCS_CHILD_GRADE));');
     expect(M.GRADES.map((g) => g.id)).toContain(idFor(2));
+  });
+  it("resumes a saved round at the same grade, else starts fresh", () => {
+    expect(page).toContain("if (saved && saved.g === grade.id) startRound(saved); else startRound();");
   });
   it("clamps to the game's range", () => {
     expect(idFor(6)).toBe("5");
