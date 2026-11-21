@@ -94,7 +94,7 @@ So the report answers one question for a parent: **what is my child getting out 
 **Children.** In the portal, a "Your children" section: add a child (name or nickname, grade: Kindergarten to 6th), rename,
 change grade, remove (removes their record). Limit 6 per parent. The grade moves up one each August on its own.
 
-**"Who's playing?"** On a device with a parent session and at least one child, the first time something would be recorded
+**"Who's creating today?"** (owner, 2026-11-21: was "Who's playing?", but a child may be reading, watching or making) On a device with a parent session and at least one child, the first time something would be recorded
 in a visit, a small picker asks "Who's playing?" (child names + "Just me, the grown-up", which records nothing). The pick
 is remembered on that device until changed; a small chip near Chike's avatar shows who is playing and opens the picker.
 
