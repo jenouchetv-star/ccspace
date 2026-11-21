@@ -36,6 +36,62 @@ export function gradeLabel(n) {
   return GRADE_LABELS[n] || "";
 }
 
+/* ---- grade adjust: games and activities fit the picked child's grade ---- */
+
+/** A grade, 0 (Kindergarten) to 6, from a number or a string of one digit; anything else is null. */
+export function childGradeFrom(raw) {
+  const n = typeof raw === "number" ? raw : typeof raw === "string" && /^[0-6]$/.test(raw) ? Number(raw) : NaN;
+  return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null;
+}
+
+/** The ages a grade fits: grade G is ages G+5 to G+6. */
+export function gradeAges(g) {
+  return { min: g + 5, max: g + 6 };
+}
+
+const DIFFICULTY_STEP = { easy: 0, medium: 1, challenge: 2 };
+
+/** How far an activity's difficulty is from the grade's: 0 when it matches (K to 1st "easy", 2nd to 3rd "medium",
+    4th to 6th "challenge" or "medium"), 1 one step away, 2 two steps, 3 when the difficulty or grade is unknown. */
+export function difficultyDistance(a, g) {
+  const grade = childGradeFrom(g);
+  const step = a && Object.prototype.hasOwnProperty.call(DIFFICULTY_STEP, a.difficulty) ? DIFFICULTY_STEP[a.difficulty] : -1;
+  if (grade === null || step < 0) return 3;
+  const fits = grade <= 1 ? [0] : grade <= 3 ? [1] : [1, 2];
+  return Math.min(...fits.map((f) => Math.abs(step - f)));
+}
+
+/** An activity fits a grade when its ages overlap the grade's and its difficulty matches. No ages or no difficulty:
+    it never fits (owner, 2026-11-21). */
+export function activityFitsGrade(a, g) {
+  const grade = childGradeFrom(g);
+  if (!a || grade === null || !Number.isFinite(a.ageMin) || !Number.isFinite(a.ageMax)) return false;
+  const ages = gradeAges(grade);
+  return a.ageMin <= ages.max && a.ageMax >= ages.min && difficultyDistance(a, grade) === 0;
+}
+
+/** The Activity Finder's age band for a grade (age G+5): "3-5" for Kindergarten, "6-8" for 1st to 3rd, "9-12" for
+    4th to 6th. */
+export function findAgeForGrade(g) {
+  const age = gradeAges(g).min;
+  return age <= 5 ? "3-5" : age <= 8 ? "6-8" : "9-12";
+}
+
+const GRADE_TAG = /<script>window\.CCS_GRADE=\d+;<\/script>/g;
+
+/** A private game's code with the grade set before anything of its own runs: right after <head>, or at the start
+    (after a <!doctype>, so the game keeps its standards mode). Never twice; a bad grade changes nothing. */
+export function withChildGrade(html, g) {
+  const grade = childGradeFrom(g);
+  const src = String(html ?? "");
+  if (grade === null) return src;
+  const tag = "<script>window.CCS_GRADE=" + grade + ";</script>";
+  const s = src.replace(GRADE_TAG, "");
+  const head = /<head(\s[^>]*)?>/i.exec(s);
+  const at = head ? head.index + head[0].length : ((/^\s*<!doctype[^>]*>\s*/i.exec(s) || [""])[0]).length;
+  return s.slice(0, at) + tag + s.slice(at);
+}
+
 /** "episode:<id>:discovery" */
 export function nuggetId(kind, itemId, part) {
   return kind + ":" + itemId + ":" + part;

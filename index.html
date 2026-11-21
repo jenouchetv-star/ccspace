@@ -12814,6 +12814,16 @@ async function openGameStage(idOrRecord){
     if (html === null){ toast("This game\u2019s file could not be loaded.", "bad"); return; }
     g = Object.assign({}, g, { srcdoc: html });
   }
+  /* a picked child's grade goes to a game (never a book or a studio app), so it can start at that grade:
+     a public game gets ?grade=N, a private game's sealed code sets window.CCS_GRADE first (kept on Start over) */
+  const grade = progressPickedGrade();
+  if (grade !== null && !g.bare){
+    if (g.srcdoc !== undefined) g = Object.assign({}, g, { srcdoc: withChildGrade(g.srcdoc, grade) });
+    else if (/^\/?games\/[^?#]+\.html/.test(g.path)){
+      const hash = g.path.indexOf("#"), base = hash < 0 ? g.path : g.path.slice(0, hash), tail = hash < 0 ? "" : g.path.slice(hash);
+      g = Object.assign({}, g, { path: base + (base.indexOf("?") < 0 ? "?" : "&") + "grade=" + grade + tail });
+    }
+  }
   $("#modal-root").innerHTML = gameStage(g);
   rootAssetPaths($("#modal-root"));
   document.body.classList.add("no-scroll");
@@ -15702,6 +15712,16 @@ let PROGRESS_BOOK_FRAME = null;   /* the book already recorded since it was open
 const PROGRESS_MADE = {};         /* "<activity id>:<child id>" -> when We made it! was pressed on this page load */
 
 function progressPlaying(){ try { return localStorage.getItem(PLAYING_KEY) || ""; } catch(_e){ return PLAYING_MEM; } }
+/** The picked child's grade (0 to 6) for a game to start at, or null: a visitor, "Just me, the grown-up", no pick, or the
+    children not loaded yet. Never loads anything (childGradeFrom, recordTarget: assets/lib/progress.js). */
+function progressPickedGrade(){
+  const kids = ProgressState.children;
+  if (!Array.isArray(kids)) return null;
+  const id = recordTarget(!!portalSavedSession(), progressPlaying(), kids);
+  if (!id || id === "ask") return null;
+  const child = kids.find(c => c && c.id === id);
+  return child ? childGradeFrom(child.grade) : null;
+}
 function progressSetPlaying(v){
   PLAYING_MEM = v || "";
   try { if (v) localStorage.setItem(PLAYING_KEY, v); else localStorage.removeItem(PLAYING_KEY); } catch(_e){ /* private window */ }

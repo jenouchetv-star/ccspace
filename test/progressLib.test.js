@@ -4,6 +4,7 @@ import {
   STEAMM_SUBJECTS, subjectFromTopic, GRADE_LABELS, gradeLabel, nuggetId, parseNuggetId,
   nuggetsFor, recordTarget, watchedEnough, doneFromMessage, grownUpQuestion,
   buildReport, QUIZ_ROUTES, quizBubbleAllowed, questionDraftMessages, parseQuestionDraft,
+  gradeAges, activityFitsGrade, difficultyDistance, findAgeForGrade, childGradeFrom, withChildGrade,
 } from "../assets/lib/progress.js";
 
 const NOW = new Date("2026-11-21T12:00:00Z");
@@ -254,5 +255,91 @@ describe("drafting quiz questions with Copilot", () => {
     expect(questionDraftMessages(fact, "k1")[0].content).toMatch(/Kindergarten and 1st grade/);
     expect(questionDraftMessages(fact, "g23")[0].content).toMatch(/exactly 3 choices/);
     expect(questionDraftMessages(fact, "g46")[0].content).toMatch(/4th to 6th grade/);
+  });
+});
+
+describe("grade adjust: the shared rule", () => {
+  it("childGradeFrom ignores bad values", () => {
+    for (const bad of ["", "7", "2.5", "abc", null, undefined, -1, 7, 2.5, NaN, " 3", "03", {}, [], true]) {
+      expect(childGradeFrom(bad), String(bad)).toBeNull();
+    }
+    expect(childGradeFrom(0)).toBe(0);
+    expect(childGradeFrom("0")).toBe(0);
+    expect(childGradeFrom("6")).toBe(6);
+    expect(childGradeFrom(3)).toBe(3);
+  });
+
+  it("gradeAges: grade G fits ages G+5 to G+6", () => {
+    expect(gradeAges(0)).toEqual({ min: 5, max: 6 });
+    expect(gradeAges(2)).toEqual({ min: 7, max: 8 });
+    expect(gradeAges(6)).toEqual({ min: 11, max: 12 });
+  });
+
+  it("activityFitsGrade: the ages overlap and the difficulty matches", () => {
+    const a = (ageMin, ageMax, difficulty) => ({ ageMin, ageMax, difficulty });
+    expect(activityFitsGrade(a(5, 9, "medium"), 2)).toBe(true);
+    expect(activityFitsGrade(a(5, 9, "easy"), 2)).toBe(false);
+    expect(activityFitsGrade(a(5, 9, "easy"), 0)).toBe(true);
+    expect(activityFitsGrade(a(9, 12, "easy"), 0)).toBe(false);
+    expect(activityFitsGrade(a(5, 9, "easy"), 1)).toBe(true);
+    expect(activityFitsGrade(a(5, 9, "medium"), 3)).toBe(true);
+    expect(activityFitsGrade(a(8, 12, "challenge"), 4)).toBe(true);
+    expect(activityFitsGrade(a(8, 12, "medium"), 6)).toBe(true);
+    expect(activityFitsGrade(a(8, 12, "easy"), 5)).toBe(false);
+    expect(activityFitsGrade(a(8, 12, "challenge"), 1)).toBe(false);   // ages miss and so does the difficulty
+    // no ages or no difficulty: never tagged (owner, 2026-11-21)
+    expect(activityFitsGrade({ difficulty: "easy" }, 0)).toBe(false);
+    expect(activityFitsGrade({ ageMin: 5, difficulty: "easy" }, 0)).toBe(false);
+    expect(activityFitsGrade({ ageMin: 5, ageMax: 9 }, 0)).toBe(false);
+    expect(activityFitsGrade(a(5, 9, "hard"), 0)).toBe(false);
+    expect(activityFitsGrade(null, 0)).toBe(false);
+    expect(activityFitsGrade(a(5, 9, "easy"), null)).toBe(false);
+  });
+
+  it("difficultyDistance orders the rest", () => {
+    const d = (difficulty, g) => difficultyDistance({ difficulty }, g);
+    expect(d("easy", 0)).toBe(0);
+    expect(d("medium", 0)).toBe(1);
+    expect(d("challenge", 1)).toBe(2);
+    expect(d("medium", 2)).toBe(0);
+    expect(d("easy", 3)).toBe(1);
+    expect(d("challenge", 3)).toBe(1);
+    expect(d("challenge", 4)).toBe(0);
+    expect(d("medium", 6)).toBe(0);
+    expect(d("easy", 5)).toBe(1);
+    expect(d("", 2)).toBe(3);
+    expect(d(undefined, 2)).toBe(3);
+    expect(d("easy", "x")).toBe(3);
+    expect(difficultyDistance(null, 2)).toBe(3);
+  });
+
+  it("findAgeForGrade picks the Activity Finder's age band", () => {
+    expect(findAgeForGrade(0)).toBe("3-5");
+    expect(findAgeForGrade(1)).toBe("6-8");
+    expect(findAgeForGrade(3)).toBe("6-8");
+    expect(findAgeForGrade(4)).toBe("9-12");
+    expect(findAgeForGrade(6)).toBe("9-12");
+  });
+
+  it("withChildGrade injects once, before the game's own scripts", () => {
+    const tag = "<script>window.CCS_GRADE=3;</script>";
+    const game = "<!doctype html><html><head><meta charset=\"utf-8\"><script>start()</script></head><body><header>x</header></body></html>";
+    const out = withChildGrade(game, 3);
+    expect(out).toBe(game.replace("<head>", "<head>" + tag));
+    expect(out.indexOf(tag)).toBeLessThan(out.indexOf("start()"));
+    // once, even when run again (a second time or with a new grade)
+    expect(withChildGrade(out, 3)).toBe(out);
+    const again = withChildGrade(out, 5);
+    expect(again.match(/CCS_GRADE/g)).toHaveLength(1);
+    expect(again).toContain("<head><script>window.CCS_GRADE=5;</script>");
+    // a <head> with attributes, any case; <header> is not a head
+    expect(withChildGrade("<HEAD lang=\"en\"><script>go()</script>", 0)).toBe("<HEAD lang=\"en\"><script>window.CCS_GRADE=0;</script><script>go()</script>");
+    // no <head>: at the very start, before the game's code
+    expect(withChildGrade("<header>x</header><script>go()</script>", 6)).toBe("<script>window.CCS_GRADE=6;</script><header>x</header><script>go()</script>");
+    // ... except it never goes in front of a <!doctype>, which would put the game in quirks mode
+    expect(withChildGrade("<!DOCTYPE html>\n<body><script>go()</script>", 1)).toBe("<!DOCTYPE html>\n<script>window.CCS_GRADE=1;</script><body><script>go()</script>");
+    // a bad grade changes nothing
+    expect(withChildGrade(game, null)).toBe(game);
+    expect(withChildGrade(game, 7)).toBe(game);
   });
 });
