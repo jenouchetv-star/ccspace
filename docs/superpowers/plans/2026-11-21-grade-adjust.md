@@ -46,7 +46,8 @@
 
 **Interfaces (Produces):**
 - `gradeAges(g) -> { min: g + 5, max: g + 6 }`
-- `activityFitsGrade(a, g) -> boolean` (false when `ageMin`/`ageMax` missing)
+- `activityFitsGrade(a, g) -> boolean`: age overlap AND difficulty match (g 0-1: "easy"; 2-3: "medium"; 4-6: "challenge" or "medium"); false when `ageMin`/`ageMax`/`difficulty` missing (owner, 2026-11-21)
+- `difficultyDistance(a, g) -> number` (0 when it matches the grade's difficulty, 1 one step away, 2 two steps; 3 when unknown), for ordering the rest
 - `findAgeForGrade(g) -> "3-5" | "6-8" | "9-12"` (age g+5: 3-5 band for K, 6-8 for 1st to 3rd, 9-12 for 4th to 6th)
 - `childGradeFrom(raw) -> number | null` (integer 0..6 from a number or a string of digits, else null)
 - `withChildGrade(html, g) -> string` (puts `<script>window.CCS_GRADE=G;</script>` right after `<head>` if present, else at the very start; never twice)
@@ -55,7 +56,7 @@
 - The snippet (verbatim in every game, before the game's start code):
   `const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSearchParams(location.search).get("grade"); const n = typeof raw === "number" ? raw : /^[0-6]$/.test(String(raw)) ? Number(raw) : NaN; return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null; } catch (_e) { return null; } })();`
 
-- [ ] **Step 1: Failing tests:** `childGradeFrom ignores bad values` ("", "7", "2.5", "abc", null -> null; 0, "0", "6" -> number); `gradeAges`; `activityFitsGrade` (5-9 fits grade 2; 9-12 doesn't fit grade 0; no ages -> false); `findAgeForGrade` (0 -> "3-5", 3 -> "6-8", 4 -> "9-12", 6 -> "9-12"); `withChildGrade injects once, before the game's own scripts`; in gradeAdjust.test.js: `openGameStage adds the grade only for a picked child` (fake progressPickedGrade null / 3; public path gets "?grade=3"; private srcdoc starts with the script after <head>); `the snippet file is the one every game uses` (reads the snippet file; Tasks 4-7 add each game to this list).
+- [ ] **Step 1: Failing tests:** `childGradeFrom ignores bad values` ("", "7", "2.5", "abc", null -> null; 0, "0", "6" -> number); `gradeAges`; `activityFitsGrade` (5-9 medium fits grade 2; 5-9 easy does not fit grade 2 but fits grade 0; 9-12 easy doesn't fit grade 0; no ages or no difficulty -> false); `difficultyDistance`; `findAgeForGrade` (0 -> "3-5", 3 -> "6-8", 4 -> "9-12", 6 -> "9-12"); `withChildGrade injects once, before the game's own scripts`; in gradeAdjust.test.js: `openGameStage adds the grade only for a picked child` (fake progressPickedGrade null / 3; public path gets "?grade=3"; private srcdoc starts with the script after <head>); `the snippet file is the one every game uses` (reads the snippet file; Tasks 4-7 add each game to this list).
 - [ ] **Step 2:** `npx vitest run test/progressLib.test.js test/gradeAdjust.test.js` -> FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Same command -> PASS; full suite once.
@@ -65,7 +66,7 @@
 
 **Files:** Modify `index.html` (`viewCreate` sort ~12288, `activityCard` ~9832, the finder start ~29832); Test `test/gradeAdjust.test.js`.
 
-- When `progressPickedGrade()` is a number: in `viewCreate` (browse and tech) fitting activities come first (keeping the page's existing order inside each group); `activityCard` shows a small tag "Good for 2nd grade" (`"Good for " + gradeLabel(g)`; "Good for Kindergarten") on fitting cards; `AppState.finder.age = findAgeForGrade(g)` when the finder starts and no age was chosen.
+- When `progressPickedGrade()` is a number: in `viewCreate` (browse and tech) fitting activities come first, the rest ordered by `difficultyDistance` (keeping the page's existing order on a tie); `activityCard` shows a small tag "Good for 2nd grade" (`"Good for " + gradeLabel(g)`; "Good for Kindergarten") on fitting cards; `AppState.finder.age = findAgeForGrade(g)` when the finder starts and no age was chosen.
 - No pick: order, cards and finder exactly as today.
 
 - [ ] **Step 1: Failing tests:** `fitting activities come first for a picked child`; `an activity without ages is not tagged`; `no pick: same order and no tag`; `the finder age is filled in`.

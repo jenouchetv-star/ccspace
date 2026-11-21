@@ -32,6 +32,10 @@ that's currently using the app."
 
 - **Grade to age:** a child in grade G is about G+5 to G+6 years old (Kindergarten 5 to 6, 2nd grade 7 to 8, 6th
   grade 11 to 12). An activity fits when its age range overlaps that.
+- **Age + difficulty (owner, 2026-11-21):** nearly every activity's age range is broad (most 5-10 or 6-10), so age alone
+  tags everything. "Good for <grade>" needs the age to fit AND the difficulty to match the grade: Kindergarten and 1st,
+  Easy start; 2nd and 3rd, A bit of a stretch; 4th to 6th, Big challenge or A bit of a stretch. Those come first; the
+  rest follow ordered by how close their difficulty is to the grade's (keeping the page's order on a tie).
 - **Passing the grade to a game:** the site adds the child's grade (0 to 6) to the game's address when it opens the
   game (a `grade` parameter); each game reads it once at start. Private (subscribers-only) games get it the same way
   through the portal; each edited private game file is re-uploaded to the portal, which needs the owner's OK.
