@@ -644,8 +644,21 @@ describe("Chike's pop quiz", () => {
   });
 
   it("the quiz card closes, and stops reading aloud, when the page changes (Back mid-quiz)", () => {
-    const hash = html.split('window.addEventListener("hashchange"')[1].split("\n")[0];
-    expect(hash).toContain("closePopQuiz()");
+    /* each route-change listener as written in the page, run with pretend parts: does it take the card away? */
+    const listener = (event) => {
+      let closed = 0, rendered = 0;
+      const src = html.split('window.addEventListener("' + event + '", ')[1].split(");\n")[0];
+      const run = new Function("AppState", "closeGameStage", "closeSheet", "closePopQuiz", "render", "return " + src)(
+        { admin: {} }, () => {}, () => {}, () => { closed++; }, () => { rendered++; });
+      run();
+      return { closed, rendered };
+    };
+    expect(listener("popstate")).toEqual({ closed: 1, rendered: 1 });       // Back on the live site (clean paths)
+    expect(listener("hashchange")).toEqual({ closed: 1, rendered: 1 });     // Back off the disk (hash routing)
+    // and a tap that moves to another page (pushState on the live site, a new hash off the disk)
+    const go = html.split("\n  go(target){")[1].split("\n  },")[0];
+    expect(go).toContain("closePopQuiz();");
+    expect(go.indexOf("closePopQuiz();")).toBeLessThan(go.indexOf("history.pushState("));
     let cancelled = 0, removed = 0, unlocked = 0;
     const card = { remove: () => { removed++; } };
     const doc = (open) => ({
@@ -793,34 +806,95 @@ describe("Quiz questions in the admin editor", () => {
     expect(out.skipped).toBe(2);                                            // a missing choice, and no right answer picked
   });
 
+  /* the editor's save path and the approval helper, with a pretend database */
+  const quizDb = (fail) => {
+    const calls = [], toasts = [], warns = [];
+    const sb = { rpc: async (name, args) => { calls.push([name, args]); return fail && fail[name] ? { error: fail[name] } : { data: 1, error: null }; } };
+    const toast = (m, k) => toasts.push([m, k]);
+    const errText = fn("quizErrorText")();
+    const prefix = fn("quizPrefix", "QUIZ_KINDS")(constant("QUIZ_KINDS"));
+    const approve = fn("quizApproveIfPublished", "quizPrefix", "sb", "quizErrorText", "toast", "console", "async ")(prefix, sb, errText, toast, { warn: (m) => warns.push(m) });
+    const save = fn("quizPanelSave", "sb", "toast", "quizErrorText", "async ")(sb, toast, errText);
+    const after = fn("quizAfterSave", "quizPanelSave", "quizApproveIfPublished", "async ")(save, approve);
+    return { calls, names: () => calls.map((c) => c[0]), toasts, warns, approve, save, after };
+  };
+  const QUIZ = { prefix: "episode:v1:", rows: [{ nugget_id: "episode:v1:discovery" }], subjects: {}, skipped: 0 };
+  const VIDEO_PUB = { id: "v1", slug: "the-bridge", status: "published" };
+
   it("publishing approves that item's questions", async () => {
-    const run = async (publish, fail) => {
-      const calls = [], toasts = [];
-      const sb = { rpc: async (name, args) => { calls.push([name, args]); return fail === name ? { error: { message: "invalid question" } } : { data: 1, error: null }; } };
-      const save = fn("quizPanelSave", "sb", "toast", "quizErrorText", "async ")(sb, (m, k) => toasts.push([m, k]), (e) => e.message);
-      const ok = await save({ prefix: "episode:v1:", rows: [{ nugget_id: "episode:v1:discovery" }], subjects: {}, skipped: 0 }, publish);
-      return { calls: calls.map((c) => c[0]), args: calls, toasts, ok };
-    };
-    const pub = await run(true);
-    expect(pub.calls).toEqual(["nugget_questions_save", "nugget_questions_approve"]);
-    expect(pub.args[0][1]).toEqual({ p_prefix: "episode:v1:", p_rows: [{ nugget_id: "episode:v1:discovery" }], p_subjects: {} });
-    expect(pub.args[1][1]).toEqual({ p_prefix: "episode:v1:" });
-    expect(pub.ok).toBe(true);
-    expect((await run(false)).calls).toEqual(["nugget_questions_save"]);   // a draft stays unapproved
-    const bad = await run(true, "nugget_questions_save");
-    expect(bad.calls).toEqual(["nugget_questions_save"]);                  // nothing approved when the save failed
+    const pub = quizDb();
+    expect(await pub.after(QUIZ, "videos", VIDEO_PUB)).toBe(true);
+    expect(pub.names()).toEqual(["nugget_questions_save", "nugget_questions_approve"]);
+    expect(pub.calls[0][1]).toEqual({ p_prefix: "episode:v1:", p_rows: [{ nugget_id: "episode:v1:discovery" }], p_subjects: {} });
+    expect(pub.calls[1][1]).toEqual({ p_prefix: "episode:v1:" });         // the record's id, never its slug
+    const draft = quizDb();
+    await draft.after(QUIZ, "videos", Object.assign({}, VIDEO_PUB, { status: "draft" }));
+    expect(draft.names()).toEqual(["nugget_questions_save"]);              // a draft stays unapproved
+    const bad = quizDb({ nugget_questions_save: { message: "invalid question" } });
+    expect(await bad.after(QUIZ, "videos", VIDEO_PUB)).toBe(false);
+    expect(bad.names()).toEqual(["nugget_questions_save"]);                // nothing approved when the save failed
     expect(bad.toasts[0][1]).toBe("bad");
     expect(bad.toasts[0][0]).toMatch(/saved, but its quiz questions/);
-    const s = body("quizPanelSave");
-    expect(s.indexOf('"nugget_questions_approve"')).toBeGreaterThan(s.indexOf('"nugget_questions_save"'));
-    expect(s.indexOf('"nugget_questions_approve"')).toBeGreaterThan(s.indexOf("if (publish)"));
+    // the panel was still loading or couldn't load: nothing saved from it, but publishing still approves
+    const unloaded = quizDb();
+    expect(await unloaded.after(null, "videos", VIDEO_PUB)).toBe(true);
+    expect(unloaded.names()).toEqual(["nugget_questions_approve"]);
     // the save-record handler: the panel is read before the editor closes, and saved only after the record is
     const h = html.split('if (act === "save-record"){')[1].split('if (act === "quick-parse")')[0];
     expect(h.indexOf("const quiz = quizPanelRead(form);")).toBeLessThan(h.indexOf("closeModal()"));
-    expect(h).toContain("quizPanelSave(quiz, false);");                     // publishing blocked: saved as a draft, not approved
-    expect(h).toContain('quizPanelSave(quiz, !!saved && saved.status === "published");');
-    expect(h.indexOf('quizPanelSave(quiz, !!saved')).toBeGreaterThan(h.indexOf("await db.update(col, id, candidate); saved ="));
-    expect(h.indexOf('quizPanelSave(quiz, !!saved')).toBeLessThan(h.indexOf("portalPrepareEmail(saved)"));
+    expect(h).toContain("quizAfterSave(quiz, col, candidate);");             // publishing blocked: saved as a draft, not approved
+    expect(h).toContain("quizAfterSave(quiz, col, saved);");
+    expect(h.indexOf("quizAfterSave(quiz, col, saved);")).toBeGreaterThan(h.indexOf("await db.update(col, id, candidate); saved ="));
+    expect(h.indexOf("quizAfterSave(quiz, col, saved);")).toBeLessThan(h.indexOf("portalPrepareEmail(saved)"));
+  });
+
+  it("quizApproveIfPublished: only a published episode, book, activity or portal entry, and a failure is only said", async () => {
+    for (const [col, kind] of [["videos", "episode"], ["stories", "book"], ["activities", "activity"], ["portalEntries", "entry"]]) {
+      const t = quizDb();
+      expect(await t.approve(col, { id: "x1", slug: "a-slug", status: "published" })).toBe(true);
+      expect(t.calls).toEqual([["nugget_questions_approve", { p_prefix: kind + ":x1:" }]]);
+    }
+    const none = quizDb();
+    for (const s of ["draft", "revision", "review", "scheduled", "archived"]) await none.approve("videos", { id: "v1", status: s });
+    await none.approve("games", { id: "g1", status: "published" });
+    await none.approve("videos", { id: "", status: "published" });
+    await none.approve("videos", null);
+    expect(none.calls).toEqual([]);
+    const bad = quizDb({ nugget_questions_approve: { message: "not allowed" } });
+    expect(await bad.approve("videos", VIDEO_PUB)).toBe(false);
+    expect(bad.toasts).toHaveLength(1);
+    expect(bad.toasts[0][1]).toBe("bad");
+    expect(bad.toasts[0][0]).toMatch(/published, but its quiz questions aren.t approved yet/);
+    // before supabase/kid-progress.sql is applied, every publish would say so: it's only logged
+    const unset = quizDb({ nugget_questions_approve: { code: "PGRST202", message: "Could not find the function public.nugget_questions_approve" } });
+    expect(await unset.approve("videos", VIDEO_PUB)).toBe(false);
+    expect(unset.toasts).toEqual([]);
+    expect(unset.warns).toHaveLength(1);
+    // the helper only reads and approves: it never changes the record's status
+    expect(body("quizApproveIfPublished")).not.toMatch(/db\.(update|add)/);
+  });
+
+  it("every other way of publishing approves too: the portal manager's Publish, a bulk status change, a Quick Update", async () => {
+    const toggle = async (status, ok = true) => {
+      const approved = [], updated = [];
+      const t = fn("portalToggle", "db", "canSetStatus", "toast", "rerender", "quizApproveIfPublished", "async ")(
+        { find: () => ({ id: "e1", slug: "e-one", status }), update: async (c, id, p) => { if (!ok) throw new Error("no"); updated.push([c, id, p]); } },
+        () => ({ ok: true }), () => {}, () => {}, (c, r) => { approved.push([c, r]); });
+      await t("e1");
+      return { approved, updated };
+    };
+    const pub = await toggle("draft");
+    expect(pub.updated).toEqual([["portalEntries", "e1", { status: "published" }]]);
+    expect(pub.approved).toEqual([["portalEntries", { id: "e1", status: "published" }]]);
+    expect((await toggle("published")).approved).toEqual([]);              // Unpublish approves nothing
+    expect((await toggle("draft", false)).approved).toEqual([]);           // the status didn't change
+    const bulk = html.split('el.getAttribute("data-act") === "admin-bulk-status"')[1].split("\n    })();")[0];
+    expect(bulk).toContain("quizApproveIfPublished(col, { id: id, status: nextStatus });");
+    expect(bulk.indexOf("quizApproveIfPublished(")).toBeGreaterThan(bulk.indexOf("await db.update(col, id, { status: nextStatus }"));
+    expect(bulk).toContain("catch(_e){ continue;");                         // a failed update approves nothing
+    const qu = body("quWriteProposal");
+    expect(qu).toContain("quizApproveIfPublished(col, { id: id || entry.result.id, status: candidate.status });");
+    expect(qu.indexOf("quizApproveIfPublished(")).toBeGreaterThan(qu.indexOf("} catch(_e){ return false; }"));
   });
 
   it("never wipes questions it could not load", () => {

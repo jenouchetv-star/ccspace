@@ -9411,6 +9411,7 @@ const Router = {
   go(target){
     const url = this.href(target);
     closeSheet();
+    closePopQuiz();          // Chike's quiz card (and its reading aloud) never outlives the page it opened on
     AppState.admin.notifOpen = false;
     const scroller = document.scrollingElement || document.documentElement;
     AppState.scrollMemory[Router.current()] = scroller.scrollTop;
@@ -18116,6 +18117,7 @@ async function portalToggle(id){
   }
   try { await db.update("portalEntries", id, { status: publishing ? "published" : "draft" }); }
   catch(_e){ return; }
+  if (publishing) quizApproveIfPublished("portalEntries", { id: id, status: "published" });
   toast(publishing ? "Published. Subscribers can see it now." : "Unpublished. Subscribers can no longer see it.");
   rerender();
 }
@@ -19155,24 +19157,40 @@ function quizPanelRead(form){
     skipped: out.skipped,
   };
 }
-/** Saves the item's questions after the record itself has saved (a failure here never undoes that), then approves them
-    when the record is published, so the quiz may ask them. */
-async function quizPanelSave(quiz, publish){
+/** Saves the panel's questions after the record itself has saved (a failure here never undoes that). Everything saved
+    starts unapproved; quizApproveIfPublished approves it. */
+async function quizPanelSave(quiz){
   if (!quiz) return false;
   let r;
   try { r = await sb.rpc("nugget_questions_save", { p_prefix: quiz.prefix, p_rows: quiz.rows, p_subjects: quiz.subjects }); }
   catch(e){ r = { error: e }; }
   if (!r || r.error){ toast("The record saved, but its quiz questions didn’t: " + quizErrorText(r && r.error), "bad"); return false; }
-  if (publish){
-    let a;
-    try { a = await sb.rpc("nugget_questions_approve", { p_prefix: quiz.prefix }); }
-    catch(e){ a = { error: e }; }
-    if (!a || a.error){ toast("The quiz questions saved, but aren’t approved yet: " + quizErrorText(a && a.error) + " Publish again to approve them.", "bad"); return false; }
-  }
   if (quiz.skipped){
     toast(quiz.skipped + (quiz.skipped === 1 ? " quiz question wasn’t" : " quiz questions weren’t") + " saved. Each one needs the question, every choice and the right answer ticked.", "bad");
   }
   return true;
+}
+/** Approves an episode's, book's, activity's or portal entry's quiz questions once it is published, so the quiz may ask
+    them. Every way of publishing calls this (the editor's Save, the portal manager's Publish, a bulk status change, a
+    Quick Update). The item is addressed by its record id, never its slug. It never blocks or undoes the status change:
+    a failure is only said (or, while the quiz tables aren't set up yet, only logged). */
+async function quizApproveIfPublished(col, rec){
+  const prefix = rec && rec.status === "published" ? quizPrefix(col, rec.id) : "";
+  if (!prefix) return false;
+  let a;
+  try { a = await sb.rpc("nugget_questions_approve", { p_prefix: prefix }); }
+  catch(e){ a = { error: e }; }
+  if (a && !a.error) return true;
+  const why = quizErrorText(a && a.error);
+  if (/aren’t set up yet/.test(why)) console.warn("Quiz questions not approved for " + prefix + ": " + why);
+  else toast("It’s published, but its quiz questions aren’t approved yet: " + why + " Publish it again to approve them.", "bad");
+  return false;
+}
+/** The editor's Save, once the record has saved: the panel's questions (when the panel loaded), then their approval when
+    the record is published. Approval still happens when the panel was still loading or couldn't load. */
+async function quizAfterSave(quiz, col, rec){
+  if (quiz && !(await quizPanelSave(quiz))) return false;
+  return quizApproveIfPublished(col, rec);
 }
 /** Draft with Copilot: fills every empty level of every fact (not the life lessons) with a question from the admin's own
     Ollama. Nothing is saved until the record is. */
@@ -22197,6 +22215,7 @@ async function quWriteProposal(entry, forcedStatus){
       entry.result.id = created.id;
     }
   } catch(_e){ return false; }
+  quizApproveIfPublished(col, { id: id || entry.result.id, status: candidate.status });
   const label = (COLLECTION_LABELS[col] || col).toLowerCase();
   if (forcedStatus === "draft"){
     entry.status = "draft_saved";
@@ -31693,7 +31712,7 @@ async function handleSubmit(form, act){
         else await db.add(col, candidate);
       } catch(_e){ return; }
       closeModal();
-      quizPanelSave(quiz, false);
+      quizAfterSave(quiz, col, candidate);              // saved as a draft or for revision: saved, not approved
       toast("Saved as " + statusMeta(candidate.status).label + ". Publishing is blocked until the problems are fixed.", "bad");
       rerender();
       return;
@@ -31706,7 +31725,7 @@ async function handleSubmit(form, act){
     } catch(_e){ return; }
     closeModal();
     /* its own toast if it fails; the record is saved either way */
-    quizPanelSave(quiz, !!saved && saved.status === "published");
+    quizAfterSave(quiz, col, saved);
     if (col === "portalEntries" && saved && saved.status === "published" && await portalPrepareEmail(saved)) return;
     toast("Saved as " + statusMeta(candidate.status).label);
     rerender();
@@ -32553,7 +32572,9 @@ document.addEventListener("change", (ev) => {
         const guard = canSetStatus(col, existing, wanted);
         const nextStatus = guard.ok ? wanted : (existing.status === "published" ? "revision" : "draft");
         try { await db.update(col, id, { status: nextStatus }, true); applied++; if (!guard.ok) downgraded++; }
-        catch(_e){ /* keep going */ }
+        catch(_e){ continue; /* keep going */ }
+        quizApproveIfPublished(col, { id: id, status: nextStatus });
+
       }
       AppState.admin.selected = { col: null, ids: [] };
       rerender();
@@ -32652,7 +32673,7 @@ document.addEventListener("error", (ev) => {
 }, true);
 
 window.addEventListener("hashchange", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); closePopQuiz(); render(); });
-window.addEventListener("popstate", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); AppState.restoringScroll = true; render(); });
+window.addEventListener("popstate", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); closePopQuiz(); AppState.restoringScroll = true; render(); });
 window.addEventListener("scroll", () => Parallax.onScroll(), { passive:true });
 window.addEventListener("scroll", () => BackToTop.onScroll(), { passive:true });
 window.addEventListener("resize", () => Parallax.refresh());
