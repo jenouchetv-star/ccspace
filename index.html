@@ -12587,6 +12587,32 @@ function shownActivity(id){
   const a = id ? db.find("activities", id) : null;
   return a && (a.status === "published" || adminSeesAll()) ? a : null;
 }
+/** The app a Digital Activity opens (a page in games/ on this site), or "" */
+function activityAppPath(a){ const p = String((a && a.appPath) || "").trim(); return /^games\/[a-z0-9][a-z0-9-]{0,60}\.html$/.test(p) ? p : ""; }
+/** A free Digital Activity that is an app on this site (Write with Yuna) is laid out like a Subscriber's Portal game
+    (owner, 2026-11-22: "use this format", Air Harp): the picture with its button on it, How to use it, the word to
+    know, then what you will learn. It stays free, under Create > Digital Activities. */
+function activityAppHTML(a){
+  const label = String(a.appLabel || "").trim() || "Start";
+  const share = '<button class="btn btn--paper btn--sm" type="button" data-act="share" data-url="' + E(location.origin + "/activity/" + a.id) + '" data-title="' + E(a.title) + '">' + ic("share-2") + ' Share with your friends</button>';
+  const start = '<button type="button" class="btn btn--sun btn--sm" data-act="open-activity-app" data-id="' + E(a.id) + '">' + ic("pencil") + ' ' + E(label) + '</button>';
+  const hero = a.image && a.image.src
+    ? '<div class="pposter"><figure class="pmedia pmedia--cover pmedia--wide"><img src="' + E(a.image.src) + '" alt="' + E(a.image.alt || "") + '"></figure><div class="pposter__cta">' + start + share + '</div></div>'
+    : '<div class="prow prow--hero">' + start + share + '</div>';
+  const how = (a.steps || []).length
+    ? '<div class="panel panel--flat" style="margin:0 0 26px"><h3>' + ic("list-checks", "i-lg") + ' How to use it</h3><ol class="steps">' + a.steps.map(x => '<li>' + E(x) + '</li>').join("") + '</ol></div>' : "";
+  const word = portalWordHTML({ vocabWord: a.vocabWord, vocabSay: a.vocabSay, vocabMeaning: a.vocabMeaning, vocabExample: a.vocabExample });
+  const body = a.body ? '<div class="pbody">' + portalSections(sanitizeHTML(a.body)) + '</div>' : "";
+  return '<section class="section"><div class="shell" style="max-width:860px">'
+    + '<div class="crumb no-print"><a href="#/create/tech">' + E(createCrumbLabel("tech")) + '</a>' + ic("chevron-right") + '<span>' + E(a.title) + '</span></div>'
+    + '<div class="tagrow" style="margin-bottom:14px"><span class="chip chip--ink">' + ic("monitor") + ' ' + E(typeMeta(a.type).label) + '</span>'
+    + (a.status === "draft" ? '<span class="chip chip--sun">' + ic("eye-off") + ' Draft</span>' : "")
+    + '<time class="chip chip--ghost" datetime="' + E(String(a.createdAt || "").slice(0, 10)) + '">' + E(portalDate(String(a.createdAt || "").slice(0, 10))) + '</time></div>'
+    + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem)">' + nameHTML(a.title) + '</h1>'
+    + '<p class="lede">' + E(a.summary) + '</p>'
+    + hero + how + word + body
+    + '</div></section>';
+}
 function viewActivity(id){
   const a = db.find("activities", id);
   if (!a || (a.status !== "published" && !adminSeesAll())) return notFound("activity");
@@ -12599,6 +12625,7 @@ function viewActivity(id){
       + '</div></section>';
   }
   noteView(a.id, "activities");
+  if (activityAppPath(a)) return activityAppHTML(a);
   const t = typeMeta(a.type);
   const ch = db.list("characters").find(c => c.slug === a.character);
   const artSpace = (a.tags || []).some(x => String(x).toLowerCase() === "art space");
@@ -30321,6 +30348,11 @@ const ACTIONS = {
 
   /* on a portal game entry's page, playing it records the entry (anywhere else progressEntryPlayed does nothing) */
   "open-game": (el) => { openGameStage(el.getAttribute("data-id")); progressEntryPlayed(); },
+  /* a Digital Activity's own app (Write with Yuna): it opens in the game stage, so the picked grade and the answers work */
+  "open-activity-app": (el) => {
+    const a = db.find("activities", el.getAttribute("data-id")), path = activityAppPath(a);
+    if (path) openGameStage({ id: "activity-" + a.id, title: a.title, path: path, icon: "pencil", sharePath: "/activity/" + a.id });
+  },
   "close-game": () => closeGameStage(),
   "game-reload": () => {
     const frame = $("#gamestage-frame");
