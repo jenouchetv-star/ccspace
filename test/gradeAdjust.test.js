@@ -10,7 +10,8 @@ const snippet = readFileSync(new URL("../assets/lib/childGrade.snippet.js", impo
 
 /** The games that start at the picked child's grade. Tasks 4 to 7 add each game file here. */
 const GAME_FILES = ["games/balloon-pop-math.html", "games/spelling-detective.html", "games/chrono-billiards.html", "games/echo-matrix.html", "games/word-quest.html", "games/maze-quest.html",
-  "supabase/private-games/math-robot.html", "supabase/private-games/number-dash.html", "supabase/private-games/remote-lunar-salvage.html"];
+  "supabase/private-games/math-robot.html", "supabase/private-games/number-dash.html", "supabase/private-games/remote-lunar-salvage.html",
+  "supabase/private-games/solar-system-sandbox.html"];
 
 /** The text of one top-level function in index.html (plain or async), from its name to the closing brace at the start of a line. */
 function fn(name) {
