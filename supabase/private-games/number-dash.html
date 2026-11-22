@@ -314,8 +314,10 @@ function hitTest(item, runner){
   if (item.type === "wall") return "hit";
   return "pass";
 }
-/** How fast the track goes after this many meters: calm at first, then a little faster, up to a top speed. */
-function speedAt(distance){ return Math.min(MAX_SPEED, START_SPEED + distance / 120); }
+/** How fast the track goes after this many meters: calm at first, then a little faster, up to a top speed.
+    Kindergarten and 1st grade never speed up (owner, 2026-11-21): they keep the starting speed the whole run. */
+const STEADY_LEVELS = ["k", "g1"];
+function speedAt(distance, levelId){ return STEADY_LEVELS.includes(levelId) ? START_SPEED : Math.min(MAX_SPEED, START_SPEED + distance / 120); }
 /* super speed: hold to run much faster. The meter holds 3 seconds of it, refills a quarter second each second,
    and each coin adds a little more. */
 const SUPER = { full: 3, mult: 1.7, refill: 0.25, coin: 0.15 };
@@ -981,7 +983,7 @@ function update(dt){
     const was = Game.superOn, sup = superStep(Game.superMeter, Game.superHeld, dt);
     Game.superMeter = sup.meter; Game.superOn = sup.on;
     if (sup.on && !was){ Sfx.play("whoosh"); rumble(0.5, 200); Fx.shake(0.12); }
-    const target = speedAt(Game.distance) * PACE[Game.level] * (Game.slowT > 0 ? 0.55 : 1) * (Game.boostT > 0 ? 1.25 : 1) * (sup.on ? SUPER.mult : 1);
+    const target = speedAt(Game.distance, Game.level) * PACE[Game.level] * (Game.slowT > 0 ? 0.55 : 1) * (Game.boostT > 0 ? 1.25 : 1) * (sup.on ? SUPER.mult : 1);
     Game.speed += (target - Game.speed) * Math.min(1, dt * (sup.on ? 5 : 2.5));
     paintSuper();
   } else if (Game.mode === "title") Game.speed = 0;

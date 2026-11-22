@@ -229,4 +229,18 @@ describe("speed and points", () => {
     expect(L.speedAt(500)).toBeGreaterThan(L.START_SPEED);
     expect(L.speedAt(1e6)).toBe(L.MAX_SPEED);
   });
+  it("never speeds up for Kindergarten and 1st grade (owner, 2026-11-21)", () => {
+    for (const id of ["k", "g1"]) {
+      expect(L.speedAt(0, id), id).toBe(L.START_SPEED);
+      expect(L.speedAt(5000, id), id).toBe(L.speedAt(0, id));
+      expect(L.speedAt(1e6, id), id).toBe(L.START_SPEED);
+    }
+    for (const id of ["g2", "g3", "g4", "g5", "g6"]) {
+      expect(L.speedAt(0, id), id).toBe(L.START_SPEED);
+      expect(L.speedAt(500, id), id).toBeGreaterThan(L.speedAt(0, id));
+      expect(L.speedAt(1e6, id), id).toBe(L.MAX_SPEED);
+    }
+    // the run uses the level's speed; each grade's pace, slow, boost and Super speed still multiply it as before
+    expect(html).toContain("const target = speedAt(Game.distance, Game.level) * PACE[Game.level] * (Game.slowT > 0 ? 0.55 : 1) * (Game.boostT > 0 ? 1.25 : 1) * (sup.on ? SUPER.mult : 1);");
+  });
 });
