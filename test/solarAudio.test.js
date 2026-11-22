@@ -20,7 +20,8 @@ describe("Solar System Sandbox sound", () => {
   });
   it("plays the space music, and a similar-but-different track in Compare, crossfading slowly between them", () => {
     expect(game).toContain("const MUSIC = window.CCSSound ? { main: CCSSound.loop('spaceMain'), cmp: CCSSound.loop('spaceCompare'), a: 0, b: 0 } : null;");
-    expect(game).toContain("MUSIC.a += ((comparing ? 0 : 0.38) - MUSIC.a) * 0.025; MUSIC.b += ((comparing ? 0.38 : 0) - MUSIC.b) * 0.025;");
+    /* half as loud as the first 0.38 (owner, 2026-11-22) */
+    expect(game).toContain("MUSIC.a += ((comparing ? 0 : 0.19) - MUSIC.a) * 0.025; MUSIC.b += ((comparing ? 0.19 : 0) - MUSIC.b) * 0.025;");
     expect(game).toContain("MUSIC.main.set(MUSIC.a); MUSIC.cmp.set(MUSIC.b);");
   });
   it("whooshes when you zoom into a planet, and with a sci-fi sweep when you switch to Compare", () => {
