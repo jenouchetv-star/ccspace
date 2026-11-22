@@ -16,13 +16,22 @@
 //   child_remove  { id } remove a child; everything kept for the child goes with it (cascade).
 //   record        { child, kind, item } the child finished an episode, book, entry or activity. One row per child per
 //                 item: first_at stays, last_at is now, times goes up by one. 300 an hour per member ("slow_down").
+//   game_answer   { child, game, qid, subject, level, correct, question, answer, why } the child answered a question
+//                 inside a game. game and qid 1 to 40 of a-z 0-9 - (not "pop-quiz"); subject one of the six STEAMM ids;
+//                 level k1, g23 or g45; correct true or false; question, answer (the right one) and why trimmed and cut
+//                 to 300, 200 and 400 characters (why may be left out). 200 an hour per member ("slow_down"). -> { ok }
 //   report        { child } what the child finished, the facts they came across, the approved lessons of what they
-//                 finished, each fact's STEAMM subject and the 5 newest quizzes.
+//                 finished, each fact's STEAMM subject, the 5 newest quizzes, and answers: { bySubject: { <subject>:
+//                 { asked, right } }, missed: [{ game, question, answer, why, at }] } over the last 8 weeks (only
+//                 subjects with answers; missed is the 10 newest wrong ones). If the answers cannot be read, the rest of
+//                 the report still comes back, with empty answers.
 //   quiz_offer    { child } -> { ok, due }: due when no quiz started in the last 7 days and 3 or more facts are eligible.
 //   quiz_start    { child } -> { ok, quizId, level, questions: [{ nuggetId, question, choices, subject }] } or "not_due"
 //                 (subject: the fact's STEAMM subject id, or ""). Never sends the answer or the why.
 //   quiz_answer   { child, quizId, nuggetId, choice } -> { ok, correct, answer, why }. Counts once per nugget per quiz;
-//                 sending it again returns the first result and changes nothing.
+//                 sending it again returns the first result and changes nothing. The first answer is also kept as a
+//                 game answer (game "pop-quiz", qid the nugget id) when the fact has a STEAMM subject; a fault there is
+//                 logged and never fails the answer.
 //   seen          the signed-in member has a page of the site open: sets this session's portal_sessions.last_seen_at
 //                 to now, skipped when it was set less than 60 seconds ago (supabase/parent-sign-ins.sql). -> { ok }
 //
@@ -35,7 +44,8 @@
 // Reads of the shared question and subject tables are scoped to the child's finished items (in batches), because hosted
 // PostgREST returns at most 1000 rows; "_" is a LIKE wildcard, so every row is checked again with startsWith.
 //
-// The six tables (supabase/kid-progress.sql) are service-role only under RLS. Deploy with verify_jwt off.
+// The six tables (supabase/kid-progress.sql) and child_game_answers (supabase/game-answers.sql) are service-role only
+// under RLS. Deploy with verify_jwt off.
 // Needs: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, the portal_sessions and subscribers tables, rate_take().
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -62,6 +72,15 @@ const LAST_REVIEW_STEP = 3;
 const SEEN_EVERY_MS = 60_000;                 // a session's last_seen_at is written at most once a minute
 const BATCH = 40;                             // prefixes or ids per scoped read, well under the URL and 1000-row limits
 const ITEM_PREFIX = /^(episode|book|entry|activity):[A-Za-z0-9_-]{1,64}:$/;
+const SUBJECTS = ["science", "technology", "engineering", "art", "math", "music"];
+const GAME_LEVELS = ["k1", "g23", "g45"];
+const GAME_ID = /^[a-z0-9-]{1,40}$/;          // a game's id and its own question ids
+const POP_QUIZ = "pop-quiz";                  // the game name of pop quiz answers, kept by quiz_answer only
+const MAX_ANSWERS_PER_HOUR = 200;
+const ANSWER_WINDOW_MS = 56 * DAY_MS;         // the report sums the last 8 weeks of answers
+const REPORT_MISSED = 10;
+const PAGE = 1000;                            // rows per page when every answer in the window is read
+const CAP = { question: 300, answer: 200, why: 400 };
 
 async function sha256Hex(s: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -98,6 +117,8 @@ function pickMixed<T extends { id: string }>(list: T[], subjectOf: (id: string) 
 function cleanGrade(v: unknown) { return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 6 ? v : -1; }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const cleanItem = (v: unknown) => { const s = typeof v === "string" ? v : ""; return /^[A-Za-z0-9_-]{1,64}$/.test(s) ? s : ""; };
+/** Text as kept for the report: trimmed and cut to n characters (whole code points, as char_length counts them). */
+const cleanText = (v: string, n: number) => [...v.trim()].slice(0, n).join("").trim();
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
@@ -218,6 +239,54 @@ Deno.serve(async (req) => {
     return { level, list };
   }
 
+  /** Keeps a first-time pop quiz answer for the report, when the fact has a STEAMM subject. Never fails the answer:
+   *  a fault is logged and the quiz goes on. */
+  async function keepQuizAnswer(childId: string, nuggetId: string, level: string, correct: boolean, shown: { question?: unknown; choices?: unknown; answer?: unknown; why?: unknown }) {
+    try {
+      const { data: s, error: subjectError } = await db.from("nugget_subjects").select("subject").eq("nugget_id", nuggetId).maybeSingle();
+      if (subjectError) throw new Error(subjectError.message);
+      const subject = String(s?.subject ?? "");
+      if (!SUBJECTS.includes(subject)) return;
+      const right = Array.isArray(shown.choices) ? shown.choices[Number(shown.answer)] : undefined;
+      const { error } = await db.from("child_game_answers").insert({
+        child_id: childId, game: POP_QUIZ, qid: nuggetId, subject, level, correct,
+        question: cleanText(String(shown.question ?? ""), CAP.question),
+        answer: cleanText(String(right ?? ""), CAP.answer),
+        why: cleanText(String(shown.why ?? ""), CAP.why),
+        at: nowDate.toISOString(),
+      });
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      console.error("kid-progress: quiz answer not kept for the report:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  /** The child's answers over the last 8 weeks: asked and right per STEAMM subject (only subjects with answers), and the
+   *  newest wrong ones. Every answer in the window is read, a page at a time, past the 1000-row read limit. */
+  async function answerSummary(childId: string) {
+    const since = new Date(now - ANSWER_WINDOW_MS).toISOString();
+    const bySubject: Record<string, { asked: number; right: number }> = {};
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await db.from("child_game_answers").select("subject, correct").eq("child_id", childId).gte("at", since)
+        .order("id", { ascending: true }).range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      for (const r of data ?? []) {
+        if (!SUBJECTS.includes(r.subject)) continue;
+        const s = (bySubject[r.subject] ??= { asked: 0, right: 0 });
+        s.asked += 1;
+        if (r.correct === true) s.right += 1;
+      }
+      if ((data ?? []).length < PAGE) break;
+    }
+    const { data: miss, error: missError } = await db.from("child_game_answers").select("game, question, answer, why, at").eq("child_id", childId)
+      .eq("correct", false).gte("at", since).order("at", { ascending: false }).limit(REPORT_MISSED);
+    if (missError) throw new Error(missError.message);
+    return {
+      bySubject,
+      missed: (miss ?? []).map((m) => ({ game: m.game, question: m.question ?? "", answer: m.answer ?? "", why: m.why ?? "", at: m.at })),
+    };
+  }
+
   try {
     const who = await member(body.session);
     if (!who) return fail("no_session");
@@ -287,6 +356,26 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    if (action === "game_answer") {
+      const child = await ownChild(who.id, body.child);
+      if (!child) return fail("not_found");
+      const str = (v: unknown) => (typeof v === "string" ? v : "");
+      const game = str(body.game), qid = str(body.qid), subject = str(body.subject), level = str(body.level);
+      const question = cleanText(str(body.question), CAP.question), answer = cleanText(str(body.answer), CAP.answer);
+      const whyOk = body.why === undefined || body.why === null || typeof body.why === "string";
+      if (!GAME_ID.test(game) || game === POP_QUIZ || !GAME_ID.test(qid) || !SUBJECTS.includes(subject) || !GAME_LEVELS.includes(level)
+        || typeof body.correct !== "boolean" || !question || !answer || !whyOk) return fail("invalid");
+      const { data: allowed, error: rateError } = await db.rpc("rate_take", { p_bucket: "kid_answer", p_key: who.id, p_max: MAX_ANSWERS_PER_HOUR, p_window_seconds: 3600 });
+      if (rateError) throw new Error(rateError.message);
+      if (allowed === false) return fail("slow_down");
+      const { error } = await db.from("child_game_answers").insert({
+        child_id: child.id, game, qid, subject, level, correct: body.correct, question, answer,
+        why: cleanText(str(body.why), CAP.why), at: nowDate.toISOString(),
+      });
+      if (error) throw new Error(error.message);
+      return json({ ok: true });
+    }
+
     if (action === "report") {
       const child = await ownChild(who.id, body.child);
       if (!child) return fail("not_found");
@@ -304,6 +393,11 @@ Deno.serve(async (req) => {
 
       const subjects: Record<string, string> = {};
       for (const s of subj) subjects[s.nugget_id] = s.subject;
+      // read on its own, so the rest of the report keeps working if game-answers.sql is not applied yet
+      let answers: Awaited<ReturnType<typeof answerSummary>> = { bySubject: {}, missed: [] };
+      try { answers = await answerSummary(child.id); } catch (e) {
+        console.error("kid-progress: answers not read for the report:", e instanceof Error ? e.message : e);
+      }
       return json({
         ok: true,
         progress: progress.map((p) => ({ kind: p.kind, item_id: p.item_id, first_at: p.first_at, last_at: p.last_at, times: p.times })),
@@ -311,6 +405,7 @@ Deno.serve(async (req) => {
         lessons: [...new Set(les.map((l) => l.nugget_id as string))],
         subjects,
         quizzes: (quiz ?? []).map((q) => ({ started_at: q.started_at, asked: q.asked, right_count: q.right_count })),
+        answers,
       });
     }
 
@@ -356,7 +451,7 @@ Deno.serve(async (req) => {
         const { data: quiz, error: quizError } = await db.from("child_quizzes").select("id, nuggets, answered, asked, right_count").eq("id", quizId).eq("child_id", child.id).maybeSingle();
         if (quizError) throw new Error(quizError.message);
         if (!quiz || !(quiz.nuggets ?? []).includes(nuggetId)) return fail("not_found");
-        const { data: qs, error: qsError } = await db.from("nugget_questions").select("variant, choices, answer, why, approved").eq("nugget_id", nuggetId).eq("level", level);
+        const { data: qs, error: qsError } = await db.from("nugget_questions").select("variant, question, choices, answer, why, approved").eq("nugget_id", nuggetId).eq("level", level);
         if (qsError) throw new Error(qsError.message);
         const { data: state, error: stateError } = await db.from("child_nuggets").select(NUGGET_STATE).eq("child_id", child.id).eq("nugget_id", nuggetId).maybeSingle();
         if (stateError) throw new Error(stateError.message);
@@ -390,6 +485,7 @@ Deno.serve(async (req) => {
           child_id: child.id, nugget_id: nuggetId, ...next, last_asked: stamp, last_variant: shown.variant,
         }, { onConflict: "child_id,nugget_id" });
         if (error) throw new Error(error.message);
+        await keepQuizAnswer(child.id, nuggetId, level, correct, shown);
         return json({ ok: true, correct, answer: shown.answer, why: shown.why ?? "" });
       }
       throw new Error("quiz answer kept changing");

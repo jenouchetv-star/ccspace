@@ -12,7 +12,7 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
   // a LIKE pattern as PostgREST takes it: * (or %) is any run of characters and _ is any one character
   const like = (p) => new RegExp("^" + p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/[*%]/g, ".*").replace(/_/g, ".") + "$");
   class Q {
-    constructor(t) { this.t = t; this.op = "select"; this.f = []; this.one = false; this.ord = null; this.lim = null; this.ret = false; }
+    constructor(t) { this.t = t; this.op = "select"; this.f = []; this.one = false; this.ord = null; this.lim = null; this.rng = null; this.ret = false; }
     select() { if (this.op === "insert" || this.op === "update") this.ret = true; return this; }
     insert(v) { this.op = "insert"; this.v = v; return this; }
     update(v) { this.op = "update"; this.v = v; return this; }
@@ -20,6 +20,7 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
     upsert(v, o) { this.op = "upsert"; this.v = v; this.on = o.onConflict.split(","); return this; }
     eq(c, v) { this.f.push((r) => r[c] === v); return this; }
     gt(c, v) { this.f.push((r) => r[c] != null && cmp(r[c], v) > 0); return this; }
+    gte(c, v) { this.f.push((r) => r[c] != null && cmp(r[c], v) >= 0); return this; }
     in(c, vs) { this.f.push((r) => vs.includes(r[c])); return this; }
     or(s) {
       const parts = s.split(",").map((p) => {
@@ -33,6 +34,7 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
     }
     order(c, o) { this.ord = { c, asc: !o || o.ascending !== false }; return this; }
     limit(n) { this.lim = n; return this; }
+    range(from, to) { this.rng = [from, to]; return this; }
     maybeSingle() { this.one = true; return this; }
     single() { this.one = true; this.must = true; return this; }
     then(a, b) { return Promise.resolve(this.run()).then(a, b); }
@@ -49,13 +51,15 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
         const gone = rows.filter(hit);
         db.tables[this.t] = rows.filter((r) => !hit(r));
         // the real tables cascade from children
-        if (this.t === "children") for (const c of gone) for (const t of ["child_progress", "child_nuggets", "child_quizzes"]) db.tables[t] = (db.tables[t] || []).filter((r) => r.child_id !== c.id);
+        if (this.t === "children") for (const c of gone) for (const t of ["child_progress", "child_nuggets", "child_quizzes", "child_game_answers"]) db.tables[t] = (db.tables[t] || []).filter((r) => r.child_id !== c.id);
         return { data: null, error: null };
       }
       if (this.op === "insert") {
         const row = copy(this.v);
         if (this.t === "children") { row.id = crypto.randomUUID(); row.created_at = new Date(Date.now() + rows.length).toISOString(); }
         if (this.t === "child_quizzes" && !row.id) row.id = crypto.randomUUID();
+        // an identity id and a default time, as the real table fills them
+        if (this.t === "child_game_answers") { row.id = rows.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0) + 1; row.at = row.at || new Date().toISOString(); }
         rows.push(row);
         return { data: this.ret ? (this.one ? copy(row) : [copy(row)]) : null, error: null };
       }
@@ -65,7 +69,8 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
         return { data: null, error: null };
       }
       let found = rows.filter(hit).map(copy);
-      if (this.ord) { const { c, asc } = this.ord; found.sort((x, y) => (x[c] < y[c] ? -1 : x[c] > y[c] ? 1 : 0) * (asc ? 1 : -1)); }
+      if (this.ord) { const { c, asc } = this.ord; found.sort((x, y) => cmp(x[c], y[c]) * (asc ? 1 : -1)); }
+      if (this.rng) found = found.slice(this.rng[0], this.rng[1] + 1);
       if (this.lim !== null) found = found.slice(0, this.lim);
       if (db.cap) found = found.slice(0, db.cap);
       if (this.one) return { data: found[0] ?? null, error: null };
@@ -118,6 +123,16 @@ const nug = (child, id) => table("child_nuggets").find((n) => n.child_id === chi
 const quizRow = (id) => table("child_quizzes").find((q) => q.id === id);
 const at = (iso) => vi.setSystemTime(new Date(iso));
 const NOW = "2026-11-21T12:00:00.000Z";
+/** A game_answer body (without the child), as the Solar System Sandbox tours send it. */
+const gameAnswer = (o = {}) => ({
+  game: "solar-system-sandbox", qid: "sun-1", subject: "science", level: "g23", correct: true,
+  question: "What is the Sun?", answer: "A star", why: "It makes its own light.", ...o,
+});
+/** A child_game_answers row as the tests seed it. */
+const answerRow = (child, at, o = {}) => ({
+  child_id: child, game: "solar-system-sandbox", qid: "q", subject: "science", level: "g23", correct: true,
+  question: "Q", answer: "A", why: "W", at, ...o,
+});
 
 describe("kid-progress function", () => {
   beforeAll(async () => {
@@ -151,7 +166,7 @@ describe("kid-progress function", () => {
 
   it("refuses a call with no session, an expired one, or a member who left the list", async () => {
     for (const session of [undefined, "short", TOKEN_GONE, TOKEN_OLD, "z".repeat(40)]) {
-      for (const action of ["children", "child_save", "child_remove", "record", "report", "quiz_offer", "quiz_start", "quiz_answer"]) {
+      for (const action of ["children", "child_save", "child_remove", "record", "report", "quiz_offer", "quiz_start", "quiz_answer", "game_answer"]) {
         expect((await call({ action, session, child: A_CHILD, id: A_CHILD })).error, action).toBe("no_session");
       }
     }
@@ -175,6 +190,7 @@ describe("kid-progress function", () => {
     expect(await b("quiz_offer", { child: A_CHILD })).toMatchObject({ ok: false, error: "not_found" });
     expect(await b("quiz_start", { child: A_CHILD })).toMatchObject({ ok: false, error: "not_found" });
     expect(await b("quiz_answer", { child: A_CHILD, quizId: crypto.randomUUID(), nuggetId: "episode:abc:x", choice: 0 })).toMatchObject({ ok: false, error: "not_found" });
+    expect(await b("game_answer", { child: A_CHILD, ...gameAnswer() })).toMatchObject({ ok: false, error: "not_found" });
     for (const bad of ["not-a-uuid", "", 5, null, undefined, { id: A_CHILD }]) {
       expect((await a("report", { child: bad })).error, String(bad)).toBe("not_found");
     }
@@ -581,6 +597,136 @@ describe("kid-progress function", () => {
     expect(ids(leo)).toEqual(["book:k1:fact", "book:k3:fact", "book:k2:fact"]);
     // each question says its STEAMM subject, for the label under it on the quiz card ("" when it has none)
     expect(leo.questions.map((q) => q.subject)).toEqual(["science", "", "science"]);
+  });
+
+  // ---- answers given inside games, for the report's subject levels ----
+
+  it("game_answer validates and limits", async () => {
+    const bad = [
+      { game: "" }, { game: "Solar" }, { game: "a b" }, { game: "solar_system" }, { game: "x".repeat(41) }, { game: 5 }, { game: undefined }, { game: "pop-quiz" },
+      { subject: ["science"] }, { level: ["g23"] },
+      { qid: "" }, { qid: "sun_1" }, { qid: "SUN" }, { qid: "sun:1" }, { qid: "x".repeat(41) }, { qid: null },
+      { subject: "history" }, { subject: "Science" }, { subject: "" }, { subject: undefined },
+      { level: "g46" }, { level: "lesson" }, { level: "K1" }, { level: "" }, { level: undefined },
+      { correct: "true" }, { correct: 1 }, { correct: null }, { correct: undefined },
+      { question: "" }, { question: "   " }, { question: 5 }, { question: undefined },
+      { answer: "" }, { answer: "  " }, { answer: ["A star"] }, { answer: undefined },
+      { why: 5 }, { why: {} },
+    ];
+    for (const o of bad) expect((await a("game_answer", { child: A_CHILD, ...gameAnswer(o) })).error, JSON.stringify(o)).toBe("invalid");
+    expect(table("child_game_answers")).toEqual([]);
+    expect(db.rate.calls).toEqual([]);
+
+    // text is trimmed and cut to 300 (question), 200 (answer) and 400 (why) characters; the child comes from the lookup
+    const long = gameAnswer({ game: "g".repeat(40), qid: "q".repeat(40), question: "  " + "x".repeat(350) + "  ", answer: "y".repeat(250), why: "z".repeat(500) });
+    expect(await a("game_answer", { child: A_CHILD, child_id: B_CHILD, at: "2000-01-01T00:00:00Z", ...long })).toEqual({ status: 200, ok: true });
+    expect(table("child_game_answers")).toEqual([{
+      id: 1, child_id: A_CHILD, game: "g".repeat(40), qid: "q".repeat(40), subject: "science", level: "g23", correct: true,
+      question: "x".repeat(300), answer: "y".repeat(200), why: "z".repeat(400), at: NOW,
+    }]);
+    expect(db.rate.calls).toEqual([{ name: "rate_take", args: { p_bucket: "kid_answer", p_key: "sub-a", p_max: 200, p_window_seconds: 3600 } }]);
+    // the why may be left out; every level and subject is taken
+    expect((await a("game_answer", { child: A_CHILD, ...gameAnswer({ question: "  Which one is Mars? ", answer: " The red one ", why: undefined, correct: false, level: "k1", subject: "math" }) })).ok).toBe(true);
+    expect(table("child_game_answers")[1]).toMatchObject({ question: "Which one is Mars?", answer: "The red one", why: "", correct: false, level: "k1", subject: "math" });
+    for (const subject of ["technology", "engineering", "art", "music"]) expect((await a("game_answer", { child: A_CHILD, ...gameAnswer({ subject, level: "g45" }) })).ok, subject).toBe(true);
+    expect(table("child_game_answers")).toHaveLength(6);
+
+    // a flood of answers is held back by the member's kid_answer bucket
+    db.rate.allow = false;
+    expect(await a("game_answer", { child: A_CHILD, ...gameAnswer() })).toMatchObject({ ok: false, error: "slow_down" });
+    expect(table("child_game_answers")).toHaveLength(6);
+  });
+
+  it("game_answer is only for the member's own child", async () => {
+    for (const child of [A_CHILD, A_CHILD2, "nope", undefined, 5]) {
+      expect((await b("game_answer", { child, ...gameAnswer() })).error, String(child)).toBe("not_found");
+    }
+    expect(table("child_game_answers")).toEqual([]);
+    expect(db.rate.calls).toEqual([]);
+    expect((await b("game_answer", { child: B_CHILD, ...gameAnswer({ level: "g45" }) })).ok).toBe(true);
+    expect(table("child_game_answers").map((r) => r.child_id)).toEqual([B_CHILD]);
+    expect(db.rate.calls[0].args.p_key).toBe("sub-b");
+    // removing the child removes the child's answers
+    expect((await b("child_remove", { id: B_CHILD })).ok).toBe(true);
+    expect(table("child_game_answers")).toEqual([]);
+  });
+
+  it("quiz_answer also records the answer for the report, once, and only for a fact with a subject", async () => {
+    seedQuiz(A_CHILD, [["episode:e1:fact", "science"], ["episode:e2:fact", "math"], ["episode:e3:fact", null]]);
+    const r = await a("quiz_start", { child: A_CHILD });
+    expect(ids(r).sort()).toEqual(["episode:e1:fact", "episode:e2:fact", "episode:e3:fact"]);
+    const answer = (nuggetId, choice) => a("quiz_answer", { child: A_CHILD, quizId: r.quizId, nuggetId, choice });
+    expect((await answer("episode:e1:fact", 1)).correct).toBe(true);
+    expect((await answer("episode:e2:fact", 0)).correct).toBe(false);
+    expect((await answer("episode:e3:fact", 1)).correct).toBe(true);     // no subject: nothing to count it toward
+    const row = (n, subject, correct) => ({
+      id: n, child_id: A_CHILD, game: "pop-quiz", qid: `episode:e${n}:fact`, subject, level: "g23", correct,
+      question: `Question about episode:e${n}:fact`, answer: "two", why: `Because of episode:e${n}:fact`, at: NOW,
+    });
+    expect(table("child_game_answers")).toEqual([row(1, "science", true), row(2, "math", false)]);
+    // sending an answer again changes nothing, here too
+    await answer("episode:e1:fact", 0);
+    await answer("episode:e2:fact", 1);
+    expect(table("child_game_answers")).toHaveLength(2);
+    // the pop quiz is not held back by the game answer bucket
+    expect(db.rate.calls).toEqual([]);
+  });
+
+  it("a fault while recording a quiz answer for the report never fails the answer", async () => {
+    seedQuiz(A_CHILD, [["episode:e1:fact", "science"], ["episode:e2:fact", "math"], ["episode:e3:fact", "art"]]);
+    const r = await a("quiz_start", { child: A_CHILD });
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    db.fail.add("child_game_answers");
+    expect(await a("quiz_answer", { child: A_CHILD, quizId: r.quizId, nuggetId: "episode:e1:fact", choice: 1 })).toEqual({ status: 200, ok: true, correct: true, answer: 1, why: "Because of episode:e1:fact" });
+    db.fail.delete("child_game_answers"); db.fail.add("nugget_subjects");
+    expect(await a("quiz_answer", { child: A_CHILD, quizId: r.quizId, nuggetId: "episode:e2:fact", choice: 0 })).toMatchObject({ status: 200, ok: true, correct: false });
+    expect(quiet).toHaveBeenCalledTimes(2); quiet.mockRestore();
+    expect(quizRow(r.quizId)).toMatchObject({ answered: ["episode:e1:fact", "episode:e2:fact"], asked: 2, right_count: 1 });
+    expect(nug(A_CHILD, "episode:e1:fact")).toMatchObject({ status: "knows", review_step: 1 });
+    expect(table("child_game_answers")).toEqual([]);
+  });
+
+  it("report sums the last 8 weeks of answers by subject and lists the 10 newest missed", async () => {
+    const day = (d) => new Date(Date.UTC(2026, 10, d, 9)).toISOString();     // November 2026
+    db.tables.child_game_answers = [
+      ...[1, 2, 3].map((d) => answerRow(A_CHILD, day(d))),
+      answerRow(A_CHILD, day(20), { game: "pop-quiz", question: "Science miss", answer: "Right one", why: "Why one", correct: false }),
+      ...Array.from({ length: 12 }, (_, i) => answerRow(A_CHILD, day(i + 1), { subject: "math", question: `M${i + 1}`, answer: `A${i + 1}`, why: `W${i + 1}`, correct: false })),
+      answerRow(A_CHILD, "2026-09-26T12:00:00Z", { subject: "music" }),                       // exactly 8 weeks ago: counts
+      answerRow(A_CHILD, "2026-09-26T11:59:59Z", { subject: "art", correct: false, question: "Too old" }),   // just before: not
+      answerRow(A_CHILD2, day(10), { subject: "engineering", correct: false, question: "Leo's" }),
+      answerRow(B_CHILD, day(10), { subject: "technology", correct: false, question: "Zed's" }),
+    ].map((row, i) => ({ id: i + 1, ...row }));
+
+    const r = await a("report", { child: A_CHILD });
+    expect(r.ok).toBe(true);
+    expect(r.answers.bySubject).toEqual({ science: { asked: 4, right: 3 }, math: { asked: 12, right: 0 }, music: { asked: 1, right: 1 } });
+    expect(r.answers.missed).toEqual([
+      { game: "pop-quiz", question: "Science miss", answer: "Right one", why: "Why one", at: day(20) },
+      ...[12, 11, 10, 9, 8, 7, 6, 5, 4].map((n) => ({ game: "solar-system-sandbox", question: `M${n}`, answer: `A${n}`, why: `W${n}`, at: day(n) })),
+    ]);
+    expect(JSON.stringify(r)).not.toMatch(/Too old|Leo's|Zed's|child_id|"id":|"level"/);
+    // every other part of the report is still there
+    for (const k of ["progress", "nuggets", "lessons", "subjects", "quizzes"]) expect(r, k).toHaveProperty(k);
+    // a child with no answers gets an empty summary, not a level for every subject
+    expect((await b("report", { child: B_CHILD })).answers).toEqual({ bySubject: { technology: { asked: 1, right: 0 } }, missed: [{ game: "solar-system-sandbox", question: "Zed's", answer: "A", why: "W", at: day(10) }] });
+    db.tables.child_game_answers = [];
+    expect((await a("report", { child: A_CHILD })).answers).toEqual({ bySubject: {}, missed: [] });
+  });
+
+  it("report counts every answer, past the 1000-row read limit", async () => {
+    db.tables.child_game_answers = Array.from({ length: 2300 }, (_, i) => ({ id: i + 1, ...answerRow(A_CHILD, new Date(Date.UTC(2026, 10, 1) + i * 60_000).toISOString(), { correct: i % 2 === 0, question: `Q${i}` }) }));
+    const r = await a("report", { child: A_CHILD });
+    expect(r.answers.bySubject).toEqual({ science: { asked: 2300, right: 1150 } });
+    expect(r.answers.missed.map((m) => m.question)).toEqual([2299, 2297, 2295, 2293, 2291, 2289, 2287, 2285, 2283, 2281].map((n) => `Q${n}`));
+  });
+
+  it("a fault reading the answers (say game-answers.sql not applied yet) leaves the rest of the report working", async () => {
+    db.tables.child_progress = [{ child_id: A_CHILD, kind: "episode", item_id: "ep-1", first_at: "2026-10-01T00:00:00Z", last_at: "2026-10-01T00:00:00Z", times: 1 }];
+    db.fail.add("child_game_answers");
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await a("report", { child: A_CHILD })).toMatchObject({ status: 200, ok: true, progress: [{ item_id: "ep-1" }], answers: { bySubject: {}, missed: [] } });
+    expect(quiet).toHaveBeenCalledOnce(); quiet.mockRestore();
   });
 
   describe("seen", () => {
