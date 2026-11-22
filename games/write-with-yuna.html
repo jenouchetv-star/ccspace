@@ -28,8 +28,8 @@
   docs/superpowers/specs/2026-11-22-write-with-yuna-design.md). Watch Yuna write it, trace it, then write it on your own.
   A computer can hand the writing to a phone or tablet (games/write-with-yuna-pad.html) over a Supabase Realtime
   broadcast room "writeyuna-CODE", sealed like Stack 'Em Up (ECDH P-256 + AES-GCM, the key's fingerprint in the QR link).
-  The child's name stays on this device: it is kept through the site's saved data (ccsSave) or, opened alone, in this
-  browser, and never goes in an answer.
+  A free game (owner, 2026-11-22). The child's name stays on this device: it is kept in this browser's own storage
+  (through the site's ccsSave only if the game ever runs sealed), and never goes in an answer.
 -->
 <style>
   :root{ --ink:#1E2226; --ink-soft:#3E464C; --mute:#616A70; --paper:#FAF4E6; --card:#FFFBF3; --blue:#1273B0; --sun:#F2C230; --leaf:#2F6B2C; --leaf-soft:#E3F3DC; --line:#C9D6DE; --red:#E5484D; --orange:#E07A1F; }
@@ -765,11 +765,13 @@ function cleanSave(d){
   if (d.at && typeof d.at === "object") Object.keys(d.at).forEach(k => { const v = Number(d.at[k]); if (/^[0-5]$/.test(k) && Number.isInteger(v) && v >= 0 && v < 200) at[k] = v; });
   return { first: cleanName(d.first), last: cleanName(d.last), at };
 }
+/* a free game on the site, or opened alone, keeps its own save; a sealed frame (no storage of its own) asks the site */
+const SEALED = (() => { try { return !window.localStorage; } catch (_e) { return true; } })();
 function writeSave(){
-  if (INSIDE) toParent({ ccsSave: "set", game: GAME_ID, data: SAVE });
+  if (SEALED) toParent({ ccsSave: "set", game: GAME_ID, data: SAVE });
   else { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(SAVE)); } catch (_e) { /* private window */ } }
 }
-if (INSIDE){
+if (SEALED){
   window.addEventListener("message", (ev) => {
     if (ev.source !== window.parent) return;
     const d = ev.data;

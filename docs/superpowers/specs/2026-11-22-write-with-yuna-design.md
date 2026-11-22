@@ -47,15 +47,14 @@ Counts toward Reading and Writing (assets/lib/progress.js, kid-progress v5).
 ## Voice
 Yuna speaks in Kokoro's Heart voice (af_heart), pre-recorded clips (scripts/record-lines.mjs; Yuna is said
 "You-nah"): letter names and sounds, the words and sentences, and her fixed lines. Never speechSynthesis. Clips follow
-the Game sounds level (games/game-sound.js volume panel; a sealed private game saves "volume" through the parent's
-ccsSave). The clip key is the FNV-1a hash of the exact text, like the Solar tours (scripts/solar-lines.mjs).
+the Game sounds level (games/game-sound.js volume panel, kept in this browser). The clip key is the FNV-1a hash of the exact text, like the Solar tours (scripts/solar-lines.mjs).
 
 ## House rules that bind the build
-- Subscribers only for now (like the other phone games): a private game in supabase/private-games/, delivered to
-  members as srcdoc; the pad page is public (it shows only lines and strokes). Owner may make it free later.
+- Free (owner, 2026-11-22): a public game, games/write-with-yuna.html, opened from a games row (kind "embed"); it
+  keeps its own save in this browser. The pad page is public too (it shows only lines and strokes).
 - Opens on the logo loader (an inline copy, data-name "Write with Yuna"; list it in test/gameLoader.test.js).
 - No em dashes, no emojis in any copy; never he/she for a child; STEAMM, not STEM.
 - Motion: decelerating, never bouncy; respects prefers-reduced-motion.
 - Never send or store a child's name outside the device. Admin previews record nothing (the site already ignores
   answers from an admin).
-- Uploading the private game file to the portal, the games/portal rows and the push all wait for the owner's OK.
+- The games row (badge "New", a new cover) and the push wait for the owner's OK. No portal upload (it is free).

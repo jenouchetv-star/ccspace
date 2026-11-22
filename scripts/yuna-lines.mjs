@@ -5,7 +5,7 @@
 //   node scripts/yuna-lines.mjs > lines.json      (then: node scripts/record-lines.mjs lines.json assets/games/write-with-yuna/voice)
 import { readFileSync } from "node:fs";
 
-const game = readFileSync(new URL("../supabase/private-games/write-with-yuna.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+const game = readFileSync(new URL("../games/write-with-yuna.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const pure = game.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
 const G = new Function(pure + "\nreturn { allLines, lineKey };")();
 

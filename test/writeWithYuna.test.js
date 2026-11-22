@@ -7,7 +7,7 @@ import { answerFromMessage } from "../assets/lib/progress.js";
 import { LINES as SCRIPT_LINES, lineKey as scriptKey } from "../scripts/yuna-lines.mjs";
 
 const read = (p) => readFileSync(new URL("../" + p, import.meta.url), "utf8").replace(/\r\n/g, "\n");
-const game = read("supabase/private-games/write-with-yuna.html");
+const game = read("games/write-with-yuna.html");
 const pad = read("games/write-with-yuna-pad.html");
 const pure = game.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
 const W = new Function(pure + "; return { MODELS, PUNCT, parseStroke, letterModel, layoutText, resample, pathLen, viewBoxFor, decorFor, compareStrokes, scoreWriting, TIPS, FIXED, GRADES, levelOf, gradeFrom, itemsFor, answerFor, lineKey, allLines, touchOnly, startChoices, roomCode, readCode, cleanName, cleanInk };")();
@@ -222,8 +222,11 @@ describe("the progress report", () => {
     expect(game).toContain('if (G.phase !== "own") return;');
     expect(game).toContain("function toParent(msg){ if (!INSIDE) return;");
   });
-  it("keeps the name on this device: the site's saved data or, opened alone, this browser", () => {
-    expect(game).toContain('toParent({ ccsSave: "set", game: GAME_ID, data: SAVE })');
+  it("keeps the name on this device: this browser's storage (a free game), the site's saved data only if sealed", () => {
+    expect(game).toContain('const SEALED = (() => { try { return !window.localStorage; } catch (_e) { return true; } })();');
+    expect(game).toContain('if (SEALED) toParent({ ccsSave: "set", game: GAME_ID, data: SAVE });');
+    expect(game).toContain("if (SEALED){");
+    expect(game).not.toMatch(/if \(INSIDE\) toParent\(\{ ccsSave/);
     expect(game).toContain('localStorage.setItem(LOCAL_KEY, JSON.stringify(SAVE))');
     expect(game).not.toContain("localStorage.clear(");
     expect(W.cleanName("  Zoë  O’Neil-Ray!! ")).toBe("Zoe O'Neil-Ray");
