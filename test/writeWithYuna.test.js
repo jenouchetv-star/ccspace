@@ -4,7 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { answerFromMessage } from "../assets/lib/progress.js";
-import { LINES as SCRIPT_LINES, lineKey as scriptKey } from "../scripts/yuna-lines.mjs";
+import { LINES as SCRIPT_LINES, lineKey as scriptKey, PHONEMES } from "../scripts/yuna-lines.mjs";
 
 const read = (p) => readFileSync(new URL("../" + p, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const game = read("games/write-with-yuna.html");
@@ -142,7 +142,9 @@ describe("what each grade writes", () => {
     expect(k[2].id).toBe("write-upper-b"); expect(k[3].id).toBe("write-lower-b");
     expect(k[2].sound).toBe("B says /b/, like ball");
     expect(k[2].big).toBe("B b");
-    expect(k[2].say).toBe("Capital B. B says buh, like ball.");
+    expect(k[2].say).toBe("Capital B. B is for ball.");
+    expect(k[0].say).toBe("Capital A. A is for apple.");
+    expect(k[1].say).toBe("Lowercase A.");
   });
   it("1st writes the full name first, then about 20 sight words and 20 short words", () => {
     const one = W.itemsFor(1);
@@ -372,5 +374,29 @@ describe("the look and the voice", () => {
     expect(game).toContain("grade: CCS_CHILD_GRADE !== null ? gradeFrom(CCS_CHILD_GRADE) : 0");
     expect(game).toContain('"Playing at " + gradeName(G.grade)');
     expect(W.GRADES.map(g => g.label + " " + g.sub)).toEqual(["K Aa to Zz", "1st Name and words", "2nd Words", "3rd Cursive", "4th Cursive", "5th Cursive"]);
+  });
+  it("turns the page to a clean one after each item, with the books' page-turn sound (owner, 2026-11-22)", () => {
+    expect(existsSync(new URL("../assets/books/page-turn.mp3", import.meta.url))).toBe(true);
+    expect(game).toContain('const a = new Audio("/assets/books/page-turn.mp3");');
+    expect(game).toContain("if (window.CCSSound && !CCSSound.isOn()) return;");
+    expect(game).toMatch(/function nextItem\(\)\{\n  pageTurn\(\);/);
+    /* decelerating, never bouncy, and still for anyone who asks for less motion */
+    for (const src of [game, pad]){
+      expect(src).toContain('const ease = "cubic-bezier(.45,.05,.3,1)";');
+      expect(src).toContain('rotateY(-180deg)');
+      expect(src).toMatch(/if \(REDUCED \|\| !wrap/);
+      expect(src).toContain("backface-visibility:hidden");
+    }
+    /* the phone turns its page when the big screen goes from the stars to the next one (the big screen plays the sound) */
+    expect(pad).toContain('if (fresh && P.view && P.view.phase === "result" && v.phase === "watch") pageTurn();');
+    expect(pad).not.toContain("page-turn.mp3");
+  });
+  it("Yuna names each Kindergarten letter and its word; letter sounds alone came out wrong, so the card shows the sound", () => {
+    const k = W.itemsFor(0).filter(it => it.id.startsWith("write-upper-"));
+    expect(k.map(it => it.say)).toEqual(UPPER.map((L, i) => "Capital " + L + ". " + L + " is for " + k[i].word + "."));
+    expect(W.allLines().join(" ")).not.toMatch(/\bAy\b| says (ah|eh|ih|aw|fff|lll|mmm|nnn|rrr|sss|vvv|zzz|ks)\b/);
+    /* the one line Kokoro reads wrong from its spelling ("A is" as "uh is") is recorded from phonemes */
+    expect(Object.keys(PHONEMES)).toEqual(["Capital A. A is for apple."]);
+    expect(PHONEMES["Capital A. A is for apple."]).toContain("ˈeɪ. ˈeɪ ɪz");
   });
 });

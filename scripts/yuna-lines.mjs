@@ -11,5 +11,11 @@ const G = new Function(pure + "\nreturn { allLines, lineKey };")();
 
 export const lineKey = G.lineKey;
 export const LINES = G.allLines();
+// Kokoro misreads a few lines from their spelling. Those are recorded from exact phonemes instead (record-lines.mjs
+// reads "ph"); the text, and so the clip key, stays. Letter sounds on their own ("ah", "fff", "ks") came out wrong
+// (owner heard "Capital I says ah, like apple", 2026-11-22), so Yuna says "A is for apple." and the card shows the sound.
+export const PHONEMES = {
+  "Capital A. A is for apple.": "kˈæpɪɾəl ˈeɪ. ˈeɪ ɪz fɔːɹ ˈæpəl."   /* the second A was read "uh" */
+};
 if (process.argv[1] && process.argv[1].replace(/\\/g, "/").endsWith("scripts/yuna-lines.mjs"))
-  console.log(JSON.stringify(LINES.map(text => ({ key: lineKey(text), text })), null, 1));
+  console.log(JSON.stringify(LINES.map(text => PHONEMES[text] ? { key: lineKey(text), text, ph: PHONEMES[text] } : { key: lineKey(text), text }), null, 1));

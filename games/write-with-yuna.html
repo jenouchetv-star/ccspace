@@ -99,6 +99,10 @@
   .paperwrap{ flex:1; min-height:180px; position:relative; }
   .paper{ position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; -webkit-user-select:none; user-select:none; cursor:crosshair; }
   .paper.off{ cursor:default; }
+  /* the page turn: a copy of the finished page lifts off the left edge, showing a clean page under it */
+  .leaf{ position:absolute; inset:0; background:#fff; transform-origin:left center; backface-visibility:hidden; pointer-events:none; z-index:2; box-shadow:0 8px 22px rgba(30,34,38,.18); }
+  .leaf svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  .leaf i{ position:absolute; inset:0; background:linear-gradient(90deg, rgba(30,34,38,0), rgba(30,34,38,.28)); opacity:0; }
   .tools{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; min-height:46px; }
   .tools .sp{ flex:1; }
   .side{ padding:18px; display:flex; flex-direction:column; gap:14px; background:var(--card); overflow:auto; }
@@ -635,13 +639,14 @@ const GRADES = [
 const levelOf = (g) => (g <= 1 ? "k1" : g <= 3 ? "g23" : "g45");
 /** The site's picked grade (0 to 6) as this game's grade: 6th grade writes with 5th. */
 function gradeFrom(raw){ return Number.isInteger(raw) && raw >= 0 && raw <= 6 ? Math.min(raw, 5) : null; }
-/* a letter's sound as Yuna says it, and the example word (Kindergarten) */
+/* a letter's sound spelled out, and the example word (Kindergarten); the card shows the sound, Yuna says the word */
 const SOUNDS = { a: ["ah", "apple"], b: ["buh", "ball"], c: ["kuh", "cat"], d: ["duh", "dog"], e: ["eh", "egg"], f: ["fff", "fish"], g: ["guh", "goat"],
   h: ["huh", "hat"], i: ["ih", "insect"], j: ["juh", "jam"], k: ["kuh", "kite"], l: ["lll", "lion"], m: ["mmm", "moon"], n: ["nnn", "nest"],
   o: ["aw", "octopus"], p: ["puh", "pig"], q: ["kwuh", "queen"], r: ["rrr", "rain"], s: ["sss", "sun"], t: ["tuh", "top"], u: ["uh", "umbrella"],
   v: ["vvv", "van"], w: ["wuh", "web"], x: ["ks", "fox"], y: ["yuh", "yarn"], z: ["zzz", "zipper"] };
 const soundShown = (l) => "/" + ({ c: "k", q: "kw", x: "ks" }[l] || l) + "/";
-const nameSay = (l) => (l === "a" ? "Ay" : l.toUpperCase());
+/* the letter's name as Yuna says it; "Capital A. A is for apple." is recorded from phonemes (scripts/yuna-lines.mjs) */
+const nameSay = (l) => l.toUpperCase();
 const SIGHT = ["the", "and", "see", "said", "you", "was", "are", "they", "have", "come", "here", "look", "my", "play", "we", "like", "go", "can", "is", "to"];
 const SHORT = ["cat", "dog", "sun", "hat", "pig", "bed", "map", "cup", "fish", "ship", "frog", "duck", "jam", "net", "fox", "bus", "hen", "log", "top", "van"];
 const WORDS2 = ["friend", "happy", "little", "water", "under", "after", "school", "house", "green", "small", "about", "again", "because", "people", "there", "where", "which", "every", "light", "three"];
@@ -682,7 +687,9 @@ function itemsFor(g){
     "abcdefghijklmnopqrstuvwxyz".split("").forEach(l => {
       const L = l.toUpperCase(), s = SOUNDS[l], N = nameSay(l), sound = L + " says " + soundShown(l) + ", like " + s[1];
       out.push({ id: "write-upper-" + l, kind: "letter", style: "print", text: L, title: "Capital " + L, short: "capital " + L, big: L + " " + l, sound, word: s[1],
-        say: "Capital " + N + ". " + N + " says " + s[0] + ", like " + s[1] + ".", question: "Write the capital letter " + L + ".", answer: L, done: "You wrote " + L + "!" });
+        /* the voice says "B is for ball." (the card shows the sound): the voice can't make a letter's sound on its own
+           without it coming out wrong (owner heard "Capital I says ah, like apple", 2026-11-22) */
+        say: "Capital " + N + ". " + N + " is for " + s[1] + ".", question: "Write the capital letter " + L + ".", answer: L, done: "You wrote " + L + "!" });
       out.push({ id: "write-lower-" + l, kind: "letter", style: "print", text: l, title: "Lowercase " + l, short: "lowercase " + l, big: L + " " + l, sound, word: s[1],
         say: "Lowercase " + N + ".", question: "Write the lowercase letter " + l + ".", answer: l, done: "You wrote " + l + "!" });
     });
@@ -1042,7 +1049,35 @@ function showFinish(){
   setTimeout(() => $("bNext").focus(), 40);
 }
 function nextShort(){ const it = G.items[G.idx + 1]; return it ? it.short : ""; }
+/* done with one: the page turns to a clean page, with the books' page-turn sound (owner, 2026-11-22) */
+const PAGE_TURN_MS = 800;
+function playPageTurn(){
+  try {
+    if (window.CCSSound && !CCSSound.isOn()) return;
+    const a = new Audio("/assets/books/page-turn.mp3");
+    a.volume = 0.8 * (window.CCSSound && CCSSound.volume ? CCSSound.volume("sfx") : 1);
+    const p = a.play(); if (p && p.catch) p.catch(() => {});
+  } catch (_e) { /* no sound, still turns */ }
+}
+function pageTurn(){
+  playPageTurn();
+  const wrap = document.querySelector("#sPlay .paperwrap"), src = $("paper");
+  if (REDUCED || !wrap || !src || !wrap.animate || $("sPlay").hidden) return;
+  wrap.querySelectorAll(".leaf").forEach(n => n.remove());
+  const leaf = document.createElement("div"), shade = document.createElement("i"), copy = src.cloneNode(true);
+  copy.removeAttribute("id"); copy.querySelectorAll("[id]").forEach(n => n.removeAttribute("id"));
+  copy.removeAttribute("role"); copy.removeAttribute("aria-label");
+  leaf.className = "leaf"; leaf.setAttribute("aria-hidden", "true");
+  leaf.appendChild(copy); leaf.appendChild(shade); wrap.appendChild(leaf);
+  const ease = "cubic-bezier(.45,.05,.3,1)";   /* decelerating, never bouncy */
+  const turn = leaf.animate([{ transform: "perspective(3200px) rotateY(0deg)" }, { transform: "perspective(3200px) rotateY(-180deg)" }],
+    { duration: PAGE_TURN_MS, easing: ease, fill: "forwards" });
+  shade.animate([{ opacity: 0 }, { opacity: 1, offset: 0.45 }, { opacity: 0.4 }], { duration: PAGE_TURN_MS, easing: ease, fill: "forwards" });
+  const done = () => leaf.remove();
+  turn.onfinish = done; setTimeout(done, PAGE_TURN_MS + 400);
+}
 function nextItem(){
+  pageTurn();
   if (G.idx >= G.items.length - 1){
     openItem(0);
     if (G.item.kind !== "name"){ $("playSay").textContent = FIXED.allDone; say([FIXED.allDone, G.item.say, FIXED.watch]); }

@@ -1,4 +1,4 @@
-// Records a list of lines ([{key, text}], e.g. from scripts/lunar-lines.mjs) in Kokoro's Heart voice as <out>/<key>.mp3.
+// Records a list of lines ([{key, text, ph?}], e.g. from scripts/lunar-lines.mjs) in Kokoro's Heart voice as <out>/<key>.mp3.
 // Same setup as record-words.mjs. Names are said the owner's way (Chike = Chee-kay, Zech = Zack, Yuna = You-nah).
 //   node record-lines.mjs <lines.json> <out folder>
 import { KokoroTTS } from "kokoro-js";
@@ -23,10 +23,13 @@ function mp3(f, sr){
 
 const tts = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", { dtype: "q8", device: "cpu" });
 let made = 0;
-for (const { key, text } of LIST){
+for (const { key, text, ph } of LIST){
   const file = OUT + "/" + key + ".mp3";
   if (existsSync(file)) continue;
-  const a = await tts.generate(spoken(text), { voice: "af_heart", speed: 0.92 });
+  /* a line with "ph" is said from those exact phonemes (Kokoro misreads some spellings, e.g. letter sounds) */
+  const a = ph
+    ? await tts.generate_from_ids(tts.tokenizer(ph, { truncation: true }).input_ids, { voice: "af_heart", speed: 0.92 })
+    : await tts.generate(spoken(text), { voice: "af_heart", speed: 0.92 });
   writeFileSync(file, mp3(a.audio, a.sampling_rate)); made++;
 }
 console.log("recorded", made, "new lines into", OUT);
