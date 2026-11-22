@@ -791,6 +791,8 @@
 <script src="/games/game-sound.js"></script>
 <script>
 "use strict";
+/* the picked child's grade, passed by the site (null when none); the game plays it for this visit only (see SESSION_GRADE) */
+const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSearchParams(location.search).get("grade"); const n = typeof raw === "number" ? raw : /^[0-6]$/.test(String(raw)) ? Number(raw) : NaN; return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null; } catch (_e) { return null; } })();
 /* BEGIN pure */
 /* ---------- the science and the rules (no browser needed; tested in test/remoteLunarSalvage.test.js) ---------- */
 const MOON_G = 1.62, EARTH_G = 9.81;          /* m/s², real values */
@@ -840,6 +842,11 @@ function combineSaves(a, b){
 }
 /* the quiz has three sets of questions: 1st grade, 2nd-3rd, 4th-5th */
 function gradeBand(g){ return g === 1 ? "g1" : g === 4 || g === 5 ? "g45" : "g23"; }
+/* the grade a picked child plays (the site passes 0 Kindergarten to 6): this game has 1st to 5th, so a
+   Kindergartner plays 1st and a 6th grader plays 5th; null when no grade was passed */
+function childPlayGrade(g){ return Number.isInteger(g) && g >= 0 && g <= 6 ? Math.min(5, Math.max(1, g)) : null; }
+/* the grade being played: this visit's child grade first, else the save's own grade */
+function playGrade(save, sessionGrade){ return sessionGrade || (save && save.grade) || null; }
 const SCRAP_TOTAL = 5;
 const ARM = { mountY: 1.2, mountZ: -0.3, hang: 0.5, reachMin: 1.3, reachMax: 4.0, pitchMin: -1.0, pitchMax: 0.85, grabR: 0.85, magR: 1.6, magDepth: 3.6 };
 const ROVER = { r: 1.35, maxF: 4.2, maxB: 1.8, acc: 3.0, brake: 7.5, turn: 1.15, bed: { x: 0, y: 1.02, z: 0.95 } };
@@ -3342,10 +3349,10 @@ document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click
 $("bHelp").onclick = () => openOv("ovHelp");
 $("bNotes").onclick = () => toggleNotes();
 $("bPhone").onclick = () => openPhone();
-$("bStartPhone").onclick = () => { if (!SAVE.grade) return askGrade(); startGame(); openPhone(); };
+$("bStartPhone").onclick = () => { if (!curGrade()) return askGrade(); startGame(); openPhone(); };
 $("gradeRow").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); });
-$("bStart").onclick = () => { if (!SAVE.grade) return askGrade(); startGame(); };
-$("bNext").onclick = () => { if (!SAVE.grade) return askGrade(); G.startStep = "world"; paintStart(); const w = document.querySelector("#worldRow .wld.sel") || $("bStart"); w.focus(); };
+$("bStart").onclick = () => { if (!curGrade()) return askGrade(); startGame(); };
+$("bNext").onclick = () => { if (!curGrade()) return askGrade(); G.startStep = "world"; paintStart(); const w = document.querySelector("#worldRow .wld.sel") || $("bStart"); w.focus(); };
 $("bContinue").onclick = () => continueGame();
 $("bFresh").onclick = () => { const r = SAVE.resume; SAVE.resume = null; writeSave(); G.pickWorld = r && r.world; startGame(); };
 $("bChangeGrade").onclick = () => { G.startStep = "grade"; paintStart(); const b = document.querySelector('#gradeRow button[aria-pressed="true"]'); if (b) b.focus(); };
@@ -3396,13 +3403,13 @@ function resetWorld(){
 }
 /* Enter, Space or a controller's A button on the start card: Next on the grade step, Start on the world step */
 function startPress(){
-  if (!$("stepGrade").hidden){ if (SAVE.grade) $("bNext").click(); else askGrade(); return; }
+  if (!$("stepGrade").hidden){ if (curGrade()) $("bNext").click(); else askGrade(); return; }
   if (!$("resumeCard").hidden) return continueGame();
   startGame();
 }
 function startGame(){
   if (G.started) return;
-  if (!SAVE.grade) return askGrade();
+  if (!curGrade()) return askGrade();
   const pick = G.pickWorld || furthestWorld();
   if (pick !== G.world.id){ enterWorld(pick); resetCurrentWorld(); }
   G.started = true; G.clockOn = true;
@@ -5528,7 +5535,7 @@ const QZ = { list: null, i: 0, right: 0, answered: false, forBoard: false };
 function kidName(){ const c = G.world.corner; return c.charAt(0).toUpperCase() + c.slice(1); }
 function openQuiz(retake){
   const bank = QUIZ_BANKS[G.world.id] || QUIZ_BANKS.pumice;
-  Object.assign(QZ, { list: bank[gradeBand(SAVE.grade)], i: 0, right: 0, answered: false, forBoard: !retake });
+  Object.assign(QZ, { list: bank[gradeBand(curGrade())], i: 0, right: 0, answered: false, forBoard: !retake });
   if (G.started && !G.done && !G.paused){ G.paused = true; QZ.paused = true; keys.clear(); }
   openOv("ovQuiz"); paintQuiz();
 }
@@ -5552,7 +5559,7 @@ function paintQuiz(){
     sfx(all ? "win" : "good");
     return;
   }
-  const q = L[QZ.i], band = gradeBand(SAVE.grade), pics = band === "g1";
+  const q = L[QZ.i], band = gradeBand(curGrade()), pics = band === "g1";
   QZ.answered = false;
   box.innerHTML = '<div class="qtop"><span class="kicker">' + kidName() + '\'s question ' + (QZ.i + 1) + " of " + L.length + "</span>"
     + (CAN_SPEAK ? '<button class="speak" id="qSay" aria-label="Read it to me"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button>' : "") + "</div>"
@@ -5580,7 +5587,7 @@ function answerQuiz(k){
   [...$("qOpts").children].forEach((el, j) => { if (j === q.a) el.classList.add("right"); else if (j === k) el.classList.add("wrong"); });
   if (!ok) $("qPic").innerHTML = quizPic(q, true);
   const w = $("qWhy"); w.innerHTML = "<b></b> "; w.querySelector("b").textContent = ok ? "Right!" : "Not quite."; w.append(q.why);
-  if (gradeBand(SAVE.grade) === "g1") speak((ok ? "Right! " : "Not quite. ") + q.why);
+  if (gradeBand(curGrade()) === "g1") speak((ok ? "Right! " : "Not quite. ") + q.why);
   $("qNextRow").hidden = false; $("qNext").textContent = QZ.i < QZ.list.length - 1 ? "Next" : "See how you did"; $("qNext").focus();
   sfx(ok ? "good" : "bad");
 }
@@ -6488,6 +6495,10 @@ function showHomeEnd(){
 /* ---------- saving, the grade picker and the worlds you've reached ---------- */
 const LOCAL_KEY = "ccs-remote-lunar-salvage-save";
 let SAVE = defaultSave();
+/* a picked child's grade is played for this visit only: it skips the grade step, but the save keeps its own grade
+   (a save arriving from the site later never replaces it); a grade picked in the game clears it and is saved as always */
+let SESSION_GRADE = childPlayGrade(CCS_CHILD_GRADE);
+function curGrade(){ return playGrade(SAVE, SESSION_GRADE); }
 function loadSave(){
   let raw = null;
   try { raw = JSON.parse(localStorage.getItem(LOCAL_KEY) || "null"); } catch (_e) { raw = null; }
@@ -6521,8 +6532,8 @@ function gradeButtons(row){
   const ORD = ["1st", "2nd", "3rd", "4th", "5th"];
   for (let g = 1; g <= 5; g++){
     const b = document.createElement("button");
-    b.textContent = ORD[g - 1]; b.setAttribute("aria-label", "Grade " + g); b.setAttribute("aria-pressed", SAVE.grade === g);
-    b.onclick = () => { SAVE.grade = g; writeSave(); paintStart(); };
+    b.textContent = ORD[g - 1]; b.setAttribute("aria-label", "Grade " + g); b.setAttribute("aria-pressed", curGrade() === g);
+    b.onclick = () => { SAVE.grade = g; SESSION_GRADE = null; writeSave(); paintStart(); };
     row.appendChild(b);
   }
 }
@@ -6633,7 +6644,7 @@ function continueGame(){
   const r = SAVE.resume;
   if (!resumable(r)) return startGame();
   if (G.started) return;
-  if (!SAVE.grade) return askGrade();
+  if (!curGrade()) return askGrade();
   const w = worldById(r.world);
   RESTORING = true;
   try {
@@ -6690,14 +6701,14 @@ function paintStart(){
   if (!START_TEXT.pumice) START_TEXT.pumice = [$("startP1").textContent, $("startP2").textContent];
   const st = START_TEXT[pk] || START_TEXT.pumice; $("startP1").textContent = st[0]; $("startP2").textContent = st[1];
   gradeButtons($("gradeRow")); gradeButtons($("gradeRow2"));
-  const ready = !!SAVE.grade;
+  const ready = !!curGrade();
   /* grade first, then the worlds; someone who already picked a grade goes straight to the worlds */
   const onWorlds = ready && G.startStep !== "grade";
   $("stepGrade").hidden = onWorlds;
   $("stepWorld").hidden = !onWorlds;
   $("bChangeGrade").hidden = !onWorlds;
   $("bNext").setAttribute("aria-disabled", ready ? "false" : "true");
-  $("gradeChip").textContent = ready ? ["1st", "2nd", "3rd", "4th", "5th"][SAVE.grade - 1] + " grade" : "";
+  $("gradeChip").textContent = ready ? ["1st", "2nd", "3rd", "4th", "5th"][curGrade() - 1] + " grade" : "";
   paintResume();
   for (const id of ["bStart", "bStartPhone"]) $(id).setAttribute("aria-disabled", ready ? "false" : "true");
   const row = $("worldRow"); row.innerHTML = "";

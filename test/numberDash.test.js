@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 /* Math Runner (file: number-dash) is a subscribers-only game: its source sits in supabase/private-games and its rules in a LOGIC block. */
 const html = readFileSync(new URL("../supabase/private-games/number-dash.html", import.meta.url), "utf8");
 const logic = html.slice(html.indexOf("/*LOGIC-START*/"), html.indexOf("/*LOGIC-END*/"));
-const L = new Function(logic + "; return { LEVELS, LANES, makeRng, makeDoors, doorLabel, applyDoor, addCoin, bestDoors, formatCoins, readBest, mergeBest, makeRow, hitTest, speedAt, MAX_SPEED, START_SPEED, SUPER, superStep, superCoin };")();
+const L = new Function(logic + "; return { LEVELS, LANES, makeRng, makeDoors, doorLabel, applyDoor, addCoin, bestDoors, formatCoins, readBest, mergeBest, makeRow, hitTest, speedAt, MAX_SPEED, START_SPEED, SUPER, superStep, superCoin, startLevel, playingAtText };")();
 
 describe("the doors", () => {
   it("has a level for each grade, Kindergarten to 6th grade", () => {
@@ -242,5 +242,76 @@ describe("speed and points", () => {
     }
     // the run uses the level's speed; each grade's pace, slow, boost and Super speed still multiply it as before
     expect(html).toContain("const target = speedAt(Game.distance, Game.level) * PACE[Game.level] * (Game.slowT > 0 ? 0.55 : 1) * (Game.boostT > 0 ? 1.25 : 1) * (sup.on ? SUPER.mult : 1);");
+  });
+});
+
+describe("the child's grade (passed by the site)", () => {
+  const src = html.replace(/\r\n/g, "\n");
+  const snippet = src.match(/^const CCS_CHILD_GRADE = .*$/m)[0];
+  const childGrade = (win) => new Function("window", "location", snippet + "; return CCS_CHILD_GRADE;")(win, { search: "" });
+  /* the title's grade row, on a tiny page: the question, the row, and the "Playing at" line with its Start button */
+  const paintText = src.slice(src.indexOf("let gradeRowOpen"), src.indexOf("\n}\n", src.indexOf("function paintGradeRow(")) + 3);
+  function title(grade) {
+    const el = (extra = {}) => ({ hidden: false, textContent: "", dataset: {}, ...extra });
+    const els = { "levels-step": el(), levels: el(), "grade-fixed": el({ hidden: true }), "grade-fixed-text": el(), "grade-go": el({ dataset: { level: "k" } }) };
+    const Game = { level: L.startLevel(grade) };
+    const api = new Function("$", "Game", "playingAtText", "CCS_CHILD_GRADE",
+      paintText + "; return { paint: paintGradeRow, change: () => { gradeRowOpen = true; paintGradeRow(); } };")((id) => els[id], Game, L.playingAtText, grade);
+    api.paint();
+    return { ...api, els, Game };
+  }
+
+  it("uses the child's grade: the title starts at it and says so in place of the grade row", () => {
+    expect(childGrade({ CCS_GRADE: 2 })).toBe(2);
+    const t = title(2);
+    expect(t.Game.level).toBe("g2");
+    expect(t.els.levels.hidden).toBe(true);
+    expect(t.els["levels-step"].hidden).toBe(true);
+    expect(t.els["grade-fixed"].hidden).toBe(false);
+    expect(t.els["grade-fixed-text"].textContent).toBe("Playing at 2nd grade. ");
+    expect(t.els["grade-go"].dataset.level).toBe("g2");
+    expect(title(0).els["grade-fixed-text"].textContent).toBe("Playing at Kindergarten. ");
+    expect(title(6).els["grade-fixed-text"].textContent).toBe("Playing at 6th grade. ");
+    // the game starts at it, and the Start button runs it through the usual level click
+    expect(src).toContain('mode: "title", level: startLevel(CCS_CHILD_GRADE), runner: "chike",');
+    expect(src).toMatch(/<button class="grade-fixed__change" type="button" data-act="grade-row">Change<\/button><\/p><button class="btn btn--go" type="button" id="grade-go" data-level="k">Start running<\/button>/);
+    expect(src).toContain('if (lvl){ Sfx.play("pick"); startRun(lvl.dataset.level); return; }');
+    // the runner pick stays on the title
+    expect(src).toContain('<p class="step">Who\'s running?</p>');
+    expect(src.split("function buildLevels(){")[1].split("\n}\n")[0]).toContain('$("runners").innerHTML');
+  });
+
+  it("clamps: every grade from Kindergarten to 6th has its own level", () => {
+    expect([0, 1, 2, 3, 4, 5, 6].map(L.startLevel)).toEqual(["k", "g1", "g2", "g3", "g4", "g5", "g6"]);
+    expect(L.startLevel(9)).toBe("g6");
+    expect(L.startLevel(-1)).toBe("k");
+    expect(childGrade({ CCS_GRADE: 7 })).toBeNull();
+  });
+
+  it("no grade: the grade row shows as today", () => {
+    for (const bad of [undefined, 7, 2.5, "abc", ""]) expect(childGrade(bad === undefined ? {} : { CCS_GRADE: bad }), String(bad)).toBeNull();
+    expect(L.startLevel(null)).toBe("k");
+    const t = title(null);
+    expect(t.els.levels.hidden).toBe(false);
+    expect(t.els["levels-step"].hidden).toBe(false);
+    expect(t.els["grade-fixed"].hidden).toBe(true);
+    expect(src).toMatch(/<div class="grade-fixed" id="grade-fixed" hidden>/);
+  });
+
+  it("change still works: Change shows the grade row, and the in-game grade button still pauses on the grade row", () => {
+    const t = title(3);
+    t.change();
+    expect(t.els.levels.hidden).toBe(false);
+    expect(t.els["levels-step"].hidden).toBe(false);
+    expect(t.els["grade-fixed"].hidden).toBe(true);
+    expect(src).toContain('if (a === "grade-row"){ gradeRowOpen = true; paintGradeRow();');
+    expect(src).toContain('if (a === "grade"){ pause();');
+    expect(src.split("function pause(){")[1].split("\n")[0]).toContain("paintGrades()");
+    // a level picked in the game: back on the title, the line names it
+    const back = title(3); back.Game.level = "g5"; back.paint();
+    expect(back.els["grade-fixed-text"].textContent).toBe("Playing at 5th grade. ");
+    expect(back.els["grade-go"].dataset.level).toBe("g5");
+    // hidden buttons are skipped by the keys and the controller
+    expect(src).toContain('[...s.querySelectorAll("button")].filter((b) => !b.closest("[hidden]"))');
   });
 });

@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 const game = readFileSync(new URL("../supabase/private-games/remote-lunar-salvage.html", import.meta.url), "utf8");
 const remote = readFileSync(new URL("../games/lunar-salvage-remote.html", import.meta.url), "utf8");
 const pure = (src) => src.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS, BOARD_STEPS, FLIGHT, flightPhase, BRIEFS, QUIZ_BANKS, QUIZ_PICS, starsForWorld, setTerrain, HEAT, heatStep, heaterTakes, nextWorldId, HOSE, hoseArc, waterStep, WIND, gustAt };")();
+const S = new Function(pure(game) + "; return { MOON_G, EARTH_G, LIFT_KG, SCRAP_TOTAL, ARM, ROVER, TRENCH, BRIDGE, WORLD, ROT_STEP, SNAP, MATERIALS, PART_TYPES, TARGET_ACCEPTS, NOTES, STEPS, angDiff, angDiffMod, earthFeelKg, fallTime, formatTime, magnetCheck, clawCheck, scanChips, bestTool, groundHeight, overTrench, onBridgeDeck, canDriveTo, driveStep, armLocal, toWorld, minPitchFor, fitCheck, currentStep, makeCode, readCode, aimArm, boxTopAt, circleTopAt, footprintPts, ROVER_SOLIDS, LASER, raySphere, CONTEST, contestPoints, contestWinner, inBase, pickBonus, WORLDS, worldById, stepIndex, SAVE_NAME, defaultSave, mergeSave, combineSaves, gradeBand, NOTE_DOODLES, SCAN, scanRange, SCANNABLE, DRILL, drillStep, drillFind, toolsFor, MISSIONS, SAT_STEPS, BOARD_STEPS, FLIGHT, flightPhase, BRIEFS, QUIZ_BANKS, QUIZ_PICS, starsForWorld, setTerrain, HEAT, heatStep, heaterTakes, nextWorldId, HOSE, hoseArc, waterStep, WIND, gustAt, childPlayGrade, playGrade };")();
 const T = new Function(pure(remote) + "; return { wrapDeg, shapeAxis, learnLR, learnFB, tiltAxes, readCode };")();
 
 describe("the science is real", () => {
@@ -674,7 +674,7 @@ describe("whole-branch review fixes", () => {
     expect(game).toMatch(/rmSend\(\{ t: "st", to: T\.id, tools: C_MODES,/);
   });
   it("no way into the mission skips the grade picker", () => {
-    expect(game).toMatch(/function startGame\(\)\{\s*if \(G\.started\) return;\s*if \(!SAVE\.grade\) return askGrade\(\);/);
+    expect(game).toMatch(/function startGame\(\)\{\s*if \(G\.started\) return;\s*if \(!curGrade\(\)\) return askGrade\(\);/);
   });
   it("Pause and Launch wait while the quiz, the notepad, the landing or the flight is up", () => {
     expect(game).toMatch(/function togglePause\(force\)\{\s*if \(!G\.started \|\| G\.done \|\| busyScreen\(\)\) return;/);
@@ -1052,5 +1052,77 @@ describe("Gusto Canyon: the beacon, the wind and the flight home", () => {
     expect(game).toContain('G.world.id === "gusto" ? BRIEFS.home');
     expect(game).toContain("function showHomeEnd(){");
     expect(game).toContain("You saved all four worlds!");
+  });
+});
+
+describe("the child's grade (passed by the site)", () => {
+  /* the save, its message from the site and the grade buttons, run for real with a stand-in page */
+  const src = game.replace(/\r\n/g, "\n");
+  const block = src.slice(src.indexOf("const LOCAL_KEY = "), src.indexOf("const PLANET_SVG"));
+  const gbAt = src.indexOf("function gradeButtons(row){");
+  const gb = src.slice(gbAt, src.indexOf("\n}\n", gbAt) + 3);
+  function boot(grade, localSave = null) {
+    const store = new Map(localSave ? [["ccs-remote-lunar-salvage-save", JSON.stringify(localSave)]] : []);
+    const posts = [], listeners = [];
+    const localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
+    const parent = { postMessage: (m) => posts.push(JSON.parse(JSON.stringify(m))) };
+    const win = { addEventListener: (_t, f) => listeners.push(f) };
+    const document = { createElement: () => { const attrs = {}; return { attrs, textContent: "", onclick: null, setAttribute: (k, v) => { attrs[k] = String(v); } }; } };
+    const api = new Function("CCS_CHILD_GRADE", "localStorage", "parent", "window", "document", "setTimeout", "clearTimeout", "paintStart", "paintNotesCount",
+      "SAVE_NAME", "defaultSave", "mergeSave", "combineSaves", "childPlayGrade", "playGrade",
+      block + gb + "; loadSave(); return { save: () => SAVE, cur: curGrade, writeSave, gradeButtons };")(
+      grade, localStorage, parent, win, document, (f) => f(), () => {}, () => {}, () => {},
+      S.SAVE_NAME, S.defaultSave, S.mergeSave, S.combineSaves, S.childPlayGrade, S.playGrade);
+    const row = () => { const r = { innerHTML: "", kids: [], appendChild(b) { r.kids.push(b); } }; api.gradeButtons(r); return r.kids; };
+    const fromSite = (data) => listeners.forEach((f) => f({ data: { ccsSave: "data", game: "remote-lunar-salvage", data } }));
+    return { ...api, posts, row, fromSite, store };
+  }
+
+  it("uses the child's grade for this visit, without changing the save's own grade", () => {
+    const g = boot(3);
+    expect(g.cur()).toBe(3);
+    expect(g.save().grade).toBeNull();
+    expect(g.row().map((b) => b.attrs["aria-pressed"])).toEqual(["false", "false", "true", "false", "false"]);
+    // a save from the site arriving later keeps its own grade, and never replaces the child's for this visit
+    g.fromSite({ grade: 5, reached: ["pumice", "glacia"] });
+    expect(g.save().grade).toBe(5);
+    expect(g.save().reached).toEqual(["pumice", "glacia"]);
+    expect(g.cur()).toBe(3);
+    // saving sends the save's own grade, never the child's
+    g.writeSave();
+    const sent = g.posts.filter((p) => p.ccsSave === "set");
+    expect(sent.at(-1).data.grade).toBe(5);
+    expect(JSON.parse(g.store.get("ccs-remote-lunar-salvage-save")).grade).toBe(5);
+    expect(boot(2, { grade: 4 }).cur()).toBe(2);
+    expect(boot(2, { grade: 4 }).save().grade).toBe(4);
+    // the start card, the quiz and every "pick a grade first" check use the grade being played
+    expect(src).toContain("const ready = !!curGrade();");
+    expect(src).toContain("bank[gradeBand(curGrade())]");
+    expect(src.match(/SAVE\.grade/g)).toEqual(["SAVE.grade"]);   // only the grade button sets it
+  });
+
+  it("clamps: a Kindergartner plays 1st grade and a 6th grader plays 5th", () => {
+    expect([0, 1, 2, 3, 4, 5, 6].map(S.childPlayGrade)).toEqual([1, 1, 2, 3, 4, 5, 5]);
+    expect(boot(0).cur()).toBe(1);
+    expect(boot(6).cur()).toBe(5);
+    expect(S.gradeBand(boot(0).cur())).toBe("g1");
+  });
+
+  it("no grade: the grade step shows as today, or the save's grade is used", () => {
+    for (const bad of [null, undefined, 7, -1, 2.5, "3"]) expect(S.childPlayGrade(bad), String(bad)).toBeNull();
+    expect(boot(null).cur()).toBeNull();
+    expect(boot(null, { grade: 4 }).cur()).toBe(4);
+    expect(S.playGrade({ grade: null }, null)).toBeNull();
+    expect(src).toContain("let SESSION_GRADE = childPlayGrade(CCS_CHILD_GRADE);");
+  });
+
+  it("change still works: a grade picked in the game is played and saved as today", () => {
+    const g = boot(3);
+    g.row()[3].onclick();
+    expect(g.cur()).toBe(4);
+    expect(g.save().grade).toBe(4);
+    expect(g.posts.filter((p) => p.ccsSave === "set").at(-1).data.grade).toBe(4);
+    expect(g.row().map((b) => b.attrs["aria-pressed"])).toEqual(["false", "false", "false", "true", "false"]);
+    expect(src).toContain('$("bChangeGrade").onclick = () => { G.startStep = "grade"; paintStart();');
   });
 });

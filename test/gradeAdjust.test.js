@@ -9,7 +9,8 @@ const SNIPPET_LINE = 'const CCS_CHILD_GRADE = (() => { try { const raw = window.
 const snippet = readFileSync(new URL("../assets/lib/childGrade.snippet.js", import.meta.url), "utf8");
 
 /** The games that start at the picked child's grade. Tasks 4 to 7 add each game file here. */
-const GAME_FILES = ["games/balloon-pop-math.html", "games/spelling-detective.html", "games/chrono-billiards.html", "games/echo-matrix.html", "games/word-quest.html", "games/maze-quest.html"];
+const GAME_FILES = ["games/balloon-pop-math.html", "games/spelling-detective.html", "games/chrono-billiards.html", "games/echo-matrix.html", "games/word-quest.html", "games/maze-quest.html",
+  "supabase/private-games/math-robot.html", "supabase/private-games/number-dash.html", "supabase/private-games/remote-lunar-salvage.html"];
 
 /** The text of one top-level function in index.html (plain or async), from its name to the closing brace at the start of a line. */
 function fn(name) {
@@ -88,6 +89,26 @@ describe("openGameStage", () => {
     expect((await opened(lesson, 3)).path).toBe(lesson.path);
     const outside = { id: "portal", title: "O", path: "https://example.org/games/x.html" };
     expect((await opened(outside, 3)).path).toBe(outside.path);
+  });
+});
+
+describe("Start over", () => {
+  it("keeps the grade: a private game's sealed code, with the grade script, is set again as it is", () => {
+    const src = index.replace(/\r\n/g, "\n");
+    const at = src.indexOf('  "game-reload": () => {');
+    const handler = src.slice(src.indexOf("() =>", at), src.indexOf("\n  },\n", at) + 4);
+    const srcdoc = withChildGrade("<!doctype html><html><head><script>start()</script></head><body></body></html>", 2);
+    const attrs = new Map([["srcdoc", srcdoc]]);
+    const sets = [];
+    const frame = {
+      src: "", hasAttribute: (n) => attrs.has(n), getAttribute: (n) => attrs.get(n),
+      setAttribute: (n, v) => { sets.push([n, v]); attrs.set(n, v); },
+      contentWindow: { location: { reload: () => sets.push(["reload"]) } },
+    };
+    const reload = new Function("$", "return (" + handler + ");")((sel) => (sel === "#gamestage-frame" ? frame : null));
+    reload();
+    expect(sets).toEqual([["srcdoc", srcdoc]]);
+    expect(attrs.get("srcdoc")).toContain("<script>window.CCS_GRADE=2;</script>");
   });
 });
 

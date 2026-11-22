@@ -109,6 +109,12 @@
   .who.is-on { border-color:var(--gold); background:rgba(34,84,166,.95); box-shadow:0 0 0 5px rgba(255,210,63,.16); }
   .who:hover, .who:focus-visible { transform:scale(1.06); border-color:var(--gold); outline:none; }
   #title .levels { grid-template-columns:repeat(7, minmax(0, 1fr)); gap:10px; }
+  /* a picked child's grade: "Playing at 2nd grade. Change" and a Start button in place of the grade row */
+  #title [hidden] { display:none; }
+  .grade-fixed { margin-top:18px; }
+  .grade-fixed__line { margin:0 0 16px; font-size:1.15rem; font-weight:800; color:var(--ink); }
+  .grade-fixed__change { appearance:none; background:none; border:0; padding:0; font:inherit; font-weight:900; color:var(--gold); text-decoration:underline; cursor:pointer; }
+  .grade-fixed__change:focus-visible { outline:2px solid var(--gold); outline-offset:3px; border-radius:4px; }
   @media (max-aspect-ratio: 11/10){ #title { place-items:end center; padding:24px 16px 28px; } #title .card { text-align:center; } .runners { justify-content:center; } #title .logo { font-size:clamp(2.4rem, 11vw, 4rem); } #title .levels { grid-template-columns:repeat(4, minmax(0, 1fr)); } }
   @media (max-width:760px){ .levels { grid-template-columns:repeat(4, minmax(0, 1fr)); } .keys { display:none; } }
   @media (max-height:520px){ .tag { margin:6px 0 12px; } .lvl { padding:10px 6px; font-size:1.25rem; } .ask { top:58px; padding:6px 20px 8px; } }
@@ -165,8 +171,9 @@
     <p class="tag">Grab coins. Pick the door that leaves you the most.</p>
     <p class="step">Who's running?</p>
     <div class="runners" id="runners"></div>
-    <p class="step">What grade are you in?</p>
+    <p class="step" id="levels-step">What grade are you in?</p>
     <div class="levels" id="levels"></div>
+    <div class="grade-fixed" id="grade-fixed" hidden><p class="grade-fixed__line"><span id="grade-fixed-text">Playing at Kindergarten. </span><button class="grade-fixed__change" type="button" data-act="grade-row">Change</button></p><button class="btn btn--go" type="button" id="grade-go" data-level="k">Start running</button></div>
   </div>
 </div>
 <div class="screen" id="paused">
@@ -188,6 +195,8 @@
 import * as THREE from "three";
 import { OutlineEffect } from "three/addons/effects/OutlineEffect.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+/* the picked child's grade, passed by the site (null when none): Math Runner has every grade, Kindergarten to 6th */
+const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSearchParams(location.search).get("grade"); const n = typeof raw === "number" ? raw : /^[0-6]$/.test(String(raw)) ? Number(raw) : NaN; return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null; } catch (_e) { return null; } })();
 
 /*LOGIC-START*/
 /* The rules of Math Runner: plain numbers, no drawing, so they can be tested on their own. */
@@ -314,6 +323,10 @@ function hitTest(item, runner){
   if (item.type === "wall") return "hit";
   return "pass";
 }
+/** The grade a run starts at: the picked child's grade (0 Kindergarten to 6), or Kindergarten when none is passed. */
+function startLevel(grade){ return grade === null ? "k" : LEVELS[Math.max(0, Math.min(grade, LEVELS.length - 1))].id; }
+/** The line in place of the title's grade row, for a picked child: "Playing at 2nd grade. " (then a Change button). */
+function playingAtText(levelId){ return "Playing at " + (LEVELS.find((l) => l.id === levelId) || LEVELS[0]).title + ". "; }
 /** How fast the track goes after this many meters: calm at first, then a little faster, up to a top speed.
     Kindergarten and 1st grade never speed up (owner, 2026-11-21): they keep the starting speed the whole run. */
 const STEADY_LEVELS = ["k", "g1"];
@@ -874,7 +887,7 @@ function rumble(strong, ms){
 const ROW_GAP = 12, SPAWN_Z = -96, GATE_EVERY = 6;
 const PACE = { k: 0.72, g1: 0.78, g2: 0.84, g3: 0.9, g4: 0.94, g5: 0.97, g6: 1 };   /* younger grades run calmer */
 const Game = {
-  mode: "title", level: "k", runner: "chike", rand: makeRng(Date.now() & 0xffff),
+  mode: "title", level: startLevel(CCS_CHILD_GRADE), runner: "chike", rand: makeRng(Date.now() & 0xffff),
   distance: 0, speed: 0, nextRowAt: 0, rowCount: 0, slowT: 0, boostT: 0, superMeter: SUPER.full, superOn: false, superHeld: false,
   coins: 0n, shown: 0n, hearts: 3, streak: 0, right: 0, asked: 0, gate: null, best: {}, bestBefore: 0n
 };
@@ -1192,7 +1205,16 @@ function buildLevels(){
   $("runners").innerHTML = Object.entries(LOOKS).map(([id, L]) => '<button class="who' + (id === Game.runner ? " is-on" : "") + '" data-runner="' + id + '" aria-pressed="' + (id === Game.runner) + '">'
     + '<img class="who__face" src="/assets/characters/' + (FACES[id] || id) + '-thumb.jpg" alt="" width="40" height="40" style="background:#' + L.shirt.toString(16).padStart(6, "0") + '">' + L.name + '</button>').join("");
   $("levels").innerHTML = gradeButtons(false);
-  paintGrades();
+  paintGrades(); paintGradeRow();
+}
+/* a picked child's grade: the title says "Playing at 2nd grade. Change" with a Start button in place of the grade
+   row; Change shows the row again (for this visit). With no grade passed, the row shows as always. */
+let gradeRowOpen = CCS_CHILD_GRADE === null;
+function paintGradeRow(){
+  $("levels-step").hidden = !gradeRowOpen; $("levels").hidden = !gradeRowOpen; $("grade-fixed").hidden = gradeRowOpen;
+  if (gradeRowOpen) return;
+  $("grade-fixed-text").textContent = playingAtText(Game.level);
+  $("grade-go").dataset.level = Game.level;
 }
 function gradeButtons(mark){
   return LEVELS.map((l) => '<button class="lvl' + (mark && l.id === Game.level ? " is-on" : "") + '" data-level="' + l.id + '" aria-label="' + l.title + '"' + (mark && l.id === Game.level ? ' aria-current="true"' : "") + '>' + l.short
@@ -1211,7 +1233,7 @@ function paintGrades(){
   const l = LEVELS.find((x) => x.id === Game.level) || LEVELS[0];
   $("grade-name").textContent = l.title;
 }
-function menuButtons(){ const s = document.querySelector(".screen.is-on"); return s ? [...s.querySelectorAll("button")] : []; }
+function menuButtons(){ const s = document.querySelector(".screen.is-on"); return s ? [...s.querySelectorAll("button")].filter((b) => !b.closest("[hidden]")) : []; }
 function focusFirst(id){ const b = document.querySelector("#" + id + " .who.is-on") || document.querySelector("#" + id + " button"); if (b) setTimeout(() => b.focus({ preventScroll: true }), 50); }   /* on the title, start on the kid already picked */
 function menuKey(code){
   const bs = menuButtons(); if (!bs.length) return false;
@@ -1237,6 +1259,7 @@ document.addEventListener("click", (e) => {
   if (a === "resume") resume();
   if (a === "again") startRun(Game.level);
   if (a === "quit") toTitle();
+  if (a === "grade-row"){ gradeRowOpen = true; paintGradeRow(); const cur = document.querySelector('#levels [data-level="' + Game.level + '"]'); if (cur) setTimeout(() => cur.focus({ preventScroll: true }), 60); }
   if (a === "grade"){ pause(); const cur = document.querySelector("#pause-levels .is-on"); if (cur) setTimeout(() => cur.focus({ preventScroll: true }), 60); }
   if (a === "sound"){ Sfx.on = !Sfx.on; b.textContent = Sfx.on ? "Sound on" : "Sound off"; }
 });

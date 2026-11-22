@@ -109,7 +109,7 @@ describe("Field Notes: Back to the mission is always in reach (owner, 2026-11-16
 describe("Enter, Space and a controller's A button follow the two steps", () => {
   it("press Next on the grade step and Start on the world step, never skipping the worlds", () => {
     const sp = fn("startPress");
-    expect(sp).toContain('if (!$("stepGrade").hidden){ if (SAVE.grade) $("bNext").click(); else askGrade(); return; }');
+    expect(sp).toContain('if (!$("stepGrade").hidden){ if (curGrade()) $("bNext").click(); else askGrade(); return; }');
     expect(sp).toContain("startGame();");
     expect(game).toContain('if (!G.started) { if (k === "Enter" || k === "Space") startPress(); return; }');
     expect(game).toContain("} else if (!G.started && edge(0)) startPress();");

@@ -244,11 +244,16 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
 (function(){
   var $ = function(id){ return document.getElementById(id); };
   var reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  /* the picked child's grade, passed by the site (null when none): the buddy teaches Kindergarten to 5th grade, so a 6th grader plays 5th */
+  const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSearchParams(location.search).get("grade"); const n = typeof raw === "number" ? raw : /^[0-6]$/.test(String(raw)) ? Number(raw) : NaN; return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null; } catch (_e) { return null; } })();
+  var CHILD_GRADE = CCS_CHILD_GRADE === null ? null : Math.min(CCS_CHILD_GRADE, 5);
 
   /* ---------------- memory: only on this computer, and fine without it ---------------- */
   var KEY = "robo-math-buddy";
   var mem = { name:"", grade:null, botName:"", right:0, highFives:0 };
   try { var saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved) for (var k in mem) if (k in saved) mem[k] = saved[k]; } catch(e) {}
+  /* with the child's grade the chat never asks it (it still asks the name); "grade 3" in the chat still changes it */
+  if (CHILD_GRADE !== null) mem.grade = CHILD_GRADE;
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(mem)); } catch(e) { /* saving not allowed here: remember until the page closes */ } }
 
   var state = { phase: mem.name ? (mem.grade === null ? "askGrade" : "chat") : "askName", awaitBotName:false, pending:"", q:null, quiz:false, streak:0, wantFive:false, voice:false };
@@ -883,6 +888,14 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
 
   /* the robot never starts quizzing on its own: it asks what the kid would like to do */
   var ASK_MENU = "What would you like to do? Do you have a question for me, or would you like help with your homework? I can also quiz you!";
+  /* the name and grade are known: the chat starts */
+  function startChat(prefix){
+    state.phase = "chat"; mood("happy", 2.2);
+    var later = new Date().getHours() >= 12;              /* the afternoon and evening greetings ask how the kid is */
+    state.pending = later ? "howAreYou" : "";
+    showOnBoard("Hi, " + mem.name + "!", ["Ask me a math question,", "or get homework help."]);
+    say(prefix + greeting() + (later ? "" : " " + ASK_MENU));
+  }
   function answerText(q){ return q.answerText || fmt(q.answer); }
   function startQuiz(prefix){ state.quiz = true; state.pending = ""; mood("excited", 1.6); askQuestion(prefix); }
   function stopQuiz(){ state.quiz = false; state.q = null; state.streak = 0; state.pending = ""; showOnBoard("ROBO MATH", ["Ask me math!", "Like: 12 times 8", "or: 15 plus 27"]); }
@@ -928,6 +941,7 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
       if (/^(hi|hello|hey|yo|good (morning|afternoon|evening))[!. ]*$/.test(t)){ robot.wave = 2.5; mood("happy", 2); say("Hi! What's your first name or a nickname?"); return; }
       var nm = cleanName(text);
       if (!nm){ mood("confused", 2); say("Hmm, what should I call you? Tell me your first name or a nickname."); return; }
+      if (mem.grade !== null){ mem.name = nm; save(); scores(); startChat("Nice to meet you, " + nm + "! "); return; }   /* the site passed the child's grade */
       mem.name = nm; save(); state.phase = "askGrade"; scores(); mood("happy", 2.5);
       showOnBoard("Hello, " + nm + "!", ["What grade are you in?", "K, 1, 2, 3, 4 or 5"]);
       say("Nice to meet you, " + nm + "! What grade are you in? You can say Kindergarten, or 1st to 5th grade.");
@@ -936,11 +950,8 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
     if (state.phase === "askGrade"){
       var g = readGrade(text);
       if (g === null){ mood("confused", 2); say("I didn't catch that. What grade are you in? Kindergarten, or 1st to 5th grade?"); return; }
-      mem.grade = g; save(); state.phase = "chat"; scores(); mood("happy", 2.2);
-      var later = new Date().getHours() >= 12;              /* the afternoon and evening greetings ask how the kid is */
-      state.pending = later ? "howAreYou" : "";
-      showOnBoard("Hi, " + mem.name + "!", ["Ask me a math question,", "or get homework help."]);
-      say(GRADES[g] + "! Got it. " + greeting() + (later ? "" : " " + ASK_MENU));
+      mem.grade = g; save(); scores();
+      startChat(GRADES[g] + "! Got it. ");
       return;
     }
 
@@ -1545,7 +1556,7 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
   $("sureNo").addEventListener("click", function(){ $("sure").style.display = "none"; });
   $("sureYes").addEventListener("click", function(){
     $("sure").style.display = "none";
-    mem = { name:"", grade:null, botName:"", right:0, highFives:0 };
+    mem = { name:"", grade:CHILD_GRADE, botName:"", right:0, highFives:0 };   /* the child's grade (if passed) stays */
     try { localStorage.removeItem(KEY); } catch(e) {}
     state = { phase:"askName", awaitBotName:false, pending:"", q:null, quiz:false, streak:0, wantFive:false, voice:state.voice };
     $("hint").style.display = "none"; scores();
