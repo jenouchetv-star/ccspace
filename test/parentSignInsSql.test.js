@@ -176,3 +176,11 @@ describe("parent-sign-ins.sql: member_activity outlives sessions", () => {
     }
   });
 });
+
+describe("recording never blocks a sign-in (review hardening, 2026-11-21)", () => {
+  it("both trigger functions swallow their own errors", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../supabase/parent-sign-ins.sql", import.meta.url), "utf8");
+    expect(src.match(/exception when others then/g).length).toBe(2);
+  });
+});

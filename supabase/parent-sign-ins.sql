@@ -42,6 +42,9 @@ begin
   on conflict (subscriber_id) do update
     set last_sign_in = greatest(public.member_activity.last_sign_in, excluded.last_sign_in);
   return null;
+exception when others then
+  -- recording is a nice-to-have: a sign-in must never fail because of it
+  return null;
 end;
 $$;
 revoke all on function public.member_activity_on_sign_in() from public, anon, authenticated;
@@ -59,6 +62,8 @@ begin
   where exists (select 1 from public.subscribers s where s.id = new.subscriber_id)
   on conflict (subscriber_id) do update
     set last_seen = greatest(public.member_activity.last_seen, excluded.last_seen);
+  return null;
+exception when others then
   return null;
 end;
 $$;
