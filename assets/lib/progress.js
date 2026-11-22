@@ -172,6 +172,40 @@ export function grownUpQuestion(rand) {
   return { a, b, answer: a * b };
 }
 
+/* ---- answers from the site's games (Solar System Sandbox's tours, ...) ---- */
+
+const GAME_ID = /^[a-z0-9-]{1,40}$/;
+const ANSWER_LEVELS = ["k1", "g23", "g45"];
+const ANSWER_CAP = { question: 300, answer: 200, why: 400 };
+
+/** A game's answer, read from a message it posted ({ ccsAnswer: { game, qid, subject, level, correct, question, answer,
+    why } }), in the shape kid-progress's game_answer takes; null when it is not one. Who sent it is checked by the page
+    (only its own game stage frame counts). */
+export function answerFromMessage(data) {
+  const a = data && typeof data === "object" ? data.ccsAnswer : null;
+  if (!a || typeof a !== "object" || Array.isArray(a)) return null;
+  const str = (v, n) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, n) : "");
+  const game = typeof a.game === "string" ? a.game : "", qid = typeof a.qid === "string" ? a.qid : "";
+  if (!GAME_ID.test(game) || game === "pop-quiz" || !GAME_ID.test(qid)) return null;
+  if (!STEAMM_SUBJECTS.some((s) => s.id === a.subject) || !ANSWER_LEVELS.includes(a.level) || typeof a.correct !== "boolean") return null;
+  if (a.why !== undefined && a.why !== null && typeof a.why !== "string") return null;
+  const question = str(a.question, ANSWER_CAP.question), answer = str(a.answer, ANSWER_CAP.answer);
+  if (!question || !answer) return null;
+  return { game, qid, subject: a.subject, level: a.level, correct: a.correct, question, answer, why: str(a.why, ANSWER_CAP.why) };
+}
+
+/** A STEAMM subject's level from the child's answers over the last 8 weeks (owner): none asked, null; fewer than 5 or
+    under half right, "Getting started"; half to under 80%, "Growing"; 80% or more of at least 5, "Strong". The parent
+    sees only the word, never a number. */
+export function subjectLevel(counts) {
+  const asked = Number(counts && counts.asked) || 0;
+  const right = Number(counts && counts.right) || 0;
+  if (asked <= 0) return null;
+  const share = right / asked;
+  if (asked < 5 || share < 0.5) return "Getting started";
+  return share < 0.8 ? "Growing" : "Strong";
+}
+
 const DAY = 24 * 60 * 60 * 1000;
 
 function imgOf(kind, rec) {
@@ -184,8 +218,10 @@ function imgOf(kind, rec) {
 
 /** Everything the grown-up report shows, worked out from what the server
     returned and the site's own content. Items that can no longer be found
-    (unpublished, deleted) are quietly left out. */
-export function buildReport({ progress, nuggets, lessons, subjects, quizzes, content, childName, now }) {
+    (unpublished, deleted) are quietly left out. answers is what the report action
+    returned for the games' answers: levels gives a level word only to the subjects
+    with answers, and toGoOver the 5 newest missed questions. */
+export function buildReport({ progress, nuggets, lessons, subjects, quizzes, answers, content, childName, now }) {
   const nowMs = new Date(now).getTime();
   const status = {};
   (nuggets || []).forEach((n) => { status[n.nugget_id] = n; });
@@ -246,10 +282,22 @@ export function buildReport({ progress, nuggets, lessons, subjects, quizzes, con
     .slice(0, 5)
     .map((q) => ({ date: q.started_at, right: q.right_count, asked: q.asked }));
 
+  const ans = answers && typeof answers === "object" ? answers : {};
+  const counted = ans.bySubject && typeof ans.bySubject === "object" ? ans.bySubject : {};
+  const levels = {};
+  STEAMM_SUBJECTS.forEach((s) => {
+    const level = Object.prototype.hasOwnProperty.call(counted, s.id) ? subjectLevel(counted[s.id]) : null;
+    if (level) levels[s.id] = level;
+  });
+  const toGoOver = (Array.isArray(ans.missed) ? ans.missed : [])
+    .filter((m) => m && clean(m.question) && clean(m.answer))
+    .slice(0, 5)
+    .map((m) => ({ game: clean(m.game), question: clean(m.question), answer: clean(m.answer), why: clean(m.why), at: m.at }));
+
   return {
     week: weekItems.map((x) => x.item),
     allTime: items.map((x) => x.item),
-    facts, talk, quizzes: quizList, bySubject, weekSubjects,
+    facts, talk, quizzes: quizList, bySubject, weekSubjects, levels, toGoOver,
   };
 }
 

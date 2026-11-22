@@ -5,6 +5,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   recordTarget, quizBubbleAllowed, GRADE_LABELS, gradeLabel, STEAMM_SUBJECTS, nuggetsFor, parseNuggetId, subjectFromTopic,
+  answerFromMessage, buildReport,
 } from "../assets/lib/progress.js";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -428,6 +429,112 @@ describe("who's playing, and recording what a child finishes", () => {
 
   it("no em dashes and no he/she in the who's playing copy", () => {
     const code = ["progressWhoHTML", "progressChipHTML", "progressMadeInner", "progressRecord"].map(body).join("\n") + action("progress-made");
+    expect(code.includes("—")).toBe(false);
+    const words = (code.match(/'[^']*'|"[^"]*"/g) || []).join(" ");
+    expect(words).not.toMatch(/\b(he|she|her|hers|his|him)\b/i);
+  });
+});
+
+describe("answers from the site's games, and the report's levels", () => {
+  const ANSWER = { game: "solar-system-sandbox", qid: "sun-1", subject: "science", level: "g23", correct: false,
+    question: "What is the Sun?", answer: "A star", why: "It is the star closest to Earth." };
+  /* progressGameAnswer built with pretend parts: the game stage frame, who's signed in and playing, and kid-progress */
+  const answerer = ({ session = "tok", playing = "c1", kids = KIDS, reply = { ok: true }, frameWin } = {}) => {
+    const win = frameWin === undefined ? { name: "game stage" } : frameWin;
+    const calls = { kid: [], ended: [] };
+    const S = { children: kids, reports: { c1: { ok: true }, c2: { ok: true } } };
+    const doc = { getElementById: (id) => (id === "gamestage-frame" ? { contentWindow: win } : null) };
+    const send = fn("progressGameAnswer", "document", "answerFromMessage", "portalSavedSession", "progressKids", "recordTarget",
+      "progressPlaying", "kidCall", "progressSessionEnded", "ProgressState", "async ")(
+      doc, answerFromMessage, () => session, async () => (session ? kids : []), recordTarget, () => playing,
+      async (action, extra) => { calls.kid.push([action, extra]); return reply; },
+      (r) => { calls.ended.push(r); return !!r && r.error === "no_session"; }, S);
+    return { send, calls, S, win };
+  };
+
+  it("answers only from the game stage frame", async () => {
+    const t = answerer();
+    await t.send({ source: { name: "some other frame" }, data: { ccsAnswer: ANSWER } });
+    await t.send({ source: null, data: { ccsAnswer: ANSWER } });
+    expect(t.calls.kid).toEqual([]);
+    await t.send({ source: t.win, data: { ccsAnswer: { ...ANSWER, subject: "history" } } });   // not a real answer
+    expect(t.calls.kid).toEqual([]);
+    await t.send({ source: t.win, data: { ccsAnswer: ANSWER } });
+    expect(t.calls.kid).toEqual([["game_answer", { child: "c1", ...ANSWER }]]);
+    const empty = answerer({ frameWin: null });                              // a stage with no page in it yet
+    await empty.send({ source: null, data: { ccsAnswer: ANSWER } });
+    expect(empty.calls.kid).toEqual([]);
+    const b = body("progressGameAnswer");
+    expect(b.indexOf("ev.source !== frame.contentWindow")).toBeLessThan(b.indexOf("kidCall("));
+    expect(html).toContain('window.addEventListener("message", (ev) => { progressGameAnswer(ev); });');
+  });
+
+  it("only for a picked child", async () => {
+    for (const [session, playing] of [["", "c1"], ["tok", "grownup"], ["tok", ""], ["tok", "someone-removed"]]) {
+      const t = answerer({ session, playing });
+      await t.send({ source: t.win, data: { ccsAnswer: ANSWER } });
+      expect(t.calls.kid).toEqual([]);
+    }
+    expect(body("progressGameAnswer")).not.toContain("openWhoIsPlaying");   // an answer never opens the picker
+    const leo = answerer({ playing: "c2" });
+    await leo.send({ source: leo.win, data: { ccsAnswer: { ...ANSWER, correct: true } } });
+    expect(leo.calls.kid).toEqual([["game_answer", { child: "c2", ...ANSWER, correct: true }]]);
+    expect(leo.S.reports.c2).toBeUndefined();                                // the report reads the answers again
+    expect(leo.S.reports.c1).toEqual({ ok: true });
+    const out = answerer({ reply: { ok: false, error: "no_session" } });
+    await out.send({ source: out.win, data: { ccsAnswer: ANSWER } });
+    expect(out.calls.ended).toEqual([{ ok: false, error: "no_session" }]);   // signed out the usual way
+    expect(out.S.reports.c1).toEqual({ ok: true });
+  });
+
+  /* the report drawn with pretend parts and the real buildReport */
+  const report = (answers) => {
+    const S = { children: KIDS, reportFor: "c1", span: "all", reports: { c1: {
+      ok: true, progress: [{ kind: "episode", item_id: "v1", first_at: "2026-11-20T10:00:00Z", last_at: "2026-11-20T10:00:00Z", times: 1 }],
+      nuggets: [], lessons: [], subjects: { "episode:v1:discovery": "engineering" }, quizzes: [], answers } }, reportLoading: {} };
+    const videos = { v1: { id: "v1", title: "Bridges", learning: "Triangles are strong.", moral: "" } };
+    return fn("progressReportHTML", "ProgressState", "E", "ic", "progressRange", "progressLoadReport", "progressSkeleton", "progressContent",
+      "buildReport", "parseNuggetId", "progressAnd", "progressWhen", "progressSubjectLabel", "thumbSrc", "STEAMM_ICONS")(
+      S, esc, () => "", () => "", () => {}, () => "", () => ({ find: (k, id) => (k === "episode" ? videos[id] : null) || null }),
+      buildReport, parseNuggetId, (l) => l.join(" and "), () => "Friday", (id) => (STEAMM_SUBJECTS.find((s) => s.id === id) || {}).label || "",
+      (s) => s, {})();
+  };
+  const subjectsOf = (h) => h.split('<ul class="pr-subjects"')[1].split("</ul>")[0];
+
+  it("subjects with no answers show no level", () => {
+    const none = report(undefined);
+    expect(none).not.toContain("pr-level");
+    expect(none).not.toMatch(/Getting started|Growing|Strong/);
+    const h = report({ bySubject: { science: { asked: 6, right: 4 } }, missed: [] });
+    const items = subjectsOf(h).split("<li").slice(1);
+    expect(items[0]).toContain("<b>Science</b>");
+    expect(items[0]).toContain('<span class="pr-level">Growing</span>');
+    expect(items[0]).not.toContain("pr-none");                             // answered, so not greyed out
+    expect(items[0]).not.toContain("nothing yet");
+    expect(items[2]).toContain("<b>Engineering</b><span>1 thing");           // the counts stay as they were
+    for (const i of [1, 2, 3, 4, 5]) expect(items[i]).not.toContain("pr-level");
+    expect(h).not.toMatch(/\d+ ?%|4 of 6|out of/);                         // a word, never a number
+  });
+
+  it("questions to go over", () => {
+    expect(report({ bySubject: {}, missed: [] })).not.toContain("Questions to go over");
+    const missed = [1, 2, 3, 4, 5, 6, 7].map((n) => ({ game: "solar-system-sandbox", question: "Question " + n + "?", answer: "Answer " + n, why: "Why " + n, at: "2026-11-1" + n + "T10:00:00Z" }));
+    missed[0] = { ...missed[0], question: "<img src=x onerror=alert(1)>Which?", answer: "<b>Mars</b>", why: "<script>x</script>" };
+    const h = report({ bySubject: { science: { asked: 7, right: 0 } }, missed });
+    const learned = h.split('box--learned')[1].split("</section>")[0];
+    expect(learned).toContain('<h3 class="pr-quiz-title">Questions to go over</h3>');
+    expect(learned.indexOf("pr-learned")).toBeLessThan(learned.indexOf("Questions to go over"));   // below the facts
+    const list = learned.split('<ul class="pr-goover">')[1].split("</ul>")[0];
+    expect(list.split("<li>").length - 1).toBe(5);
+    expect(list).toContain("<span>The answer: Answer 2</span><p>Why 2</p>");
+    expect(list).not.toContain("Question 6?");
+    expect(list).not.toMatch(/<img|<script|<b>Mars/);                        // what a browser sent is only shown escaped
+    expect(list).toContain("&lt;img src=x onerror=alert(1)&gt;Which?");
+    expect(h.split("box--").length - 1).toBe(3);                            // no new box
+  });
+
+  it("no em dashes and no he/she in the new copy", () => {
+    const code = body("progressGameAnswer") + body("progressReportHTML");
     expect(code.includes("—")).toBe(false);
     const words = (code.match(/'[^']*'|"[^"]*"/g) || []).join(" ");
     expect(words).not.toMatch(/\b(he|she|her|hers|his|him)\b/i);

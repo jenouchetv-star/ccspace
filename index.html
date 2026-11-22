@@ -4524,6 +4524,13 @@ body.portal-locked{ overflow:hidden; }
 .pr-subjects b{ display:block; font-size:.98rem; line-height:1.2; }
 .pr-subjects span{ display:block; font-size:.82rem; font-weight:700; color:var(--ink-mute); line-height:1.35; margin-top:2px; }
 .pr-subjects .pr-none{ opacity:.45; }
+.pr-subjects .pr-level{ margin-top:6px; color:var(--leaf-deep); font-weight:800; }
+.pr-goover{ list-style:none; margin:0; padding:0; }
+.pr-goover li{ padding:14px 0; border-top:2px solid rgba(47,107,44,.25); }
+.pr-goover li:last-child{ border-bottom:2px solid rgba(47,107,44,.25); }
+.pr-goover b{ display:block; font-size:1.08rem; line-height:1.35; }
+.pr-goover span{ display:block; margin-top:4px; font-weight:800; color:var(--leaf-deep); }
+.pr-goover p{ margin:4px 0 0; color:var(--ink-soft); max-width:64ch; }
 .pr-learned{ list-style:none; margin:0; padding:0; }
 .pr-learned li{ display:grid; grid-template-columns:30px minmax(0,1fr); gap:4px 14px; padding:18px 0; border-top:2px solid rgba(47,107,44,.25); }
 .pr-learned li:last-child{ border-bottom:2px solid rgba(47,107,44,.25); }
@@ -15504,7 +15511,7 @@ function progressReportHTML(){
 
   const content = progressContent();
   const rep = buildReport({ progress: raw.progress, nuggets: raw.nuggets, lessons: raw.lessons, subjects: raw.subjects,
-    quizzes: raw.quizzes, content: content, childName: child.name, now: nowMs });
+    quizzes: raw.quizzes, answers: raw.answers, content: content, childName: child.name, now: nowMs });
   const items = week ? rep.week : rep.allTime;
   /* what belongs to the days shown: an item is known by its recorded id and by its record's own id */
   const inSpan = new Set();
@@ -15557,16 +15564,32 @@ function progressReportHTML(){
     + '</div>';
   const small = '<p class="pr-small">Only you can see this. It shows what ' + name + ' did on this site while you were signed in on '
     + name + '’s device. Remove ' + name + ' under Your children and everything kept for ' + name + ' is deleted.</p>';
-  if (!rep.allTime.length) return top + boxWeek + small;
+  const answered = Object.keys(rep.levels).length > 0 || rep.toGoOver.length > 0;
+  if (!rep.allTime.length && !answered) return top + boxWeek + small;
 
   /* ---- 2. what they learned: the six STEAMM subjects so far, then the things themselves ---- */
+  /* a subject the child answered game questions in also shows its level word (subjectLevel in progress.js), never a
+     number; a subject with no answers shows none */
   const subjects = '<ul class="pr-subjects" aria-label="What ' + name + ' learned, by STEAMM subject">'
-    + rep.bySubject.map(s => '<li' + (s.met ? "" : ' class="pr-none"') + '>' + (STEAMM_ICONS[s.label] || "")
-      + '<b>' + E(s.label) + '</b><span>'
-      + (!s.met ? "nothing yet"
-        : s.met + (s.met === 1 ? " thing" : " things") + '<br>' + (s.knows ? "knows " + s.knows : "came across " + (s.met === 1 ? "it" : "them")))
-      + '</span></li>').join("")
+    + rep.bySubject.map(s => {
+      const level = rep.levels[s.id] || "";
+      const counts = s.met ? s.met + (s.met === 1 ? " thing" : " things") + '<br>' + (s.knows ? "knows " + s.knows : "came across " + (s.met === 1 ? "it" : "them"))
+        : level ? "" : "nothing yet";
+      return '<li' + (s.met || level ? "" : ' class="pr-none"') + '>' + (STEAMM_ICONS[s.label] || "")
+        + '<b>' + E(s.label) + '</b>'
+        + (counts ? '<span>' + counts + '</span>' : "")
+        + (level ? '<span class="pr-level">' + E(level) + '</span>' : "")
+        + '</li>';
+    }).join("")
     + '</ul>';
+  /* the newest questions the child missed in a game or Chike's quiz, with the right answer and why: text the child's
+     browser sent, so only ever shown escaped */
+  const goOver = rep.toGoOver.length
+    ? '<h3 class="pr-quiz-title">Questions to go over</h3><ul class="pr-goover">'
+      + rep.toGoOver.map(m => '<li><b>' + E(m.question) + '</b><span>The answer: ' + E(m.answer) + '</span>'
+        + (m.why ? '<p>' + E(m.why) + '</p>' : "") + '</li>').join("")
+      + '</ul>'
+    : "";
   const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
   const factLi = f => {
     const from = titles[f.kind + ":" + f.itemId] || "";
@@ -15589,6 +15612,7 @@ function progressReportHTML(){
     + (shown.length ? '<ul class="pr-learned">' + shown.map(factLi).join("") + '</ul>'
       + (facts.length > shown.length ? '<p class="pr-small">And ' + (facts.length - shown.length) + ' more.</p>' : "")
       : '<p class="pr-small">' + (week ? "Nothing new to know this week." : "Nothing to know yet.") + '</p>')
+    + goOver
     + '</div></section>';
 
   /* ---- 3. what to ask them, and Chike's quizzes ---- */
@@ -15978,6 +16002,25 @@ window.addEventListener("message", (ev) => {
   PROGRESS_BOOK_FRAME = frame;
   progressRecord("book", id);
 });
+/** An answer a game in the game stage sent (Solar System Sandbox's tours, ...): kept for the picked child, for the
+    report's subject levels and "Questions to go over". Only the game stage frame counts (a private game runs there from
+    srcdoc, origin "null", so who sent it is checked, not the origin); the payload is checked by answerFromMessage
+    (assets/lib/progress.js). Visitors, the grown-up and a device with nobody picked yet send nothing, and the picker is
+    never opened for an answer. */
+async function progressGameAnswer(ev){
+  const frame = document.getElementById("gamestage-frame");
+  if (!ev || !frame || !frame.contentWindow || ev.source !== frame.contentWindow) return;
+  const a = typeof answerFromMessage === "function" ? answerFromMessage(ev.data) : null;
+  if (!a || !portalSavedSession()) return;
+  const kids = await progressKids();
+  const target = recordTarget(!!portalSavedSession(), progressPlaying(), kids);
+  if (!target || target === "ask") return;
+  const r = await kidCall("game_answer", Object.assign({ child: target }, a));
+  if (progressSessionEnded(r)) return;
+  /* the report reads the answers again the next time it is drawn */
+  if (r && r.ok) delete ProgressState.reports[target];
+}
+window.addEventListener("message", (ev) => { progressGameAnswer(ev); });
 
 /* ---- Chike's pop quiz ----
    Once a week, on a list page only (quizBubbleAllowed), Chike offers the child who's creating 3 quick questions about

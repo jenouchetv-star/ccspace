@@ -5,6 +5,7 @@ import {
   nuggetsFor, recordTarget, watchedEnough, doneFromMessage, grownUpQuestion,
   buildReport, QUIZ_ROUTES, quizBubbleAllowed, questionDraftMessages, parseQuestionDraft,
   gradeAges, activityFitsGrade, difficultyDistance, findAgeForGrade, childGradeFrom, withChildGrade,
+  subjectLevel, answerFromMessage,
 } from "../assets/lib/progress.js";
 
 const NOW = new Date("2026-11-21T12:00:00Z");
@@ -187,6 +188,54 @@ describe("buildReport", () => {
     const r = buildReport({ ...base, content: c, progress: [
       { kind: "entry", item_id: "x", last_at: daysAgo(1) }, { kind: "activity", item_id: "y", last_at: daysAgo(2) } ] });
     expect(r.week.map((i) => i.img)).toEqual(["s.jpg", "o.jpg"]);
+  });
+  it("subjects with no answers show no level", () => {
+    const none = buildReport(base);
+    expect(none.levels).toEqual({});
+    expect(none.toGoOver).toEqual([]);
+    const r = buildReport({ ...base, answers: { bySubject: { science: { asked: 5, right: 4 }, math: { asked: 0, right: 0 }, bogus: { asked: 9, right: 9 } }, missed: [] } });
+    expect(r.levels).toEqual({ science: "Strong" });
+    expect(r.bySubject[0]).toEqual({ id: "science", label: "Science", met: 0, knows: 0 });   // the counts are unchanged
+  });
+  it("questions to go over: the 5 newest missed, as the server sent them", () => {
+    const missed = [1, 2, 3, 4, 5, 6].map((d) => ({ game: "solar-system-sandbox", question: "Q" + d + "?", answer: "A" + d, why: d === 1 ? "" : "Why " + d, at: daysAgo(d) }));
+    missed.splice(2, 0, { game: "x", question: "", answer: "A", why: "", at: daysAgo(2) });   // not a question: left out
+    const r = buildReport({ ...base, answers: { bySubject: {}, missed } });
+    expect(r.toGoOver.map((m) => m.question)).toEqual(["Q1?", "Q2?", "Q3?", "Q4?", "Q5?"]);
+    expect(r.toGoOver[0]).toEqual({ game: "solar-system-sandbox", question: "Q1?", answer: "A1", why: "", at: daysAgo(1) });
+    expect(buildReport({ ...base, answers: null }).toGoOver).toEqual([]);
+  });
+});
+
+describe("answers from the site's games", () => {
+  it("subjectLevel cut-offs", () => {
+    expect(subjectLevel({ asked: 0, right: 0 })).toBe(null);
+    expect(subjectLevel(undefined)).toBe(null);
+    expect(subjectLevel({ asked: 4, right: 4 })).toBe("Getting started");      // fewer than 5 answers
+    expect(subjectLevel({ asked: 5, right: 2 })).toBe("Getting started");      // under half right
+    expect(subjectLevel({ asked: 10, right: 5 })).toBe("Growing");             // half
+    expect(subjectLevel({ asked: 5, right: 3 })).toBe("Growing");
+    expect(subjectLevel({ asked: 10, right: 7 })).toBe("Growing");
+    expect(subjectLevel({ asked: 5, right: 4 })).toBe("Strong");               // 80%
+    expect(subjectLevel({ asked: 20, right: 20 })).toBe("Strong");
+  });
+
+  const good = { game: "solar-system-sandbox", qid: "sun-1", subject: "science", level: "g23", correct: false,
+    question: "What is the Sun?", answer: "A star", why: "The Sun is the star closest to Earth." };
+  it("reads a game's answer in the shape game_answer takes", () => {
+    expect(answerFromMessage({ ccsAnswer: good })).toEqual(good);
+    expect(answerFromMessage({ ccsAnswer: { ...good, why: undefined } }).why).toBe("");
+    expect(answerFromMessage({ ccsAnswer: { ...good, question: "  What   is\nthe Sun? " } }).question).toBe("What is the Sun?");
+    expect(answerFromMessage({ ccsAnswer: { ...good, question: "x".repeat(500) } }).question).toHaveLength(300);
+    expect(Object.keys(answerFromMessage({ ccsAnswer: { ...good, extra: "<b>" } }))).not.toContain("extra");
+  });
+  it("turns away anything that is not one", () => {
+    for (const bad of [null, "text", {}, { ccsAnswer: null }, { ccsAnswer: [good] },
+      { ccsAnswer: { ...good, game: "Bad Game" } }, { ccsAnswer: { ...good, game: "pop-quiz" } }, { ccsAnswer: { ...good, qid: "" } },
+      { ccsAnswer: { ...good, subject: "history" } }, { ccsAnswer: { ...good, level: "g46" } }, { ccsAnswer: { ...good, correct: "yes" } },
+      { ccsAnswer: { ...good, question: "  " } }, { ccsAnswer: { ...good, answer: 4 } }, { ccsAnswer: { ...good, why: 3 } }]) {
+      expect(answerFromMessage(bad)).toBe(null);
+    }
   });
 });
 
