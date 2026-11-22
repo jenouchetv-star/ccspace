@@ -187,7 +187,8 @@ describe("compact cards on Watch, Read and Create", () => {
     expect(index).toContain(".grid--compact .card__media, .grid--compact .ep__thumb{ aspect-ratio:16/9; }");
     expect(index).toContain("-webkit-line-clamp:2;");
     expect(index).toContain(`'<div class="grid ep-grid grid--compact">' + pageEps.map(v => episodeRow(v))`);
-    expect(fn("viewStories")).toContain('<div class="grid g-3 grid--compact">');
+    // books add grid--books, which shows the whole description (test/bookCards.test.js)
+    expect(fn("viewStories")).toContain('<div class="grid g-3 grid--compact grid--books">');
     expect(fn("viewCreate")).toContain('<div class="grid g-3 grid--compact">');
   });
 });
