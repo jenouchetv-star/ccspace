@@ -582,4 +582,41 @@ describe("kid-progress function", () => {
     // each question says its STEAMM subject, for the label under it on the quiz card ("" when it has none)
     expect(leo.questions.map((q) => q.subject)).toEqual(["science", "", "science"]);
   });
+
+  describe("seen", () => {
+    const sessionRow = async (hash) => table("portal_sessions").find((s) => s.token_hash === hash);
+    let hashA;
+    beforeEach(async () => { hashA = await sha(TOKEN_A); });
+
+    it("sets last_seen_at on that session's row only", async () => {
+      at("2026-11-21T12:00:00.000Z");
+      expect(await a("seen")).toMatchObject({ status: 200, ok: true });
+      expect((await sessionRow(hashA)).last_seen_at).toBe("2026-11-21T12:00:00.000Z");
+      // the member's other session and other members' sessions are untouched
+      for (const s of table("portal_sessions").filter((r) => r.token_hash !== hashA)) expect(s.last_seen_at).toBeUndefined();
+    });
+
+    it("does not write again within 60 seconds", async () => {
+      at("2026-11-21T12:00:00.000Z");
+      await a("seen");
+      at("2026-11-21T12:00:59.000Z");
+      expect(await a("seen")).toMatchObject({ ok: true });
+      expect((await sessionRow(hashA)).last_seen_at).toBe("2026-11-21T12:00:00.000Z");
+    });
+
+    it("writes again once 60 seconds have passed", async () => {
+      at("2026-11-21T12:00:00.000Z");
+      await a("seen");
+      at("2026-11-21T12:01:00.000Z");
+      expect(await a("seen")).toMatchObject({ ok: true });
+      expect((await sessionRow(hashA)).last_seen_at).toBe("2026-11-21T12:01:00.000Z");
+    });
+
+    it("says no_session for a bad, expired or left-the-list token and writes nothing", async () => {
+      for (const session of [undefined, "short", "z".repeat(40), TOKEN_OLD, TOKEN_GONE]) {
+        expect((await call({ action: "seen", session })).error).toBe("no_session");
+      }
+      for (const s of table("portal_sessions")) expect(s.last_seen_at).toBeUndefined();
+    });
+  });
 });

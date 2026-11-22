@@ -23,6 +23,8 @@
 //                 (subject: the fact's STEAMM subject id, or ""). Never sends the answer or the why.
 //   quiz_answer   { child, quizId, nuggetId, choice } -> { ok, correct, answer, why }. Counts once per nugget per quiz;
 //                 sending it again returns the first result and changes nothing.
+//   seen          the signed-in member has a page of the site open: sets this session's portal_sessions.last_seen_at
+//                 to now, skipped when it was set less than 60 seconds ago (supabase/parent-sign-ins.sql). -> { ok }
 //
 // The pop quiz. A fact (nugget '<kind>:<itemId>:<part>') is eligible when the child finished its item, it has an
 // approved question at the child's level (grade 0-1 k1, 2-3 g23, 4-6 g46) and the child has never been asked it, got
@@ -57,6 +59,7 @@ const DAY_MS = 86_400_000;
 const QUIZ_EVERY_MS = 7 * DAY_MS;
 const REVIEW_DAYS = [21, 60];                 // after the 1st and 2nd right answer; after the 3rd, no more reviews
 const LAST_REVIEW_STEP = 3;
+const SEEN_EVERY_MS = 60_000;                 // a session's last_seen_at is written at most once a minute
 const BATCH = 40;                             // prefixes or ids per scoped read, well under the URL and 1000-row limits
 const ITEM_PREFIX = /^(episode|book|entry|activity):[A-Za-z0-9_-]{1,64}:$/;
 
@@ -119,11 +122,12 @@ Deno.serve(async (req) => {
   async function member(token: unknown) {
     const t = String(token ?? "");
     if (t.length < 20 || t.length > 200) return null;
-    const { data } = await db.from("portal_sessions").select("subscriber_id, expires_at").eq("token_hash", await sha256Hex(t)).maybeSingle();
+    const tokenHash = await sha256Hex(t);
+    const { data } = await db.from("portal_sessions").select("subscriber_id, expires_at").eq("token_hash", tokenHash).maybeSingle();
     if (!data || Date.parse(data.expires_at) <= now) return null;
     const { data: sub } = await db.from("subscribers").select("id, data").eq("id", data.subscriber_id).maybeSingle();
     if (!sub || sub.data?.status !== "published") return null;
-    return { id: sub.id as string, email: String(sub.data.email ?? "") };
+    return { id: sub.id as string, email: String(sub.data.email ?? ""), tokenHash };
   }
 
   /** One of this member's children, or null (not a child id, not theirs, or gone). Reused by the quiz actions. */
@@ -217,6 +221,18 @@ Deno.serve(async (req) => {
   try {
     const who = await member(body.session);
     if (!who) return fail("no_session");
+
+    if (action === "seen") {
+      // read here, not in member(), so the other actions keep working if parent-sign-ins.sql is not applied yet
+      const { data: s, error: seenError } = await db.from("portal_sessions").select("last_seen_at").eq("token_hash", who.tokenHash).maybeSingle();
+      if (seenError) throw new Error(seenError.message);
+      const last = s?.last_seen_at ? Date.parse(s.last_seen_at) : NaN;
+      if (!(now - last < SEEN_EVERY_MS)) {
+        const { error } = await db.from("portal_sessions").update({ last_seen_at: nowDate.toISOString() }).eq("token_hash", who.tokenHash);
+        if (error) throw new Error(error.message);
+      }
+      return json({ ok: true });
+    }
 
     if (action === "children") {
       const { data, error } = await db.from("children").select("id, name, grade, grade_year, created_at").eq("subscriber_id", who.id).order("created_at", { ascending: true });
