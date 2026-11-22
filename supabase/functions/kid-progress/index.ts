@@ -9,10 +9,12 @@
 // (or `id`) in a call must be one of this member's own children, else { ok:false, error:"not_found" } and nothing is
 // read or written.
 //
-//   children      the member's children: [{ id, name, grade }], each grade moved up one for every August 1 since it
-//                 was set, never past 6th.
-//   child_save    { child: { id?, name, grade } } add a child or change one. Name 1 to 24 letters, spaces, ' - or .;
-//                 grade a whole number 0 (Kindergarten) to 6. Six children at most ("full"). -> { ok, id }
+//   children      the member's children: [{ id, name, grade, avatar }], each grade moved up one for every August 1
+//                 since it was set, never past 6th; avatar one of the 20 AVATARS, or "" when none is kept.
+//   child_save    { child: { id?, name, grade, avatar? } } add a child or change one. Name 1 to 24 letters, spaces, ' - or
+//                 .; grade a whole number 0 (Kindergarten) to 6; avatar one of the 20 AVATARS. A new child with no avatar
+//                 gets one at random, one their brothers and sisters don't have while any are left; a change with no
+//                 avatar keeps the one they have. Six children at most ("full"). -> { ok, id, avatar }
 //   child_remove  { id } remove a child; everything kept for the child goes with it (cascade).
 //   record        { child, kind, item } the child finished an episode, book, entry or activity. One row per child per
 //                 item: first_at stays, last_at is now, times goes up by one. 300 an hour per member ("slow_down").
@@ -82,6 +84,9 @@ const ANSWER_WINDOW_MS = 56 * DAY_MS;         // the report sums the last 8 week
 const REPORT_MISSED = 10;
 const PAGE = 1000;                            // rows per page when every answer in the window is read
 const CAP = { question: 300, answer: 200, why: 400 };
+/** The 20 avatars a child can have (supabase/child-avatars.sql; drawn by assets/lib/avatars.js, the same ids). */
+const AVATARS = ["robot", "racecar", "pencil", "rocket", "paintbrush", "guitar", "dinosaur", "planet", "lightbulb", "gear",
+  "music", "microscope", "book", "telescope", "drum", "crayon", "magnet", "headphones", "airplane", "star"];
 
 async function sha256Hex(s: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -315,30 +320,42 @@ Deno.serve(async (req) => {
     }
 
     if (action === "children") {
-      const { data, error } = await db.from("children").select("id, name, grade, grade_year, created_at").eq("subscriber_id", who.id).order("created_at", { ascending: true });
+      const { data, error } = await db.from("children").select("id, name, grade, grade_year, created_at, avatar").eq("subscriber_id", who.id).order("created_at", { ascending: true });
       if (error) throw new Error(error.message);
-      return json({ ok: true, children: (data ?? []).map((c) => ({ id: c.id, name: c.name, grade: movedUpGrade(Number(c.grade), Number(c.grade_year), nowDate) })) });
+      return json({ ok: true, children: (data ?? []).map((c) => ({
+        id: c.id, name: c.name, grade: movedUpGrade(Number(c.grade), Number(c.grade_year), nowDate), avatar: AVATARS.includes(c.avatar) ? c.avatar : "",
+      })) });
     }
 
     if (action === "child_save") {
       const c = body.child as Record<string, unknown> | null;
       if (!c || typeof c !== "object" || Array.isArray(c)) return fail("invalid");
       const name = cleanName(c.name), grade = cleanGrade(c.grade);
-      if (!name || grade < 0) return fail("invalid");
-      const row = { name, grade, grade_year: schoolYear(nowDate) };
+      const noAvatar = c.avatar === undefined || c.avatar === null;
+      if (!name || grade < 0 || (!noAvatar && !AVATARS.includes(c.avatar as string))) return fail("invalid");
+      const row: Record<string, unknown> = { name, grade, grade_year: schoolYear(nowDate) };
+      if (!noAvatar) row.avatar = c.avatar;
       if (c.id !== undefined && c.id !== null) {
         const mine = await ownChild(who.id, c.id);
         if (!mine) return fail("not_found");
-        const { error } = await db.from("children").update(row).eq("id", mine.id).eq("subscriber_id", who.id);
+        const { data: saved, error } = await db.from("children").update(row).eq("id", mine.id).eq("subscriber_id", who.id).select("avatar");
         if (error) throw new Error(error.message);
-        return json({ ok: true, id: mine.id });
+        const avatar = (saved ?? [])[0]?.avatar;
+        return json({ ok: true, id: mine.id, avatar: AVATARS.includes(avatar) ? avatar : "" });
       }
-      const { data: kept, error: countError } = await db.from("children").select("id").eq("subscriber_id", who.id);
+      const { data: kept, error: countError } = await db.from("children").select("id, avatar").eq("subscriber_id", who.id);
       if (countError) throw new Error(countError.message);
       if ((kept ?? []).length >= MAX_CHILDREN) return fail("full");
+      if (noAvatar) {
+        // at random, from the ones no brother or sister has (all 20 when every one is taken)
+        const taken = new Set((kept ?? []).map((k) => k.avatar));
+        const free = AVATARS.filter((a) => !taken.has(a));
+        const from = free.length ? free : AVATARS;
+        row.avatar = from[Math.floor(Math.random() * from.length)];
+      }
       const { data, error } = await db.from("children").insert({ subscriber_id: who.id, ...row }).select("id").single();
       if (error || !data) throw new Error(error?.message || "child not saved");
-      return json({ ok: true, id: data.id });
+      return json({ ok: true, id: data.id, avatar: row.avatar });
     }
 
     if (action === "child_remove") {

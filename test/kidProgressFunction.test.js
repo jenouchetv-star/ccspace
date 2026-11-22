@@ -177,8 +177,67 @@ describe("kid-progress function", () => {
   });
 
   it("lists only the member's own children", async () => {
-    expect((await a("children")).children).toEqual([{ id: A_CHILD, name: "Maya", grade: 2 }, { id: A_CHILD2, name: "Leo", grade: 0 }]);
-    expect((await b("children")).children).toEqual([{ id: B_CHILD, name: "Zed", grade: 4 }]);
+    expect((await a("children")).children).toEqual([{ id: A_CHILD, name: "Maya", grade: 2, avatar: "" }, { id: A_CHILD2, name: "Leo", grade: 0, avatar: "" }]);
+    expect((await b("children")).children).toEqual([{ id: B_CHILD, name: "Zed", grade: 4, avatar: "" }]);
+  });
+
+  describe("avatars (owner, 2026-11-22)", () => {
+    const AVATARS = ["robot", "racecar", "pencil", "rocket", "paintbrush", "guitar", "dinosaur", "planet", "lightbulb", "gear",
+      "music", "microscope", "book", "telescope", "drum", "crayon", "magnet", "headphones", "airplane", "star"];
+
+    it("the server's 20 avatars are the site's 20, in the same order", async () => {
+      const { AVATAR_IDS } = await import("../assets/lib/avatars.js");
+      expect([...AVATAR_IDS]).toEqual(AVATARS);
+      const src = (await import("node:fs")).readFileSync(new URL("../supabase/functions/kid-progress/index.ts", import.meta.url), "utf8");
+      expect(src).toContain('const AVATARS = ["robot", "racecar",');
+    });
+
+    it("a new child gets one at random, one no brother or sister has", async () => {
+      rowsOf("children").find((c) => c.id === A_CHILD).avatar = "robot";
+      rowsOf("children").find((c) => c.id === A_CHILD2).avatar = "rocket";
+      for (let i = 0; i < 4; i++) {
+        const r = await a("child_save", { child: { name: "Kid" + "abcd"[i], grade: 1 } });
+        expect(r.ok).toBe(true);
+        expect(AVATARS).toContain(r.avatar);
+        expect(table("children").find((c) => c.id === r.id).avatar).toBe(r.avatar);
+      }
+      const mine = table("children").filter((c) => c.subscriber_id === "sub-a").map((c) => c.avatar);
+      expect(new Set(mine).size).toBe(6);
+      expect((await a("children")).children.map((c) => c.avatar)).toEqual(mine);
+    });
+
+    it("random means random: Math.random picks from the free ones", async () => {
+      rowsOf("children").find((c) => c.id === A_CHILD).avatar = "robot";
+      const spy = vi.spyOn(Math, "random").mockReturnValue(0);
+      expect((await a("child_save", { child: { name: "Ann", grade: 1 } })).avatar).toBe("racecar");
+      spy.mockReturnValue(0.9999);
+      expect((await a("child_save", { child: { name: "Bo", grade: 1 } })).avatar).toBe("star");
+      spy.mockRestore();
+    });
+
+    it("the grown-up can pick one, on a new child or a change; leaving it out keeps it", async () => {
+      const r = await a("child_save", { child: { name: "Ann", grade: 1, avatar: "guitar" } });
+      expect(r).toMatchObject({ ok: true, avatar: "guitar" });
+      expect(await a("child_save", { child: { id: r.id, name: "Ann", grade: 2, avatar: "drum" } })).toMatchObject({ ok: true, avatar: "drum" });
+      expect(await a("child_save", { child: { id: r.id, name: "Annie", grade: 2 } })).toMatchObject({ ok: true, avatar: "drum" });
+      expect(table("children").find((c) => c.id === r.id)).toMatchObject({ name: "Annie", avatar: "drum" });
+      // brothers and sisters may share one the grown-up picked
+      expect((await a("child_save", { child: { id: A_CHILD, name: "Maya", grade: 2, avatar: "drum" } })).ok).toBe(true);
+    });
+
+    it("refuses an avatar that isn't one of the 20", async () => {
+      for (const avatar of ["", "unicorn", "Robot", 5, true, {}, ["robot"], "<svg>"]) {
+        expect((await a("child_save", { child: { id: A_CHILD, name: "Maya", grade: 2, avatar } })).error, JSON.stringify(avatar)).toBe("invalid");
+        expect((await a("child_save", { child: { name: "Mia", grade: 2, avatar } })).error, JSON.stringify(avatar)).toBe("invalid");
+      }
+      expect(table("children")).toHaveLength(3);
+      expect(table("children").find((c) => c.id === A_CHILD).avatar).toBeUndefined();
+    });
+
+    it("an unknown avatar kept in the table is sent as none", async () => {
+      rowsOf("children").find((c) => c.id === A_CHILD).avatar = "unicorn";
+      expect((await a("children")).children[0].avatar).toBe("");
+    });
   });
 
   it("rejects a child that belongs to another member", async () => {

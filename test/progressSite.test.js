@@ -7,6 +7,7 @@ import {
   recordTarget, quizBubbleAllowed, GRADE_LABELS, gradeLabel, STEAMM_SUBJECTS, nuggetsFor, parseNuggetId, subjectFromTopic,
   answerFromMessage, buildReport,
 } from "../assets/lib/progress.js";
+import { AVATAR_IDS, avatarName, avatarFor, avatarSVG } from "../assets/lib/avatars.js";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const body = (name) => html.split("function " + name + "(")[1].split("\nfunction ")[0];
@@ -393,13 +394,15 @@ describe("who's playing, and recording what a child finishes", () => {
   });
 
   it("the picker offers Just me, the grown-up", () => {
-    const h = fn("progressWhoHTML", "E")(esc)([{ id: "c1", name: "<Maya>" }, { id: "c2", name: "Leo" }]);
+    const h = fn("progressWhoHTML", "E", "avatarSVG", "avatarFor")(esc, avatarSVG, avatarFor)([{ id: "c1", name: "<Maya>" }, { id: "c2", name: "Leo" }]);
     expect(h).toMatch(/Who.s creating today\?/);              // owner, 2026-11-21: reading, watching or making
     expect(h).not.toMatch(/Who.s playing/);
     expect(h).toContain("assets/characters/chike-pose-wave");
     expect(h).toContain("Just me, the grown-up");
     expect(h).toContain('data-who="grownup"');
     expect(h).toContain('data-who="c1"');
+    // each child's avatar above the name (owner, 2026-11-22)
+    expect(h).toContain('<button type="button" class="who__kid" data-who="c1"><span class="kid-av">' + avatarSVG(avatarFor({ id: "c1" })) + "</span>&lt;Maya&gt;</button>");
     expect(h).toContain("&lt;Maya&gt;");
     expect(h).not.toContain("<Maya>");
   });
@@ -505,10 +508,10 @@ describe("answers from the site's games, and the report's levels", () => {
       nuggets: [], lessons: [], subjects: { "episode:v1:discovery": "engineering" }, quizzes: [], answers } }, reportLoading: {} };
     const videos = { v1: { id: "v1", title: "Bridges", learning: "Triangles are strong.", moral: "" } };
     return fn("progressReportHTML", "ProgressState", "E", "ic", "progressRange", "progressLoadReport", "progressSkeleton", "progressContent",
-      "buildReport", "parseNuggetId", "progressAnd", "progressWhen", "progressSubjectLabel", "thumbSrc", "STEAMM_ICONS")(
+      "buildReport", "parseNuggetId", "progressAnd", "progressWhen", "progressSubjectLabel", "thumbSrc", "STEAMM_ICONS", "avatarSVG", "avatarFor")(
       S, esc, () => "", () => "", () => {}, () => "", () => ({ find: (k, id) => (k === "episode" ? videos[id] : null) || null }),
       buildReport, parseNuggetId, (l) => l.join(" and "), () => "Friday", (id) => (STEAMM_SUBJECTS.find((s) => s.id === id) || {}).label || "",
-      (s) => s, {})();
+      (s) => s, {}, avatarSVG, avatarFor)();
   };
   const subjectsOf = (h) => h.split('<ul class="pr-subjects"')[1].split("</ul>")[0];
 
@@ -834,9 +837,10 @@ describe("Chike's pop quiz", () => {
 
 describe("Your children: edit and remove as icons (owner, 2026-11-21)", () => {
   const ICON = (n) => '<svg data-i="' + n + '"></svg>';
-  const kids = (S) => fn("progressChildrenHTML", "ProgressState", "GRADE_LABELS", "gradeLabel", "E", "ic", "PROGRESS_MAX_CHILDREN")(
-    Object.assign({ children: [{ id: "c1", name: "<Maya>", grade: 2 }], editing: "", removing: "", formMsg: "", draft: null, busy: false }, S),
-    GRADE_LABELS, gradeLabel, esc, ICON, 6)();
+  const kids = (S) => fn("progressChildrenHTML", "ProgressState", "GRADE_LABELS", "gradeLabel", "E", "ic", "PROGRESS_MAX_CHILDREN",
+    "AVATAR_IDS", "avatarName", "avatarFor", "avatarSVG")(
+    Object.assign({ children: [{ id: "c1", name: "<Maya>", grade: 2, avatar: "guitar" }], editing: "", removing: "", formMsg: "", draft: null, busy: false }, S),
+    GRADE_LABELS, gradeLabel, esc, ICON, 6, AVATAR_IDS, avatarName, avatarFor, avatarSVG)();
 
   it("each child has two round icons: edit, then a red trash can", () => {
     const h = kids({});
@@ -864,6 +868,74 @@ describe("Your children: edit and remove as icons (owner, 2026-11-21)", () => {
     const h = kids({ removing: "c1" });
     expect(h).toContain("Remove &lt;Maya&gt;? Everything recorded for &lt;Maya&gt; goes too.");
     expect(h).toContain('data-act="progress-remove-yes"');
+  });
+
+  it("each child shows their avatar; the edit form offers all 20 with theirs picked (owner, 2026-11-22)", () => {
+    const list = kids({});
+    expect(list).toContain('<span class="kid-av">' + avatarSVG("guitar") + "</span>");
+    expect(list).not.toContain('name="avatar"');
+    const h = kids({ editing: "c1" });
+    expect((h.match(/<input type="radio" name="avatar" value="/g) || []).length).toBe(20);
+    for (const id of AVATAR_IDS) expect(h).toContain('value="' + id + '"');
+    expect(h).toContain('value="guitar" checked>');
+    expect((h.match(/ checked>/g) || []).length).toBe(1);
+    expect(h).toContain("Pick the one that fits &lt;Maya&gt; best.");
+    expect(h).toContain('aria-label="Race car"');
+    expect(h).toContain("<span class=\"kid-av\" data-av-preview>" + avatarSVG("guitar") + "</span>");
+    // a pick that didn't save yet (a name error) is kept on the next draw
+    const again = kids({ editing: "c1", draft: { id: "c1", name: "", grade: "2", avatar: "drum" } });
+    expect(again).toContain('value="drum" checked>');
+    expect(again).not.toContain('value="guitar" checked>');
+    // adding a child has no avatar choices: the server picks one at random
+    expect(h.split('data-id=""')[1]).not.toContain('name="avatar"');
+  });
+
+  it("Save sends the avatar picked, only when it is one of the 20", () => {
+    const save = body("progressSaveChild");
+    expect(save).toContain('const avatar = form.elements.avatar ? String(form.elements.avatar.value || "") : "";');
+    expect(save).toContain("if (AVATAR_IDS.includes(avatar)) child.avatar = avatar;");
+    expect(save).toContain("avatar: avatar };");
+    expect(html).toContain('if (el.name === "avatar" && el.closest && el.closest("#your-children")){');
+  });
+
+  it("the report opens with the child's avatar, not Chike", () => {
+    const r = body("progressReportHTML");
+    expect(r).toContain("'<span class=\"kid-av kid-av--lg\">' + avatarSVG(avatarFor(child)) + '</span>'");
+    expect(r).not.toContain("chike-avatar-moving");
+    expect(html).toContain('import * as Avatars from "./assets/lib/avatars.js";');
+  });
+});
+
+describe("the avatars (assets/lib/avatars.js)", () => {
+  it("are 20, each with a name", () => {
+    expect(AVATAR_IDS).toHaveLength(20);
+    for (const id of AVATAR_IDS) expect(avatarName(id).length, id).toBeGreaterThan(2);
+    expect(avatarName("unicorn")).toBe("");
+    expect(avatarName("constructor")).toBe("");
+  });
+
+  it("a child shows their own, else the same one every time from their id", () => {
+    expect(avatarFor({ id: "x", avatar: "drum" })).toBe("drum");
+    for (const avatar of ["", "unicorn", undefined, null, "toString"]) {
+      const a = avatarFor({ id: "c-123", avatar });
+      expect(AVATAR_IDS).toContain(a);
+      expect(avatarFor({ id: "c-123" })).toBe(a);
+    }
+    const spread = new Set(Array.from({ length: 60 }, (_, i) => avatarFor({ id: "kid-" + i })));
+    expect(spread.size).toBeGreaterThan(8);
+    expect(AVATAR_IDS).toContain(avatarFor(null));
+  });
+
+  it("draws decoration by default and a named image with a label, escaped", () => {
+    const d = avatarSVG("robot");
+    expect(d).toMatch(/^<svg class="av-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false">/);
+    expect(avatarSVG("robot", 'A "<b>" & c')).toContain('role="img" aria-label="A &quot;&lt;b>&quot; &amp; c"');
+    expect(avatarSVG("unicorn")).toBe(d);
+    for (const id of AVATAR_IDS) {
+      const s = avatarSVG(id);
+      expect(s.endsWith("</svg>")).toBe(true);
+      expect(s).not.toMatch(/<script|on\w+=|href/i);
+    }
   });
 });
 
