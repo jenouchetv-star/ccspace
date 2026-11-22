@@ -22,9 +22,10 @@
 //                 to 300, 200 and 400 characters (why may be left out). 200 an hour per member ("slow_down"). -> { ok }
 //   report        { child } what the child finished, the facts they came across, the approved lessons of what they
 //                 finished, each fact's STEAMM subject, the 5 newest quizzes, and answers: { bySubject: { <subject>:
-//                 { asked, right } }, missed: [{ game, question, answer, why, at }] } over the last 8 weeks (only
-//                 subjects with answers; missed is the 10 newest wrong ones). If the answers cannot be read, the rest of
-//                 the report still comes back, with empty answers.
+//                 { asked, right } }, missed: [{ game, question, answer, why, at }] } over the last 8 weeks, counting
+//                 only the first answer to each question (game, qid) so replays cannot inflate a level (only subjects
+//                 with answers; missed is the 10 newest questions missed the first time). If the answers cannot be
+//                 read, the rest of the report still comes back, with empty answers.
 //   quiz_offer    { child } -> { ok, due }: due when no quiz started in the last 7 days and 3 or more facts are eligible.
 //   quiz_start    { child } -> { ok, quizId, level, questions: [{ nuggetId, question, choices, subject }] } or "not_due"
 //                 (subject: the fact's STEAMM subject id, or ""). Never sends the answer or the why.
@@ -261,29 +262,39 @@ Deno.serve(async (req) => {
     }
   }
 
-  /** The child's answers over the last 8 weeks: asked and right per STEAMM subject (only subjects with answers), and the
-   *  newest wrong ones. Every answer in the window is read, a page at a time, past the 1000-row read limit. */
+  /** The child's answers over the last 8 weeks, counting only the FIRST answer to each question (game, qid) in the
+   *  window: a game shows the right answer and the why after each pick, so a replay would only inflate the level.
+   *  Returns asked and right per STEAMM subject (only subjects with answers) and the questions missed the first time,
+   *  newest first (even if a later replay got them right). Every answer in the window is read, a page at a time, past
+   *  the 1000-row read limit; storing every answer stays as is. */
   async function answerSummary(childId: string) {
     const since = new Date(now - ANSWER_WINDOW_MS).toISOString();
-    const bySubject: Record<string, { asked: number; right: number }> = {};
+    type Row = { id: number; game: string; qid: string; subject: string; correct: boolean; question: string | null; answer: string | null; why: string | null; at: string };
+    const first = new Map<string, Row>();
+    const earlier = (x: Row, y: Row) => { const a = Date.parse(x.at), b = Date.parse(y.at); return a !== b ? a < b : Number(x.id) < Number(y.id); };
     for (let from = 0; ; from += PAGE) {
-      const { data, error } = await db.from("child_game_answers").select("subject, correct").eq("child_id", childId).gte("at", since)
-        .order("id", { ascending: true }).range(from, from + PAGE - 1);
+      const { data, error } = await db.from("child_game_answers").select("id, game, qid, subject, correct, question, answer, why, at")
+        .eq("child_id", childId).gte("at", since).order("id", { ascending: true }).range(from, from + PAGE - 1);
       if (error) throw new Error(error.message);
-      for (const r of data ?? []) {
-        if (!SUBJECTS.includes(r.subject)) continue;
-        const s = (bySubject[r.subject] ??= { asked: 0, right: 0 });
-        s.asked += 1;
-        if (r.correct === true) s.right += 1;
+      for (const r of (data ?? []) as Row[]) {
+        const key = JSON.stringify([r.game, r.qid]);
+        const kept = first.get(key);
+        if (!kept || earlier(r, kept)) first.set(key, r);
       }
       if ((data ?? []).length < PAGE) break;
     }
-    const { data: miss, error: missError } = await db.from("child_game_answers").select("game, question, answer, why, at").eq("child_id", childId)
-      .eq("correct", false).gte("at", since).order("at", { ascending: false }).limit(REPORT_MISSED);
-    if (missError) throw new Error(missError.message);
+    const bySubject: Record<string, { asked: number; right: number }> = {};
+    const misses: Row[] = [];
+    for (const r of first.values()) {
+      if (!SUBJECTS.includes(r.subject)) continue;
+      const s = (bySubject[r.subject] ??= { asked: 0, right: 0 });
+      s.asked += 1;
+      if (r.correct === true) s.right += 1; else misses.push(r);
+    }
+    misses.sort((x, y) => (earlier(x, y) ? 1 : earlier(y, x) ? -1 : 0));
     return {
       bySubject,
-      missed: (miss ?? []).map((m) => ({ game: m.game, question: m.question ?? "", answer: m.answer ?? "", why: m.why ?? "", at: m.at })),
+      missed: misses.slice(0, REPORT_MISSED).map((m) => ({ game: m.game, question: m.question ?? "", answer: m.answer ?? "", why: m.why ?? "", at: m.at })),
     };
   }
 

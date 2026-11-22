@@ -696,7 +696,7 @@ describe("kid-progress function", () => {
       answerRow(A_CHILD, "2026-09-26T11:59:59Z", { subject: "art", correct: false, question: "Too old" }),   // just before: not
       answerRow(A_CHILD2, day(10), { subject: "engineering", correct: false, question: "Leo's" }),
       answerRow(B_CHILD, day(10), { subject: "technology", correct: false, question: "Zed's" }),
-    ].map((row, i) => ({ id: i + 1, ...row }));
+    ].map((row, i) => ({ ...row, id: i + 1, qid: `q${i + 1}` }));                     // each a different question
 
     const r = await a("report", { child: A_CHILD });
     expect(r.ok).toBe(true);
@@ -715,10 +715,50 @@ describe("kid-progress function", () => {
   });
 
   it("report counts every answer, past the 1000-row read limit", async () => {
-    db.tables.child_game_answers = Array.from({ length: 2300 }, (_, i) => ({ id: i + 1, ...answerRow(A_CHILD, new Date(Date.UTC(2026, 10, 1) + i * 60_000).toISOString(), { correct: i % 2 === 0, question: `Q${i}` }) }));
+    db.tables.child_game_answers = Array.from({ length: 2300 }, (_, i) => ({ id: i + 1, ...answerRow(A_CHILD, new Date(Date.UTC(2026, 10, 1) + i * 60_000).toISOString(), { qid: `q${i}`, correct: i % 2 === 0, question: `Q${i}` }) }));
     const r = await a("report", { child: A_CHILD });
     expect(r.answers.bySubject).toEqual({ science: { asked: 2300, right: 1150 } });
     expect(r.answers.missed.map((m) => m.question)).toEqual([2299, 2297, 2295, 2293, 2291, 2289, 2287, 2285, 2283, 2281].map((n) => `Q${n}`));
+  });
+
+  it("a replayed question counts once in the report", async () => {
+    // a tour shows the right answer and the why after each pick, so replaying it must not turn 1 of 3 into 10 of 12
+    const day = (d) => new Date(Date.UTC(2026, 10, d, 9)).toISOString();
+    const play = (d, right) => ["t1", "t2", "t3"].map((qid) => answerRow(A_CHILD, day(d), { qid, question: `Q ${qid}`, answer: `A ${qid}`, why: `W ${qid}`, correct: right.includes(qid) }));
+    db.tables.child_game_answers = [
+      ...play(1, ["t1"]), ...play(2, ["t1", "t2", "t3"]), ...play(3, ["t1", "t2", "t3"]), ...play(4, ["t1", "t2", "t3"]),
+      // the same question id in another game is another question
+      answerRow(A_CHILD, day(5), { game: "other-game", qid: "t1", question: "Other Q", answer: "Other A", why: "Other W", correct: false }),
+    ].map((row, i) => ({ id: i + 1, ...row }));
+    const r = await a("report", { child: A_CHILD });
+    expect(r.answers.bySubject).toEqual({ science: { asked: 4, right: 1 } });
+    expect(r.answers.missed).toEqual([
+      { game: "other-game", question: "Other Q", answer: "Other A", why: "Other W", at: day(5) },
+      // same time: the later-stored one first
+      { game: "solar-system-sandbox", question: "Q t3", answer: "A t3", why: "W t3", at: day(1) },
+      { game: "solar-system-sandbox", question: "Q t2", answer: "A t2", why: "W t2", at: day(1) },
+    ]);
+    // every answer is still kept
+    expect(table("child_game_answers")).toHaveLength(13);
+  });
+
+  it("the first answer wins even if a later replay is right, or wrong", async () => {
+    const t = (m) => new Date(Date.UTC(2026, 10, 1) + m * 60_000).toISOString();
+    db.tables.child_game_answers = [
+      // stored out of time order: the earliest answer (by time) is the first, whatever its row id
+      { id: 1, ...answerRow(A_CHILD, t(10), { qid: "missed-first", correct: true }) },
+      { id: 2, ...answerRow(A_CHILD, t(5), { qid: "missed-first", correct: false, question: "Missed first" }) },
+      { id: 3, ...answerRow(A_CHILD, t(1), { qid: "right-first", subject: "math", correct: true }) },
+      { id: 4, ...answerRow(A_CHILD, t(2), { qid: "right-first", subject: "math", correct: false, question: "Missed on a replay" }) },
+      // answered before the window: the first answer inside the window is the one that counts
+      { id: 5, ...answerRow(A_CHILD, "2026-09-01T00:00:00Z", { qid: "old", subject: "art", correct: false, question: "Old miss" }) },
+      { id: 6, ...answerRow(A_CHILD, t(3), { qid: "old", subject: "art", correct: true }) },
+      // replays of one question across more than one page of rows still count once
+      ...Array.from({ length: 1500 }, (_, i) => ({ id: 7 + i, ...answerRow(A_CHILD, t(20 + i), { qid: "many", subject: "music", correct: i > 0, question: "Many" }) })),
+    ];
+    const r = await a("report", { child: A_CHILD });
+    expect(r.answers.bySubject).toEqual({ science: { asked: 1, right: 0 }, math: { asked: 1, right: 1 }, art: { asked: 1, right: 1 }, music: { asked: 1, right: 0 } });
+    expect(r.answers.missed.map((m) => [m.question, m.at])).toEqual([["Many", t(20)], ["Missed first", t(5)]]);
   });
 
   it("a fault reading the answers (say game-answers.sql not applied yet) leaves the rest of the report working", async () => {
