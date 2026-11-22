@@ -3431,6 +3431,10 @@ h1.admin-page-title{ font-size:1.7rem; }
 
 .wmap-wrap svg{ width:100%; height:auto; display:block; }
 .wmap-wrap svg path{ fill:var(--admin-neutral-soft); stroke:var(--admin-surface); stroke-width:.6; }
+/* the Robinson map's oval outline and grid (owner, 2026-11-21), in the admin's own greys; countries keep their colours */
+.wmap-wrap svg path.wm-sphere{ fill:#F7F9FB; stroke:var(--admin-border-strong); stroke-width:.8; }
+.wmap-wrap svg path.wm-grat{ fill:none; stroke:var(--admin-border); stroke-width:.5; pointer-events:none; }
+.wmap-wrap svg .wm-land path:hover{ stroke:var(--admin-neutral); stroke-width:1; }
 
 /* A single shared hover tooltip for every SVG chart on this page (bar
    charts, the line chart, the world map) - lighter than a full charting
@@ -20812,9 +20816,10 @@ function vitalBar(label, v){
     + (poorPct > 0 ? '<div style="width:' + poorPct.toFixed(1) + '%;background:var(--berry)" title="Poor: ' + poorPct.toFixed(1) + '%"></div>' : "")
     + '</div></div>';
 }
-/* A static SVG asset (assets/vendor/world-map.svg - "Simple World Map" by
-   Al MacDonald / Fritz Lekschas, CC BY-SA 3.0, paths keyed by lowercase
-   ISO 3166-1 alpha-2 code), fetched once and cached at module scope since
+/* A static SVG asset (assets/vendor/world-map.svg - a Robinson projection of
+   Natural Earth 1:110m countries, public domain, made by scripts/make-world-map.mjs;
+   paths keyed by lowercase ISO 3166-1 alpha-2 code, each with data-name for the
+   hover label; owner, 2026-11-21), fetched once and cached at module scope since
    it's a fixed asset shared by every admin, not per-request data - the
    same reasoning that keeps lucide.js/supabase.js out of AppState. */
 let worldMapSvgCache = null;
@@ -20853,7 +20858,8 @@ function countryMapHTML(byCountry){
   if (!wm.svg) return '<p class="admin-meta">Map unavailable.</p>';
   const max = Math.max(1, ...byCountry.map(c => c.views));
   const sum = byCountry.reduce((s,c) => s + c.views, 0);
-  let svgHtml = wm.svg;
+  /* every country names itself on hover (owner, 2026-11-21); countries with visitors add their views below */
+  let svgHtml = wm.svg.replace(/<path id="([a-z_]+)" data-name="([^"]*)"/g, '<path id="$1" data-name="$2" data-tip="$2"');
   const styles = byCountry.map(c => {
     const code = /^[A-Za-z]{2}$/.test(c.country) ? c.country.toLowerCase() : null;
     if (!code) return "";
@@ -20863,8 +20869,9 @@ function countryMapHTML(byCountry){
        attribute per matched country (ids are unique in the source file,
        so one targeted replace per code is safe) rather than forking the
        asset just to add attributes it doesn't otherwise need. */
-    const tip = E(c.country) + ": " + plural(c.views, "view") + " (" + sharePct(c.views, sum) + ")";
-    svgHtml = svgHtml.replace(new RegExp('(<(?:path|g) id="' + code + '")'), '$1 data-tip="' + tip + '"');
+    const named = svgHtml.match(new RegExp('<path id="' + code + '" data-name="([^"]*)"'));
+    const tip = (named ? named[1] : E(c.country)) + ": " + plural(c.views, "view") + " (" + sharePct(c.views, sum) + ")";
+    svgHtml = svgHtml.replace(new RegExp('(<path id="' + code + '" data-name="[^"]*") data-tip="[^"]*"'), '$1 data-tip="' + tip + '"');
     return '[id="' + code + '"], [id="' + code + '"] path { fill:' + fill + ' !important; }';
   }).join("\n");
   return '<div class="wmap-wrap admin-chart-fade">' + '<style>' + styles + '</style>' + svgHtml + '</div>';
@@ -20987,16 +20994,17 @@ function renderAnalyticsLoaded(data){
 
     + adminSharesCard()
 
+    /* the map gets the full width of the page (owner, 2026-11-21: "Make the map larger") */
+    + '<div class="admin-card" style="margin-bottom:20px">'
+    + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("globe") + 'Visitor countries</h3>'
+    + '<p class="admin-meta" style="margin:2px 0 14px">Country-level only - Web Analytics never identifies an individual visitor. Point at a country to see its name.</p>'
+    + '<div class="wmap-big" style="max-width:1100px;margin:0 auto">' + countryMapHTML(data.byCountry) + '</div>'
+    + '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--admin-border)">' + verticalBarChart(data.byCountry, "country", null, "country") + '</div>'
+    + '</div>'
+
     + '<div class="grid" style="grid-template-columns:1fr 1.4fr;gap:20px;align-items:start">'
 
     + '<div class="stack" style="gap:20px">'
-
-    + '<div class="admin-card">'
-    + '<h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("globe") + 'Visitor countries</h3>'
-    + '<p class="admin-meta" style="margin:2px 0 14px">Country-level only - Web Analytics never identifies an individual visitor.</p>'
-    + '<div style="max-width:480px;margin:0 auto">' + countryMapHTML(data.byCountry) + '</div>'
-    + '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--admin-border)">' + verticalBarChart(data.byCountry, "country", null, "country") + '</div>'
-    + '</div>'
 
     + '<div class="admin-card"><h3 class="admin-section-title" style="font-size:1rem">' + sectionIcon("link") + 'Where visitors come from</h3>'
       + '<p class="admin-meta" style="margin:2px 0 14px">The site that sent them here, when known.</p>'
