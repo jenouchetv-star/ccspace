@@ -3,7 +3,7 @@
 --
 -- child_game_answers  one row per answer: the game ('pop-quiz' for the pop quiz), the question's id in that game (the
 --                     nugget id for the pop quiz), its STEAMM subject (science, technology, engineering, art, math or
---                     music), the level it was asked at, whether it was right, and the question, the right answer and
+--                     music) or 'reading' for Reading and Writing, the level it was asked at, whether it was right, and the question, the right answer and
 --                     the why as the child saw them, so a parent can see what was missed. A child's answers go with
 --                     the child (and so with the member).
 --
@@ -17,7 +17,7 @@ create table if not exists public.child_game_answers (
   child_id uuid not null references public.children(id) on delete cascade,
   game text not null check (char_length(game) between 1 and 40),
   qid text not null check (char_length(qid) between 1 and 200),
-  subject text not null check (subject in ('science', 'technology', 'engineering', 'art', 'math', 'music')),
+  subject text not null check (subject in ('science', 'technology', 'engineering', 'art', 'math', 'music', 'reading')),
   level text check (char_length(level) <= 10),
   correct boolean not null,
   question text check (char_length(question) <= 300),
@@ -29,3 +29,9 @@ create index if not exists child_game_answers_child_idx on public.child_game_ans
 alter table public.child_game_answers enable row level security;
 revoke all on table public.child_game_answers from public, anon, authenticated;
 revoke all on sequence public.child_game_answers_id_seq from public, anon, authenticated;
+
+-- Reading and Writing (owner, 2026-11-22): spelling and word games count toward a line of their own on the report,
+-- beside the six STEAMM subjects but not one of them (subject 'reading'). A table made before then keeps its rows.
+alter table public.child_game_answers drop constraint if exists child_game_answers_subject_check;
+alter table public.child_game_answers add constraint child_game_answers_subject_check
+  check (subject in ('science', 'technology', 'engineering', 'art', 'math', 'music', 'reading'));

@@ -1589,8 +1589,23 @@ const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSe
                 }
             }
 
+            // Each case counts toward Reading and Writing on the grown-up's progress report (owner, 2026-11-22). The
+            // site keeps it only for the child picked in "Who's creating today?", while signed in; on its own, nothing
+            // is sent. K and 1st are k1, 2nd and 3rd g23, 4th and 5th g45.
+            function spellingAnswer(gradeId, wordData, isWin) {
+                const w = String(wordData.word);
+                const level = gradeId === 'k' || gradeId === '1' ? 'k1' : gradeId === '2' || gradeId === '3' ? 'g23' : 'g45';
+                return { ccsAnswer: { game: 'spelling-detective', qid: 'spell-' + w, subject: 'reading', level, correct: !!isWin,
+                    question: 'Spell the word that means: ' + wordData.definition, answer: w,
+                    why: w.charAt(0).toUpperCase() + w.slice(1) + ' is spelled ' + w.toUpperCase().split('').join('-') + '.' } };
+            }
+            function sendAnswer(isWin) {
+                try { if (window.parent && window.parent !== window && grade && currentWordData) window.parent.postMessage(spellingAnswer(grade.id, currentWordData, isWin), '*'); } catch (_e) { /* opened on its own */ }
+            }
+
             function endGame(isWin) {
                 gameOver = true;
+                sendAnswer(isWin);
                 clearTimeout(clueTimer);
                 clueButton.disabled = true;
                 winContent.style.display = 'none';

@@ -5,7 +5,7 @@ import {
   nuggetsFor, recordTarget, watchedEnough, doneFromMessage, grownUpQuestion,
   buildReport, QUIZ_ROUTES, quizBubbleAllowed, questionDraftMessages, parseQuestionDraft,
   gradeAges, activityFitsGrade, difficultyDistance, findAgeForGrade, childGradeFrom, withChildGrade,
-  subjectLevel, answerFromMessage,
+  subjectLevel, answerFromMessage, READING_SUBJECT,
 } from "../assets/lib/progress.js";
 
 const NOW = new Date("2026-11-21T12:00:00Z");
@@ -197,6 +197,13 @@ describe("buildReport", () => {
     expect(r.levels).toEqual({ science: "Strong" });
     expect(r.bySubject[0]).toEqual({ id: "science", label: "Science", met: 0, knows: 0 });   // the counts are unchanged
   });
+  it("Reading and Writing gets a level from its answers, but is not a STEAMM subject (owner, 2026-11-22)", () => {
+    expect(READING_SUBJECT).toEqual({ id: "reading", label: "Reading and Writing" });
+    expect(STEAMM_SUBJECTS.map((s) => s.id)).not.toContain("reading");
+    const r = buildReport({ ...base, answers: { bySubject: { reading: { asked: 6, right: 4 }, science: { asked: 1, right: 1 } }, missed: [] } });
+    expect(r.levels).toEqual({ reading: "Growing", science: "Getting started" });
+    expect(r.bySubject.map((s) => s.id)).toEqual(["science", "technology", "engineering", "art", "math", "music"]);
+  });
   it("questions to go over: the 5 newest missed, as the server sent them", () => {
     const missed = [1, 2, 3, 4, 5, 6].map((d) => ({ game: "solar-system-sandbox", question: "Q" + d + "?", answer: "A" + d, why: d === 1 ? "" : "Why " + d, at: daysAgo(d) }));
     missed.splice(2, 0, { game: "x", question: "", answer: "A", why: "", at: daysAgo(2) });   // not a question: left out
@@ -228,11 +235,14 @@ describe("answers from the site's games", () => {
     expect(answerFromMessage({ ccsAnswer: { ...good, question: "  What   is\nthe Sun? " } }).question).toBe("What is the Sun?");
     expect(answerFromMessage({ ccsAnswer: { ...good, question: "x".repeat(500) } }).question).toHaveLength(300);
     expect(Object.keys(answerFromMessage({ ccsAnswer: { ...good, extra: "<b>" } }))).not.toContain("extra");
+    // a spelling game's answer counts toward Reading and Writing
+    const spell = { ...good, game: "spelling-detective", qid: "spell-cat", subject: "reading", level: "k1", correct: true };
+    expect(answerFromMessage({ ccsAnswer: spell })).toEqual(spell);
   });
   it("turns away anything that is not one", () => {
     for (const bad of [null, "text", {}, { ccsAnswer: null }, { ccsAnswer: [good] },
       { ccsAnswer: { ...good, game: "Bad Game" } }, { ccsAnswer: { ...good, game: "pop-quiz" } }, { ccsAnswer: { ...good, qid: "" } },
-      { ccsAnswer: { ...good, subject: "history" } }, { ccsAnswer: { ...good, level: "g46" } }, { ccsAnswer: { ...good, correct: "yes" } },
+      { ccsAnswer: { ...good, subject: "history" } }, { ccsAnswer: { ...good, subject: "Reading" } }, { ccsAnswer: { ...good, subject: "writing" } }, { ccsAnswer: { ...good, level: "g46" } }, { ccsAnswer: { ...good, correct: "yes" } },
       { ccsAnswer: { ...good, question: "  " } }, { ccsAnswer: { ...good, answer: 4 } }, { ccsAnswer: { ...good, why: 3 } }]) {
       expect(answerFromMessage(bad)).toBe(null);
     }

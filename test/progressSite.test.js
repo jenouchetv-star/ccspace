@@ -5,7 +5,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   recordTarget, quizBubbleAllowed, GRADE_LABELS, gradeLabel, STEAMM_SUBJECTS, nuggetsFor, parseNuggetId, subjectFromTopic,
-  answerFromMessage, buildReport,
+  answerFromMessage, buildReport, READING_SUBJECT,
 } from "../assets/lib/progress.js";
 import { AVATAR_IDS, avatarName, avatarFor, avatarSVG } from "../assets/lib/avatars.js";
 
@@ -508,10 +508,10 @@ describe("answers from the site's games, and the report's levels", () => {
       nuggets: [], lessons: [], subjects: { "episode:v1:discovery": "engineering" }, quizzes: [], answers } }, reportLoading: {} };
     const videos = { v1: { id: "v1", title: "Bridges", learning: "Triangles are strong.", moral: "" } };
     return fn("progressReportHTML", "ProgressState", "E", "ic", "progressRange", "progressLoadReport", "progressSkeleton", "progressContent",
-      "buildReport", "parseNuggetId", "progressAnd", "progressWhen", "progressSubjectLabel", "thumbSrc", "STEAMM_ICONS", "avatarSVG", "avatarFor")(
+      "buildReport", "parseNuggetId", "progressAnd", "progressWhen", "progressSubjectLabel", "thumbSrc", "STEAMM_ICONS", "avatarSVG", "avatarFor", "READING_SUBJECT")(
       S, esc, () => "", () => "", () => {}, () => "", () => ({ find: (k, id) => (k === "episode" ? videos[id] : null) || null }),
       buildReport, parseNuggetId, (l) => l.join(" and "), () => "Friday", (id) => (STEAMM_SUBJECTS.find((s) => s.id === id) || {}).label || "",
-      (s) => s, {}, avatarSVG, avatarFor)();
+      (s) => s, {}, avatarSVG, avatarFor, READING_SUBJECT)();
   };
   const subjectsOf = (h) => h.split('<ul class="pr-subjects"')[1].split("</ul>")[0];
 
@@ -528,6 +528,23 @@ describe("answers from the site's games, and the report's levels", () => {
     expect(items[2]).toContain("<b>Engineering</b><span>1 thing");           // the counts stay as they were
     for (const i of [1, 2, 3, 4, 5]) expect(items[i]).not.toContain("pr-level");
     expect(h).not.toMatch(/\d+ ?%|4 of 6|out of/);                         // a word, never a number
+  });
+
+  it("Reading and Writing sits after the six STEAMM subjects, set apart by a line (owner, 2026-11-22)", () => {
+    const none = subjectsOf(report(undefined)).split("<li").slice(1);
+    expect(none).toHaveLength(8);                                           // six subjects, the line, Reading and Writing
+    expect(none[6]).toContain('class="pr-sep"');
+    expect(none[6]).toContain('aria-hidden="true"');
+    expect(none[7]).toContain("<b>Reading and Writing</b>");
+    expect(none[7]).toContain("pr-none");
+    expect(none[7]).toContain("nothing yet");
+    const items = subjectsOf(report({ bySubject: { reading: { asked: 6, right: 5 } }, missed: [] })).split("<li").slice(1);
+    expect(items[7]).toContain('<span class="pr-level">Strong</span>');
+    expect(items[7]).not.toContain("pr-none");
+    expect(items[7]).not.toContain("nothing yet");
+    for (const i of [0, 1, 2, 3, 4, 5]) expect(items[i]).not.toContain("pr-level");
+    // the heading still says STEAMM: Reading and Writing is beside it, not one of its subjects
+    expect(report(undefined)).toContain("by STEAMM subject");
   });
 
   it("questions to go over", () => {

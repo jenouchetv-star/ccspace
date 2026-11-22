@@ -15,6 +15,12 @@ export const STEAMM_SUBJECTS = [
   { id: "music", label: "Music" },
 ];
 
+/** Reading and Writing (owner, 2026-11-22): what the spelling and word games count toward. A line of its own on the
+    report, set apart beside the six STEAMM subjects; it is not one of them (the site stays STEAMM). */
+export const READING_SUBJECT = Object.freeze({ id: "reading", label: "Reading and Writing" });
+/** Everything a game's answer may count toward. */
+const ANSWER_SUBJECTS = [...STEAMM_SUBJECTS.map((s) => s.id), READING_SUBJECT.id];
+
 const TOPIC_SUBJECT = {
   structures: "engineering",
   sound: "music",
@@ -187,7 +193,7 @@ export function answerFromMessage(data) {
   const str = (v, n) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, n) : "");
   const game = typeof a.game === "string" ? a.game : "", qid = typeof a.qid === "string" ? a.qid : "";
   if (!GAME_ID.test(game) || game === "pop-quiz" || !GAME_ID.test(qid)) return null;
-  if (!STEAMM_SUBJECTS.some((s) => s.id === a.subject) || !ANSWER_LEVELS.includes(a.level) || typeof a.correct !== "boolean") return null;
+  if (!ANSWER_SUBJECTS.includes(a.subject) || !ANSWER_LEVELS.includes(a.level) || typeof a.correct !== "boolean") return null;
   if (a.why !== undefined && a.why !== null && typeof a.why !== "string") return null;
   const question = str(a.question, ANSWER_CAP.question), answer = str(a.answer, ANSWER_CAP.answer);
   if (!question || !answer) return null;
@@ -285,9 +291,9 @@ export function buildReport({ progress, nuggets, lessons, subjects, quizzes, ans
   const ans = answers && typeof answers === "object" ? answers : {};
   const counted = ans.bySubject && typeof ans.bySubject === "object" ? ans.bySubject : {};
   const levels = {};
-  STEAMM_SUBJECTS.forEach((s) => {
-    const level = Object.prototype.hasOwnProperty.call(counted, s.id) ? subjectLevel(counted[s.id]) : null;
-    if (level) levels[s.id] = level;
+  ANSWER_SUBJECTS.forEach((id) => {
+    const level = Object.prototype.hasOwnProperty.call(counted, id) ? subjectLevel(counted[id]) : null;
+    if (level) levels[id] = level;
   });
   const toGoOver = (Array.isArray(ans.missed) ? ans.missed : [])
     .filter((m) => m && clean(m.question) && clean(m.answer))

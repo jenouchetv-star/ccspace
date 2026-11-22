@@ -688,12 +688,15 @@ describe("kid-progress function", () => {
     expect((await a("game_answer", { child: A_CHILD, ...gameAnswer({ question: "  Which one is Mars? ", answer: " The red one ", why: undefined, correct: false, level: "k1", subject: "math" }) })).ok).toBe(true);
     expect(table("child_game_answers")[1]).toMatchObject({ question: "Which one is Mars?", answer: "The red one", why: "", correct: false, level: "k1", subject: "math" });
     for (const subject of ["technology", "engineering", "art", "music"]) expect((await a("game_answer", { child: A_CHILD, ...gameAnswer({ subject, level: "g45" }) })).ok, subject).toBe(true);
-    expect(table("child_game_answers")).toHaveLength(6);
+    // Reading and Writing (spelling and word games; owner, 2026-11-22) is taken too, though it is not a STEAMM subject
+    expect((await a("game_answer", { child: A_CHILD, ...gameAnswer({ subject: "reading", level: "k1" }) })).ok).toBe(true);
+    expect(table("child_game_answers")).toHaveLength(7);
+    for (const subject of ["Reading", "writing", "spelling"]) expect((await a("game_answer", { child: A_CHILD, ...gameAnswer({ subject }) })).error, subject).toBe("invalid");
 
     // a flood of answers is held back by the member's kid_answer bucket
     db.rate.allow = false;
     expect(await a("game_answer", { child: A_CHILD, ...gameAnswer() })).toMatchObject({ ok: false, error: "slow_down" });
-    expect(table("child_game_answers")).toHaveLength(6);
+    expect(table("child_game_answers")).toHaveLength(7);
   });
 
   it("game_answer is only for the member's own child", async () => {
@@ -752,6 +755,9 @@ describe("kid-progress function", () => {
       answerRow(A_CHILD, day(20), { game: "pop-quiz", question: "Science miss", answer: "Right one", why: "Why one", correct: false }),
       ...Array.from({ length: 12 }, (_, i) => answerRow(A_CHILD, day(i + 1), { subject: "math", question: `M${i + 1}`, answer: `A${i + 1}`, why: `W${i + 1}`, correct: false })),
       answerRow(A_CHILD, "2026-09-26T12:00:00Z", { subject: "music" }),                       // exactly 8 weeks ago: counts
+      answerRow(A_CHILD, "2026-09-25T12:00:00Z", { subject: "reading", correct: false, question: "Old spelling" }),   // too old: not
+      answerRow(A_CHILD, day(4), { game: "spelling-detective", subject: "reading" }),          // Reading and Writing counts too
+      answerRow(A_CHILD, day(5), { game: "spelling-detective", subject: "reading" }),
       answerRow(A_CHILD, "2026-09-26T11:59:59Z", { subject: "art", correct: false, question: "Too old" }),   // just before: not
       answerRow(A_CHILD2, day(10), { subject: "engineering", correct: false, question: "Leo's" }),
       answerRow(B_CHILD, day(10), { subject: "technology", correct: false, question: "Zed's" }),
@@ -759,7 +765,8 @@ describe("kid-progress function", () => {
 
     const r = await a("report", { child: A_CHILD });
     expect(r.ok).toBe(true);
-    expect(r.answers.bySubject).toEqual({ science: { asked: 4, right: 3 }, math: { asked: 12, right: 0 }, music: { asked: 1, right: 1 } });
+    expect(r.answers.bySubject).toEqual({ science: { asked: 4, right: 3 }, math: { asked: 12, right: 0 }, music: { asked: 1, right: 1 }, reading: { asked: 2, right: 2 } });
+    expect(JSON.stringify(r)).not.toMatch(/Old spelling/);
     expect(r.answers.missed).toEqual([
       { game: "pop-quiz", question: "Science miss", answer: "Right one", why: "Why one", at: day(20) },
       ...[12, 11, 10, 9, 8, 7, 6, 5, 4].map((n) => ({ game: "solar-system-sandbox", question: `M${n}`, answer: `A${n}`, why: `W${n}`, at: day(n) })),

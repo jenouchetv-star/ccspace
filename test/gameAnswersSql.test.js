@@ -84,13 +84,34 @@ describe("game-answers.sql", () => {
     expect((await q("select count(*)::int as n from child_game_answers"))[0].n).toBe(0);
   });
 
-  it("keeps only the six STEAMM subjects and needs a child", async () => {
-    for (const subject of ["science", "technology", "engineering", "art", "math", "music"]) await add({ subject });
-    for (const subject of ["history", "", "Science", null]) await expect(add({ subject }), String(subject)).rejects.toThrow();
+  it("keeps only the six STEAMM subjects and Reading and Writing, and needs a child", async () => {
+    for (const subject of ["science", "technology", "engineering", "art", "math", "music", "reading"]) await add({ subject });
+    for (const subject of ["history", "", "Science", "Reading", "writing", null]) await expect(add({ subject }), String(subject)).rejects.toThrow();
     await expect(q("insert into child_game_answers (game, qid, subject, correct) values ('x', 'y', 'math', true)")).rejects.toThrow();
     await expect(q("insert into child_game_answers (child_id, game, qid, subject, correct) values ($1, 'x', 'y', 'math', true)", ["44444444-4444-4444-8444-444444444444"])).rejects.toThrow();
-    expect((await q("select count(*)::int as n from child_game_answers"))[0].n).toBe(6);
+    expect((await q("select count(*)::int as n from child_game_answers"))[0].n).toBe(7);
   });
+
+  it("widens a table made before Reading and Writing (owner, 2026-11-22) and keeps its rows", async () => {
+    const old = new PGlite();
+    await old.exec(`
+      create role anon; create role authenticated; create role service_role;
+      create function is_active_admin() returns boolean language sql stable as $$ select false $$;
+      create table subscribers (id text primary key, data jsonb not null, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+      grant usage on schema public to anon, authenticated, service_role;
+    `);
+    await old.exec(kidSql);
+    await old.exec(sql.replace("'music', 'reading')", "'music')").split("-- Reading and Writing")[0]);
+    await old.exec("insert into subscribers (id, data) values ('sub-a', '{\"email\":\"parent@example.test\",\"status\":\"published\"}')");
+    const kid = (await old.query("insert into children (subscriber_id, name, grade, grade_year) values ('sub-a', 'Maya', 2, 2026) returning id")).rows[0].id;
+    const ins = (s) => old.query("insert into child_game_answers (child_id, game, qid, subject, correct) values ($1, 'g', 'q', $2, true)", [kid, s]);
+    await ins("math");
+    await expect(ins("reading")).rejects.toThrow();
+    await old.exec(sql);
+    await ins("reading");
+    await expect(ins("history")).rejects.toThrow();
+    expect((await old.query("select subject from child_game_answers order by id")).rows.map((r) => r.subject)).toEqual(["math", "reading"]);
+  }, 60000);
 
   it("caps the text fields at the lengths the function trims to", async () => {
     await add({ game: "g".repeat(40), qid: "q".repeat(200), question: "x".repeat(300), answer: "y".repeat(200), why: "z".repeat(400) });

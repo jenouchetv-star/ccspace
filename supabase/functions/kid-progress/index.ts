@@ -19,7 +19,8 @@
 //   record        { child, kind, item } the child finished an episode, book, entry or activity. One row per child per
 //                 item: first_at stays, last_at is now, times goes up by one. 300 an hour per member ("slow_down").
 //   game_answer   { child, game, qid, subject, level, correct, question, answer, why } the child answered a question
-//                 inside a game. game and qid 1 to 40 of a-z 0-9 - (not "pop-quiz"); subject one of the six STEAMM ids;
+//                 inside a game. game and qid 1 to 40 of a-z 0-9 - (not "pop-quiz"); subject one of the six STEAMM ids,
+//                 or "reading" (Reading and Writing: spelling and word games, beside STEAMM, not one of it);
 //                 level k1, g23 or g45; correct true or false; question, answer (the right one) and why trimmed and cut
 //                 to 300, 200 and 400 characters (why may be left out). 200 an hour per member ("slow_down"). -> { ok }
 //   report        { child } what the child finished, the facts they came across, the approved lessons of what they
@@ -76,6 +77,9 @@ const SEEN_EVERY_MS = 60_000;                 // a session's last_seen_at is wri
 const BATCH = 40;                             // prefixes or ids per scoped read, well under the URL and 1000-row limits
 const ITEM_PREFIX = /^(episode|book|entry|activity):[A-Za-z0-9_-]{1,64}:$/;
 const SUBJECTS = ["science", "technology", "engineering", "art", "math", "music"];
+/* what a game's answer may count toward: the six STEAMM subjects, and Reading and Writing for the spelling and word
+   games (owner, 2026-11-22), a line of its own on the report beside STEAMM, not one of its subjects */
+const ANSWER_SUBJECTS = [...SUBJECTS, "reading"];
 const GAME_LEVELS = ["k1", "g23", "g45"];
 const GAME_ID = /^[a-z0-9-]{1,40}$/;          // a game's id and its own question ids
 const POP_QUIZ = "pop-quiz";                  // the game name of pop quiz answers, kept by quiz_answer only
@@ -291,7 +295,7 @@ Deno.serve(async (req) => {
     const bySubject: Record<string, { asked: number; right: number }> = {};
     const misses: Row[] = [];
     for (const r of first.values()) {
-      if (!SUBJECTS.includes(r.subject)) continue;
+      if (!ANSWER_SUBJECTS.includes(r.subject)) continue;
       const s = (bySubject[r.subject] ??= { asked: 0, right: 0 });
       s.asked += 1;
       if (r.correct === true) s.right += 1; else misses.push(r);
@@ -391,7 +395,7 @@ Deno.serve(async (req) => {
       const game = str(body.game), qid = str(body.qid), subject = str(body.subject), level = str(body.level);
       const question = cleanText(str(body.question), CAP.question), answer = cleanText(str(body.answer), CAP.answer);
       const whyOk = body.why === undefined || body.why === null || typeof body.why === "string";
-      if (!GAME_ID.test(game) || game === POP_QUIZ || !GAME_ID.test(qid) || !SUBJECTS.includes(subject) || !GAME_LEVELS.includes(level)
+      if (!GAME_ID.test(game) || game === POP_QUIZ || !GAME_ID.test(qid) || !ANSWER_SUBJECTS.includes(subject) || !GAME_LEVELS.includes(level)
         || typeof body.correct !== "boolean" || !question || !answer || !whyOk) return fail("invalid");
       const { data: allowed, error: rateError } = await db.rpc("rate_take", { p_bucket: "kid_answer", p_key: who.id, p_max: MAX_ANSWERS_PER_HOUR, p_window_seconds: 3600 });
       if (rateError) throw new Error(rateError.message);
