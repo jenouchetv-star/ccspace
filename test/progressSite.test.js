@@ -549,7 +549,11 @@ describe("answers from the site's games, and the report's levels", () => {
       missed: [{ game: "solar-system-sandbox", question: "Which planet is biggest?", answer: "Jupiter", why: "Jupiter is the biggest planet.", at: "2026-11-20T10:00:00Z" }] };
     for (const span of ["week", "all"]) {
       const h = report(answers, [], span);
-      expect(h).toContain("Nothing recorded for Maya yet.");                  // the week box says so, as before
+      const weekBox = h.split("box--week")[1].split("box--learned")[0];
+      expect(weekBox).toContain("Maya answered questions in the games.");     // the week box does not say "nothing"
+      expect(weekBox).toContain("See how it went under What Maya learned.");
+      expect(weekBox).not.toMatch(/Nothing recorded|A quiet week/);
+      expect(weekBox).not.toContain("pr-strip");                               // no pictures to show
       const learned = h.split("box--learned")[1].split("</section>")[0];
       expect(learned).toContain('<span class="pr-level">Getting started</span>');
       expect(learned).toContain("<b>Which planet is biggest?</b><span>The answer: Jupiter</span><p>Jupiter is the biggest planet.</p>");
@@ -557,7 +561,12 @@ describe("answers from the site's games, and the report's levels", () => {
       expect(h).toContain("box--ask");
       expect(h).not.toContain("undefined");
     }
-    expect(report({ bySubject: {}, missed: [] }, [])).not.toContain("box--learned");   // no answers: unchanged
+    const empty = report({ bySubject: {}, missed: [] }, []);                  // truly nothing: unchanged
+    expect(empty).not.toContain("box--learned");
+    expect(empty).toContain("Nothing recorded for Maya yet.");
+    expect(empty).toContain("When Maya watches an episode, reads a book, tries a lesson or makes an activity on a device where you are signed in, I write it down here.");
+    expect(empty).not.toContain("answered questions");
+    expect(report(answers)).toContain("Everything Maya has done so far.");     // with items, the usual headings
   });
 
   it("no em dashes and no he/she in the new copy", () => {
