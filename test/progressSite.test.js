@@ -439,16 +439,16 @@ describe("answers from the site's games, and the report's levels", () => {
   const ANSWER = { game: "solar-system-sandbox", qid: "sun-1", subject: "science", level: "g23", correct: false,
     question: "What is the Sun?", answer: "A star", why: "It is the star closest to Earth." };
   /* progressGameAnswer built with pretend parts: the game stage frame, who's signed in and playing, and kid-progress */
-  const answerer = ({ session = "tok", playing = "c1", kids = KIDS, reply = { ok: true }, frameWin } = {}) => {
+  const answerer = ({ session = "tok", playing = "c1", kids = KIDS, reply = { ok: true }, frameWin, admin = false } = {}) => {
     const win = frameWin === undefined ? { name: "game stage" } : frameWin;
     const calls = { kid: [], ended: [] };
     const S = { children: kids, reports: { c1: { ok: true }, c2: { ok: true } } };
     const doc = { getElementById: (id) => (id === "gamestage-frame" ? { contentWindow: win } : null) };
     const send = fn("progressGameAnswer", "document", "answerFromMessage", "portalSavedSession", "progressKids", "recordTarget",
-      "progressPlaying", "kidCall", "progressSessionEnded", "ProgressState", "async ")(
+      "progressPlaying", "kidCall", "progressSessionEnded", "ProgressState", "portalIsAdmin", "async ")(
       doc, answerFromMessage, () => session, async () => (session ? kids : []), recordTarget, () => playing,
       async (action, extra) => { calls.kid.push([action, extra]); return reply; },
-      (r) => { calls.ended.push(r); return !!r && r.error === "no_session"; }, S);
+      (r) => { calls.ended.push(r); return !!r && r.error === "no_session"; }, S, () => admin);
     return { send, calls, S, win };
   };
 
@@ -487,10 +487,21 @@ describe("answers from the site's games, and the report's levels", () => {
     expect(out.S.reports.c1).toEqual({ ok: true });
   });
 
+  it("an admin trying out a game (a draft included) records no answers, even with a child picked", async () => {
+    const t = answerer({ admin: true, playing: "c1" });
+    await t.send({ source: t.win, data: { ccsAnswer: ANSWER } });
+    expect(t.calls.kid).toEqual([]);
+    expect(t.S.reports.c1).toEqual({ ok: true });
+    const b = body("progressGameAnswer");
+    expect(b.indexOf("if (portalIsAdmin()) return;")).toBeGreaterThan(-1);
+    expect(b.indexOf("if (portalIsAdmin()) return;")).toBeLessThan(b.indexOf("kidCall("));
+  });
+
   /* the report drawn with pretend parts and the real buildReport */
-  const report = (answers) => {
-    const S = { children: KIDS, reportFor: "c1", span: "all", reports: { c1: {
-      ok: true, progress: [{ kind: "episode", item_id: "v1", first_at: "2026-11-20T10:00:00Z", last_at: "2026-11-20T10:00:00Z", times: 1 }],
+  const ONE_EPISODE = [{ kind: "episode", item_id: "v1", first_at: "2026-11-20T10:00:00Z", last_at: "2026-11-20T10:00:00Z", times: 1 }];
+  const report = (answers, progress = ONE_EPISODE, span = "all") => {
+    const S = { children: KIDS, reportFor: "c1", span, reports: { c1: {
+      ok: true, progress,
       nuggets: [], lessons: [], subjects: { "episode:v1:discovery": "engineering" }, quizzes: [], answers } }, reportLoading: {} };
     const videos = { v1: { id: "v1", title: "Bridges", learning: "Triangles are strong.", moral: "" } };
     return fn("progressReportHTML", "ProgressState", "E", "ic", "progressRange", "progressLoadReport", "progressSkeleton", "progressContent",
@@ -531,6 +542,22 @@ describe("answers from the site's games, and the report's levels", () => {
     expect(list).not.toMatch(/<img|<script|<b>Mars/);                        // what a browser sent is only shown escaped
     expect(list).toContain("&lt;img src=x onerror=alert(1)&gt;Which?");
     expect(h.split("box--").length - 1).toBe(3);                            // no new box
+  });
+
+  it("a report with answers but nothing else recorded still draws the levels and questions to go over", () => {
+    const answers = { bySubject: { science: { asked: 3, right: 1 } },
+      missed: [{ game: "solar-system-sandbox", question: "Which planet is biggest?", answer: "Jupiter", why: "Jupiter is the biggest planet.", at: "2026-11-20T10:00:00Z" }] };
+    for (const span of ["week", "all"]) {
+      const h = report(answers, [], span);
+      expect(h).toContain("Nothing recorded for Maya yet.");                  // the week box says so, as before
+      const learned = h.split("box--learned")[1].split("</section>")[0];
+      expect(learned).toContain('<span class="pr-level">Getting started</span>');
+      expect(learned).toContain("<b>Which planet is biggest?</b><span>The answer: Jupiter</span><p>Jupiter is the biggest planet.</p>");
+      expect(learned).not.toContain('<ul class="pr-learned">');               // no facts to list
+      expect(h).toContain("box--ask");
+      expect(h).not.toContain("undefined");
+    }
+    expect(report({ bySubject: {}, missed: [] }, [])).not.toContain("box--learned");   // no answers: unchanged
   });
 
   it("no em dashes and no he/she in the new copy", () => {
