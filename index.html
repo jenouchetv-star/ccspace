@@ -12305,6 +12305,17 @@ function createNextCards(){
     + '</article>').join("");
 }
 
+/* BEGIN digital-order-pure */
+/* Digital Activities, newest first (by createdAt; added together, the later title first, so AI Lesson 05 before 04);
+   these go last, in this order (owner, 2026-11-22) */
+const DIGITAL_LAST = ["act-photo-comic", "act-audiobook"];
+function digitalActivityOrder(a, b){
+  const la = DIGITAL_LAST.indexOf(a.id), lb = DIGITAL_LAST.indexOf(b.id);
+  if (la >= 0 || lb >= 0) return (la < 0 ? -1 : la) - (lb < 0 ? -1 : lb);
+  return String(b.createdAt || "").localeCompare(String(a.createdAt || "")) || String(b.title || "").localeCompare(String(a.title || ""));
+}
+/* END digital-order-pure */
+
 /** Create, by tab: "" is the finder, "browse" Art & Craft Activities (the library), "tech" Computer Activities,
     "studio" Chike's Creative Studio. */
 function viewCreate(sub){
@@ -12333,8 +12344,9 @@ function viewCreate(sub){
     const q = f.q.toLowerCase();
     list = list.filter(a => (a.title + " " + a.summary + " " + a.tags.join(" ") + " " + (a.learning.title||"")).toLowerCase().indexOf(q) >= 0);
   }
-  /* on Computer Activities the free ones come first, then the subscribers' lessons */
-  list = list.slice().sort((a,b) => (tech ? (a.access === "members") - (b.access === "members") : 0) || a.title.localeCompare(b.title));
+  /* on Digital Activities the newest come first, and the Photo Comic and the Audiobook go last (owner, 2026-11-22);
+     Art & Craft stays A to Z */
+  list = list.slice().sort(tech ? digitalActivityOrder : (a,b) => a.title.localeCompare(b.title));
   /* a picked child: activities that fit their grade first, the rest nearest in difficulty first (before paging) */
   list = gradeOrderActivities(list, progressPickedGrade());
   const poolSize = createPoolActivities().length;
