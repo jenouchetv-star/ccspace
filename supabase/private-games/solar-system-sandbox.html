@@ -2123,7 +2123,11 @@ function makeTours(env){
   /* ----- the save: the tours finished and a grade picked here (the site's grade is for this visit only) ----- */
   let SAVE = { done: [], grade: null };
   let siteGrade = okGrade(env.grade) ? env.grade : null;
-  const S = { list: false, picking: false, tour: null, phase: "", i: 0, got: false, wrong: "", qi: 0, pick: -1, right: 0, sent: {} };
+  const S = { list: false, picking: false, tour: null, phase: "", i: 0, got: false, wrong: "", qi: 0, pick: -1, right: 0, sent: {}, shownAt: 0 };
+  /* a card just drawn ignores Next and Back for a moment, so a quick double tap can't skip a stop (the next card's
+     Next sits in the same spot) */
+  const now = () => (env.now ? env.now() : Date.now());
+  const SETTLE_MS = 300;
   function clean(d){
     d = d && typeof d === "object" ? d : {};
     const done = Array.isArray(d.done) ? d.done.filter((id, k, a) => TOURS.some(t => t.id === id) && a.indexOf(id) === k) : [];
@@ -2212,6 +2216,7 @@ function makeTours(env){
 
   /* ----- the stops ----- */
   function renderStop(){
+    S.shownAt = now();
     const t = S.tour, s = stop(), L = level(), n = t.stops.length;
     const dots = t.stops.map((_, k) => '<i' + (k <= S.i ? ' class="on"' : '') + '></i>').join("");
     let h = '<div class="ttop"><span>' + esc(t.title) + ', stop ' + (S.i + 1) + ' of ' + n + '</span><span class="tright"><span class="dots" aria-hidden="true">' + dots +
@@ -2275,6 +2280,7 @@ function makeTours(env){
     return ids.map(id => Math.max(10, Math.round(96 * env.real[id] / big)));
   }
   function renderQuiz(){
+    S.shownAt = now();
     const t = S.tour, L = level(), q = t.quiz[S.qi][L], n = t.quiz.length, done = S.pick >= 0;
     const cls = k => !done ? "" : k === q.answer ? " right" : k === S.pick ? " picked" : "";
     const attrs = k => ' data-act="answer" data-arg="' + k + '"' + (done ? " disabled" : k === 0 ? " data-focus" : "");
@@ -2321,7 +2327,7 @@ function makeTours(env){
     if (L === "k1") say((correct ? "You got it! " : "Good try! ") + q.why);
   }
   function finish(){
-    S.phase = "end"; hush();
+    S.phase = "end"; hush(); S.shownAt = now();
     if (SAVE.done.indexOf(S.tour.id) < 0) SAVE.done = SAVE.done.concat(S.tour.id);
     writeSave();
     els.quiz.innerHTML = '<div class="tq"><div class="ttop"><span>' + esc(S.tour.title) + '</span><button class="x" data-act="close" aria-label="Close">&times;</button></div>' +
@@ -2350,6 +2356,7 @@ function makeTours(env){
   }
 
   function act(a, arg){
+    if ((a === "next" || a === "back") && now() - S.shownAt < SETTLE_MS) return;
     if (a === "start") start(arg);
     else if (a === "closeList"){ env.sfx("click"); setList(false); }
     else if (a === "grade"){ env.sfx("click"); pickGrade(Number(arg)); }
@@ -2641,12 +2648,23 @@ const tours = makeTours({
   select: id => select(BODIES.find(b => b.id === id)),
   isOn: id => !!current && current.id === id && !moving,
   overview: overview, setCompare: setCompare,
-  glowMove: on => { $("cMove").classList.toggle("tglow", on); if (on && $("cMove").scrollIntoView) $("cMove").scrollIntoView({ block: "nearest" }); },
+  glowMove: on => $("cMove").classList.toggle("tglow", on),
   ring: id => { ringId = id; },
   speak: speak, stopSpeaking: stopSpeaking,
   sfx: name => sfx(name, { volume: 0.6 }),
   win: window, parentWin: window.parent, ls: () => localStorage
 });
+/* on a phone the stop card and the tour list sit at the top, where the Compare sizes and Move banners open: an open
+   banner pushes them down below it, so "Back to orbits", Done and the card's X can all be reached */
+function placeTourCards(){
+  const open = innerWidth <= 640 ? [$("banner"), $("cmpBanner")].filter(b => b.classList.contains("open")) : [];
+  const top = open.length ? Math.round(Math.max.apply(null, open.map(b => b.getBoundingClientRect().bottom))) + 8 : 0;
+  tourStop.style.top = top ? top + "px" : "";
+  $("tours").style.top = top ? top + "px" : "";
+  $("tours").style.maxHeight = top ? "calc(100% - " + (top + 90) + "px)" : "";
+}
+["banner", "cmpBanner"].forEach(id => new MutationObserver(placeTourCards).observe($(id), { attributes: true, attributeFilter: ["class"] }));
+addEventListener("resize", placeTourCards);
 /* a tap on a planet (the dock or out in space): a tour's "do something" stop takes it first, otherwise it opens as always */
 function pickBody(p){ if (tours.picked(p.id)) return; select(p); }
 /* the green ring around the planet a child found, in the orbits or in Compare sizes */

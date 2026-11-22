@@ -229,8 +229,12 @@ function fakeEl(){
     setAttribute(k, v){ this.attrs[k] = String(v); }, getAttribute(k){ return this.attrs[k]; },
     addEventListener(t, f){ (this.listeners[t] = this.listeners[t] || []).push(f); }, querySelector(){ return null; } };
 }
+/* the game's clock: each click comes a second after the one before (a card ignores Next and Back for 300 ms) */
+let CLOCK = 1e6;
+const later = (ms = 1000) => { CLOCK += ms; };
 /* a click on a button the panel really shows */
 function click(el, act, arg){
+  later();
   const sel = 'data-act="' + act + '"' + (arg === undefined ? "" : ' data-arg="' + arg + '"');
   expect(el.innerHTML, sel).toContain(sel);
   const b = { disabled: false, getAttribute: k => (k === "data-act" ? act : arg === undefined ? null : String(arg)) };
@@ -250,7 +254,7 @@ function boot({ grade = 2, stored = null, framed = true, noStorage = false } = {
     overview: () => { calls.push("overview"); g.current = null; },
     setCompare: on => { if (on !== g.comparing) calls.push("compare:" + on); g.comparing = on; },
     glowMove: on => { g.glow = on; }, ring: id => { g.ring = id; },
-    speak: text => spoken.push(text), stopSpeaking: () => calls.push("hush"), sfx: () => {},
+    speak: text => spoken.push(text), stopSpeaking: () => calls.push("hush"), sfx: () => {}, now: () => CLOCK,
     win, parentWin, ls: () => { if (noStorage) throw new Error("sealed"); return { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } }; }
   });
   return { T, els, calls, spoken, posts, store, g, parentWin, win, message: (source, data) => winL.message({ source, data }),
@@ -445,7 +449,7 @@ describe("Solar System Sandbox tours: in the game", () => {
     expect(b.answers().length).toBe(2);
     expect(b.answers()[1]).toMatchObject({ qid: "gas-giants-q2", correct: true });
     /* answering is only for the question on screen */
-    b.T.act("next"); b.T.act("answer", 0); b.T.act("answer", 1);
+    later(); b.T.act("next"); b.T.act("answer", 0); b.T.act("answer", 1);
     expect(b.answers().length).toBe(3);
   });
 
@@ -623,5 +627,44 @@ describe("Solar System Sandbox tours: in the game", () => {
     for (const x of heard) expect(list.has(x.trim()), x).toBe(true);
     /* keys are unique, so no two lines share a clip */
     expect(new Set(LINES.map(lineKey)).size).toBe(LINES.length);
+  });
+
+  it("a quick double tap on Next can't skip a stop", () => {
+    const b = boot({ grade: 2 });
+    openList(b); click(b.els.list, "start", "gas-giants");
+    click(b.els.stop, "next");
+    expect(b.els.stop.innerHTML).toContain("stop 2 of 4");
+    later(120); b.T.act("next");                                  /* the second tap of a double tap */
+    expect(b.els.stop.innerHTML).toContain("stop 2 of 4");
+    later(120); b.T.act("back");
+    expect(b.els.stop.innerHTML).toContain("stop 2 of 4");
+    later(300); b.T.act("next");
+    expect(b.els.stop.innerHTML).toContain("stop 3 of 4");
+    /* the quiz too: a fresh question ignores a Next tap at once */
+    const q = boot({ grade: 2 });
+    toQuiz(q, "moons");
+    q.T.act("answer", 0); q.T.act("next");
+    expect(q.els.quiz.innerHTML).toContain("question 1 of 3");
+    later(); q.T.act("next");
+    expect(q.els.quiz.innerHTML).toContain("question 2 of 3");
+  });
+
+  it("on a phone an open banner pushes the stop card and the list below it", () => {
+    const src = html.match(/function placeTourCards\(\)\{[\s\S]*?\n\}/)[0];
+    const el = (open, bottom) => ({ style: {}, classList: { contains: c => c === "open" && open }, getBoundingClientRect: () => ({ bottom }) });
+    const run = (w, banner, cmp) => {
+      const els = { banner, cmpBanner: cmp, tours: el(false, 0) }, stop = el(false, 0);
+      new Function("$", "tourStop", "innerWidth", src + "\nplaceTourCards();")(id => els[id], stop, w);
+      return { stop: stop.style.top, list: els.tours.style.top, listMax: els.tours.style.maxHeight };
+    };
+    expect(run(375, el(false, 120), el(true, 131))).toEqual({ stop: "139px", list: "139px", listMax: "calc(100% - 229px)" });
+    expect(run(375, el(true, 104), el(false, 0))).toEqual({ stop: "112px", list: "112px", listMax: "calc(100% - 202px)" });
+    expect(run(375, el(false, 0), el(false, 0))).toEqual({ stop: "", list: "", listMax: "" });          /* no banner: the CSS place */
+    expect(run(1280, el(true, 120), el(false, 0))).toEqual({ stop: "", list: "", listMax: "" });        /* wide: the card is bottom-left */
+    /* it follows the banners opening and closing, and the window's size */
+    expect(html).toContain('["banner", "cmpBanner"].forEach(id => new MutationObserver(placeTourCards).observe($(id), { attributes: true, attributeFilter: ["class"] }));');
+    expect(html).toContain('addEventListener("resize", placeTourCards);');
+    /* the Move stop lights the button without scrolling the phone's planet sheet */
+    expect(html).toContain('glowMove: on => $("cMove").classList.toggle("tglow", on),');
   });
 });
