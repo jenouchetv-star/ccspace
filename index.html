@@ -8101,6 +8101,8 @@ function mailingListModal(next, game, member, what){
   const back2 = !!member;                               /* "Already joined? Sign in" */
   /* an AI lesson from the Create page is opened, not played */
   const book = !!play && what === "book";
+  /* a subscribers-only Digital Activity (Air Harp) is tried, not played */
+  const activity = !!play && what === "activity";
   const lesson = !!play && (what === "lesson" || book || /^AI Lesson\b/i.test(play));
   const bleed = "calc(-1 * clamp(20px,3vw,32px))";
   /* the plain Join box (not for a game, a lesson or "Welcome back") is the wide one: what you get beside the form */
@@ -8118,10 +8120,10 @@ function mailingListModal(next, game, member, what){
   const intro = back2
     ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">Welcome back!</h3>'
       + '<p class="tiny mute" style="margin:0 0 18px">Enter the email you subscribed with and we’ll send you a 6-digit code to '
-      + (play ? (lesson ? 'open ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.') + '</p>'
+      + (play ? (lesson ? 'open ' : activity ? 'try ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.') + '</p>'
     : play
       ? '<h3 style="margin:.2em 0 .3em;font-size:1.6rem">' + (book ? 'This book is for subscribers' : lesson ? 'This AI lesson is for subscribers' : 'Join our mailing list') + '</h3>'
-        + '<p class="tiny mute" style="margin:0 0 18px">' + (book ? 'Join our free mailing list to read it, along with every AI lesson.' : lesson ? 'Join our free mailing list to see it, and every AI lesson.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '
+        + '<p class="tiny mute" style="margin:0 0 18px">' + (book ? 'Join our free mailing list to read it, along with every AI lesson.' : lesson ? 'Join our free mailing list to see it, and every AI lesson.' : activity ? 'Join our free mailing list to try it.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '
         + 'You can unsubscribe at any time.</p>'
       /* exactly what's waiting in the Subscriber's Portal (keep this list in step with it) */
       : '<h3 class="joinbox__title">Join our mailing list and get instant access to our extended content.</h3>'
@@ -9859,10 +9861,11 @@ function cardShareBtn(path, title, atEnd){
 function membersActivityCard(a){
   const slug = encodeURIComponent(a.portalSlug || "");
   const sub = portalHasAccess();
-  /* a subscribers-only Computer activity is a game in the portal (Air Harp, owner 2026-11-20): it is played, not read */
+  /* a subscribers-only Computer activity opens from the portal (Air Harp, owner 2026-11-20); it is an activity, not a
+     game, so its button says Try it like every other activity (owner, 2026-11-22) */
   const game = a.type === "computer";
   const open = sub ? 'data-act="go" data-hash="#/newsletter/' + E(slug) + '"'
-    : 'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(a.title) + '"' + (game ? "" : ' data-what="lesson"');
+    : 'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(a.title) + '"' + (game ? ' data-what="activity"' : ' data-what="lesson"');
   return '<article class="card card--members" ' + open + ' tabindex="0" role="link" aria-label="' + E(a.title + ", subscribers only") + '">'
     + '<div class="card__media">' + cover(a, a.type, typeMeta(a.type).label, true)
     + '<span class="card__badge chip chip--members">' + ic("lock") + ' Subscribers only</span>'
@@ -9871,9 +9874,11 @@ function membersActivityCard(a){
     + '<h3 class="card__title">' + E(a.title) + '</h3>'
     /* a visitor reads what joining gets them; a subscriber, who has it, just reads what it is */
     /* a visitor is told what joining opens; a subscriber reads what the lesson is */
-    + '<p class="tiny mute" style="margin:0">' + (sub ? E(a.summary) : '<b class="card__join">' + (game ? 'Join our mailing list to play this game and other exclusive content.' : 'Join our mailing list to view this lesson and other exclusive content.') + '</b>') + '</p>'
+    + '<p class="tiny mute" style="margin:0">' + (sub ? E(a.summary) : '<b class="card__join">' + (game ? 'Join our mailing list to try this activity and other exclusive content.' : 'Join our mailing list to view this lesson and other exclusive content.') + '</b>') + '</p>'
     + '<div class="card__foot">'
-    + '<button type="button" class="btn btn--sm btn--sun" ' + open + '>' + ic(sub ? (game ? "play" : "sparkles") : "lock") + (sub ? (game ? ' Play the game' : ' Open the lesson') : (game ? ' Join free to play' : ' Join free to see it')) + '</button>'
+    + (sub && game
+        ? '<button type="button" class="btn btn--sm btn--cyan" ' + open + '>' + ic("wand-sparkles") + ' Try it</button>'
+        : '<button type="button" class="btn btn--sm btn--sun" ' + open + '>' + ic(sub ? "sparkles" : "lock") + (sub ? ' Open the lesson' : (game ? ' Join free to try it' : ' Join free to see it')) + '</button>')
     + '</div>'
     + '</div></article>';
 }
@@ -12590,7 +12595,7 @@ function viewActivity(id){
     return '<section class="section"><div class="shell" style="max-width:860px">'
       + '<div class="crumb no-print"><a href="#/create/tech">' + E(createCrumbLabel("tech")) + '</a>' + ic("chevron-right") + '<span>' + E(a.title) + '</span></div>'
       + '<h1 style="font-size:clamp(2rem,4.6vw,3.2rem)">' + E(a.title) + '</h1><p class="lede">' + E(a.summary) + '</p>'
-      + membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: typeMeta(a.type).p1, p2: typeMeta(a.type).p2 }, a.type === "computer" ? "game" : "lesson")
+      + membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: typeMeta(a.type).p1, p2: typeMeta(a.type).p2 }, a.type === "computer" ? "activity" : "lesson")
       + '</div></section>';
   }
   noteView(a.id, "activities");
@@ -12813,6 +12818,8 @@ function membersPoster(g, what){
       + '<span class="gameposter__note gameposter__note--wrap">' + (sub ? "Opens in the Subscriber’s Portal." : E(slotText("templates/game", "membersNote"))) + '</span>'
       + '</div>';
   }
+  /* a subscribers-only Digital Activity (Air Harp) uses the game's poster, in an activity's words: Try it (owner, 2026-11-22) */
+  const act = what === "activity", w = act ? ' data-what="activity"' : "";
   return '<div class="gameposter gameposter--low" style="--p1:' + E(g.p1 || "#D9C2E3") + ';--p2:' + E(g.p2 || "#7A4A86") + '">'
     + (g.cover && g.cover.src
         ? '<img class="gameposter__photo skel" src="' + E(g.cover.src) + '" alt="' + E(g.cover.alt || "") + '" loading="lazy">'
@@ -12821,9 +12828,9 @@ function membersPoster(g, what){
     + (sub
         /* a subscriber plays right here: the game's code is fetched for them and opens in the game stage */
         ? '<button type="button" class="btn btn--lg btn--sun" data-act="members-play" data-slug="' + E(g.portalSlug || "") + '" data-title="' + E(g.title) + '"'
-          + (g.id ? ' data-game-id="' + E(g.id) + '"' : "") + '>' + ic("play") + ' Play ' + nameHTML(g.title) + '</button>'
-        : '<button type="button" class="btn btn--lg btn--sun" data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '">' + ic("lock") + ' Join free to play</button>'
-          + '<button type="button" class="btn btn--sm btn--paper" data-act="open-mailing-list" data-member data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '">' + ic("log-in") + ' Already joined? Sign in</button>')
+          + (g.id ? ' data-game-id="' + E(g.id) + '"' : "") + '>' + (act ? ic("wand-sparkles") + ' Try it' : ic("play") + ' Play ' + nameHTML(g.title)) + '</button>'
+        : '<button type="button" class="btn btn--lg btn--sun" data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '"' + w + '>' + ic("lock") + (act ? ' Join free to try it' : ' Join free to play') + '</button>'
+          + '<button type="button" class="btn btn--sm btn--paper" data-act="open-mailing-list" data-member data-next="/newsletter/' + E(slug) + '" data-game="' + E(g.title) + '"' + w + '>' + ic("log-in") + ' Already joined? Sign in</button>')
     + '</div>'
     + (sub ? "" : '<span class="gameposter__note gameposter__note--wrap">' + E(slotText("templates/game", "membersNote")) + '</span>')
     + '</div>';

@@ -81,7 +81,7 @@ describe("Pic-a-Puzzle", () => {
 
   it("tells a visitor on a subscribers-only card what joining gets them", () => {
     const lesson = index.split("function membersActivityCard(")[1].split("\nfunction ")[0];
-    expect(lesson).toContain(`(game ? 'Join our mailing list to play this game and other exclusive content.' : 'Join our mailing list to view this lesson and other exclusive content.')`);
+    expect(lesson).toContain(`(game ? 'Join our mailing list to try this activity and other exclusive content.' : 'Join our mailing list to view this lesson and other exclusive content.')`);
     const game = index.split("function gameCard(")[1].split("\nfunction ")[0];
     expect(game).toContain(`(g.kind === "members" && !portalHasAccess() ? '<b class="card__join">Join our mailing list to play this game and other educational content.</b>' : E(g.summary))`);
   });

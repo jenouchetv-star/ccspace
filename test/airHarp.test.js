@@ -166,17 +166,25 @@ describe("the page", () => {
 describe("on the Digital Activities page (owner, 2026-11-20: moved there from the Play page)", () => {
   const index = readFileSync(new URL("../index.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const fn = (name) => index.split("function " + name + "(")[1].split("\nfunction ")[0];
-  it("a subscribers-only Computer activity is a portal game: its card says play, not lesson", () => {
+  it("a subscribers-only Computer activity opens from the portal, and is an activity: its card says Try it (owner, 2026-11-22)", () => {
     const card = fn("membersActivityCard");
     expect(card).toContain('const game = a.type === "computer";');
-    expect(card).toContain("Join our mailing list to play this game and other exclusive content.");
-    expect(card).toContain("(game ? ' Play the game' : ' Open the lesson')");
-    expect(card).toContain("(game ? ' Join free to play' : ' Join free to see it')");
-    /* the join box speaks of playing a game unless it is told this is a lesson */
-    expect(card).toContain(`'" data-game="' + E(a.title) + '"' + (game ? "" : ' data-what="lesson"')`);
+    expect(card).toContain("Join our mailing list to try this activity and other exclusive content.");
+    expect(card).toContain(`'<button type="button" class="btn btn--sm btn--cyan" ' + open + '>' + ic("wand-sparkles") + ' Try it</button>'`);
+    expect(card).toContain("(game ? ' Join free to try it' : ' Join free to see it')");
+    expect(card).not.toContain("Play the game");
+    /* the join box speaks of trying an activity, or of a lesson */
+    expect(card).toContain(`'" data-game="' + E(a.title) + '"' + (game ? ' data-what="activity"' : ' data-what="lesson"')`);
+    const join = fn("mailingListModal");
+    expect(join).toContain('const activity = !!play && what === "activity";');
+    expect(join).toContain("activity ? 'Join our free mailing list to try it.'");
+    expect(join).toContain("(lesson ? 'open ' : activity ? 'try ' : 'play ')");
   });
-  it("a shared link to it shows the game's poster, where a subscriber plays it right there", () => {
-    expect(fn("viewActivity")).toContain('membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: typeMeta(a.type).p1, p2: typeMeta(a.type).p2 }, a.type === "computer" ? "game" : "lesson")');
+  it("a shared link to it shows the poster in an activity's words, where a subscriber tries it right there", () => {
+    expect(fn("viewActivity")).toContain('membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: typeMeta(a.type).p1, p2: typeMeta(a.type).p2 }, a.type === "computer" ? "activity" : "lesson")');
+    const poster = fn("membersPoster");
+    expect(poster).toContain('(act ? ic("wand-sparkles") + \' Try it\' : ic("play") + \' Play \' + nameHTML(g.title))');
+    expect(poster).toContain("(act ? ' Join free to try it' : ' Join free to play')");
   });
   it("the activity editor can point a card at a portal game as well as a lesson", () => {
     expect(index).toContain('{ key:"portalSlug", label:"Subscriber’s Portal lesson or game", type:"select", wide:true, options:() => [{ value:"", label:"Choose a portal entry..." }].concat(db.list("portalEntries").filter(e => e.layout === "lesson" || e.layout === "game" || String(e.aiPrompt || "").trim())');

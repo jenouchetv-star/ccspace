@@ -39,8 +39,8 @@ describe("Gravity 4 on the Play page", () => {
   });
   it("has Join free to play for someone new, and its own button for someone already subscribed", () => {
     const p = fn("membersPoster");
-    expect(p).toContain('data-act="open-mailing-list" data-next="/newsletter/\' + E(slug) + \'" data-game="\' + E(g.title) + \'">\' + ic("lock") + \' Join free to play</button>');
-    expect(p).toContain('data-act="open-mailing-list" data-member data-next="/newsletter/\' + E(slug) + \'" data-game="\' + E(g.title) + \'">\' + ic("log-in") + \' Already joined? Sign in</button>');
+    expect(p).toContain('data-act="open-mailing-list" data-next="/newsletter/\' + E(slug) + \'" data-game="\' + E(g.title) + \'"\' + w + \'>\' + ic("lock") + (act ? \' Join free to try it\' : \' Join free to play\') + \'</button>');
+    expect(p).toContain('data-act="open-mailing-list" data-member data-next="/newsletter/\' + E(slug) + \'" data-game="\' + E(g.title) + \'"\' + w + \'>\' + ic("log-in") + \' Already joined? Sign in</button>');
   });
   it("opens the Join modal in the matching words: Play Chike's Gravity 4 to join, Welcome back! to get a code", () => {
     const modal = fn("mailingListModal");
@@ -48,10 +48,10 @@ describe("Gravity 4 on the Play page", () => {
     expect(modal).toContain("const back2 = !!member;");
     expect(modal).toContain("? '<h3 style=\"margin:.2em 0 .3em;font-size:1.6rem\">' + (book ? 'This book is for subscribers' : lesson ? 'This AI lesson is for subscribers' : 'Join our mailing list') + '</h3>'");
     expect(modal).not.toContain(">Play ' + nameHTML(play)");
-    expect(modal).toContain("(book ? 'Join our free mailing list to read it, along with every AI lesson.' : lesson ? 'Join our free mailing list to see it, and every AI lesson.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '");
+    expect(modal).toContain("(book ? 'Join our free mailing list to read it, along with every AI lesson.' : lesson ? 'Join our free mailing list to see it, and every AI lesson.' : activity ? 'Join our free mailing list to try it.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '");
     expect(modal).toContain(">Welcome back!</h3>");
     expect(modal).toContain("Enter the email you subscribed with and we’ll send you a 6-digit code to ");
-    expect(modal).toContain("(play ? (lesson ? 'open ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.')");
+    expect(modal).toContain("(play ? (lesson ? 'open ' : activity ? 'try ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.')");
     // an AI lesson from the Create page is opened, not played
     expect(modal).toContain("const lesson = !!play && (what === \"lesson\" || book || /^AI Lesson\\b/i.test(play));");
     expect(modal).toContain("(back2 ? ' Send my code' : ' Join free')");
@@ -69,7 +69,7 @@ describe("Gravity 4 on the Play page", () => {
     expect(modal).toContain("/^\\/newsletter(\\/[a-z0-9][a-z0-9-]{0,80})?$/i");   // the same rule the portal function uses
     const send = index.split('if (act === "newsletter-submit"){')[1].split("\n  }\n")[0];
     expect(send).toContain('next: back || "/newsletter"');
-    expect(index).toContain('data-act="open-mailing-list" data-next="/newsletter/\' + E(slug) + \'" data-game="\' + E(g.title) + \'">\' + ic("lock") + \' Join free to play');   // the game's own page
+    expect(index).toContain('data-act="open-mailing-list" data-next="/newsletter/\' + E(slug) + \'" data-game="\' + E(g.title) + \'"\' + w + \'>\' + ic("lock") + (act ? \' Join free to try it\' : \' Join free to play\')');   // the game's own page
     expect(fn("portalNextPath")).toContain('"/newsletter/" + encodeURIComponent(r.params.id)');
   });
   it("can be set up from the admin games form, which insists on the portal game", () => {
@@ -167,10 +167,10 @@ describe("the AI lessons on the Create page", () => {
     expect(fn("activityCard")).toContain('if (a.kind === "members") return membersActivityCard(a);');
     const card = fn("membersActivityCard");
     expect(card).toContain("' Subscribers only</span>'");
-    expect(card).toContain(`'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(a.title) + '"' + (game ? "" : ' data-what="lesson"')`);
+    expect(card).toContain(`'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(a.title) + '"' + (game ? ' data-what="activity"' : ' data-what="lesson"')`);
     expect(card).toContain(`'data-act="go" data-hash="#/newsletter/' + E(slug) + '"'`);
     expect(card).not.toContain("#/activity/");
-    expect(fn("viewActivity")).toContain('membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: typeMeta(a.type).p1, p2: typeMeta(a.type).p2 }, a.type === "computer" ? "game" : "lesson")');
+    expect(fn("viewActivity")).toContain('membersPoster({ title: a.title, portalSlug: a.portalSlug, cover: a.image, p1: typeMeta(a.type).p1, p2: typeMeta(a.type).p2 }, a.type === "computer" ? "activity" : "lesson")');
   });
   it("stay out of the sitemap and need only a card's fields in the editor", () => {
     const gen = readFileSync(new URL("../supabase/generate-sitemap.mjs", import.meta.url), "utf8");
