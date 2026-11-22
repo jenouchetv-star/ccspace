@@ -150,9 +150,15 @@ export function nuggetsFor(kind, rec) {
 
 /** Who a finished item is recorded for: a child id, "ask" (show the picker),
     or null (record nothing). */
-/** "Who's creating today?" lasts for the day it was picked (owner, 2026-11-22: a pick kept for good recorded a game for
-    a child who had not played it). Kept on the device as "<YYYY-MM-DD>|<child id or grownup>"; another day's pick, or
-    one kept before the day was added (just an id), counts as no pick, so the device asks again. */
+/** "Who's creating today?" lasts a week from the day it was picked, then the device asks again (owner, 2026-11-22: a
+    pick kept for good kept recording for the same child; asking every day or after an hour was too often). Kept on the
+    device as "<YYYY-MM-DD>|<child id or grownup>"; a pick 7 or more days old, one dated after today, or one kept before
+    the day was added (just an id) counts as no pick. */
+export const PLAYING_DAYS = 7;
+const dayNumber = (s) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ""));
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000 : NaN;
+};
 export function playingToStore(who, today) {
   return who ? today + "|" + who : "";
 }
@@ -160,8 +166,8 @@ export function playingFromStored(raw, today) {
   if (typeof raw !== "string") return "";
   const bar = raw.indexOf("|");
   if (bar < 0) return "";
-  const day = raw.slice(0, bar), who = raw.slice(bar + 1);
-  return day === today && who ? who : "";
+  const age = dayNumber(today) - dayNumber(raw.slice(0, bar)), who = raw.slice(bar + 1);
+  return who && age >= 0 && age < PLAYING_DAYS ? who : "";
 }
 
 export function recordTarget(hasSession, playing, children) {

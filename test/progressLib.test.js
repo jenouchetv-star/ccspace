@@ -403,19 +403,22 @@ describe("grade adjust: the shared rule", () => {
   });
 });
 
-describe("Who's creating today: the pick lasts for the day (owner, 2026-11-22)", () => {
-  it("keeps today's pick", () => {
+describe("Who's creating today: the pick lasts a week (owner, 2026-11-22)", () => {
+  it("keeps the pick for 7 days from the day it was made", () => {
     expect(playingToStore("c1", "2026-11-22")).toBe("2026-11-22|c1");
     expect(playingFromStored("2026-11-22|c1", "2026-11-22")).toBe("c1");
-    expect(playingFromStored(playingToStore("grownup", "2026-11-22"), "2026-11-22")).toBe("grownup");
+    expect(playingFromStored("2026-11-22|c1", "2026-11-28")).toBe("c1");          // the 7th day
+    expect(playingFromStored("2026-11-28|c1", "2026-12-01")).toBe("c1");          // across a month
+    expect(playingFromStored(playingToStore("grownup", "2026-11-22"), "2026-11-25")).toBe("grownup");
   });
-  it("asks again the next day: an older pick counts as none", () => {
-    expect(playingFromStored("2026-11-21|c1", "2026-11-22")).toBe("");
-    expect(playingFromStored("2026-11-21|grownup", "2026-11-22")).toBe("");
+  it("asks again after a week: an older pick counts as none", () => {
+    expect(playingFromStored("2026-11-22|c1", "2026-11-29")).toBe("");
+    expect(playingFromStored("2026-10-01|grownup", "2026-11-22")).toBe("");
+    expect(playingFromStored("2026-11-23|c1", "2026-11-22")).toBe("");            // a date ahead of today (clock moved)
   });
   it("a pick kept before the day was added (just an id) counts as none, so the device asks once", () => {
     expect(playingFromStored("d0000000-0000-4000-8000-000000000001", "2026-11-22")).toBe("");
-    for (const bad of [null, undefined, "", "|c1", "2026-11-22|", 5]) expect(playingFromStored(bad, "2026-11-22")).toBe("");
+    for (const bad of [null, undefined, "", "|c1", "2026-11-22|", "nope|c1", 5]) expect(playingFromStored(bad, "2026-11-22")).toBe("");
   });
   it("no pick stores nothing", () => {
     expect(playingToStore("", "2026-11-22")).toBe("");

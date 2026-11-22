@@ -430,7 +430,7 @@ describe("who's playing, and recording what a child finishes", () => {
     expect(html).not.toContain("localStorage.clear()");
   });
 
-  it("the pick lasts for the day: yesterday's pick asks again (owner, 2026-11-22)", () => {
+  it("the pick lasts a week, then asks again (owner, 2026-11-22)", () => {
     const store = {};
     const ls = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
     let day = "2026-11-21";
@@ -440,8 +440,10 @@ describe("who's playing, and recording what a child finishes", () => {
     set("c1");
     expect(store.ccs_playing_child).toBe("2026-11-21|c1");
     expect(get()).toBe("c1");
-    day = "2026-11-22";
-    expect(get()).toBe("");                      // a new day: nobody picked, so nothing is recorded until someone picks
+    day = "2026-11-27";
+    expect(get()).toBe("c1");                    // still that week
+    day = "2026-11-28";
+    expect(get()).toBe("");                      // a week on: nobody picked, so nothing is recorded until someone picks
     store.ccs_playing_child = "c1";               // kept before the day was added
     expect(get()).toBe("");
     set("");
