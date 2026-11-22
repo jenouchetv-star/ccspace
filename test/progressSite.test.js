@@ -107,16 +107,25 @@ describe("the progress report page", () => {
   it("the member bar links to the report", () => {
     const m = body("portalMemberBar");
     expect(m).toContain("portalReportLink()");
-    const link = fn("portalReportLink", "AppState", "ic")({ route: { name: "newsletter", params: {} } }, () => "");
+    const link = fn("portalReportLink", "AppState", "ic", "ProgressState")({ route: { name: "newsletter", params: {} } }, () => "", { children: null });
     expect(link()).toContain('href="#/newsletter/progress"');
-    expect(link()).toContain("Progress report");
+    expect(link()).toContain("My Child’s Progress");
+  });
+
+  it("the button reads Add a child until a child is added, then My Child's Progress (owner, 2026-11-21)", () => {
+    const link = (children) => fn("portalReportLink", "AppState", "ic", "ProgressState")({ route: { name: "newsletter", params: {} } }, () => "", { children })();
+    expect(link([])).toContain("Add a child");
+    expect(link([])).not.toContain("Progress");
+    expect(link([{ id: "c1", name: "Maya", grade: 2 }])).toContain("My Child’s Progress");
+    expect(link(null)).toContain("My Child’s Progress");          // not known yet
+    expect(link([])).toContain('href="#/newsletter/progress"');   // the children are added on the same page
   });
 
   it("the admin's portal bar links to the report too; on the report itself neither bar has a portal link", () => {
     expect(body("portalAdminBar")).toContain("portalReportLink()");
-    const link = (name) => fn("portalReportLink", "AppState", "ic")({ route: { name, params: {} } }, () => "")();
+    const link = (name) => fn("portalReportLink", "AppState", "ic", "ProgressState")({ route: { name, params: {} } }, () => "", { children: null })();
     expect(link("newsletter")).toContain('href="#/newsletter/progress"');
-    expect(link("newsletter-detail")).toContain("Progress report");
+    expect(link("newsletter-detail")).toContain("My Child’s Progress");
     // owner, 2026-11-21: the header's Subscriber's Portal button and the breadcrumb already lead back
     expect(link("progress")).toBe("");
     const member = fn("portalMemberBar", "ic", "PortalState", "E", "portalReportLink")(() => "", { email: "" }, esc, () => link("progress"))();
