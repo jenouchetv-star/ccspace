@@ -15591,7 +15591,7 @@ function progressReportHTML(){
     if (labels.length) note.push((week ? "This week was mostly " : "So far it has been mostly ") + progressAnd(labels) + ".");
   }
   const strip = items.slice(0, 8).map(it => '<figure>'
-    + (it.img ? '<img class="skel" src="' + E(thumbSrc(it.img)) + '" alt="" loading="lazy">' : '<div class="pr-strip__blank" aria-hidden="true">' + ic(VERB[it.kind][2], "i-lg") + '</div>')
+    + (it.img ? '<img class="skel" src="' + E(thumbSrc(it.img)) + '" data-full="' + E(it.img) + '" alt="" loading="lazy">' : '<div class="pr-strip__blank" aria-hidden="true">' + ic(VERB[it.kind][2], "i-lg") + '</div>')
     + '<figcaption><b>' + E(it.title) + '</b><span>' + VERB[it.kind][1] + ' ' + E(progressWhen(when[it.kind + ":" + it.id], week ? "day" : "date")) + '</span></figcaption></figure>').join("");
   const boxWeek = '<div class="box box--week"><section class="pr-opening" aria-labelledby="pr-week-title">'
     /* the child's own avatar (owner, 2026-11-22; assets/lib/avatars.js), next to their name in the heading */
@@ -15810,8 +15810,8 @@ async function progressRemoveChild(id){
 
 /* ---- Who's creating, and recording what a child finishes ----
    On a device signed in to the Subscriber's Portal, with children added, the site asks once "Who's creating today?"
-   and remembers the pick on this device (PLAYING_KEY: a child's id, or "grownup" for "Just me, the grown-up", which
-   records nothing). A watched episode, a book read to its last page, an opened portal entry (a game entry when it is
+   and remembers the pick on this device for that day only (PLAYING_KEY: "<day>|<a child's id>", or "<day>|grownup" for
+   "Just me, the grown-up", which records nothing; the next day it asks again). A watched episode, a book read to its last page, an opened portal entry (a game entry when it is
    played) and an activity marked "We made it!" are then recorded for that child. Nothing is recorded, and the picker
    never shows, without a portal session (recordTarget in assets/lib/progress.js decides). The look is
    docs/mockups/progress-report-draft-5.html. */
@@ -15822,7 +15822,12 @@ let PROGRESS_ENTRY_SEEN = "";     /* the portal entry already recorded on this v
 let PROGRESS_BOOK_FRAME = null;   /* the book already recorded since it was opened */
 const PROGRESS_MADE = {};         /* "<activity id>:<child id>" -> when We made it! was pressed on this page load */
 
-function progressPlaying(){ try { return localStorage.getItem(PLAYING_KEY) || ""; } catch(_e){ return PLAYING_MEM; } }
+/* the pick lasts for the day it was made, then the device asks again (playingFromStored, assets/lib/progress.js) */
+function progressPlaying(){
+  let raw;
+  try { raw = localStorage.getItem(PLAYING_KEY); } catch(_e){ raw = PLAYING_MEM; }
+  return playingFromStored(raw, progressToday());
+}
 /** The picked child's grade (0 to 6) for a game to start at, or null: a visitor, "Just me, the grown-up", no pick, or the
     children not loaded yet. Never loads anything (childGradeFrom, recordTarget: assets/lib/progress.js). */
 function progressPickedGrade(){
@@ -15856,8 +15861,9 @@ function finderFillAge(){
   if (!AppState.finder.age) AppState.finder.age = findAgeForGrade(g);
 }
 function progressSetPlaying(v){
-  PLAYING_MEM = v || "";
-  try { if (v) localStorage.setItem(PLAYING_KEY, v); else localStorage.removeItem(PLAYING_KEY); } catch(_e){ /* private window */ }
+  const kept = playingToStore(v || "", progressToday());
+  PLAYING_MEM = kept;
+  try { if (kept) localStorage.setItem(PLAYING_KEY, kept); else localStorage.removeItem(PLAYING_KEY); } catch(_e){ /* private window */ }
 }
 /** The member's children, loaded once when nothing has loaded them yet; a load already under way (the report page's,
     or one after Remove) is waited for. No session: none. */
@@ -16165,7 +16171,8 @@ function progressQuizFrom(nuggetId){
   const pic = n.kind === "episode" ? rec.thumb && rec.thumb.src
     : n.kind === "book" ? rec.data && rec.data.card && rec.data.card.src
     : typeof c === "string" ? c : c && c.src;
-  return { title: rec.title || "", pic: pic ? thumbSrc(pic) : "" };
+  /* full: the picture itself, for the page's missing-thumbnail fallback (data-full) */
+  return { title: rec.title || "", pic: pic ? thumbSrc(pic) : "", full: pic || "" };
 }
 /** The answers as big buttons. Once answered, the right one is green and the child's other pick a soft neutral; while
     an answer is on its way, and after, none can be pressed again. */
@@ -16199,7 +16206,7 @@ function progressQuizQuestionHTML(q, i, n, st, from, canSay){
   const label = progressSubjectLabel(q.subject);
   const note = (label ? '<span class="pr-subj">' + (STEAMM_ICONS[label] || "") + E(label) + '</span>' : "")
     + (from && from.title ? "From " + E(from.title) : "");
-  return (from && from.pic ? '<img class="quiz__pic" src="' + E(from.pic) + '" alt="" decoding="async">' : "")
+  return (from && from.pic ? '<img class="quiz__pic" src="' + E(from.pic) + '"' + (from.full ? ' data-full="' + E(from.full) + '"' : "") + ' alt="" decoding="async">' : "")
     + '<div class="quiz__row"><img class="quiz__chike" src="assets/characters/chike-pose-' + pose + '.png" alt="" width="84" height="84" decoding="async">'
     + '<h3 id="quiz-title" class="quiz__q" tabindex="-1">' + E(q.question) + (note ? '<small>' + note + '</small>' : "") + '</h3></div>'
     + (canSay ? '<button type="button" class="quiz__hear" data-quiz="hear">'

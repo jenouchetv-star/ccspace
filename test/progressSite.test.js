@@ -5,7 +5,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   recordTarget, quizBubbleAllowed, GRADE_LABELS, gradeLabel, STEAMM_SUBJECTS, nuggetsFor, parseNuggetId, subjectFromTopic,
-  answerFromMessage, buildReport, READING_SUBJECT,
+  answerFromMessage, buildReport, READING_SUBJECT, playingFromStored, playingToStore,
 } from "../assets/lib/progress.js";
 import { AVATAR_IDS, avatarName, avatarFor, avatarSVG } from "../assets/lib/avatars.js";
 
@@ -430,6 +430,24 @@ describe("who's playing, and recording what a child finishes", () => {
     expect(html).not.toContain("localStorage.clear()");
   });
 
+  it("the pick lasts for the day: yesterday's pick asks again (owner, 2026-11-22)", () => {
+    const store = {};
+    const ls = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
+    let day = "2026-11-21";
+    const deps = ["localStorage", "PLAYING_KEY", "PLAYING_MEM", "progressToday", "playingFromStored", "playingToStore"];
+    const set = (v) => fn("progressSetPlaying", ...deps)(ls, "ccs_playing_child", "", () => day, playingFromStored, playingToStore)(v);
+    const get = () => fn("progressPlaying", ...deps)(ls, "ccs_playing_child", "", () => day, playingFromStored, playingToStore)();
+    set("c1");
+    expect(store.ccs_playing_child).toBe("2026-11-21|c1");
+    expect(get()).toBe("c1");
+    day = "2026-11-22";
+    expect(get()).toBe("");                      // a new day: nobody picked, so nothing is recorded until someone picks
+    store.ccs_playing_child = "c1";               // kept before the day was added
+    expect(get()).toBe("");
+    set("");
+    expect(store).toEqual({});
+  });
+
   it("no em dashes and no he/she in the who's playing copy", () => {
     const code = ["progressWhoHTML", "progressChipHTML", "progressMadeInner", "progressRecord"].map(body).join("\n") + action("progress-made");
     expect(code.includes("—")).toBe(false);
@@ -514,6 +532,12 @@ describe("answers from the site's games, and the report's levels", () => {
       (s) => s, {}, avatarSVG, avatarFor, READING_SUBJECT)();
   };
   const subjectsOf = (h) => h.split('<ul class="pr-subjects"')[1].split("</ul>")[0];
+
+  it("the week's pictures fall back to the full picture when the small copy is missing (owner, 2026-11-22)", () => {
+    const strip = body("progressReportHTML").split("const strip =")[1].split("const boxWeek")[0];
+    expect(strip).toContain(`'<img class="skel" src="' + E(thumbSrc(it.img)) + '" data-full="' + E(it.img) + '" alt="" loading="lazy">'`);
+    expect(body("progressQuizFrom")).toContain('full: pic || ""');
+  });
 
   it("subjects with no answers show no level", () => {
     const none = report(undefined);
@@ -701,6 +725,10 @@ describe("Chike's pop quiz", () => {
     expect(h).toContain("chike-pose-");
     for (const c of Q.choices) expect(h).toContain(c);
     expect((h.match(/data-quiz="pick"/g) || []).length).toBe(3);
+    // a picture whose small copy is missing falls back to the full one (owner, 2026-11-22: Air Harp's was blank)
+    const withFull = questionHTML(Q, 0, 3, { result: null }, { title: "Air Harp", pic: "u/air-harp-thumb.jpg", full: "u/air-harp.jpg" }, false);
+    expect(withFull).toContain('src="u/air-harp-thumb.jpg" data-full="u/air-harp.jpg"');
+    expect(h).not.toContain("data-full");                                       // none given, none added
     // no picture or subject: neither shows, and nothing breaks
     const bare = questionHTML(Object.assign({}, Q, { subject: "" }), 2, 3, { result: null }, null, false);
     expect(bare).toContain("3 of 3");

@@ -150,6 +150,20 @@ export function nuggetsFor(kind, rec) {
 
 /** Who a finished item is recorded for: a child id, "ask" (show the picker),
     or null (record nothing). */
+/** "Who's creating today?" lasts for the day it was picked (owner, 2026-11-22: a pick kept for good recorded a game for
+    a child who had not played it). Kept on the device as "<YYYY-MM-DD>|<child id or grownup>"; another day's pick, or
+    one kept before the day was added (just an id), counts as no pick, so the device asks again. */
+export function playingToStore(who, today) {
+  return who ? today + "|" + who : "";
+}
+export function playingFromStored(raw, today) {
+  if (typeof raw !== "string") return "";
+  const bar = raw.indexOf("|");
+  if (bar < 0) return "";
+  const day = raw.slice(0, bar), who = raw.slice(bar + 1);
+  return day === today && who ? who : "";
+}
+
 export function recordTarget(hasSession, playing, children) {
   const list = Array.isArray(children) ? children : [];
   if (!hasSession || !list.length || playing === "grownup") return null;

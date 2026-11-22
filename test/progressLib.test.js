@@ -5,7 +5,7 @@ import {
   nuggetsFor, recordTarget, watchedEnough, doneFromMessage, grownUpQuestion,
   buildReport, QUIZ_ROUTES, quizBubbleAllowed, questionDraftMessages, parseQuestionDraft,
   gradeAges, activityFitsGrade, difficultyDistance, findAgeForGrade, childGradeFrom, withChildGrade,
-  subjectLevel, answerFromMessage, READING_SUBJECT,
+  subjectLevel, answerFromMessage, READING_SUBJECT, playingFromStored, playingToStore,
 } from "../assets/lib/progress.js";
 
 const NOW = new Date("2026-11-21T12:00:00Z");
@@ -400,5 +400,24 @@ describe("grade adjust: the shared rule", () => {
     // a bad grade changes nothing
     expect(withChildGrade(game, null)).toBe(game);
     expect(withChildGrade(game, 7)).toBe(game);
+  });
+});
+
+describe("Who's creating today: the pick lasts for the day (owner, 2026-11-22)", () => {
+  it("keeps today's pick", () => {
+    expect(playingToStore("c1", "2026-11-22")).toBe("2026-11-22|c1");
+    expect(playingFromStored("2026-11-22|c1", "2026-11-22")).toBe("c1");
+    expect(playingFromStored(playingToStore("grownup", "2026-11-22"), "2026-11-22")).toBe("grownup");
+  });
+  it("asks again the next day: an older pick counts as none", () => {
+    expect(playingFromStored("2026-11-21|c1", "2026-11-22")).toBe("");
+    expect(playingFromStored("2026-11-21|grownup", "2026-11-22")).toBe("");
+  });
+  it("a pick kept before the day was added (just an id) counts as none, so the device asks once", () => {
+    expect(playingFromStored("d0000000-0000-4000-8000-000000000001", "2026-11-22")).toBe("");
+    for (const bad of [null, undefined, "", "|c1", "2026-11-22|", 5]) expect(playingFromStored(bad, "2026-11-22")).toBe("");
+  });
+  it("no pick stores nothing", () => {
+    expect(playingToStore("", "2026-11-22")).toBe("");
   });
 });
