@@ -3186,6 +3186,9 @@ h1.admin-page-title{ font-size:1.7rem; }
 /* Status pill with a leading badge - the workflow-status component
    used throughout admin list tables. */
 .admin-status{ display:inline-flex; align-items:center; gap:7px; font-size:.82rem; font-weight:600; }
+/* "Online now" in the Subscribers table's Last seen column */
+.admin-online{ display:inline-flex; align-items:center; gap:7px; font-weight:600; color:var(--admin-good); }
+.admin-online__dot{ width:8px; height:8px; border-radius:50%; background:var(--admin-good); flex:none; }
 
 /* -- Toggle switch (checkbox styled as a slider) -- */
 .admin-switch{ position:relative; display:inline-flex; align-items:center; gap:9px; cursor:pointer; font-size:.85rem; font-weight:600; }
@@ -15291,6 +15294,20 @@ function progressSessionEnded(r){
   return true;
 }
 
+/* "Last seen" for the admin Subscribers table: while a signed-in member has a page of the site open and visible, tell
+   kid-progress now and then (it keeps only the time, at most once a minute). Visitors without a saved sign-in send
+   nothing, and members see nothing. */
+const PORTAL_SEEN_EVERY_MS = 120000;
+function portalSeenPing(){
+  if (!portalSavedSession() || document.visibilityState !== "visible") return;
+  kidCall("seen").then((r) => { progressSessionEnded(r); }, () => {});
+}
+function portalSeenStart(){
+  portalSeenPing();
+  setInterval(portalSeenPing, PORTAL_SEEN_EVERY_MS);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") portalSeenPing(); });
+}
+
 /** Loads the member's children. A load already under way is shared: whoever asks meanwhile waits for the same answer.
     A load the family signed out of (progressForget) while it ran keeps nothing. */
 async function progressLoadChildren(){
@@ -19814,7 +19831,13 @@ const LIST_COLS = {
     { key:"source", label:"From" },
     { key:"heardFrom", label:"Heard about us", render:r => r.heardFrom
         ? (r.heardFrom === "other" && r.heardFromOther ? "Other: " + r.heardFromOther : (HEARD_FROM_LABELS[r.heardFrom] || r.heardFrom)) : "" },
-    { key:"at", label:"Joined", render:r => fmtDate(r.at) }
+    { key:"at", label:"Joined", render:r => fmtDate(r.at) },
+    { key:"lastSignIn", label:"Last signed in", render:r => signInLastCell(subscriberSignIn(r.id)),
+      sortValue:r => { const s = subscriberSignIn(r.id); return s && s.last_sign_in ? Date.parse(s.last_sign_in) : 0; } },
+    { key:"signedIn", label:"Signed in", html:true, render:r => signInNowCell(subscriberSignIn(r.id)),
+      sortValue:r => { const s = subscriberSignIn(r.id); return s && s.signed_in ? 1 : 0; } },
+    { key:"lastSeen", label:"Last seen", html:true, render:r => signInSeenCell(subscriberSignIn(r.id)),
+      sortValue:r => { const s = subscriberSignIn(r.id); return s && s.last_seen ? Date.parse(s.last_seen) : 0; } }
   ],
   characters: [
     { key:"thumb", label:"", html:true, render:r => thumbCell(r.image && r.image.src) },
@@ -20207,15 +20230,18 @@ function adminList(col){
   const effectiveSort = (col === "characters" && st.sort === "updatedAt") ? "order" : st.sort;
   const effectiveDir = (col === "characters" && st.sort === "updatedAt") ? "asc" : st.dir;
 
+  const cols = LIST_COLS[col] || [{ key:"title", label:"Title", main:true }];
   rows.sort((a,b) => {
     const key = effectiveSort;
     let av = a[key], bv = b[key];
     if (key === "title") { av = a.title || a.name || a.path || ""; bv = b.title || b.name || b.path || ""; }
+    /* a column whose value is not a field of the record (the Subscribers sign-in columns) says how to sort it */
+    const custom = cols.find(c => c.key === key && c.sortValue);
+    if (custom) { av = custom.sortValue(a); bv = custom.sortValue(b); }
     if (typeof av === "string") return effectiveDir === "asc" ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
     return effectiveDir === "asc" ? (av||0) - (bv||0) : (bv||0) - (av||0);
   });
 
-  const cols = LIST_COLS[col] || [{ key:"title", label:"Title", main:true }];
   const label = COLLECTION_LABELS[col] || col;
   const all = db.list(col);
   const problemCount = all.filter(r => errorsOf(col, r).length > 0).length;
@@ -21639,6 +21665,71 @@ function subscriberStatusBadge(status){
   return '<span class="admin-status">'
     + '<span class="admin-badge admin-badge--sm ' + b.cls + '">' + ic(b.icon) + '</span>'
     + E(b.label) + '</span>';
+}
+
+/* Parents' sign-ins for the Subscribers table's "Last signed in", "Signed in" and "Last seen" columns, read once per
+   visit to that list from subscriber_sign_ins() (admins only; supabase/parent-sign-ins.sql) and kept by subscriber
+   id. map is null until it arrives; failed when the RPC could not be read (for example not deployed yet), and then
+   the columns say "Not available" and the table works as before. visit counts visits so a late answer is dropped. */
+const SubscriberSignIns = { visit: 0, loading: false, map: null, failed: false };
+const ONLINE_NOW_MS = 5 * 60000;
+async function subscriberSignInsLoad(){
+  const S = SubscriberSignIns;
+  const visit = ++S.visit;
+  S.loading = true;
+  let res;
+  try { res = await sb.rpc("subscriber_sign_ins"); } catch(e){ res = { data: null, error: e }; }
+  if (S.visit !== visit) return;
+  S.loading = false;
+  if (!res || res.error || !Array.isArray(res.data)){
+    console.warn("Subscribers: sign-ins not available:", (res && res.error && res.error.message) || "no data");
+    S.failed = true;
+  } else {
+    const map = {};
+    for (const row of res.data) if (row && row.subscriber_id) map[row.subscriber_id] = row;
+    S.map = map;
+  }
+  rerender();
+}
+/** Called on every admin render: on the Subscribers list it loads the sign-ins once; anywhere else it forgets them,
+    so the next visit reads them fresh. */
+function subscriberSignInsVisit(on){
+  const S = SubscriberSignIns;
+  if (!on){
+    if (S.loading || S.map || S.failed){ S.visit += 1; S.loading = false; S.map = null; S.failed = false; }
+    return;
+  }
+  if (S.loading || S.map || S.failed) return;
+  subscriberSignInsLoad();
+}
+/** One subscriber's sign-ins: undefined while loading, "fail" when not available, null when they never signed in. */
+function subscriberSignIn(id){
+  const S = SubscriberSignIns;
+  return S.failed ? "fail" : (S.map ? (S.map[id] || null) : undefined);
+}
+/** "Last signed in" (plain text). */
+function signInLastCell(s){
+  if (s === "fail") return "Not available";
+  if (s === undefined) return "Loading";
+  return s && s.last_sign_in ? relTime(s.last_sign_in) : "Never";
+}
+/** "Signed in" (HTML): a badge like the Status column's, good while a sign-in has not run out. */
+function signInNowCell(s){
+  if (s === "fail") return E("Not available");
+  if (s === undefined) return E("Loading");
+  const on = !!(s && s.signed_in);
+  return '<span class="admin-status">'
+    + '<span class="admin-badge admin-badge--sm' + (on ? " admin-badge--good" : "") + '">' + ic(on ? "log-in" : "log-out") + '</span>'
+    + E(on ? "Signed in" : "Signed out") + '</span>';
+}
+/** "Last seen" (HTML): a green dot and "Online now" within 5 minutes, else how long ago. */
+function signInSeenCell(s){
+  if (s === "fail") return E("Not available");
+  if (s === undefined) return E("Loading");
+  if (!s || !s.last_seen) return "Never";
+  if (Date.now() - Date.parse(s.last_seen) < ONLINE_NOW_MS)
+    return '<span class="admin-online"><span class="admin-online__dot" aria-hidden="true"></span>Online now</span>';
+  return E(relTime(s.last_seen));
 }
 
 /** One row in the newsletters list: status, subject, the timestamp that
@@ -24447,6 +24538,7 @@ function viewAdmin(section, id, sub){
       }).join("");
 
   let body = "";
+  subscriberSignInsVisit(section === "subscribers");
   if (section === "dashboard") body = adminDashboard();
   else if (section === "homepage") body = adminHomepage();
   else if (section === "studio")   body = adminStudio();
@@ -29034,6 +29126,7 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => Moti
 function renderRoute(route){
   const n = route.name;
   const p = route.params || {};
+  if (n !== "admin") subscriberSignInsVisit(false);   // leaving admin ends a visit to the Subscribers list too
   switch(n){
     case "home":              return viewHome();
     case "create":            return p.app ? viewStudioApp(p.app) : viewCreate(p.sub || "");
@@ -32975,6 +33068,7 @@ async function boot(){
   );
   setInterval(checkIdleLock, 30000);
   render();
+  portalSeenStart();
   BackToTop.mount();
   if (window.lucide) drawIcons();
   else {

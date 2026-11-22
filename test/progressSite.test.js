@@ -930,3 +930,43 @@ describe("Quiz questions in the admin editor", () => {
     expect(code).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 });
+
+describe("the 'last seen' heartbeat", () => {
+  const ping = (saved, visible, answer = { ok: true }) => {
+    const calls = [], ended = [];
+    const kidCall = (action) => { calls.push(action); return Promise.resolve(answer); };
+    const progressSessionEnded = (r) => { ended.push(r); return !!r && r.error === "no_session"; };
+    const doc = { visibilityState: visible ? "visible" : "hidden" };
+    fn("portalSeenPing", "portalSavedSession", "kidCall", "progressSessionEnded", "document")(() => saved, kidCall, progressSessionEnded, doc)();
+    return new Promise((res) => setTimeout(() => res({ calls, ended }), 0));
+  };
+
+  it("sends seen only with a saved session and a visible tab", async () => {
+    expect((await ping("tok", true)).calls).toEqual(["seen"]);
+    expect((await ping("", true)).calls).toEqual([]);
+    expect((await ping("tok", false)).calls).toEqual([]);
+  });
+
+  it("hands every answer to progressSessionEnded, so a no_session signs the portal out the usual way", async () => {
+    const r = await ping("tok", true, { ok: false, error: "no_session" });
+    expect(r.ended).toEqual([{ ok: false, error: "no_session" }]);
+  });
+
+  it("starts on load, every 2 minutes, and again when the tab becomes visible", () => {
+    const timers = [], listeners = {};
+    let pings = 0;
+    const doc = { visibilityState: "visible", addEventListener: (ev, f) => { listeners[ev] = f; } };
+    fn("portalSeenStart", "portalSeenPing", "setInterval", "document", "PORTAL_SEEN_EVERY_MS")(
+      () => { pings += 1; }, (f, ms) => { timers.push({ f, ms }); return 1; }, doc, 120000)();
+    expect(pings).toBe(1);
+    expect(timers.map((t) => t.ms)).toEqual([120000]);
+    timers[0].f();
+    expect(pings).toBe(2);
+    doc.visibilityState = "hidden"; listeners.visibilitychange();
+    expect(pings).toBe(2);
+    doc.visibilityState = "visible"; listeners.visibilitychange();
+    expect(pings).toBe(3);
+    expect(html).toContain("const PORTAL_SEEN_EVERY_MS = 120000;");
+    expect(body("boot")).toContain("portalSeenStart();");
+  });
+});
