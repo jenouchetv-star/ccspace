@@ -28,7 +28,8 @@ const GAMES = {
   "supabase/private-games/number-dash.html": "Math Runner",
   "supabase/private-games/pic-pop-puzzle.html": "Pic-a-Puzzle",
   "supabase/private-games/remote-lunar-salvage.html": "Remote Lunar Mission",   /* was Remote Lunar Salvage (owner renamed it, 2026-11-18) */
-  "supabase/private-games/solar-system-sandbox.html": "Solar System Sandbox"
+  "supabase/private-games/solar-system-sandbox.html": "Solar System Sandbox",
+  "supabase/private-games/write-with-yuna.html": "Write with Yuna"
 };
 const read = (p) => readFileSync(new URL("../" + p, import.meta.url), "utf8");
 const esc = (t) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -69,6 +70,7 @@ describe("every game opens on the logo loading screen", () => {
   });
   it("the phone controller is a remote, not a game, so it has none", () => {
     expect(read("games/lunar-salvage-remote.html")).not.toContain('id="ccsLoad"');
+    expect(read("games/write-with-yuna-pad.html")).not.toContain('id="ccsLoad"');
   });
   it("the Hands-Free Reader (AI Lesson 05) stays free of Chike's branding, so it has none", () => {
     expect(read("supabase/private-games/gesture-lab.html")).not.toContain('id="ccsLoad"');

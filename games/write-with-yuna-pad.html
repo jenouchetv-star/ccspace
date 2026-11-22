@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#FAF4E6">
+<title>Write with Yuna: the writing pad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<!--
+  Write with Yuna's writing pad: a phone or tablet becomes the paper for the big screen (a remote, not a game, so no
+  loading screen). It joins the big screen's room over Supabase Realtime broadcast (channel "writeyuna-CODE"), sealed
+  like Stack 'Em Up: ECDH P-256 + AES-GCM, and only the screen whose key matches the QR link's fingerprint (k) is
+  trusted. It shows the writing lines, the guide, the orange arrows and the numbers for the current item, and sends the
+  strokes as they are drawn. Nothing is saved on the phone. The big screen grades the writing.
+-->
+<style>
+  :root{ --ink:#1E2226; --ink-soft:#3E464C; --mute:#616A70; --paper:#FAF4E6; --card:#FFFBF3; --blue:#1273B0; --sun:#F2C230; --leaf:#2F6B2C; --red:#E5484D; }
+  *{ box-sizing:border-box; }
+  [hidden]{ display:none !important; }
+  html,body{ margin:0; height:100%; background:var(--paper); color:var(--ink); font-family:"Plus Jakarta Sans", system-ui, sans-serif; -webkit-font-smoothing:antialiased; overflow:hidden; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+  button,input{ font-family:inherit; color:inherit; }
+  .screen{ position:fixed; inset:0; display:flex; flex-direction:column; padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left)); }
+  .center{ justify-content:center; align-items:center; text-align:center; gap:14px; overflow:auto; }
+  h1{ margin:0; font-size:26px; line-height:1.1; letter-spacing:-.02em; }
+  p{ margin:0; color:var(--ink-soft); font-size:15px; line-height:1.5; max-width:380px; }
+  .code{ font:800 32px/1 "Plus Jakarta Sans", system-ui, sans-serif; letter-spacing:.2em; text-align:center; width:9.5ch; padding:12px 10px; border-radius:14px; border:3px solid var(--ink); background:#fff; color:var(--ink); -webkit-user-select:text; user-select:text; }
+  .code:focus{ outline:3px solid var(--blue); outline-offset:2px; }
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:48px; padding:0 18px; border:3px solid var(--ink); border-radius:999px; background:var(--card); font-weight:800; font-size:15px; color:var(--ink); box-shadow:3px 3px 0 var(--ink); cursor:pointer; touch-action:manipulation; }
+  .btn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink); }
+  .btn:disabled{ opacity:.45; transform:none; box-shadow:3px 3px 0 var(--ink); }
+  .btn--blue{ background:var(--blue); color:#fff; } .btn--sun{ background:var(--sun); }
+  .msg{ min-height:1.4em; font-size:14px; font-weight:700; color:var(--mute); }
+  .msg.err{ color:#B42318; }
+  .face{ width:96px; height:96px; }
+  .face img{ width:100%; height:100%; object-fit:contain; display:block; }
+
+  .top{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:2px 4px 8px; }
+  .top b{ font-size:17px; line-height:1.2; }
+  .stat{ display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--mute); white-space:nowrap; }
+  .stat i{ width:9px; height:9px; border-radius:50%; background:#B9C3CB; display:block; }
+  .stat.ok{ color:var(--leaf); } .stat.ok i{ background:var(--leaf); }
+  .pad{ flex:1; min-height:0; background:#fff; border:3px solid var(--ink); border-radius:18px; position:relative; overflow:hidden; }
+  .pad svg{ position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  .note{ position:absolute; left:12px; right:12px; top:12px; text-align:center; font-weight:800; font-size:15px; color:var(--ink-soft); pointer-events:none; }
+  .bar{ display:flex; gap:8px; padding:12px 0 0; justify-content:center; flex-wrap:wrap; align-items:center; }
+  .stars{ display:flex; gap:4px; }
+  .stars svg{ width:30px; height:30px; }
+</style>
+</head>
+<body>
+
+<!-- 1: join, by the QR code's link or by typing the six numbers -->
+<section class="screen center" id="vJoin">
+  <div class="face"><img src="/assets/characters/yuna-pose-wave.png" alt=""></div>
+  <h1>Write with Yuna</h1>
+  <p>Type the six numbers on the big screen, then tap Connect.</p>
+  <input class="code" id="code" inputmode="numeric" autocomplete="off" maxlength="7" placeholder="000000" aria-label="Room code">
+  <button class="btn btn--blue" id="bJoin" type="button">Connect</button>
+  <div class="msg" id="joinMsg" role="status"></div>
+</section>
+
+<!-- 2: the paper -->
+<section class="screen" id="vPad" hidden>
+  <div class="top"><b id="title">Write with Yuna</b><span class="stat" id="stat"><i></i><span id="statTxt">Connected</span></span></div>
+  <div class="pad">
+    <svg id="paper" viewBox="0 -34 300 204" preserveAspectRatio="xMidYMid meet" aria-label="Writing lines">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#E07A1F"/></marker></defs>
+      <g id="gLines"></g><g id="gGuide"></g><g id="gArrows"></g><g id="gNums"></g><g id="gInk"></g><g id="gOver"></g>
+    </svg>
+    <div class="note" id="note" role="status"></div>
+  </div>
+  <div class="bar" id="barWatch" hidden><button class="btn btn--blue" id="bReady" type="button">I'm ready to trace</button></div>
+  <div class="bar" id="barWrite" hidden><button class="btn" id="bUndo" type="button">Undo</button><button class="btn" id="bClear" type="button">Clear</button><button class="btn btn--sun" id="bDone" type="button">Done</button></div>
+  <div class="bar" id="barResult" hidden><span class="stars" id="stars" role="img"></span><button class="btn" id="bRetry" type="button">Try it again</button><button class="btn btn--blue" id="bNext" type="button">Next</button></div>
+</section>
+
+<script>
+"use strict";
+/* BEGIN pure */
+function readCode(s){ const d = String(s || "").replace(/\D/g, ""); return /^[1-9]\d{5}$/.test(d) ? d : null; }
+const PHASES = ["wait", "watch", "trace", "own", "result"];
+const isNum = (n) => typeof n === "number" && Number.isFinite(n) && Math.abs(n) < 100000;
+const isPt = (p) => Array.isArray(p) && p.length === 2 && isNum(p[0]) && isNum(p[1]);
+const isLine = (s, max) => Array.isArray(s) && s.length <= max && s.every(isPt);
+/** The pad's own view of the lines: closer around the writing than the big screen's, so a letter fills a phone. */
+function padView(guide, vb){
+  let lo = Infinity, hi = -Infinity;
+  guide.forEach(s => s.forEach(p => { lo = Math.min(lo, p[0]); hi = Math.max(hi, p[0]); }));
+  if (!(hi >= lo)) return vb;
+  let x0 = lo - 30, x1 = hi + 30;
+  if (x1 - x0 < 170){ const c = (x0 + x1) / 2; x0 = c - 85; x1 = c + 85; }
+  return [Math.round(x0 * 10) / 10, -34, Math.round((x1 - x0) * 10) / 10, 204];
+}
+/** Anyone on the room's channel can send messages, so only a well-formed view sealed by the big screen is drawn:
+    plain numbers and a short title. */
+function cleanView(m){
+  if (!m || typeof m !== "object" || PHASES.indexOf(m.phase) < 0 || !Number.isInteger(m.seq) || m.seq < 0) return null;
+  const v = { seq: m.seq, phase: m.phase, title: typeof m.title === "string" ? m.title.slice(0, 40) : "" };
+  if (m.phase === "wait") return v;
+  if (!Array.isArray(m.vb) || m.vb.length !== 4 || !m.vb.every(isNum) || m.vb[2] <= 0 || m.vb[3] <= 0) return null;
+  if (!Array.isArray(m.guide) || m.guide.length > 120 || !m.guide.every(s => isLine(s, 1200))) return null;
+  v.vb = padView(m.guide, m.vb); v.guide = m.guide;
+  v.arrows = Array.isArray(m.arrows) ? m.arrows.slice(0, 120).map(a => (isLine(a, 200) ? a : null)) : [];
+  v.nums = Array.isArray(m.nums) ? m.nums.slice(0, 120).filter(n => n && Number.isInteger(n.n) && n.n > 0 && n.n < 200 && isNum(n.x) && isNum(n.y)) : [];
+  v.start = isPt(m.start) ? m.start : null;
+  v.stars = Number.isInteger(m.stars) && m.stars >= 0 && m.stars <= 3 ? m.stars : 0;
+  v.last = !!m.last;
+  return v;
+}
+/* END pure */
+
+const $ = (id) => document.getElementById(id);
+const r1 = (v) => Math.round(v * 10) / 10;
+addEventListener("contextmenu", (e) => { if (!e.target.closest("input")) e.preventDefault(); });
+const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (_e) {} };
+function show(id){ ["vJoin", "vPad"].forEach(s => { $(s).hidden = s !== id; }); }
+
+/* ---------- the sealed link to the big screen (as Stack 'Em Up's player page) ---------- */
+const SB_URL = "https://wdctkfhwygwwulipwnys.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
+const MSC = {
+  b64: (buf) => btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(buf)))),
+  unb64: (s) => Uint8Array.from(atob(String(s)), c => c.charCodeAt(0)),
+  ALG: { name: "ECDH", namedCurve: "P-256" },
+  pair(){ return crypto.subtle.generateKey(MSC.ALG, true, ["deriveKey"]); },
+  async pub(kp){ return MSC.b64(await crypto.subtle.exportKey("raw", kp.publicKey)); },
+  /* a short fingerprint of the big screen's key, carried in the QR link so this pad trusts only that screen */
+  async fp(pubB64){ const h = await crypto.subtle.digest("SHA-256", MSC.unb64(pubB64)); return MSC.b64(h.slice(0, 12)).replace(/\+/g, "-").replace(/\//g, "_"); },
+  async key(priv, pubB64){
+    const pk = await crypto.subtle.importKey("raw", MSC.unb64(pubB64), MSC.ALG, false, []);
+    return crypto.subtle.deriveKey({ name: "ECDH", public: pk }, priv, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  },
+  async seal(key, obj){
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
+    return { iv: MSC.b64(iv), d: MSC.b64(ct) };
+  },
+  async open(key, box){
+    try { const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: MSC.unb64(box.iv) }, key, MSC.unb64(box.d)); return JSON.parse(new TextDecoder().decode(pt)); }
+    catch (_e){ return null; }
+  }
+};
+/* a new key pair every visit: nothing is kept on this phone */
+const P = { code: "", fp: "", pk: "", kp: null, key: null, hk: "", hostWait: null, n: 0, lastV: 0, ch: null, sb: null, id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"),
+  view: null, seq: -1, heard: false, hostSeen: 0, chain: Promise.resolve(), beat: 0 };
+function loadScript(src){ return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error("load")); document.head.appendChild(s); }); }
+async function sb(){
+  if (P.sb) return P.sb;
+  if (!window.supabase){ try { await loadScript("/assets/vendor/supabase.js"); } catch (_e){ await loadScript("https://unpkg.com/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"); } }
+  P.sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, realtime: { params: { eventsPerSecond: 30 } } });
+  return P.sb;
+}
+function post(p){ if (!P.ch) return; p.i = P.id; try { const r = P.ch.send({ type: "broadcast", event: "m", payload: p }); if (r && r.catch) r.catch(() => {}); } catch (_e) {} }
+/* everything this pad says is sealed, with a number that only goes up, one message after another so they keep their order */
+function send(m){
+  P.chain = P.chain.then(async () => {
+    if (!P.key) return;
+    P.n = Math.max(P.n + 1, Date.now() * 1000);
+    m.n = P.n;
+    post({ t: "s", pk: P.pk, box: await MSC.seal(P.key, m) });
+  }).catch(() => {});
+  return P.chain;
+}
+function hostKey(){ return new Promise((ok) => { if (P.hk) return ok(P.hk); P.hostWait = ok; post({ t: "ping" }); setTimeout(() => ok(P.hk || ""), 6000); }); }
+async function connect(code){
+  const client = await sb();
+  if (P.ch){ try { await client.removeChannel(P.ch); } catch (_e) {} P.ch = null; }
+  return new Promise((ok, no) => {
+    const ch = client.channel("writeyuna-" + code, { config: { broadcast: { self: false } } });
+    ch.on("broadcast", { event: "m" }, (e) => onMsg(e.payload || {}));
+    const to = setTimeout(() => no(new Error("timeout")), 9000);
+    ch.subscribe((s) => { if (s === "SUBSCRIBED"){ clearTimeout(to); P.ch = ch; ok(); } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT"){ clearTimeout(to); no(new Error(s)); } });
+  });
+}
+function joinErr(t){ show("vJoin"); $("joinMsg").className = "msg err"; $("joinMsg").textContent = t; $("bJoin").disabled = false; }
+async function join(){
+  const code = readCode($("code").value);
+  if (!code){ joinErr("The code is the six numbers on the big screen."); return; }
+  if (code !== qr) P.fp = "";   /* a typed code for a different room has no fingerprint to check */
+  if (!window.crypto || !crypto.subtle){ joinErr("This browser can't connect privately. Try another browser."); return; }
+  $("bJoin").disabled = true; $("joinMsg").className = "msg"; $("joinMsg").textContent = "Connecting";
+  P.code = code; P.hk = ""; P.key = null; P.lastV = 0; P.seq = -1; P.heard = false;
+  P.kp = await MSC.pair(); P.pk = await MSC.pub(P.kp);
+  try { await connect(code); } catch (_e){ joinErr("Couldn't connect. Check the internet and try again."); return; }
+  const hk = await hostKey();
+  try { P.key = hk ? await MSC.key(P.kp.privateKey, hk) : null; } catch (_e){ P.key = null; }
+  if (!P.key){ joinErr("No big screen is using that code. Check the six numbers."); return; }
+  await send({ t: "join" });
+  setTimeout(() => { if (!P.heard) joinErr("No big screen answered. Check the six numbers."); }, 7000);
+  clearInterval(P.beat);
+  P.beat = setInterval(() => {
+    send({ t: "beat" });
+    const quiet = performance.now() - P.hostSeen > 10000;
+    $("stat").classList.toggle("ok", !quiet);
+    $("statTxt").textContent = quiet ? "Looking for the big screen" : "Connected";
+  }, 3000);
+}
+async function onMsg(p){
+  if (p.t === "host"){
+    if (typeof p.hk !== "string") return;
+    if (p.hk === P.hk){ P.hostSeen = performance.now(); return; }
+    if (P.hk) return;
+    /* scanned from the QR code: only the screen whose key matches the link's fingerprint counts */
+    if (P.fp && P.fp !== await MSC.fp(p.hk).catch(() => "")) return;
+    if (P.hk) return;
+    P.hk = p.hk; P.hostSeen = performance.now();
+    if (P.hostWait){ const w = P.hostWait; P.hostWait = null; w(P.hk); }
+    return;
+  }
+  if (p.t === "gone"){ $("stat").classList.remove("ok"); $("statTxt").textContent = "The big screen closed"; return; }
+  if (!P.pk || p.to !== P.pk) return;
+  if (p.t === "full"){ P.heard = true; joinErr("Another phone or tablet is already writing for this screen."); return; }
+  if (p.t === "you" && P.key && p.box){
+    const m = await MSC.open(P.key, p.box);
+    if (!m || !(Number(m.v) > P.lastV)) return;   /* only the big screen can seal these; skip any that arrive late */
+    P.lastV = Number(m.v);
+    const v = cleanView(m); if (!v) return;
+    if (!P.heard){ P.heard = true; buzz(30); }
+    P.hostSeen = performance.now();
+    $("stat").classList.add("ok"); $("statTxt").textContent = "Connected";
+    show("vPad");
+    paint(v);
+  }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && P.key) send({ t: "hi" }); });
+addEventListener("pagehide", () => { if (P.pk) post({ t: "bye", pk: P.pk }); });
+
+/* ---------- the paper ---------- */
+const INK = { strokes: [], cur: null, sent: 0 };
+const pathD = (pts) => pts.length ? "M" + pts.map(p => p[0] + " " + p[1]).join(" L") + (pts.length === 1 ? " l0.01 0" : "") : "";
+function linesSVG(vb){
+  const a = vb[0] - 3000, b = vb[0] + vb[2] + 3000;
+  return '<line x1="' + a + '" y1="0" x2="' + b + '" y2="0" stroke="#1273B0" stroke-width="2.5"/>' +
+    /* the dashed middle line is thin (owner, 2026-11-22): as on the big screen, and never under 1 CSS pixel (keepMinWidths) */
+    '<line class="mid" data-min="1" data-w="0.75" x1="' + a + '" y1="50" x2="' + b + '" y2="50" stroke="#9BB5C7" stroke-width="0.75" stroke-dasharray="5 4"/>' +
+    '<line x1="' + a + '" y1="100" x2="' + b + '" y2="100" stroke="#E5484D" stroke-width="2.5"/>';
+}
+/* thin lines stay visible: the middle line never under 1 CSS pixel, the dashed guide never under 1.5 */
+function keepMinWidths(){
+  const m = $("paper").getScreenCTM(), scale = m ? Math.hypot(m.a, m.b) : 0;
+  document.querySelectorAll("#paper [data-min]").forEach(l => {
+    const base = Number(l.getAttribute("data-w")) || 1, min = Number(l.getAttribute("data-min")) || 1;
+    l.setAttribute("stroke-width", String(scale > 0 ? Math.max(base, min / scale) : base));
+  });
+}
+addEventListener("resize", () => requestAnimationFrame(keepMinWidths));
+/* the model to trace, and to compare with afterwards: thin dashes (owner, 2026-11-22), 1.4 wide with dashes 4.8 on
+   and 3.6 off (3.5, 12 and 9 in the mockup's 276-wide phone view) */
+const guideSVG = (g) => '<g class="guide" data-min="1.5" data-w="1.4" fill="none" stroke="#9AA6B0" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4.8 3.6">' + g.map(s => '<path d="' + pathD(s) + '"/>').join("") + "</g>";
+function numSVG(n){
+  if (n.n === 1) return '<circle cx="' + n.x + '" cy="' + n.y + '" r="10" fill="#2F6B2C"/><text x="' + n.x + '" y="' + (n.y + 4.2) + '" text-anchor="middle" font-family="Plus Jakarta Sans, sans-serif" font-weight="800" font-size="12" fill="#fff">1</text>';
+  return '<circle cx="' + n.x + '" cy="' + n.y + '" r="8.5" fill="#fff" stroke="#1E2226" stroke-width="1.6"/><text x="' + n.x + '" y="' + (n.y + 3.8) + '" text-anchor="middle" font-family="Plus Jakarta Sans, sans-serif" font-weight="800" font-size="11" fill="#1E2226">' + n.n + "</text>";
+}
+const STAR = (on) => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 6.5 7 .9-5.1 4.8 1.3 7L12 17.8 5.8 21.2l1.3-7L2 9.4l7-.9z" fill="' + (on ? "#F2C230" : "#fff") + '" stroke="#1E2226" stroke-width="1.6"/></svg>';
+function paint(v){
+  const fresh = v.seq !== P.seq;
+  P.view = v;
+  /* a new step starts on clean paper; the stars keep the writing on show beside the dashed model */
+  if (fresh){ P.seq = v.seq; if (v.phase !== "result") INK.strokes = []; INK.cur = null; }
+  $("title").textContent = v.title || "Write with Yuna";
+  const ph = v.phase, svg = $("paper");
+  $("barWatch").hidden = ph !== "watch";
+  $("barWrite").hidden = ph !== "trace" && ph !== "own";
+  $("barResult").hidden = ph !== "result";
+  $("note").textContent = ph === "wait" ? "Pick what to write on the big screen." : ph === "watch" ? "Watch Yuna write it on the big screen." : ph === "result" ? "Look at the big screen to see how you did." : "";
+  if (ph === "wait"){ ["gLines", "gGuide", "gArrows", "gNums", "gInk", "gOver"].forEach(id => { $(id).innerHTML = ""; }); return; }
+  svg.setAttribute("viewBox", v.vb.join(" "));
+  $("gLines").innerHTML = linesSVG(v.vb);
+  $("gGuide").innerHTML = ph === "trace" ? guideSVG(v.guide) : "";
+  $("gArrows").innerHTML = ph === "trace" ? v.arrows.map(a => a ? '<path d="' + pathD(a) + '" fill="none" stroke="#E07A1F" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ah)"/>' : "").join("") : "";
+  $("gNums").innerHTML = ph === "trace" ? v.nums.slice().reverse().map(numSVG).join("") : ph === "own" && v.start ? '<circle cx="' + v.start[0] + '" cy="' + v.start[1] + '" r="9" fill="#2F6B2C"/>' : "";
+  $("gOver").innerHTML = ph === "result" ? guideSVG(v.guide) : "";
+  if (ph === "result"){ $("stars").innerHTML = STAR(v.stars >= 1) + STAR(v.stars >= 2) + STAR(v.stars >= 3); $("stars").setAttribute("aria-label", v.stars + " of 3 stars"); $("bNext").textContent = v.last ? "Start again" : "Next"; }
+  paintInk();
+  keepMinWidths();
+}
+function paintInk(){
+  $("gInk").innerHTML = INK.strokes.map(s => '<path d="' + pathD(s) + '" fill="none" stroke="#1273B0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>').join("");
+  const has = INK.strokes.length > 0;
+  $("bUndo").disabled = !has; $("bClear").disabled = !has; $("bDone").disabled = !has;
+}
+const writing = () => P.view && (P.view.phase === "trace" || P.view.phase === "own");
+(function(){
+  const svg = $("paper");
+  const pt = (e) => { const m = svg.getScreenCTM(); if (!m) return null; const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; const q = p.matrixTransform(m.inverse()); return [r1(q.x), r1(q.y)]; };
+  let raf = 0, lastSend = 0;
+  /* the stroke being drawn goes to the big screen about 15 times a second, and once more when the finger lifts */
+  const sendCur = (force) => {
+    if (!INK.cur) return;
+    const now = performance.now();
+    if (!force && now - lastSend < 66) return;
+    lastSend = now;
+    send({ t: "ink", seq: P.seq, i: INK.strokes.length - 1, p: INK.cur.pts.slice(0, 800) });
+  };
+  svg.addEventListener("pointerdown", (e) => {
+    if (!writing() || INK.cur || INK.strokes.length >= 80) return;
+    e.preventDefault();
+    try { svg.setPointerCapture(e.pointerId); } catch (_e) {}
+    const p = pt(e); if (!p) return;
+    INK.cur = { id: e.pointerId, pts: [p] }; INK.strokes.push(INK.cur.pts);
+    paintInk(); sendCur(true);
+  });
+  svg.addEventListener("pointermove", (e) => {
+    if (!INK.cur || e.pointerId !== INK.cur.id) return;
+    e.preventDefault();
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    (evs.length ? evs : [e]).forEach(ev => { const p = pt(ev), l = INK.cur.pts[INK.cur.pts.length - 1]; if (p && Math.hypot(p[0] - l[0], p[1] - l[1]) > 0.8) INK.cur.pts.push(p); });
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintInk(); });
+    sendCur(false);
+  });
+  const end = (e) => { if (INK.cur && e.pointerId === INK.cur.id){ sendCur(true); INK.cur = null; paintInk(); } };
+  svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", end); svg.addEventListener("lostpointercapture", end);
+})();
+$("bUndo").onclick = () => { if (INK.cur) return; INK.strokes.pop(); paintInk(); send({ t: "set", seq: P.seq, ink: INK.strokes }); buzz(10); };
+$("bClear").onclick = () => { if (INK.cur) return; INK.strokes = []; paintInk(); send({ t: "set", seq: P.seq, ink: [] }); buzz(10); };
+$("bDone").onclick = () => { if (INK.cur || !INK.strokes.length) return; send({ t: "done", seq: P.seq, ink: INK.strokes }); buzz(25); };
+$("bReady").onclick = () => { send({ t: "go", seq: P.seq, what: "trace" }); buzz(15); };
+$("bRetry").onclick = () => { send({ t: "go", seq: P.seq, what: "again" }); buzz(15); };
+$("bNext").onclick = () => { send({ t: "go", seq: P.seq, what: "next" }); buzz(15); };
+
+/* ---------- join: from the QR code's link (?room=CODE&k=FINGERPRINT), or by typing the code ---------- */
+$("code").addEventListener("input", (e) => { const d = e.target.value.replace(/\D/g, "").slice(0, 6); e.target.value = d; });
+$("code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("bJoin").click(); });
+$("bJoin").onclick = () => join();
+const qs = new URLSearchParams(location.search), qr = readCode(qs.get("room")) || "";
+const qk = qs.get("k") || ""; if (/^[A-Za-z0-9_-]{16}$/.test(qk)) P.fp = qk;
+if (qr){ $("code").value = qr; join(); }
+else $("code").focus();
+</script>
+</body>
+</html>

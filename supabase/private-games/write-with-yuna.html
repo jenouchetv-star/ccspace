@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Write with Yuna</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style id="ccsLoadCss">
+  /* the Chike's Creative Space loading screen (draft: docs/mockups/game-loader-draft.html) */
+  #ccsLoad{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px;box-sizing:border-box;margin:0;
+    background:radial-gradient(ellipse at 50% 42%,#1f3f86 0,#0f1d45 52%,#081028 100%);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    transition:opacity .45s cubic-bezier(.2,.7,.2,1),visibility 0s linear .45s}
+  #ccsLoad.gone{opacity:0;visibility:hidden;pointer-events:none}
+  #ccsLoad .ccsl-lg{display:block;width:min(320px,70vw);height:auto;opacity:0;transform:translateY(10px) scale(.96);animation:ccsLoadIn .7s cubic-bezier(.2,.7,.2,1) .05s forwards;filter:drop-shadow(0 8px 18px rgba(0,0,0,.45))}
+  #ccsLoad .ccsl-bar{width:min(240px,56vw);height:10px;border-radius:999px;background:rgba(255,255,255,.14);overflow:hidden;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25)}
+  #ccsLoad .ccsl-bar i{display:block;height:100%;width:0;border-radius:999px;background:#ffd23f;animation:ccsLoadFill 2.4s cubic-bezier(.2,.7,.2,1) .2s forwards}
+  #ccsLoad.ready .ccsl-bar i{animation:none;width:100%;transition:width .3s cubic-bezier(.2,.7,.2,1)}
+  #ccsLoad .ccsl-gn{font-weight:800;font-size:16px;letter-spacing:.02em;line-height:1.3;color:#fff;text-align:center;opacity:0;animation:ccsLoadIn .6s cubic-bezier(.2,.7,.2,1) .25s forwards}
+  #ccsLoad .ccsl-gn small{display:block;font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#9fb6e8;margin-bottom:4px}
+  @keyframes ccsLoadIn{to{opacity:1;transform:none}}
+  @keyframes ccsLoadFill{0%{width:0}100%{width:86%}}
+  @media (prefers-reduced-motion: reduce){ #ccsLoad .ccsl-lg,#ccsLoad .ccsl-gn{animation:none;opacity:1;transform:none} #ccsLoad .ccsl-bar i{animation:none;width:60%} #ccsLoad{transition:none} }
+</style>
+<!--
+  Write with Yuna: a handwriting game (owner-approved mockup docs/mockups/writing-game-draft.html, decisions in
+  docs/superpowers/specs/2026-11-22-write-with-yuna-design.md). Watch Yuna write it, trace it, then write it on your own.
+  A computer can hand the writing to a phone or tablet (games/write-with-yuna-pad.html) over a Supabase Realtime
+  broadcast room "writeyuna-CODE", sealed like Stack 'Em Up (ECDH P-256 + AES-GCM, the key's fingerprint in the QR link).
+  The child's name stays on this device: it is kept through the site's saved data (ccsSave) or, opened alone, in this
+  browser, and never goes in an answer.
+-->
+<style>
+  :root{ --ink:#1E2226; --ink-soft:#3E464C; --mute:#616A70; --paper:#FAF4E6; --card:#FFFBF3; --blue:#1273B0; --sun:#F2C230; --leaf:#2F6B2C; --leaf-soft:#E3F3DC; --line:#C9D6DE; --red:#E5484D; --orange:#E07A1F; }
+  *{ box-sizing:border-box; }
+  [hidden]{ display:none !important; }
+  html,body{ margin:0; height:100%; }
+  body{ background:var(--paper); color:var(--ink); font:16px/1.55 "Plus Jakarta Sans", system-ui, sans-serif; display:flex; flex-direction:column; min-height:100dvh; }
+  button{ font-family:inherit; }
+  .top{ display:flex; align-items:center; gap:10px; padding:10px 16px; flex:none; }
+  .top .ttl{ font-weight:800; font-size:17px; letter-spacing:-.01em; white-space:nowrap; }
+  .top .sp{ flex:1; }
+  .chip{ border:2px solid var(--ink); border-radius:999px; background:#fff; padding:4px 12px; font:800 13px inherit; font-family:inherit; color:var(--ink); cursor:pointer; white-space:nowrap; }
+  .chip:hover{ background:var(--sun); }
+  #soundSlot{ display:flex; align-items:center; }
+  .stage{ flex:1; min-height:0; display:flex; flex-direction:column; padding:4px 16px 16px; }
+  .box{ background:var(--card); border:3px solid var(--ink); border-radius:22px; box-shadow:8px 8px 0 var(--ink); }
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:46px; padding:0 20px; border:3px solid var(--ink); border-radius:999px; background:var(--card); font-weight:800; font-size:15px; font-family:inherit; color:var(--ink); box-shadow:3px 3px 0 var(--ink); cursor:pointer; transition:transform .15s cubic-bezier(.2,.7,.2,1), box-shadow .15s cubic-bezier(.2,.7,.2,1); }
+  .btn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink); }
+  .btn:disabled{ opacity:.45; cursor:default; transform:none; box-shadow:3px 3px 0 var(--ink); }
+  .btn:focus-visible,.chip:focus-visible,.grades button:focus-visible{ outline:3px solid var(--blue); outline-offset:3px; }
+  .btn--blue{ background:var(--blue); color:#fff; } .btn--sun{ background:var(--sun); }
+  .btn--quiet{ border-width:2px; box-shadow:none; min-height:38px; font-size:13px; padding:0 14px; background:transparent; }
+  .yuna{ display:flex; gap:12px; align-items:flex-start; }
+  .yuna .face{ width:84px; height:84px; flex:none; display:block; }
+  .yuna .face img{ width:100%; height:100%; object-fit:contain; display:block; }
+  .yuna .say{ background:#fff; border:2px solid var(--ink); border-radius:14px; padding:9px 13px; font-weight:600; }
+
+  /* 1. start */
+  .start{ padding:30px; max-width:760px; width:100%; margin:auto; }
+  .start h1{ font-size:30px; line-height:1.1; margin:16px 0 6px; letter-spacing:-.02em; }
+  .start .lead{ margin:0 0 18px; color:var(--ink-soft); }
+  .grades{ display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin:0 0 8px; }
+  .grades button{ height:66px; border-radius:14px; border:3px solid var(--ink); background:#fff; font-weight:800; font-size:17px; font-family:inherit; color:var(--ink); display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.05; cursor:pointer; }
+  .grades button small{ font-size:11px; font-weight:700; color:var(--mute); margin-top:4px; }
+  .grades button[aria-pressed="true"]{ background:var(--sun); box-shadow:3px 3px 0 var(--ink); }
+  .who{ font-size:13px; color:var(--mute); margin:8px 0 20px; }
+  .row{ display:flex; gap:12px; flex-wrap:wrap; }
+  body.touch .grades{ grid-template-columns:repeat(3,1fr); }
+  body.touch #bStartTouch{ width:100%; }
+
+  /* 1a. the QR code, only after it is asked for */
+  .qrpanel{ max-width:760px; width:100%; margin:auto; overflow:hidden; }
+  .qrpanel .in{ background:#EEF4F3; padding:30px; display:flex; flex-direction:column; align-items:center; text-align:center; }
+  .qrpanel h2{ margin:0 0 4px; font-size:19px; }
+  .qrpanel p{ font-size:14px; margin:0 0 14px; color:var(--ink-soft); max-width:46ch; }
+  .qr{ width:188px; height:188px; background:#fff; border:3px solid var(--ink); border-radius:14px; padding:10px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:var(--mute); }
+  .qr svg{ width:100%; height:100%; display:block; }
+  .code{ margin-top:12px; font:800 26px/1 "Plus Jakarta Sans", system-ui, sans-serif; letter-spacing:.16em; }
+  .code small{ display:block; font-size:12px; letter-spacing:0; color:var(--mute); font-weight:700; margin-bottom:6px; }
+
+  /* the name, typed once */
+  .namecard{ max-width:560px; width:100%; margin:auto; padding:26px; }
+  .namecard h2{ margin:10px 0 6px; font-size:24px; }
+  .namecard p{ margin:0 0 14px; color:var(--ink-soft); font-size:14px; }
+  .namecard label{ display:block; font-weight:800; font-size:14px; margin:0 0 12px; }
+  .namecard input{ display:block; width:100%; margin-top:6px; height:48px; border:3px solid var(--ink); border-radius:14px; padding:0 14px; font:700 18px inherit; font-family:inherit; background:#fff; color:var(--ink); }
+  .namecard input:focus{ outline:3px solid var(--blue); outline-offset:2px; }
+
+  /* 2. the writing board */
+  .play{ display:grid; grid-template-columns:1fr 280px; overflow:hidden; flex:1; min-height:0; position:relative; }
+  .board{ padding:18px 22px; border-right:3px solid var(--ink); background:#fff; display:flex; flex-direction:column; min-height:0; min-width:0; }
+  .steps{ display:flex; gap:8px; margin:0 0 12px; flex-wrap:wrap; }
+  .steps span{ padding:5px 12px; border:2px solid var(--ink); border-radius:999px; font-size:13px; font-weight:800; background:#fff; }
+  .steps span.on{ background:var(--sun); }
+  .steps span.done{ background:var(--leaf-soft); }
+  .board .yuna{ margin-bottom:8px; }
+  .paperwrap{ flex:1; min-height:180px; position:relative; }
+  .paper{ position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; -webkit-user-select:none; user-select:none; cursor:crosshair; }
+  .paper.off{ cursor:default; }
+  .tools{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; min-height:46px; }
+  .tools .sp{ flex:1; }
+  .side{ padding:18px; display:flex; flex-direction:column; gap:14px; background:var(--card); overflow:auto; }
+  .side .card{ border:2px solid var(--ink); border-radius:14px; padding:14px; background:#fff; }
+  .side .big{ font-size:64px; font-weight:800; line-height:1; text-align:center; margin:4px 0; overflow-wrap:anywhere; }
+  .side .big.sm{ font-size:24px; line-height:1.2; }
+  .side .big svg{ width:100%; height:auto; max-height:110px; display:block; }
+  .side .sound{ text-align:center; font-weight:700; color:var(--ink-soft); font-size:14px; }
+  .stars{ display:flex; gap:6px; justify-content:center; }
+  .stars svg{ width:30px; height:30px; }
+  .small{ margin:8px 0 0; font-size:13px; text-align:center; color:var(--ink-soft); }
+  .linked{ display:flex; gap:8px; align-items:center; font-size:13px; font-weight:700; color:var(--leaf); }
+  .linked i{ width:10px; height:10px; border-radius:50%; background:var(--leaf); display:block; flex:none; }
+  .linked.away{ color:var(--mute); } .linked.away i{ background:#B9C3CB; }
+  .jump{ font-size:13px; font-weight:700; color:var(--mute); display:flex; flex-direction:column; gap:4px; }
+  .jump select{ height:40px; border:2px solid var(--ink); border-radius:12px; background:#fff; font:700 14px inherit; font-family:inherit; color:var(--ink); padding:0 8px; }
+
+  /* 4. after writing it on their own */
+  .finish{ position:absolute; right:18px; bottom:18px; width:min(440px, calc(100% - 36px)); padding:22px; z-index:5; }
+  .finish h3{ margin:0; font-size:24px; line-height:1.15; }
+  .finish .yuna{ align-items:center; margin-bottom:8px; }
+  .finish .stars{ justify-content:flex-start; }
+  .finish .stars svg{ width:34px; height:34px; }
+  .tip{ border-top:2px dashed var(--line); margin-top:12px; padding-top:12px; }
+  .tip span{ font-size:13px; font-weight:800; color:var(--mute); }
+  .tip b{ display:block; font-size:19px; line-height:1.3; }
+  .tip p{ margin:4px 0 0; color:var(--ink-soft); }
+  .finish .row{ margin-top:16px; justify-content:flex-end; }
+
+  @media (prefers-reduced-motion: reduce){ .btn{ transition:none; } }
+  @media (max-width:900px){
+    .stage{ padding:4px 10px 10px; }
+    .grades{ grid-template-columns:repeat(3,1fr); }
+    .play{ grid-template-columns:1fr; grid-template-rows:auto 1fr; }
+    .board{ border-right:0; order:2; padding:12px 12px; }
+    .side{ order:1; flex-direction:row; flex-wrap:wrap; align-items:center; gap:10px; padding:10px 12px; border-bottom:3px solid var(--ink); overflow:visible; }
+    .side .card{ padding:8px 12px; }
+    .side .big{ font-size:34px; }
+    .side .big.sm{ font-size:16px; }
+    .side .big svg{ max-height:56px; max-width:140px; }
+    .side .small, .side .jump{ display:none; }
+    .stars svg{ width:24px; height:24px; }
+    .yuna .face{ width:56px; height:56px; }
+    .yuna .say{ font-size:14px; padding:7px 11px; }
+    .finish{ left:10px; right:10px; bottom:10px; width:auto; }
+    .tools{ gap:6px; flex-wrap:nowrap; }
+    .tools .sp{ min-width:0; }
+    .tools .btn{ min-height:42px; padding:0 10px; font-size:13px; white-space:nowrap; }
+  }
+</style>
+</head>
+<body>
+<div id="ccsLoad" role="status" aria-live="polite" data-name="Write with Yuna"><img class="ccsl-lg" src="/assets/brand/logo.webp" alt="Chike's Creative Space"><div class="ccsl-bar"><i></i></div><div class="ccsl-gn"><small>Loading</small><b></b></div></div>
+<script id="ccsLoadJs">(function(){ var el = document.getElementById("ccsLoad"); if (!el) return; var t0 = Date.now(), gone = false, hold = 1000, snd = null; var b = el.querySelector(".ccsl-gn b"); if (b) b.textContent = el.getAttribute("data-name") || "";
+  /* the logo sound (owner's pick 1A, 2026-11-17): played a bit faster; quiet when sound is off on the site or the browser blocks it */
+  var on = true; try { on = localStorage.getItem("ccs-sound") !== "off"; } catch (e) { /* a sealed frame can't read the site's setting */ }
+  if (on){ try { snd = new Audio("/assets/games/loader/logo-intro.mp3"); snd.volume = 0.7; snd.playbackRate = 1.5; var p = snd.play(); if (p && p.then) p.then(function(){ hold = 1600; }, function(){ snd = null; }); } catch (e) { snd = null; } }
+  function fade(){ var a = snd; if (!a) return; var t = setInterval(function(){ a.volume = Math.max(0, a.volume - 0.07); if (a.volume <= 0){ clearInterval(t); a.pause(); } }, 90); }
+  function hide(){ if (gone) return; gone = true; el.className = "ready"; setTimeout(function(){ el.className = "ready gone"; fade(); setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 500); }, 320); }
+  function done(){ setTimeout(function(){ setTimeout(hide, Math.max(0, hold - (Date.now() - t0))); }, 60); }
+  if (document.readyState === "complete") done(); else window.addEventListener("load", done);
+  setTimeout(function(){ hide(); }, 9000); })();</script>
+
+<header class="top">
+  <span class="ttl">Write with Yuna</span>
+  <button class="chip" id="gradeChip" type="button" hidden></button>
+  <span class="sp"></span>
+  <span id="soundSlot"></span>
+</header>
+
+<main class="stage">
+  <!-- 1. start: pick a grade, then pick where to write -->
+  <section class="box start" id="sStart">
+    <div class="yuna"><div class="face"><img src="/assets/characters/yuna-pose-wave.png" alt=""></div><div class="say" id="startSay">Let's practice writing! Pick your grade.</div></div>
+    <h1>Write with Yuna</h1>
+    <p class="lead" id="startLead">Watch how it's made, trace it, then write it on your own.</p>
+    <div class="grades" id="grades" role="group" aria-label="Grade"></div>
+    <p class="who" id="who"></p>
+    <div class="row">
+      <button class="btn btn--blue" id="bHere" type="button">Write on this screen</button>
+      <button class="btn" id="bPhone" type="button">Try it on a phone or a tablet</button>
+      <button class="btn btn--blue" id="bStartTouch" type="button" hidden>Start writing</button>
+    </div>
+  </section>
+
+  <!-- 1a. only after "Try it on a phone or a tablet": the QR code and the 6-digit code -->
+  <section class="box qrpanel" id="sQR" hidden>
+    <div class="in">
+      <h2>Try it on a phone or a tablet</h2>
+      <p>Scan with the phone's camera. Write with a finger or a stylus, and watch it show up here.</p>
+      <div class="qr" id="qr">Getting a room ready</div>
+      <div class="code"><small>Or go to <span id="joinHost">chikescreativespace.com/write</span> and type</small><span id="roomCode">--- ---</span></div>
+      <div style="margin-top:18px"><button class="btn" id="bBack" type="button">Back</button></div>
+    </div>
+  </section>
+
+  <!-- the full name: typed on this device, kept only on this device -->
+  <section class="box namecard" id="sName" hidden>
+    <div class="yuna"><div class="face"><img src="/assets/characters/yuna-pose-pencil.png" alt=""></div><div class="say">Let's write your name.</div></div>
+    <h2>Your name</h2>
+    <p>The first name can be typed by you or a grown-up. A grown-up types the last name once. Both stay only on this device.</p>
+    <label>First name<input id="nFirst" maxlength="20" autocomplete="off" spellcheck="false"></label>
+    <label>Last name<input id="nLast" maxlength="20" autocomplete="off" spellcheck="false"></label>
+    <div class="row"><button class="btn btn--blue" id="bNameGo" type="button">Write it</button><button class="btn" id="bNameSkip" type="button">Skip the name</button></div>
+  </section>
+
+  <!-- 2. the writing board -->
+  <section class="box play" id="sPlay" hidden>
+    <div class="board">
+      <div class="steps" id="steps"><span>1 Watch</span><span>2 Trace</span><span>3 On your own</span></div>
+      <div class="yuna"><div class="face"><img id="playFace" src="/assets/characters/yuna-pose-point.png" alt=""></div><div class="say" id="playSay" aria-live="polite"></div></div>
+      <div class="paperwrap">
+        <svg class="paper" id="paper" viewBox="0 -34 300 204" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Writing lines">
+          <defs><marker id="ah" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#E07A1F"/></marker></defs>
+          <g id="gLines"></g><g id="gGuide"></g><g id="gYuna"></g><g id="gArrows"></g><g id="gNums"></g><g id="gInk"></g><g id="gOver"></g>
+        </svg>
+      </div>
+      <div class="tools">
+        <button class="btn btn--quiet" id="bUndo" type="button">Undo</button>
+        <button class="btn btn--quiet" id="bClear" type="button">Clear</button>
+        <span class="sp"></span>
+        <button class="btn btn--quiet" id="bSkip" type="button">Skip this one</button>
+        <button class="btn btn--blue" id="bTrace" type="button" hidden>Now trace it</button>
+        <button class="btn btn--sun" id="bDone" type="button">Done</button>
+      </div>
+    </div>
+    <aside class="side">
+      <div class="card"><div class="big" id="sideBig"></div><div class="sound" id="sideSound"></div></div>
+      <div class="card">
+        <div class="stars" id="sideStars" aria-label="Stars so far"></div>
+        <p class="small">Stars come from starting at the dot, following the orange arrows, and staying on the lines.</p>
+      </div>
+      <div class="linked" id="linked" hidden><i></i><span id="linkedTxt"></span></div>
+      <button class="btn" id="bAgain" type="button">Show me again</button>
+      <button class="btn btn--quiet" id="bRename" type="button" hidden>Change the name</button>
+      <label class="jump">Jump to<select id="jump"></select></label>
+    </aside>
+    <!-- 4. after writing it on their own -->
+    <div class="box finish" id="finish" hidden role="dialog" aria-labelledby="fTitle">
+      <div class="yuna"><div class="face"><img id="fFace" src="/assets/characters/yuna-pose-cheer.png" alt=""></div><h3 id="fTitle"></h3></div>
+      <div class="stars" id="fStars"></div>
+      <div class="tip"><span>Yuna's tip</span><b id="fTip"></b><p id="fMore"></p></div>
+      <div class="row"><button class="btn" id="bRetry" type="button">Try it again</button><button class="btn btn--blue" id="bNext" type="button"></button></div>
+    </div>
+  </section>
+</main>
+
+<script src="/games/game-sound.js"></script>
+<script>
+"use strict";
+/* BEGIN pure */
+const GAME_ID = "write-with-yuna";
+/* The letter models: school print (ball and stick) and cursive, each stroke in the order a teacher shows it.
+   Units: the top line is y 0, the dashed middle line y 50, the base line y 100, and descenders reach about y 145.
+   A stroke is a little path: M x y (start), L x y (line), Q cx cy x y, C ax ay bx by x y (curves) and
+   A cx cy rx ry from to (an arc in degrees: 0 points right, 90 down; going down in degrees is counterclockwise).
+   Cursive lowercase letters start on the base line at x 0 and leave at their width on the base line (or the middle
+   line for b o v w), so letters join; dots and crosses are the extra strokes, written after the word. */
+/* BEGIN models */
+const MODELS = {
+  print: {
+    A: ["M35 0 L0 100", "M35 0 L70 100", "M13 62 L57 62"],
+    B: ["M0 0 L0 100", "M0 0 L32 0 A32 25 25 25 -90 90 L0 50", "M0 50 L36 50 A36 75 25 25 -90 90 L0 100"],
+    C: ["A40 50 38 50 -45 -315"],
+    D: ["M0 0 L0 100", "M0 0 L22 0 C80 0 80 100 22 100 L0 100"],
+    E: ["M0 0 L0 100", "M0 0 L52 0", "M0 50 L42 50", "M0 100 L52 100"],
+    F: ["M0 0 L0 100", "M0 0 L52 0", "M0 50 L42 50"],
+    G: ["A42 50 40 50 -45 -360 L52 50"],
+    H: ["M0 0 L0 100", "M60 0 L60 100", "M0 50 L60 50"],
+    I: ["M20 0 L20 100", "M0 0 L40 0", "M0 100 L40 100"],
+    J: ["M42 0 L42 78 A22 78 20 20 0 180"],
+    K: ["M0 0 L0 100", "M56 0 L0 56", "M16 40 L58 100"],
+    L: ["M0 0 L0 100 L50 100"],
+    M: ["M0 0 L0 100", "M0 0 L32 72 L64 0 L64 100"],
+    N: ["M0 0 L0 100", "M0 0 L56 100 L56 0"],
+    O: ["A42 50 40 50 -90 -450"],
+    P: ["M0 0 L0 100", "M0 0 L30 0 A30 25 25 25 -90 90 L0 50"],
+    Q: ["A42 50 40 50 -90 -450", "M50 74 L84 104"],
+    R: ["M0 0 L0 100", "M0 0 L30 0 A30 25 25 25 -90 90 L0 50", "M22 50 L58 100"],
+    S: ["A30 25 28 25 -20 -270 A30 75 28 25 -90 160"],
+    T: ["M30 0 L30 100", "M0 0 L60 0"],
+    U: ["M0 0 L0 70 A30 70 30 30 180 0 L60 0"],
+    V: ["M0 0 L32 100 L64 0"],
+    W: ["M0 0 L22 100 L44 0 L66 100 L88 0"],
+    X: ["M0 0 L56 100", "M56 0 L0 100"],
+    Y: ["M0 0 L30 50", "M60 0 L30 50 L30 100"],
+    Z: ["M0 0 L56 0 L0 100 L56 100"],
+    a: ["A25 75 25 25 -30 -390", "M50 50 L50 100"],
+    b: ["M0 0 L0 100", "M0 75 A25 75 25 25 180 540"],
+    c: ["A25 75 25 25 -40 -320"],
+    d: ["A25 75 25 25 -30 -390", "M50 0 L50 100"],
+    e: ["M0 75 L50 75 A25 75 25 25 0 -320"],
+    f: ["A32 14 12 12 -20 -180 L20 100", "M4 50 L40 50"],
+    g: ["A25 75 25 25 -30 -390", "M50 50 L50 130 A30 130 20 15 0 160"],
+    h: ["M0 0 L0 100", "M0 75 A25 75 25 25 180 360 L50 100"],
+    i: ["M10 50 L10 100", "M10 30 L10 33"],
+    j: ["M34 50 L34 130 A16 130 18 15 0 170", "M34 30 L34 33"],
+    k: ["M0 0 L0 100", "M40 50 L0 78", "M12 70 L42 100"],
+    l: ["M10 0 L10 100"],
+    m: ["M0 50 L0 100", "M0 68 A17 68 17 17 180 360 L34 100", "M34 68 A51 68 17 17 180 360 L68 100"],
+    n: ["M0 50 L0 100", "M0 70 A20 70 20 20 180 360 L40 100"],
+    o: ["A25 75 25 25 -90 -450"],
+    p: ["M0 50 L0 145", "M0 75 A25 75 25 25 180 540"],
+    q: ["A25 75 25 25 -30 -390", "M50 50 L50 145"],
+    r: ["M0 50 L0 100", "M0 70 A20 70 20 20 180 315"],
+    s: ["A20 62.5 18 12.5 -20 -270 A20 87.5 18 12.5 -90 160"],
+    t: ["M16 15 L16 100", "M0 50 L34 50"],
+    u: ["M0 50 L0 80 A20 80 20 20 180 0 L40 50", "M40 50 L40 100"],
+    v: ["M0 50 L22 100 L44 50"],
+    w: ["M0 50 L15 100 L30 50 L45 100 L60 50"],
+    x: ["M0 50 L40 100", "M40 50 L0 100"],
+    y: ["M0 50 L22 100", "M44 50 L10 145"],
+    z: ["M0 50 L40 50 L0 100 L40 100"],
+    ".": ["M4 97 L4 100"],
+    ",": ["M5 96 L1 110"],
+    "'": ["M4 0 L4 16"],
+    "-": ["M0 75 L24 75"],
+    "!": ["M5 0 L5 72", "M5 96 L5 99"],
+    "?": ["A20 22 18 18 -160 90 L20 70", "M20 96 L20 99"]
+  },
+  cursive: {
+    a: ["M0 100 Q16 98 33.5 55.2 A26 76 15 24 -60 -360 L41 50 L41 93 Q42 100 52 100"],
+    b: ["M0 100 C16 90 30 40 22 14 C18 0 8 4 10 30 L12 90 Q14 100 24 98 Q34 94 32 66 Q28 56 20 62 Q30 57 44 56"],
+    c: ["M0 100 Q18 96 37.5 60.6 A26 76 15 24 -40 -300 Q40 100 46 100"],
+    d: ["M0 100 Q16 98 33.5 55.2 A26 76 15 24 -60 -360 L41 0 L41 93 Q42 100 52 100"],
+    e: ["M0 100 C14 96 34 78 34 64 C34 50 14 50 14 72 C14 96 28 100 42 100"],
+    f: ["M0 100 C16 90 30 40 22 14 C18 0 8 4 10 30 L12 140 C12 150 22 146 22 132 C22 116 14 104 14 100 Q24 100 34 100"],
+    g: ["M0 100 Q16 98 33.5 55.2 A26 76 15 24 -60 -360 L41 50 L41 130 C41 150 18 150 20 132 C22 118 40 108 54 100"],
+    h: ["M0 100 C16 90 30 40 22 14 C18 0 8 4 10 30 L12 100 L12 78 Q18 56 28 56 Q36 56 36 70 L36 92 Q37 100 48 100"],
+    i: ["M0 100 Q12 92 18 52 L18 92 Q19 100 30 100", "M18 32 L18 35"],
+    j: ["M0 100 Q12 92 18 52 L18 130 C18 150 4 148 6 134 C8 118 24 106 34 100", "M18 32 L18 35"],
+    k: ["M0 100 C16 90 30 40 22 14 C18 0 8 4 10 30 L12 100 L12 78 Q22 54 32 60 Q36 72 18 76 Q30 80 34 92 Q36 100 46 100"],
+    l: ["M0 100 C16 90 30 40 22 14 C18 0 8 4 10 30 L12 92 Q13 100 24 100"],
+    m: ["M0 100 Q8 92 10 64 Q12 52 18 54 Q24 56 24 66 L24 100 L24 66 Q28 52 34 54 Q40 56 40 66 L40 100 L40 66 Q44 52 50 54 Q56 56 56 66 L56 92 Q57 100 66 100"],
+    n: ["M0 100 Q8 92 10 64 Q12 52 18 54 Q24 56 24 66 L24 100 L24 66 Q28 52 34 54 Q40 56 40 66 L40 92 Q41 100 50 100"],
+    o: ["M0 100 Q16 98 33.5 55.2 A26 76 15 24 -60 -420 Q40 57 52 56"],
+    p: ["M0 100 Q10 90 14 52 L14 145 L14 72 Q20 54 30 56 Q40 60 38 80 Q36 100 20 98 Q30 100 42 100"],
+    q: ["M0 100 Q16 98 33.5 55.2 A26 76 15 24 -60 -360 L41 50 L41 145 C42 132 46 110 56 100"],
+    r: ["M0 100 Q10 90 16 54 L24 58 L26 64 Q30 76 30 92 Q31 100 42 100"],
+    s: ["M0 100 Q12 88 18 54 C38 78 32 102 16 98 Q26 100 36 100"],
+    t: ["M0 100 Q12 92 18 15 L18 92 Q19 100 30 100", "M8 45 L30 45"],
+    u: ["M0 100 Q10 92 14 52 L14 86 Q15 100 26 100 Q36 100 38 86 L38 52 L38 92 Q39 100 50 100"],
+    v: ["M0 100 Q8 92 10 64 Q12 52 18 54 Q22 70 26 100 Q32 70 36 54 Q42 57 48 56"],
+    w: ["M0 100 Q10 92 14 52 L14 86 Q15 100 26 100 Q34 100 36 86 L36 64 L36 86 Q37 100 46 100 Q56 100 58 86 L58 52 Q62 57 70 56"],
+    x: ["M0 100 Q8 92 10 64 Q12 52 18 54 Q30 80 36 100 Q38 102 44 100", "M36 54 L14 100"],
+    y: ["M0 100 Q8 92 10 64 Q12 52 18 54 Q22 56 22 66 L22 86 Q23 100 32 100 Q40 100 40 86 L40 52 L40 130 C40 150 26 148 28 134 C30 118 46 106 56 100"],
+    z: ["M0 100 Q8 92 10 64 Q12 52 18 54 Q34 54 30 62 Q24 76 18 76 Q34 80 34 100 L34 130 C34 150 20 148 22 134 C24 118 40 106 50 100"],
+    A: ["M46 10 C30 -4 2 30 4 74 C6 104 34 100 46 60 L50 2 L50 92 Q51 100 60 100"],
+    B: ["M12 8 L10 100", "M12 8 C46 -4 58 34 22 48 C64 50 60 104 14 98 Q4 96 6 88"],
+    C: ["M44 22 C46 2 22 0 12 20 C0 44 2 92 30 100 C40 103 50 100 60 100"],
+    D: ["M30 8 L24 92 Q20 102 8 98 Q2 92 14 94 Q32 102 50 86 C66 66 64 4 28 4 Q12 4 8 14"],
+    E: ["M46 16 C40 -2 8 4 14 26 C18 42 32 46 34 46 C10 46 2 64 6 84 C10 100 30 102 44 100 L56 100"],
+    F: ["M6 14 Q30 2 62 8", "M36 8 L28 88 Q24 100 10 96", "M18 52 L46 50"],
+    G: ["M26 54 C4 40 14 -6 44 8 C32 28 24 62 28 88 Q32 102 46 94 C56 86 56 56 44 52 Q54 66 54 92 Q55 100 64 100"],
+    H: ["M16 4 Q22 50 10 100", "M52 4 L48 92 Q48 100 58 100", "M4 56 Q30 46 50 52"],
+    I: ["M30 30 Q20 0 46 4 L36 70 Q30 100 14 98 Q2 94 8 84"],
+    J: ["M20 40 Q20 0 48 4 L40 100 L38 130 C36 150 20 148 22 134 C24 118 50 106 60 100"],
+    K: ["M16 4 Q22 50 10 100", "M56 6 Q30 40 18 54 Q34 58 40 90 Q42 100 54 100"],
+    L: ["M40 24 C44 0 20 0 22 20 C24 50 14 90 4 98 Q0 100 4 96 Q20 90 40 100 L56 100"],
+    M: ["M6 100 Q14 50 16 8 Q24 30 28 90 Q34 30 42 8 Q48 40 50 92 Q51 100 60 100"],
+    N: ["M6 100 Q14 50 16 8 Q34 50 40 96 Q46 40 52 4"],
+    O: ["M40 6 C10 0 2 40 6 74 C10 104 46 104 52 60 C56 20 42 2 30 8 C26 14 36 18 50 12"],
+    P: ["M14 6 L10 100", "M14 8 C50 -6 60 40 14 52"],
+    Q: ["M8 24 C10 -2 50 -4 46 30 C42 60 10 90 4 100 Q24 86 44 98 Q50 102 58 100"],
+    R: ["M16 100 L16 6 C50 -6 60 40 16 52 Q30 56 36 90 Q38 100 50 100"],
+    S: ["M2 70 Q20 50 40 6 Q26 30 34 60 Q40 96 16 98 Q4 98 6 88 Q20 100 46 100"],
+    T: ["M4 14 Q30 2 62 8", "M36 8 L28 88 Q24 100 10 96"],
+    U: ["M4 16 Q10 4 16 8 L14 80 Q16 100 30 98 Q44 92 46 60 L46 4 L46 92 Q47 100 56 100"],
+    V: ["M4 16 Q10 4 16 8 Q22 50 30 100 Q40 40 52 4 Q56 2 60 6"],
+    W: ["M4 16 Q10 4 16 8 Q20 50 24 100 Q30 60 36 40 Q42 70 48 100 Q56 40 64 4 Q68 2 72 6"],
+    X: ["M4 16 Q10 4 16 8 Q30 50 40 92 Q42 100 52 100", "M44 8 L10 98"],
+    Y: ["M4 16 Q10 4 16 8 L14 80 Q16 100 30 98 Q44 92 46 60 L46 4 L46 130 C46 150 32 148 34 134 C36 118 52 106 62 100"],
+    Z: ["M8 14 Q28 2 46 8 Q30 30 18 50 Q40 50 40 76 L40 130 C40 150 26 148 28 134 C30 118 46 106 56 100"]
+  },
+  /* cursive letters that leave from the middle line, so the next letter starts there */
+  hi: "bovw",
+  /* cursive capitals that join the letter after them */
+  joins: "ACEGJLMQRSUYZ"
+};
+/* END models */
+const PUNCT = ".,'-!?";
+const GAP = 16, SPACE = 44, SHEAR = 0.2, HI_Y = 56;
+const r1 = (v) => Math.round(v * 10) / 10;
+
+/** A stroke's little path as points about 3 units apart. start moves the first point (a cursive letter after
+    b o v w starts on the middle line), and keeps that first curve near it. */
+function parseStroke(str, start){
+  const tk = String(str).match(/[MLQCA]|-?\d*\.?\d+/g) || [], pts = [];
+  let i = 0, cx = 0, cy = 0, seg = 0, moved = false;
+  const n = () => { const v = parseFloat(tk[i++]); if (!Number.isFinite(v)) throw new Error("bad number in " + str); return v; };
+  const add = (x, y) => { const l = pts[pts.length - 1]; if (!l || Math.hypot(l[0] - x, l[1] - y) > 0.05) pts.push([x, y]); };
+  const cy0 = (y) => (start && seg === 1 ? Math.min(y, start[1] + 6) : y);
+  while (i < tk.length){
+    const c = tk[i++];
+    if (c === "M"){ cx = n(); cy = n(); if (start && !moved){ cx = start[0]; cy = start[1]; } moved = true; add(cx, cy); continue; }
+    seg++;
+    if (c === "L"){
+      const x = n(), y = n(), k = Math.max(1, Math.ceil(Math.hypot(x - cx, y - cy) / 3));
+      for (let j = 1; j <= k; j++) add(cx + (x - cx) * j / k, cy + (y - cy) * j / k);
+      cx = x; cy = y;
+    } else if (c === "Q"){
+      const qx = n(), qy = cy0(n()), x = n(), y = n();
+      for (let j = 1; j <= 16; j++){ const t = j / 16, u = 1 - t; add(u * u * cx + 2 * u * t * qx + t * t * x, u * u * cy + 2 * u * t * qy + t * t * y); }
+      cx = x; cy = y;
+    } else if (c === "C"){
+      const ax = n(), ay = cy0(n()), bx = n(), by = cy0(n()), x = n(), y = n();
+      for (let j = 1; j <= 24; j++){ const t = j / 24, u = 1 - t; add(u * u * u * cx + 3 * u * u * t * ax + 3 * u * t * t * bx + t * t * t * x, u * u * u * cy + 3 * u * u * t * ay + 3 * u * t * t * by + t * t * t * y); }
+      cx = x; cy = y;
+    } else if (c === "A"){
+      const ox = n(), oy = n(), rx = n(), ry = n(), a0 = n(), a1 = n(), k = Math.max(4, Math.ceil(Math.abs(a1 - a0) / 6));
+      for (let j = 0; j <= k; j++){ const a = (a0 + (a1 - a0) * j / k) * Math.PI / 180; add(ox + rx * Math.cos(a), oy + ry * Math.sin(a)); }
+      const l = pts[pts.length - 1]; cx = l[0]; cy = l[1]; moved = true;
+    } else throw new Error("bad stroke " + str);
+  }
+  const out = [];
+  pts.forEach(p => { const q = [r1(p[0]), r1(p[1])], l = out[out.length - 1]; if (!l || l[0] !== q[0] || l[1] !== q[1]) out.push(q); });
+  return out;
+}
+/** One letter's strokes and width. Print letters sit from x 0; cursive ones keep their joining points. */
+function letterModel(style, ch, start){
+  const cur = style === "cursive" && PUNCT.indexOf(ch) < 0;
+  const src = (cur ? MODELS.cursive : MODELS.print)[ch];
+  if (!src) return null;
+  const strokes = src.map((s, k) => parseStroke(s, k === 0 ? start : null));
+  let lo = Infinity, hi = -Infinity;
+  strokes.forEach(st => st.forEach(p => { lo = Math.min(lo, p[0]); hi = Math.max(hi, p[0]); }));
+  if (!cur) return { strokes: strokes.map(st => st.map(p => [r1(p[0] - lo), p[1]])), w: Math.max(6, r1(hi - lo)), join: false, hi: false, lower: false };
+  const lower = /^[a-z]$/.test(ch), join = lower || MODELS.joins.indexOf(ch) >= 0, end = strokes[0][strokes[0].length - 1];
+  return { strokes, w: join ? end[0] : hi, join, hi: lower && MODELS.hi.indexOf(ch) >= 0, lower };
+}
+/** A letter, word, name or sentence laid out on the lines: its strokes in writing order. In cursive the letters of
+    a word join into one stroke, and the dots and crosses come after the word. */
+function layoutText(text, style){
+  const strokes = [], chars = [];
+  let x = 0, run = null, prev = null, extras = [];
+  const at = (pts, dx, ci) => ({ pts: pts.map(p => [r1(p[0] + dx), p[1]]), ch: ci });
+  const flush = () => { extras.forEach(s => strokes.push(s)); extras = []; run = null; prev = null; };
+  for (const ch of String(text)){
+    if (ch === " "){ flush(); x += SPACE; continue; }
+    const cur = style === "cursive" && PUNCT.indexOf(ch) < 0;
+    const m = letterModel(cur ? "cursive" : "print", ch, cur && run && prev && prev.hi ? [0, HI_Y] : null);
+    if (!m) continue;
+    const ci = chars.push({ ch, x }) - 1;
+    if (!cur){ flush(); m.strokes.forEach(st => strokes.push(at(st, x, ci))); x += m.w + GAP; continue; }
+    if (m.lower && run){
+      run.pts = run.pts.concat(at(m.strokes[0], x, ci).pts.slice(1));
+      m.strokes.slice(1).forEach(st => extras.push(at(st, x, ci)));
+    } else {
+      flush();
+      if (m.join){ run = at(m.strokes[0], x, ci); strokes.push(run); m.strokes.slice(1).forEach(st => extras.push(at(st, x, ci))); }
+      else m.strokes.forEach(st => strokes.push(at(st, x, ci)));
+    }
+    if (m.join){ x += m.w; prev = { hi: m.hi }; } else { x += m.w + GAP; run = null; prev = null; }
+  }
+  flush();
+  if (style === "cursive") strokes.forEach(s => { s.pts = s.pts.map(p => [r1(p[0] + (100 - p[1]) * SHEAR), p[1]]); });
+  let minX = Infinity, maxX = -Infinity;
+  strokes.forEach(s => s.pts.forEach(p => { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); }));
+  if (!strokes.length){ minX = 0; maxX = 0; }
+  return { strokes, chars, minX, maxX, style, text: String(text) };
+}
+function pathLen(p){ let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return L; }
+/** Points every step units along a stroke, both ends kept. */
+function resample(p, step){
+  if (!p || !p.length) return [];
+  if (p.length === 1) return [[p[0][0], p[0][1]]];
+  const out = [[p[0][0], p[0][1]]];
+  let acc = 0;
+  for (let i = 1; i < p.length; i++){
+    let ax = p[i - 1][0], ay = p[i - 1][1];
+    const bx = p[i][0], by = p[i][1];
+    let d = Math.hypot(bx - ax, by - ay);
+    while (d > 0 && acc + d >= step){
+      const t = (step - acc) / d;
+      ax += (bx - ax) * t; ay += (by - ay) * t;
+      out.push([ax, ay]);
+      d = Math.hypot(bx - ax, by - ay); acc = 0;
+    }
+    acc += d;
+  }
+  const last = p[p.length - 1], o = out[out.length - 1];
+  if (Math.hypot(last[0] - o[0], last[1] - o[1]) > step * 0.3) out.push([last[0], last[1]]);
+  return out;
+}
+/** The part of a stroke from s0 to s1 units along it. */
+function sliceStroke(p, s0, s1){
+  const out = []; let acc = 0;
+  for (let i = 1; i < p.length; i++){
+    const a = p[i - 1], b = p[i], d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const lerp = (s) => { const t = d ? (s - acc) / d : 0; return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; };
+    if (!out.length && acc + d >= s0) out.push(lerp(s0));
+    if (out.length && acc + d >= s1){ out.push(lerp(s1)); return out; }
+    if (out.length && acc + d > s0) out.push([b[0], b[1]]);
+    acc += d;
+  }
+  return out;
+}
+/** The first part of a stroke, to draw while Yuna writes it (frac 0 to 1). */
+function partial(p, frac){
+  const L = pathLen(p);
+  if (frac >= 1 || L === 0) return p.slice();
+  return sliceStroke(p, 0, Math.max(0.01, L * frac));
+}
+/** The writing lines' view: the text with room around it, never narrower than a single letter needs. */
+function viewBoxFor(lay, minW){
+  let x0 = lay.minX - 34, x1 = lay.maxX + 34;
+  const w = minW || 300;
+  if (x1 - x0 < w){ const c = (x0 + x1) / 2; x0 = c - w / 2; x1 = c + w / 2; }
+  return [r1(x0), -34, r1(x1 - x0), 204];
+}
+/** The numbered starts and the orange arrows: one arrow beside the first part of each stroke, on its outer side. */
+function decorFor(lay){
+  const arrows = [], nums = [], box = {};
+  /* each print letter's middle, so its arrows sit outside it */
+  lay.strokes.forEach(s => s.pts.forEach(p => { const b = box[s.ch] || (box[s.ch] = [Infinity, Infinity, -Infinity, -Infinity]); b[0] = Math.min(b[0], p[0]); b[1] = Math.min(b[1], p[1]); b[2] = Math.max(b[2], p[0]); b[3] = Math.max(b[3], p[1]); }));
+  lay.strokes.forEach((s, i) => {
+    const p = s.pts, L = pathLen(p), a = p[0];
+    const r = resample(p, 2), b = r[Math.min(r.length - 1, 4)] || a;
+    let dx = b[0] - a[0], dy = b[1] - a[1]; const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+    if (L < 1) { dx = 0; dy = 1; }
+    nums.push(i === 0 ? { n: 1, x: a[0], y: a[1] } : { n: i + 1, x: r1(a[0] - dx * 15), y: r1(a[1] - dy * 15) });
+    if (L < 14){ arrows.push(null); return; }
+    const s0 = Math.min(9, L * 0.15), s1 = Math.min(L * 0.6, s0 + 60);
+    const seg = resample(sliceStroke(p, s0, s1), 3);
+    if (seg.length < 2){ arrows.push(null); return; }
+    /* in cursive a word is one stroke, so the middle is that of the stroke's first part */
+    const near = sliceStroke(p, 0, Math.min(L, s1 + 40)), bb = box[s.ch];
+    const cx = lay.style === "cursive" ? near.reduce((t, q) => t + q[0], 0) / near.length : (bb[0] + bb[2]) / 2;
+    const cy = lay.style === "cursive" ? near.reduce((t, q) => t + q[1], 0) / near.length : (bb[1] + bb[3]) / 2;
+    const side = (sgn) => seg.map((q, k) => {
+      const u = seg[Math.max(0, k - 1)], v = seg[Math.min(seg.length - 1, k + 1)];
+      let tx = v[0] - u[0], ty = v[1] - u[1]; const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+      return [r1(q[0] - ty * 13 * sgn), r1(q[1] + tx * 13 * sgn)];
+    });
+    const A = side(1), B = side(-1), mid = Math.floor(seg.length / 2);
+    const far = (P) => Math.hypot(P[mid][0] - cx, P[mid][1] - cy);
+    arrows.push(far(A) >= far(B) ? A : B);
+  });
+  return { arrows, nums, start: lay.strokes.length ? lay.strokes[0].pts[0] : null };
+}
+
+/* ---- scoring: starting at the right place, going the right way, the stroke order, and staying on the lines ---- */
+const TOL = { k1: 16, g23: 12, g45: 10 };
+const TIPS = {
+  write: { t: "Write it on the lines.", more: "Put your pencil on the green dot and start there." },
+  more: { t: "Write every part of it.", more: "Some lines were missing. The dashed letter shows them all." },
+  lines: { t: "Stay on the writing lines.", more: "Tall letters touch the top line. Small letters fit under the dashed line." },
+  topDown: { t: "Start at the top and go straight down first.", more: "The first line starts at the top line and goes down to the base line." },
+  start: { t: "Start at the green dot.", more: "Every stroke has a starting place. The numbers show where each one starts." },
+  dir: { t: "Follow the orange arrows.", more: "The arrows show which way each line goes." },
+  order: { t: "Write the lines in number order.", more: "Number 1 first, then 2, then 3." },
+  smooth: { t: "Go slow and keep it neat.", more: "Slow, smooth lines stay closer to the shape." },
+  great: { t: "Great writing!", more: "You started in the right place and went the right way." }
+};
+/** How the child's strokes compare with the model's: coverage (how much of the model was written), precision (how
+    much of the writing is on the model), start, direction and order (0 to 1 each). Each of the child's strokes is
+    matched to the model stroke it fits best (in order when two fit), then walked along it to see which way it went. */
+function compareStrokes(model, ink, level){
+  const tol = TOL[level] || 12, near = tol * 1.5;
+  const MS = model.map(s => resample(s, 4)).filter(s => s.length);
+  const IS = (ink || []).filter(s => Array.isArray(s) && s.length).map(s => resample(s, 4));
+  const parts = { coverage: 0, precision: 0, start: 0, dir: 0, order: 0 };
+  const allM = [].concat(...MS), allI = [].concat(...IS);
+  if (!allI.length || !allM.length) return parts;
+  const dd = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const nearest = (q, set) => { let b = Infinity; for (let k = 0; k < set.length; k++){ const d = dd(q, set[k]); if (d < b) b = d; } return b; };
+  parts.coverage = allM.filter(m => nearest(m, allI) <= near).length / allM.length;
+  parts.precision = allI.filter(q => nearest(q, allM) <= near).length / allI.length;
+  const used = new Set();
+  let prevA = -1, okStart = 0, nStart = 0, inc = 0, dec = 0, ordOk = 0, ordN = 0;
+  IS.forEach(st => {
+    const fits = MS.map(ms => st.reduce((t, q) => t + nearest(q, ms), 0) / st.length);
+    const best = Math.min.apply(null, fits);
+    let pick = -1;
+    for (let j = 0; j < MS.length; j++) if (fits[j] <= best + 2 && !used.has(j) && j >= prevA){ pick = j; break; }
+    if (pick < 0) pick = fits.indexOf(best);
+    if (fits[pick] > near) return;   /* a scribble away from the letter: precision already counts it */
+    used.add(pick);
+    if (prevA >= 0){ ordN++; if (pick >= prevA) ordOk++; }
+    prevA = pick;
+    nStart++; if (dd(st[0], MS[pick][0]) <= tol * 2) okStart++;
+    const ms = MS[pick]; let prev = -1;
+    st.forEach(q => {
+      let bi = 0, bc = Infinity, bd = Infinity;
+      for (let j = 0; j < ms.length; j++){
+        const d = dd(q, ms[j]); let c = d;
+        if (prev >= 0){ const dg = j - prev; c += dg < 0 ? -dg * 3 : dg > 12 ? tol : dg * 0.05; }
+        if (c < bc){ bc = c; bi = j; bd = d; }
+      }
+      if (prev >= 0 && bd <= near && bi !== prev){ if (bi > prev) inc++; else dec++; }
+      prev = bi;
+    });
+  });
+  parts.start = nStart ? okStart / nStart : 0;
+  parts.dir = inc + dec ? inc / (inc + dec) : 1;
+  parts.order = ordN ? ordOk / ordN : 1;
+  return parts;
+}
+/** Stars from the parts: shape first, then the right start and direction, then everything (generous for K-1
+    through the wider tolerance). many: a word, name or sentence, where an extra lift of the pencil is fine. */
+function starsFrom(p, many){
+  const shape = Math.min(p.coverage, p.precision);
+  if (shape < 0.45) return 0;
+  if (shape >= 0.85 && p.dir >= 0.9 && p.start >= 0.8 && p.order >= (many ? 0.85 : 1)) return 3;
+  if (shape >= 0.7 && p.dir >= 0.7 && p.start >= 0.5) return 2;
+  return 1;
+}
+const topDownFirst = (model) => { const s = model[0]; if (!s || s.length < 2) return false; const a = s[0], b = s[s.length - 1]; return a[1] <= 5 && b[1] >= 95 && Math.abs(b[0] - a[0]) < 8; };
+/** One short tip: the first thing to work on. */
+function pickTip(p, model, many){
+  const shape = Math.min(p.coverage, p.precision);
+  if (shape < 0.45) return p.precision >= 0.6 ? "more" : "lines";
+  if (p.start < 0.8) return topDownFirst(model) ? "topDown" : "start";
+  if (p.dir < 0.9) return "dir";
+  if (p.order < (many ? 0.85 : 1)) return "order";
+  if (shape < 0.85) return p.coverage < p.precision ? "more" : "smooth";
+  return "great";
+}
+function scoreWriting(model, ink, level, many){
+  const parts = compareStrokes(model, ink, level);
+  if (!(ink || []).some(s => Array.isArray(s) && s.length)) return { stars: 0, tip: "write", parts };
+  return { stars: starsFrom(parts, many), tip: pickTip(parts, model, many), parts };
+}
+
+/* ---- what each grade writes ---- */
+const GRADES = [
+  { id: 0, label: "K", sub: "Aa to Zz", name: "Kindergarten" },
+  { id: 1, label: "1st", sub: "Name and words", name: "1st grade" },
+  { id: 2, label: "2nd", sub: "Words", name: "2nd grade" },
+  { id: 3, label: "3rd", sub: "Cursive", name: "3rd grade" },
+  { id: 4, label: "4th", sub: "Cursive", name: "4th grade" },
+  { id: 5, label: "5th", sub: "Cursive", name: "5th grade" }
+];
+const levelOf = (g) => (g <= 1 ? "k1" : g <= 3 ? "g23" : "g45");
+/** The site's picked grade (0 to 6) as this game's grade: 6th grade writes with 5th. */
+function gradeFrom(raw){ return Number.isInteger(raw) && raw >= 0 && raw <= 6 ? Math.min(raw, 5) : null; }
+/* a letter's sound as Yuna says it, and the example word (Kindergarten) */
+const SOUNDS = { a: ["ah", "apple"], b: ["buh", "ball"], c: ["kuh", "cat"], d: ["duh", "dog"], e: ["eh", "egg"], f: ["fff", "fish"], g: ["guh", "goat"],
+  h: ["huh", "hat"], i: ["ih", "insect"], j: ["juh", "jam"], k: ["kuh", "kite"], l: ["lll", "lion"], m: ["mmm", "moon"], n: ["nnn", "nest"],
+  o: ["aw", "octopus"], p: ["puh", "pig"], q: ["kwuh", "queen"], r: ["rrr", "rain"], s: ["sss", "sun"], t: ["tuh", "top"], u: ["uh", "umbrella"],
+  v: ["vvv", "van"], w: ["wuh", "web"], x: ["ks", "fox"], y: ["yuh", "yarn"], z: ["zzz", "zipper"] };
+const soundShown = (l) => "/" + ({ c: "k", q: "kw", x: "ks" }[l] || l) + "/";
+const nameSay = (l) => (l === "a" ? "Ay" : l.toUpperCase());
+const SIGHT = ["the", "and", "see", "said", "you", "was", "are", "they", "have", "come", "here", "look", "my", "play", "we", "like", "go", "can", "is", "to"];
+const SHORT = ["cat", "dog", "sun", "hat", "pig", "bed", "map", "cup", "fish", "ship", "frog", "duck", "jam", "net", "fox", "bus", "hen", "log", "top", "van"];
+const WORDS2 = ["friend", "happy", "little", "water", "under", "after", "school", "house", "green", "small", "about", "again", "because", "people", "there", "where", "which", "every", "light", "three"];
+const SENTENCES2 = ["The cat is big.", "I can see a bird.", "We like to play.", "My dog can run.", "The sun is hot.", "I have a red hat.", "Look at the moon.", "We went to the park.", "The frog sat on a log.", "Fish swim in the lake."];
+const FAMILIES = ["cadgoq", "ituw", "elbhkf", "rsjp", "nmxyvz"];
+const CURSIVE_WORDS = { 4: ["art", "music", "kind", "brave", "story", "learn", "dream", "build", "world", "smile"], 5: ["science", "create", "planet", "garden", "rocket", "bridge", "puzzle", "wonder", "explore", "imagine"] };
+const CURSIVE_SENTENCES = { 4: ["We can do it.", "I love to learn."], 5: ["Make art every day.", "Music makes me happy."] };
+const FIXED = {
+  hello: "Let's practice writing! Pick your grade.",
+  watch: "Watch me write it.",
+  trace: "Now you trace it. Start at the green dot.",
+  own: "Now write it on your own.",
+  traceGood: "Nice tracing!",
+  traceAgain: "Let's trace it one more time.",
+  star0: "Let's try that one again.",
+  star1: "Good try! You got one star.",
+  star2: "Nice work! You got two stars.",
+  star3: "Wow! You got three stars.",
+  allDone: "You finished them all! Great writing.",
+  name: "Let's write your name.",
+  phone: "You're connected! Write on the phone or tablet."
+};
+/** Everything a grade writes, in order. A name item's text is filled in on the device. */
+function itemsFor(g){
+  const out = [];
+  const word = (w, style, extra) => Object.assign({ id: (style === "cursive" ? "write-cursive-word-" : "write-word-") + w, kind: "word", style, text: w,
+    title: (style === "cursive" ? "Cursive word: " : "The word ") + w, short: (style === "cursive" ? "the cursive word " : "the word ") + w, big: w,
+    say: style === "cursive" ? "Let's write " + w + " in cursive." : "Let's write the word " + w + ".",
+    question: style === "cursive" ? "Write the word " + w + " in cursive." : "Write the word " + w + ".", answer: w, done: "You wrote " + w + "!" }, extra || {});
+  const sentence = (s, n, style) => ({ id: (style === "cursive" ? "write-cursive-sentence-" : "write-sentence-") + n, kind: "sentence", style, text: s,
+    title: "A sentence", short: "a sentence", big: s, sound: "A capital at the start, a period at the end",
+    say: (style === "cursive" ? "Let's write this sentence in cursive. " : "Let's write this sentence. ") + s,
+    question: (style === "cursive" ? "Write this sentence in cursive: " : "Write the sentence: ") + s, answer: s, done: "You wrote a sentence!" });
+  const name = (style) => ({ id: style === "cursive" ? "write-cursive-name" : "write-name", kind: "name", style, text: "",
+    title: "Your name", short: "your name", big: "", sound: style === "cursive" ? "First and last, in cursive" : "First and last, each with a capital",
+    say: FIXED.name, question: style === "cursive" ? "Write your name in cursive." : "Write your name.", answer: "your name", done: "You wrote your name!" });
+  if (g === 0){
+    "abcdefghijklmnopqrstuvwxyz".split("").forEach(l => {
+      const L = l.toUpperCase(), s = SOUNDS[l], N = nameSay(l), sound = L + " says " + soundShown(l) + ", like " + s[1];
+      out.push({ id: "write-upper-" + l, kind: "letter", style: "print", text: L, title: "Capital " + L, short: "capital " + L, big: L + " " + l, sound, word: s[1],
+        say: "Capital " + N + ". " + N + " says " + s[0] + ", like " + s[1] + ".", question: "Write the capital letter " + L + ".", answer: L, done: "You wrote " + L + "!" });
+      out.push({ id: "write-lower-" + l, kind: "letter", style: "print", text: l, title: "Lowercase " + l, short: "lowercase " + l, big: L + " " + l, sound, word: s[1],
+        say: "Lowercase " + N + ".", question: "Write the lowercase letter " + l + ".", answer: l, done: "You wrote " + l + "!" });
+    });
+  } else if (g === 1){
+    out.push(name("print"));
+    SIGHT.forEach(w => out.push(word(w, "print", { sound: "A word to know by sight" })));
+    SHORT.forEach(w => out.push(word(w, "print", { sound: "Sound it out: " + w.split("").join(", ") })));
+  } else if (g === 2){
+    WORDS2.forEach(w => out.push(word(w, "print", { sound: "Leave a little space between letters" })));
+    SENTENCES2.forEach((s, i) => out.push(sentence(s, i + 1, "print")));
+  } else if (g === 3){
+    FAMILIES.forEach(f => f.split("").forEach(l => out.push({ id: "write-cursive-" + l, kind: "letter", style: "cursive", text: l, title: "Cursive " + l, short: "cursive " + l,
+      big: l, sound: "The " + f.split("").join(" ") + " family", say: "Cursive " + nameSay(l) + ".", question: "Write the cursive letter " + l + ".", answer: l, done: "You wrote cursive " + l + "!" })));
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach(L => out.push({ id: "write-cursive-upper-" + L.toLowerCase(), kind: "letter", style: "cursive", text: L,
+      title: "Cursive capital " + L, short: "cursive capital " + L, big: L, sound: "Cursive capitals", say: "Cursive capital " + nameSay(L.toLowerCase()) + ".",
+      question: "Write the cursive capital letter " + L + ".", answer: L, done: "You wrote cursive " + L + "!" }));
+  } else if (g === 4 || g === 5){
+    CURSIVE_WORDS[g].forEach(w => out.push(word(w, "cursive", { sound: "Join every letter" })));
+    out.push(name("cursive"));
+    CURSIVE_SENTENCES[g].forEach((s, i) => out.push(sentence(s, (g === 4 ? 1 : 3) + i, "cursive")));
+  }
+  return out;
+}
+/** The answer for the progress report: never the child's name (a name item's answer is "your name"). */
+function answerFor(item, g, stars, tip){
+  return { game: GAME_ID, qid: item.id, subject: "reading", level: levelOf(g), correct: stars >= 2,
+    question: item.question, answer: item.answer, why: (TIPS[tip] || TIPS.great).t };
+}
+/** The clip for a line is the FNV-1a hash of its exact text, base 36 (as Solar System Sandbox's tours). */
+function lineKey(text){
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++){ h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(36);
+}
+/** Every line Yuna can say (scripts/yuna-lines.mjs records them). */
+function allLines(){
+  const s = new Set();
+  Object.keys(FIXED).forEach(k => s.add(FIXED[k]));
+  Object.keys(TIPS).forEach(k => s.add(TIPS[k].t));
+  GRADES.forEach(g => itemsFor(g.id).forEach(it => s.add(it.say)));
+  return Array.from(s).map(t => t.trim());
+}
+/** A phone or tablet (a touch screen, no mouse): it writes right here, so it never offers the QR code. */
+function touchOnly(m){ return !!(m && m.coarse && !m.fine); }
+function startChoices(touch){ return touch ? ["start"] : ["here", "phone"]; }
+function roomCode(rand){ return String(100000 + Math.floor(rand() * 900000)); }
+function readCode(s){ const d = String(s || "").replace(/\D/g, ""); return /^[1-9]\d{5}$/.test(d) ? d : null; }
+/** A name as typed: letters (accents dropped), spaces, hyphens and apostrophes, at most 20 characters. */
+function cleanName(s){
+  return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[‘’]/g, "'").replace(/[^A-Za-z' -]/g, "").replace(/\s+/g, " ").trim().slice(0, 20).trim();
+}
+/** Strokes from the phone or tablet, kept only if they are plain points near the lines. */
+function cleanInk(ink, vb){
+  if (!Array.isArray(ink)) return [];
+  const x0 = vb[0] - 60, x1 = vb[0] + vb[2] + 60;
+  return ink.slice(0, 80).filter(Array.isArray).map(st => st.slice(0, 800).filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+    .map(p => [r1(Math.min(x1, Math.max(x0, p[0]))), r1(Math.min(230, Math.max(-70, p[1])))])).filter(st => st.length);
+}
+/* END pure */
+
+const $ = (id) => document.getElementById(id);
+const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSearchParams(location.search).get("grade"); const n = typeof raw === "number" ? raw : /^[0-6]$/.test(String(raw)) ? Number(raw) : NaN; return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null; } catch (_e) { return null; } })();
+const REDUCED = (() => { try { return matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (_e) { return false; } })();
+const TOUCH = (() => { try { return touchOnly({ coarse: matchMedia("(pointer: coarse)").matches, fine: matchMedia("(any-pointer: fine)").matches }); } catch (_e) { return false; } })();
+/* inside the site (a sealed frame), answers and saves go to the page around the game; opened alone, nothing is posted */
+const INSIDE = (() => { try { return window.parent !== window; } catch (_e) { return true; } })();
+function toParent(msg){ if (!INSIDE) return; try { window.parent.postMessage(msg, "*"); } catch (_e) { /* opened on its own */ } }
+const sfx = (name, opts) => { if (window.CCSSound) CCSSound.play(name, opts); };
+if (window.CCSSound) $("soundSlot").appendChild(CCSSound.button({ compact: true, background: "#FFFBF3" }));
+const POSE = (p) => "/assets/characters/yuna-pose-" + p + ".png";
+const STAR = (on) => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 6.5 7 .9-5.1 4.8 1.3 7L12 17.8 5.8 21.2l1.3-7L2 9.4l7-.9z" fill="' + (on ? "#F2C230" : "#fff") + '" stroke="#1E2226" stroke-width="1.6"/></svg>';
+const starsHTML = (n) => STAR(n >= 1) + STAR(n >= 2) + STAR(n >= 3);
+
+/* ---------- saved on this device: the name (first and last) and where each grade is up to ---------- */
+const LOCAL_KEY = "write-with-yuna-save";
+let SAVE = { first: "", last: "", at: {} };
+function cleanSave(d){
+  d = d && typeof d === "object" ? d : {};
+  const at = {};
+  if (d.at && typeof d.at === "object") Object.keys(d.at).forEach(k => { const v = Number(d.at[k]); if (/^[0-5]$/.test(k) && Number.isInteger(v) && v >= 0 && v < 200) at[k] = v; });
+  return { first: cleanName(d.first), last: cleanName(d.last), at };
+}
+function writeSave(){
+  if (INSIDE) toParent({ ccsSave: "set", game: GAME_ID, data: SAVE });
+  else { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(SAVE)); } catch (_e) { /* private window */ } }
+}
+if (INSIDE){
+  window.addEventListener("message", (ev) => {
+    if (ev.source !== window.parent) return;
+    const d = ev.data;
+    if (!d || d.ccsSave !== "data" || d.game !== GAME_ID) return;
+    const got = cleanSave(d.data);
+    SAVE = { first: SAVE.first || got.first, last: SAVE.last || got.last, at: Object.assign({}, got.at, SAVE.at) };
+  });
+  toParent({ ccsSave: "get", game: GAME_ID });
+} else {
+  try { SAVE = cleanSave(JSON.parse(localStorage.getItem(LOCAL_KEY) || "null")); } catch (_e) { SAVE = cleanSave(null); }
+}
+
+/* ---------- Yuna's voice: pre-recorded clips (Kokoro, Heart), named by a hash of the line; no clip, no sound ---------- */
+const VOICE_DIR = "/assets/games/write-with-yuna/voice/";
+const voice = new Audio();
+let voiceQueue = [];
+function playNextLine(){
+  const t = voiceQueue.shift();
+  if (!t) return;
+  try {
+    if (window.CCSSound && !CCSSound.isOn()){ voiceQueue = []; return; }
+    voice.src = VOICE_DIR + lineKey(t.trim()) + ".mp3";
+    voice.volume = window.CCSSound && CCSSound.volume ? CCSSound.volume("sfx") : 1;   /* the volume panel's Game sounds level */
+    const p = voice.play(); if (p && p.catch) p.catch(() => { voiceQueue = []; });
+  } catch (_e) { voiceQueue = []; }
+}
+voice.addEventListener("ended", playNextLine);
+voice.addEventListener("error", playNextLine);
+function say(lines){ try { voice.pause(); } catch (_e) {} voiceQueue = (Array.isArray(lines) ? lines : [lines]).filter(Boolean); playNextLine(); }
+function hush(){ voiceQueue = []; try { voice.pause(); } catch (_e) {} }
+
+/* ---------- the game ---------- */
+const G = { grade: CCS_CHILD_GRADE !== null ? gradeFrom(CCS_CHILD_GRADE) : 0, items: [], idx: 0, item: null, lay: null, vb: [0, -34, 300, 204], decor: null,
+  phase: "", ink: [], seq: 0, traceTries: 0, sent: {}, stars: 0, tip: "great", linked: false, anim: 0, cur: null, best: {} };
+function show(id){ ["sStart", "sQR", "sName", "sPlay"].forEach(s => { $(s).hidden = s !== id; }); }
+function gradeName(g){ return GRADES[g].name; }
+function paintChip(){ const c = $("gradeChip"); c.hidden = false; c.textContent = "Playing at " + gradeName(G.grade); c.setAttribute("aria-label", "Playing at " + gradeName(G.grade) + ". Change the grade"); }
+function paintGrades(){
+  $("grades").innerHTML = GRADES.map(g => '<button type="button" data-g="' + g.id + '" aria-pressed="' + (g.id === G.grade) + '">' + g.label + "<small>" + g.sub + "</small></button>").join("");
+  $("who").textContent = CCS_CHILD_GRADE !== null ? "Picked: " + gradeName(gradeFrom(CCS_CHILD_GRADE)) + ". Change it any time from the top bar." : "Pick a grade to start. Change it any time from the top bar.";
+}
+$("grades").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-g]"); if (!b) return;
+  G.grade = Number(b.dataset.g); sfx("click", { volume: 0.5 });
+  paintGrades(); paintChip();
+});
+function openStart(){
+  stopAnim(); hush();
+  show("sStart");
+  $("startSay").textContent = FIXED.hello;
+  paintGrades(); paintChip();
+  tellPad();
+}
+/* the start screen's choices: a computer gets two, a phone or tablet only "Start writing" */
+(function(){
+  const c = startChoices(TOUCH);
+  document.body.classList.toggle("touch", TOUCH);
+  $("bHere").hidden = c.indexOf("here") < 0;
+  $("bPhone").hidden = c.indexOf("phone") < 0;
+  $("bStartTouch").hidden = c.indexOf("start") < 0;
+  if (TOUCH) $("startLead").textContent = "Write with your finger or a stylus.";
+})();
+$("gradeChip").onclick = () => { sfx("click", { volume: 0.5 }); openStart(); };
+$("bHere").onclick = () => { sfx("click", { volume: 0.5 }); beginWriting(); };
+$("bStartTouch").onclick = () => { sfx("click", { volume: 0.5 }); beginWriting(); };
+$("bPhone").onclick = () => { sfx("click", { volume: 0.5 }); showQRPanel(); };
+$("bBack").onclick = () => { sfx("click", { volume: 0.5 }); openStart(); };
+
+function beginWriting(){
+  G.items = itemsFor(G.grade);
+  const at = SAVE.at[G.grade] || 0;
+  G.idx = at >= 0 && at < G.items.length ? at : 0;
+  $("jump").innerHTML = G.items.map((it, i) => '<option value="' + i + '">' + esc(it.title) + "</option>").join("");
+  openItem(G.idx);
+}
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function fullName(){ return (SAVE.first + " " + SAVE.last).trim(); }
+function openItem(i, askName){
+  stopAnim(); hush();
+  G.idx = i; G.item = Object.assign({}, G.items[i]);
+  SAVE.at[G.grade] = i; writeSave();
+  $("jump").value = String(i);
+  if (G.item.kind === "name"){
+    if (!fullName() || askName){ show("sName"); $("nFirst").value = SAVE.first; $("nLast").value = SAVE.last; setTimeout(() => $("nFirst").focus(), 30); say(FIXED.name); tellPad(); return; }
+    G.item.text = fullName(); G.item.big = fullName();
+  }
+  show("sPlay");
+  G.lay = layoutText(G.item.text, G.item.style);
+  /* a tall, narrow screen (a phone held upright) gets the letter bigger */
+  G.vb = viewBoxFor(G.lay, innerWidth < innerHeight * 0.9 ? 170 : 300);
+  G.decor = decorFor(G.lay);
+  G.stars = G.best[G.item.id] || 0;
+  paintSide();
+  $("finish").hidden = true;
+  setPhase("watch");
+}
+$("bNameGo").onclick = () => {
+  const f = cleanName($("nFirst").value), l = cleanName($("nLast").value);
+  if (!f){ $("nFirst").focus(); return; }
+  SAVE.first = f; SAVE.last = l; writeSave();
+  sfx("click", { volume: 0.5 });
+  openItem(G.idx);
+};
+$("bNameSkip").onclick = () => { sfx("click", { volume: 0.5 }); openItem(Math.min(G.items.length - 1, G.idx + 1)); };
+[$("nFirst"), $("nLast")].forEach(el => el.addEventListener("keydown", (e) => { if (e.key === "Enter") $("bNameGo").click(); }));
+$("bRename").onclick = () => openItem(G.idx, true);
+$("jump").onchange = () => openItem(Number($("jump").value) || 0);
+
+function paintSide(){
+  const it = G.item, big = $("sideBig");
+  big.className = "big" + (it.style === "cursive" ? "" : it.kind === "letter" ? "" : " sm");
+  if (it.style === "cursive"){
+    /* the cursive letter or word, drawn small from its model */
+    const vb = G.vb;
+    big.innerHTML = '<svg viewBox="' + vb.join(" ") + '" aria-label="' + esc(it.kind === "name" ? "Your name" : it.text) + ' in cursive" role="img">' + linesSVG(vb, 2) +
+      G.lay.strokes.map(s => '<path d="' + pathD(s.pts) + '" fill="none" stroke="#1E2226" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>').join("") + "</svg>";
+  } else big.textContent = it.big;
+  const snd = $("sideSound");
+  snd.textContent = "";
+  if (it.word && it.sound){ const k = it.sound.lastIndexOf(it.word); snd.append(it.sound.slice(0, k)); const b = document.createElement("b"); b.textContent = it.word; snd.append(b); }
+  else snd.textContent = it.sound || "";
+  $("sideStars").innerHTML = starsHTML(G.stars);
+  $("bRename").hidden = it.kind !== "name";
+  requestAnimationFrame(keepMinWidths);
+}
+
+/* ---------- drawing the paper ---------- */
+const pathD = (pts) => pts.length ? "M" + pts.map(p => p[0] + " " + p[1]).join(" L") + (pts.length === 1 ? " l0.01 0" : "") : "";
+function linesSVG(vb, w){
+  const a = vb[0] - 3000, b = vb[0] + vb[2] + 3000;
+  return '<line x1="' + a + '" y1="0" x2="' + b + '" y2="0" stroke="#1273B0" stroke-width="' + w + '"/>' +
+    /* the dashed middle line is thin (owner, 2026-11-22): 0.3 of the solid lines, dashes 5 on and 4 off at full size,
+       and never under 1 CSS pixel (keepMinWidths) */
+    '<line class="mid" data-min="1" data-w="' + (w * 0.3).toFixed(2) + '" x1="' + a + '" y1="50" x2="' + b + '" y2="50" stroke="#9BB5C7" stroke-width="' + (w * 0.3).toFixed(2) + '" stroke-dasharray="' + r1(w * 2) + " " + r1(w * 1.6) + '"/>' +
+    '<line x1="' + a + '" y1="100" x2="' + b + '" y2="100" stroke="#E5484D" stroke-width="' + w + '"/>';
+}
+/* thin lines stay visible: the dashed middle line never under 1 CSS pixel, the dashed guide never under 1.5,
+   whatever size the paper is drawn at */
+function keepMinWidths(){
+  document.querySelectorAll("[data-min]").forEach(l => {
+    const svg = l.ownerSVGElement, m = svg && svg.getScreenCTM ? svg.getScreenCTM() : null;
+    const base = Number(l.getAttribute("data-w")) || 1, min = Number(l.getAttribute("data-min")) || 1, scale = m ? Math.hypot(m.a, m.b) : 0;
+    l.setAttribute("stroke-width", String(scale > 0 ? Math.max(base, min / scale) : base));
+  });
+}
+addEventListener("resize", () => requestAnimationFrame(keepMinWidths));
+/* the model to trace, and to compare with afterwards: thin dashes (owner, 2026-11-22), 2 wide with dashes 6 on and
+   4.5 off (4, 12 and 9 in the mockup's 640-wide view) */
+const guideSVG = (strokes) => '<g class="guide" data-min="1.5" data-w="2" fill="none" stroke="#9AA6B0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 4.5">' + strokes.map(s => '<path d="' + pathD(s.pts) + '"/>').join("") + "</g>";
+function arrowSVG(a){ return a ? '<path d="' + pathD(a) + '" fill="none" stroke="#E07A1F" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ah)"/>' : ""; }
+function numSVG(n){
+  if (n.n === 1) return '<circle cx="' + n.x + '" cy="' + n.y + '" r="10" fill="#2F6B2C"/><text x="' + n.x + '" y="' + (n.y + 4.2) + '" text-anchor="middle" font-family="Plus Jakarta Sans, sans-serif" font-weight="800" font-size="12" fill="#fff">1</text>';
+  return '<circle cx="' + n.x + '" cy="' + n.y + '" r="8.5" fill="#fff" stroke="#1E2226" stroke-width="1.6"/><text x="' + n.x + '" y="' + (n.y + 3.8) + '" text-anchor="middle" font-family="Plus Jakarta Sans, sans-serif" font-weight="800" font-size="11" fill="#1E2226">' + n.n + "</text>";
+}
+const startDotSVG = (s) => s ? '<circle cx="' + s[0] + '" cy="' + s[1] + '" r="9" fill="#2F6B2C"/>' : "";
+function paintPaper(){
+  const svg = $("paper"), vb = G.vb, ph = G.phase, L = G.lay, D = G.decor;
+  svg.setAttribute("viewBox", vb.join(" "));
+  svg.setAttribute("aria-label", "Writing lines" + (ph === "trace" ? " with a dashed guide, its stroke order and arrows" : ""));
+  $("gLines").innerHTML = linesSVG(vb, 2.5);
+  $("gGuide").innerHTML = ph === "trace" ? guideSVG(L.strokes) : "";
+  $("gArrows").innerHTML = ph === "trace" ? D.arrows.map(arrowSVG).join("") : "";
+  $("gNums").innerHTML = ph === "trace" ? D.nums.slice().reverse().map(numSVG).join("") : ph === "own" ? startDotSVG(D.start) : "";
+  $("gOver").innerHTML = ph === "result" ? '<g opacity=".95">' + guideSVG(L.strokes) + "</g>" : "";
+  if (ph !== "watch") $("gYuna").innerHTML = "";
+  paintInk();
+  keepMinWidths();
+}
+function paintInk(){
+  $("gInk").innerHTML = G.ink.map(s => '<path d="' + pathD(s) + '" fill="none" stroke="#1273B0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>').join("");
+  const has = G.ink.some(s => s.length);
+  $("bDone").disabled = !has; $("bUndo").disabled = !has; $("bClear").disabled = !has;
+}
+
+/* ---------- the three steps ---------- */
+const BUBBLE = { watch: FIXED.watch, trace: "Start at the green dot. Follow the orange arrows.", own: FIXED.own };
+function setPhase(ph){
+  G.phase = ph; G.seq++; G.ink = []; G.cur = null;
+  const order = ["watch", "trace", "own"], k = order.indexOf(ph);
+  Array.from($("steps").children).forEach((s, i) => { s.className = ph === "result" ? "done" : i < k ? "done" : i === k ? "on" : ""; });
+  $("playFace").src = POSE(ph === "watch" ? "point" : ph === "result" ? (G.stars >= 3 ? "cheer" : "thumbs-up") : "pencil");
+  if (BUBBLE[ph]) $("playSay").textContent = BUBBLE[ph];
+  if (ph === "trace" && topDownFirst(G.lay.strokes.map(s => s.pts)) && G.item.kind === "letter") $("playSay").textContent = "Start at the green dot. Straight down first!";
+  paintTools();
+  if (ph !== "result") $("finish").hidden = true;
+  paintPaper();
+  if (ph === "watch") watch();
+  else if (ph === "trace") say(FIXED.trace);
+  else if (ph === "own") say(FIXED.own);
+  tellPad();
+}
+/* with a phone or tablet joined, the writing happens there; this screen shows it */
+function paintTools(){
+  const ph = G.phase, writing = ph === "trace" || ph === "own";
+  $("paper").classList.toggle("off", !writing || G.linked);
+  ["bUndo", "bClear", "bDone"].forEach(id => { $(id).hidden = !writing || G.linked; });
+  $("bTrace").hidden = ph !== "watch";
+  $("bSkip").hidden = ph === "result";
+}
+/* Watch: Yuna writes it, stroke by stroke, each with its number and arrow; decelerating, never bouncy.
+   With reduced motion it is shown already written. */
+function stopAnim(){ if (G.anim) cancelAnimationFrame(G.anim); G.anim = 0; }
+function watch(){
+  stopAnim();
+  say([G.item.say, FIXED.watch]);
+  const S = G.lay.strokes, D = G.decor;
+  const draw = (upto, frac) => {
+    $("gYuna").innerHTML = S.slice(0, upto + 1).map((s, i) => '<path d="' + pathD(i < upto ? s.pts : partial(s.pts, frac)) + '" fill="none" stroke="#3E464C" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>').join("");
+    $("gArrows").innerHTML = D.arrows.slice(0, upto + 1).map(arrowSVG).join("");
+    $("gNums").innerHTML = D.nums.slice(0, upto + 1).reverse().map(numSVG).join("");
+  };
+  if (REDUCED || !S.length){ if (S.length) draw(S.length - 1, 1); return; }
+  const durs = S.map(s => Math.max(260, Math.min(1500, pathLen(s.pts) * 8)));
+  const startDelay = 600, pause = 260;
+  let t0 = performance.now() + startDelay;
+  const tick = (now) => {
+    if (G.phase !== "watch") return;
+    let t = now - t0, i = 0;
+    if (t < 0){ G.anim = requestAnimationFrame(tick); return; }
+    while (i < S.length && t > durs[i] + pause){ t -= durs[i] + pause; i++; }
+    if (i >= S.length){ draw(S.length - 1, 1); G.anim = 0; return; }
+    const f = Math.min(1, t / durs[i]);
+    draw(i, 1 - Math.pow(1 - f, 2));
+    G.anim = requestAnimationFrame(tick);
+  };
+  G.anim = requestAnimationFrame(tick);
+}
+$("bTrace").onclick = () => { sfx("click", { volume: 0.5 }); setPhase("trace"); };
+$("bAgain").onclick = () => { sfx("click", { volume: 0.5 }); $("finish").hidden = true; setPhase("watch"); };
+$("bSkip").onclick = () => { sfx("click", { volume: 0.5 }); nextItem(); };
+$("bUndo").onclick = () => { G.ink.pop(); paintInk(); };
+$("bClear").onclick = () => { G.ink = []; paintInk(); };
+$("bDone").onclick = () => done();
+
+function done(){
+  if (!G.ink.some(s => s.length)) return;
+  const model = G.lay.strokes.map(s => s.pts), L = levelOf(G.grade), many = G.item.kind !== "letter";
+  const r = scoreWriting(model, G.ink, L, many);
+  if (G.phase === "trace"){
+    G.traceTries++;
+    if (r.stars >= 1 || G.traceTries >= 2){ sfx("good", { volume: 0.5 }); G.traceTries = 0; $("playSay").textContent = FIXED.traceGood; say(FIXED.traceGood); setTimeout(() => { if (G.phase === "trace") setPhase("own"); }, 900); }
+    else { $("playSay").textContent = FIXED.traceAgain + " " + TIPS[r.tip].t; say([FIXED.traceAgain, TIPS[r.tip].t]); G.ink = []; G.seq++; paintInk(); tellPad(); }
+    return;
+  }
+  if (G.phase !== "own") return;
+  G.stars = r.stars; G.tip = r.tip;
+  G.best[G.item.id] = Math.max(G.best[G.item.id] || 0, r.stars);
+  /* the progress report: one answer per item, the first time it is written on its own, and only inside the site */
+  if (!G.sent[G.item.id]){ G.sent[G.item.id] = true; toParent({ ccsAnswer: answerFor(G.item, G.grade, r.stars, r.tip) }); }
+  const keep = G.ink;
+  setPhase("result");
+  G.ink = keep; paintInk();
+  showFinish();
+}
+function showFinish(){
+  const it = G.item, n = G.stars, last = G.idx >= G.items.length - 1;
+  $("fFace").src = POSE(n >= 3 ? "cheer" : "thumbs-up");
+  $("fTitle").textContent = n ? it.done : "Let's try that one again.";
+  $("fStars").innerHTML = starsHTML(n);
+  $("fStars").setAttribute("aria-label", n + " of 3 stars");
+  $("fTip").textContent = TIPS[G.tip].t; $("fMore").textContent = TIPS[G.tip].more;
+  $("bNext").textContent = last ? "Start again from the first one" : "Next: " + nextShort();
+  $("sideStars").innerHTML = starsHTML(G.best[it.id] || n);
+  $("playSay").textContent = FIXED["star" + n];
+  $("finish").hidden = false;
+  if (n) sfx(n >= 3 ? "win" : "good", { volume: 0.5 });
+  say([FIXED["star" + n], n < 3 ? TIPS[G.tip].t : null]);
+  setTimeout(() => $("bNext").focus(), 40);
+}
+function nextShort(){ const it = G.items[G.idx + 1]; return it ? it.short : ""; }
+function nextItem(){
+  if (G.idx >= G.items.length - 1){
+    openItem(0);
+    if (G.item.kind !== "name"){ $("playSay").textContent = FIXED.allDone; say([FIXED.allDone, G.item.say, FIXED.watch]); }
+    return;
+  }
+  openItem(G.idx + 1);
+}
+$("bRetry").onclick = () => { sfx("click", { volume: 0.5 }); $("finish").hidden = true; setPhase("own"); };
+$("bNext").onclick = () => { sfx("click", { volume: 0.5 }); nextItem(); };
+
+/* ---------- writing on this screen: mouse, finger or stylus ---------- */
+(function(){
+  const svg = $("paper");
+  const pt = (e) => { const m = svg.getScreenCTM(); if (!m) return null; const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; const q = p.matrixTransform(m.inverse()); return [r1(q.x), r1(q.y)]; };
+  const can = () => (G.phase === "trace" || G.phase === "own") && !G.linked;
+  let raf = 0;
+  svg.addEventListener("pointerdown", (e) => {
+    if (!can() || (e.pointerType === "mouse" && e.button !== 0)) return;
+    e.preventDefault();
+    try { svg.setPointerCapture(e.pointerId); } catch (_e) {}
+    const p = pt(e); if (!p) return;
+    G.cur = { id: e.pointerId, pts: [p] }; G.ink.push(G.cur.pts); paintInk();
+  });
+  svg.addEventListener("pointermove", (e) => {
+    if (!G.cur || e.pointerId !== G.cur.id) return;
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    (evs.length ? evs : [e]).forEach(ev => { const p = pt(ev), l = G.cur.pts[G.cur.pts.length - 1]; if (p && Math.hypot(p[0] - l[0], p[1] - l[1]) > 0.8) G.cur.pts.push(p); });
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintInk(); });
+  });
+  const end = (e) => { if (G.cur && e.pointerId === G.cur.id){ G.cur = null; paintInk(); } };
+  svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", end); svg.addEventListener("lostpointercapture", end);
+})();
+
+/* ---------- a phone or tablet as the paper: Supabase Realtime broadcast, sealed like Stack 'Em Up ---------- */
+const SB_URL = "https://wdctkfhwygwwulipwnys.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
+const NET = { sb: null, ch: null, id: Array.from(crypto.getRandomValues(new Uint32Array(2))).join("-"), kp: null, hk: "", fp: "", code: "", keys: {}, lastN: {}, pad: "", padSeen: 0, out: 0, chain: Promise.resolve(), making: null, beat: 0 };
+function loadScript(src){ return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error("load " + src)); document.head.appendChild(s); }); }
+/* the room's channel is shared, so this screen and the phone agree a key (ECDH P-256) and seal everything with it
+   (AES-GCM): nobody else on the channel can see the writing or send strokes */
+const MSC = {
+  b64: (buf) => btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(buf)))),
+  unb64: (s) => Uint8Array.from(atob(String(s)), c => c.charCodeAt(0)),
+  ALG: { name: "ECDH", namedCurve: "P-256" },
+  pair(){ return crypto.subtle.generateKey(MSC.ALG, true, ["deriveKey"]); },
+  async pub(kp){ return MSC.b64(await crypto.subtle.exportKey("raw", kp.publicKey)); },
+  /* a short fingerprint of this screen's key, carried in the QR link so a scanning phone trusts only this screen */
+  async fp(pubB64){ const h = await crypto.subtle.digest("SHA-256", MSC.unb64(pubB64)); return MSC.b64(h.slice(0, 12)).replace(/\+/g, "-").replace(/\//g, "_"); },
+  async key(priv, pubB64){
+    const pk = await crypto.subtle.importKey("raw", MSC.unb64(pubB64), MSC.ALG, false, []);
+    return crypto.subtle.deriveKey({ name: "ECDH", public: pk }, priv, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  },
+  async seal(key, obj){
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
+    return { iv: MSC.b64(iv), d: MSC.b64(ct) };
+  },
+  async open(key, box){
+    try { const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: MSC.unb64(box.iv) }, key, MSC.unb64(box.d)); return JSON.parse(new TextDecoder().decode(pt)); }
+    catch (_e){ return null; }
+  }
+};
+async function sbClient(){
+  if (NET.sb) return NET.sb;
+  if (!window.supabase){ try { await loadScript("/assets/vendor/supabase.js"); } catch (_e){ await loadScript("https://unpkg.com/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"); } }
+  NET.sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, realtime: { params: { eventsPerSecond: 30 } } });
+  return NET.sb;
+}
+function send(p){ if (!NET.ch) return; p.i = NET.id; try { const r = NET.ch.send({ type: "broadcast", event: "m", payload: p }); if (r && r.catch) r.catch(() => {}); } catch (_e) {} }
+function openRoom(code){
+  return sbClient().then(sb => new Promise((ok, no) => {
+    const ch = sb.channel("writeyuna-" + code, { config: { broadcast: { self: false } } });
+    let other = false;
+    ch.on("broadcast", { event: "m" }, (e) => { const p = e.payload || {}; if (p.t === "host" && p.i !== NET.id) other = true; else onMsg(p); });
+    const to = setTimeout(() => no(new Error("timeout")), 9000);
+    ch.subscribe((s) => { if (s === "SUBSCRIBED"){ clearTimeout(to); ok({ ch, taken: () => other }); } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT"){ clearTimeout(to); no(new Error(s)); } });
+  }));
+}
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+function joinUrl(){ return new URL("/games/write-with-yuna-pad.html?room=" + NET.code + "&k=" + NET.fp, document.baseURI).href; }
+/* the QR code shows only here, after "Try it on a phone or a tablet" */
+function showQRPanel(){
+  stopAnim(); hush();
+  show("sQR");
+  if (NET.code){ paintRoom(); return; }
+  $("qr").textContent = "Getting a room ready"; $("roomCode").textContent = "--- ---";
+  makeRoom();
+}
+function makeRoom(){
+  if (NET.making) return NET.making;
+  NET.making = (async () => {
+    if (!window.crypto || !crypto.subtle){ $("qr").textContent = "This browser can't make a private room. Write on this screen instead."; return false; }
+    NET.kp = await MSC.pair(); NET.hk = await MSC.pub(NET.kp); NET.fp = await MSC.fp(NET.hk); NET.keys = {}; NET.lastN = {};
+    const rand = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
+    for (let i = 0; i < 6; i++){
+      const code = roomCode(rand);
+      try {
+        const r = await openRoom(code);
+        NET.ch = r.ch; send({ t: "host", hk: NET.hk });
+        await wait(700);
+        if (r.taken()){ try { await NET.sb.removeChannel(r.ch); } catch (_e) {} NET.ch = null; continue; }
+        NET.code = code;
+        paintRoom();
+        NET.beat = setInterval(() => { send({ t: "host", hk: NET.hk }); if (NET.pad && performance.now() - NET.padSeen > 15000) padGone(); }, 4000);
+        return true;
+      } catch (_e) { /* try another code */ }
+    }
+    $("qr").textContent = "Couldn't reach the internet room. Write on this screen instead.";
+    NET.making = null;
+    return false;
+  })();
+  return NET.making;
+}
+async function paintRoom(){
+  $("roomCode").textContent = NET.code.slice(0, 3) + " " + NET.code.slice(3);
+  $("joinHost").textContent = new URL("/write", document.baseURI).host + "/write";
+  try {
+    if (!window.qrcode) await loadScript("https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js");
+    const qr = window.qrcode(0, "M"); qr.addData(joinUrl()); qr.make();
+    $("qr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 1, scalable: true });
+    $("qr").setAttribute("aria-label", "QR code to write on a phone or a tablet");
+  } catch (_e){ $("qr").textContent = "Type the code on the phone instead."; }
+}
+const PK_RE = /^[A-Za-z0-9+/]{86}[A-Za-z0-9+/=]{2}$/;
+function keyFor(pk){ return NET.keys[pk] || (NET.keys[pk] = MSC.key(NET.kp.privateKey, pk).catch(() => null)); }
+/* messages are opened one at a time, in the order they came */
+function onMsg(p){ NET.chain = NET.chain.then(() => handle(p)).catch(() => {}); }
+async function handle(p){
+  if (!p || typeof p.t !== "string") return;
+  if (p.t === "ping"){ if (NET.hk) send({ t: "host", hk: NET.hk }); return; }
+  if (typeof p.pk !== "string" || !PK_RE.test(p.pk) || !NET.kp) return;
+  if (p.t === "bye"){ if (p.pk === NET.pad) padGone(); return; }
+  if (p.t !== "s" || !p.box) return;
+  const key = await keyFor(p.pk); if (!key) return;
+  const m = await MSC.open(key, p.box);
+  /* each message carries a number that only goes up, so an old one can't be sent again */
+  if (!m || typeof m.t !== "string" || !(Number(m.n) > (NET.lastN[p.pk] || 0))) return;
+  NET.lastN[p.pk] = Number(m.n);
+  onPad(p.pk, m);
+}
+function onPad(pk, m){
+  if (m.t === "join" || m.t === "hi"){
+    if (NET.pad && NET.pad !== pk && performance.now() - NET.padSeen < 15000){ send({ t: "full", to: pk }); return; }
+    const fresh = NET.pad !== pk || !G.linked;
+    NET.pad = pk; NET.padSeen = performance.now();
+    if (fresh){
+      G.linked = true;
+      /* a phone that joined from the QR code goes straight to writing */
+      if (!$("sQR").hidden || !$("sStart").hidden) beginWriting();
+      else if (!$("sPlay").hidden && G.phase && G.phase !== "result") setPhase(G.phase);
+      else paintTools();
+      paintLinked();
+      if (m.t === "join") say(FIXED.phone);
+    }
+    tellPad();
+    return;
+  }
+  if (pk !== NET.pad) return;
+  NET.padSeen = performance.now();
+  if (m.t === "beat") return;
+  if (Number(m.seq) !== G.seq) return;   /* strokes for a step that has moved on */
+  if (m.t === "ink" && (G.phase === "trace" || G.phase === "own")){
+    const i = Number(m.i), st = cleanInk([m.p], G.vb)[0];
+    if (!Number.isInteger(i) || i < 0 || i > G.ink.length || i >= 80 || !st) return;
+    G.ink[i] = st; G.ink.length = i + 1; paintInk(); paintLinked(true);
+  } else if (m.t === "set" && (G.phase === "trace" || G.phase === "own")){
+    G.ink = cleanInk(m.ink, G.vb); paintInk();
+  } else if (m.t === "done" && (G.phase === "trace" || G.phase === "own")){
+    G.ink = cleanInk(m.ink, G.vb); paintInk(); done();
+  } else if (m.t === "go"){
+    if (m.what === "trace" && G.phase === "watch") setPhase("trace");
+    else if (m.what === "again" && G.phase === "result"){ $("finish").hidden = true; setPhase("own"); }
+    else if (m.what === "next" && G.phase === "result") nextItem();
+    else if (m.what === "show" && G.phase !== "watch"){ $("finish").hidden = true; setPhase("watch"); }
+  }
+}
+function padGone(){
+  NET.pad = ""; G.linked = false;
+  paintLinked(); paintTools();
+}
+let writingT = 0;
+function paintLinked(writing){
+  const el = $("linked");
+  el.hidden = !NET.code;
+  el.classList.toggle("away", !G.linked);
+  $("linkedTxt").textContent = G.linked ? (writing ? "The phone or tablet is writing" : "Phone or tablet connected") : "No phone or tablet connected. Write on this screen.";
+  if (writing){ clearTimeout(writingT); writingT = setTimeout(() => paintLinked(false), 1500); }
+}
+/* what the phone shows: the lines, the guide in Trace, the green start dot, and the stars at the end */
+async function tellPad(){
+  if (!NET.pad) return;
+  const key = await keyFor(NET.pad); if (!key) return;
+  const it = G.item, playing = !$("sPlay").hidden && it && G.lay;
+  const view = { v: ++NET.out, seq: playing ? G.seq : 0, phase: playing ? G.phase : "wait", title: playing ? it.title : "Write with Yuna" };
+  if (playing){
+    view.vb = G.vb;
+    view.guide = G.lay.strokes.map(s => resample(s.pts, 3).map(p => [r1(p[0]), r1(p[1])]));
+    view.arrows = G.decor.arrows; view.nums = G.decor.nums; view.start = G.decor.start;
+    if (G.phase === "result"){ view.stars = G.stars; view.last = G.idx >= G.items.length - 1; }
+  }
+  send({ t: "you", to: NET.pad, box: await MSC.seal(key, view) });
+}
+addEventListener("pagehide", () => { if (NET.ch) send({ t: "gone" }); });
+
+/* ---------- start: at the picked child's grade ---------- */
+paintGrades();
+$("startSay").textContent = FIXED.hello;
+if (CCS_CHILD_GRADE !== null) paintChip();
+</script>
+</body>
+</html>
