@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Drop 2048</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style id="ccsLoadCss">
+  /* the Chike's Creative Space loading screen (draft: docs/mockups/game-loader-draft.html) */
+  #ccsLoad{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px;box-sizing:border-box;margin:0;
+    background:radial-gradient(ellipse at 50% 42%,#1f3f86 0,#0f1d45 52%,#081028 100%);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    transition:opacity .45s cubic-bezier(.2,.7,.2,1),visibility 0s linear .45s}
+  #ccsLoad.gone{opacity:0;visibility:hidden;pointer-events:none}
+  #ccsLoad .ccsl-lg{display:block;width:min(320px,70vw);height:auto;opacity:0;transform:translateY(10px) scale(.96);animation:ccsLoadIn .7s cubic-bezier(.2,.7,.2,1) .05s forwards;filter:drop-shadow(0 8px 18px rgba(0,0,0,.45))}
+  #ccsLoad .ccsl-bar{width:min(240px,56vw);height:10px;border-radius:999px;background:rgba(255,255,255,.14);overflow:hidden;box-shadow:inset 0 0 0 2px rgba(0,0,0,.25)}
+  #ccsLoad .ccsl-bar i{display:block;height:100%;width:0;border-radius:999px;background:#ffd23f;animation:ccsLoadFill 2.4s cubic-bezier(.2,.7,.2,1) .2s forwards}
+  #ccsLoad.ready .ccsl-bar i{animation:none;width:100%;transition:width .3s cubic-bezier(.2,.7,.2,1)}
+  #ccsLoad .ccsl-gn{font-weight:800;font-size:16px;letter-spacing:.02em;line-height:1.3;color:#fff;text-align:center;opacity:0;animation:ccsLoadIn .6s cubic-bezier(.2,.7,.2,1) .25s forwards}
+  #ccsLoad .ccsl-gn small{display:block;font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#9fb6e8;margin-bottom:4px}
+  @keyframes ccsLoadIn{to{opacity:1;transform:none}}
+  @keyframes ccsLoadFill{0%{width:0}100%{width:86%}}
+  @media (prefers-reduced-motion: reduce){ #ccsLoad .ccsl-lg,#ccsLoad .ccsl-gn{animation:none;opacity:1;transform:none} #ccsLoad .ccsl-bar i{animation:none;width:60%} #ccsLoad{transition:none} }
+</style>
+<!--
+  Drop 2048 (owner, 2026-11-22; playable draft docs/mockups/drop-2048-draft.html). A free arcade game. A numbered gem (2,
+  4, 8 or 16) waits at the top; pick a column and it drops. Gems with the same number that touch (up, down, left or
+  right, never diagonal) smash together where the dropped gem landed: two make double, and each extra one doubles again (three
+  4s make 16). Gems above fall into the gaps, and new matches chain into combos. The player picks a 5 x 5, 6 x 6 or 7 x 7
+  board; the game ends when no column has room. No quizzes (owner, 2026-11-22: never interrupt the play; a child sees
+  8 + 8 become 16 right on the board).
+-->
+<style>
+  /* the arcade look (owner, 2026-11-22): a neon cabinet screen with a glowing grid floor, chunky glossy 3D cubes, and
+     arcade lettering (Lilita One: chunky, with a 4 that reads as a 4) for the name, the scores and the combos */
+  :root{ --ink:#1E2226; --soft:#3E464C; --card:#FFFBF3; --blue:#1273B0; --sun:#FFE600; --cyan:#00E5FF; --pink:#FF2BD6; --deep:#0B0420; }
+  *{ box-sizing:border-box; }
+  [hidden]{ display:none !important; }
+  html,body{ height:100%; }
+  body{ margin:0; font-family:"Plus Jakarta Sans",system-ui,sans-serif; color:#fff; overflow:hidden; display:flex; flex-direction:column; position:relative;
+    background:radial-gradient(ellipse at 50% 110%,rgba(255,43,214,.35) 0,transparent 55%),linear-gradient(180deg,#07021A 0%,#160737 55%,#2A0B52 100%);
+    -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+  /* the glowing grid floor, and faint scanlines over everything */
+  body::before{ content:""; position:fixed; left:-50%; right:-50%; bottom:-8%; height:58%; z-index:-1; pointer-events:none;
+    background-image:linear-gradient(rgba(255,43,214,.45) 2px,transparent 2px),linear-gradient(90deg,rgba(0,229,255,.35) 2px,transparent 2px);
+    background-size:56px 56px; transform:perspective(420px) rotateX(62deg); transform-origin:50% 100%;
+    -webkit-mask-image:linear-gradient(180deg,transparent,#000 70%); mask-image:linear-gradient(180deg,transparent,#000 70%); }
+  body::after{ content:""; position:fixed; inset:0; pointer-events:none; z-index:40; background:repeating-linear-gradient(180deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px); }
+  button{ font-family:inherit; }
+  .arc{ font-family:"Lilita One","Plus Jakarta Sans",system-ui,sans-serif; font-weight:400; }
+  .bar{ display:flex; align-items:center; gap:10px; padding:10px 14px; flex-wrap:wrap; }
+  .bar .name{ font-size:24px; margin-right:auto; background:linear-gradient(180deg,#FFF7A8,var(--sun) 45%,#FF8A00); -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 0 8px rgba(255,180,0,.55)) drop-shadow(0 3px 0 #7A1FA0); }
+  .chipbtn{ border:2px solid var(--cyan); background:rgba(0,229,255,.08); color:#E9FDFF; border-radius:999px; padding:6px 12px; font-weight:800; font-size:13px; cursor:pointer; box-shadow:0 0 10px rgba(0,229,255,.45), inset 0 0 8px rgba(0,229,255,.25); }
+  .chipbtn:hover{ background:rgba(0,229,255,.18); }
+  .pill{ background:#05010F; border:2px solid var(--pink); border-radius:12px; padding:3px 12px; text-align:center; min-width:84px; box-shadow:0 0 12px rgba(255,43,214,.5), inset 0 0 10px rgba(255,43,214,.25); }
+  .pill small{ display:block; font-size:10px; font-weight:800; color:#FFB8F2; letter-spacing:.08em; }
+  .pill b{ font-family:"Lilita One",system-ui,sans-serif; font-weight:400; font-size:20px; color:var(--sun); text-shadow:0 0 8px rgba(255,230,0,.8); font-variant-numeric:tabular-nums; }
+  #soundSlot{ display:flex; gap:6px; }
+  /* the kit's volume and sound buttons, light on the dark screen (the kit styles them inline, so this needs the id) */
+  #soundSlot button{ background:#FFFBF3 !important; color:#1E2226 !important; }
+  .play{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 12px 16px; min-height:0; }
+  /* a phone: one row of controls (the name is on the start card) */
+  @media (max-width:520px){
+    .bar{ gap:6px; padding:8px 10px; flex-wrap:nowrap; }
+    .bar .name{ display:none; }
+    .chipbtn{ margin-right:auto; padding:5px 10px; font-size:12px; }
+    .pill{ min-width:60px; padding:2px 8px; }
+    .pill b{ font-size:16px; }
+  }
+  .touch .keys{ display:none; }
+  .nextrow{ display:flex; align-items:center; gap:8px; font-weight:800; font-size:13px; color:#B9F6FF; margin:2px 0 6px; text-shadow:0 0 6px rgba(0,229,255,.7); }
+  .nextrow .mini{ width:36px; height:36px; border-radius:10px; display:grid; place-items:center; color:#fff; font-family:"Lilita One",system-ui,sans-serif; font-size:13px;
+    background:linear-gradient(180deg,var(--hi),var(--c) 50%,var(--lo)); box-shadow:inset 0 2px 0 rgba(255,255,255,.55), inset 0 -4px 0 rgba(0,0,0,.25), 0 4px 0 var(--lo); text-shadow:0 2px 0 rgba(0,0,0,.35); }
+  .boardwrap{ position:relative; }
+  .lane{ height:calc(var(--cell) * 1.08); }
+  .board{ position:relative; width:calc(var(--cell) * var(--n)); height:calc(var(--cell) * var(--n)); border-radius:18px; background:rgba(6,2,22,.88);
+    border:3px solid var(--cyan); box-shadow:0 0 0 5px #1B0840, 0 0 0 7px rgba(255,43,214,.85), 0 0 34px rgba(0,229,255,.55), 0 0 60px rgba(255,43,214,.35), inset 0 0 30px rgba(0,229,255,.15); }
+  .slots{ position:absolute; inset:0; display:grid; grid-template-columns:repeat(var(--n),1fr); }
+  .slots i{ margin:calc(var(--cell) * .07); border-radius:calc(var(--cell) * .2); background:rgba(120,90,255,.08); box-shadow:inset 0 0 0 1px rgba(0,229,255,.12), inset 0 4px 10px rgba(0,0,0,.5); }
+  .colhi{ position:absolute; top:calc(var(--cell) * -1.08); bottom:0; left:0; width:var(--cell); border-radius:14px; pointer-events:none;
+    background:linear-gradient(180deg,rgba(0,229,255,0),rgba(0,229,255,.16) 18%,rgba(255,43,214,.06)); box-shadow:inset 0 0 0 2px rgba(0,229,255,.25); transition:transform .18s cubic-bezier(.2,.7,.2,1); }
+  .colhi.full{ animation:flash .5s ease-out; }
+  @keyframes flash{ from{ background:rgba(255,60,80,.6); } }
+  .layer{ position:absolute; inset:0; pointer-events:none; }
+  .blob, .lab{ position:absolute; left:0; top:0; width:var(--cell); height:var(--cell); will-change:transform; }
+  /* the gems are drawn whole in the label layer (owner, 2026-11-22: "make the cube look like gems"); no blob under them */
+  .blob{ display:none; }
+  .blob i{ position:absolute; inset:calc(var(--cell) * .07); background:var(--c); }
+  /* a cut gem: four angled facets around a bright flat top (the table), a glint, and a glow on the floor under it */
+  .lab{ display:grid; place-items:center; }
+  .lab span{ position:relative; isolation:isolate; width:86%; height:86%; border-radius:calc(var(--cell) * .11); display:grid; place-items:center; color:#fff;
+    font-family:"Lilita One",system-ui,sans-serif; font-weight:400; font-size:calc(var(--cell) * var(--fs, .36)); font-variant-numeric:tabular-nums;
+    text-shadow:0 calc(var(--cell) * .03) 0 var(--edge), 0 0 calc(var(--cell) * .1) rgba(0,0,0,.35);
+    background:conic-gradient(from -45deg, var(--hi) 0 25%, var(--c) 0 50%, var(--lo) 0 75%, var(--mid) 0 100%);
+    box-shadow:inset 0 0 0 calc(var(--cell) * .02) rgba(255,255,255,.35), 0 calc(var(--cell) * .06) 0 var(--edge),
+      0 calc(var(--cell) * .12) calc(var(--cell) * .16) rgba(0,0,0,.55), 0 0 calc(var(--cell) * .22) var(--glow);
+    transition:opacity .18s ease-in .08s; }
+  .lab span::before{ content:""; position:absolute; inset:19%; z-index:-1; border-radius:calc(var(--cell) * .06); pointer-events:none;
+    background:linear-gradient(155deg,var(--hi) 0%,var(--c) 55%,var(--lo) 100%); box-shadow:inset 0 0 0 1px rgba(255,255,255,.45), 0 0 calc(var(--cell) * .05) rgba(0,0,0,.25); }
+  .lab span::after{ content:""; position:absolute; left:12%; top:9%; width:22%; height:22%; z-index:-1; pointer-events:none;
+    background:radial-gradient(circle,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,0) 62%);
+    clip-path:polygon(50% 0,60% 40%,100% 50%,60% 60%,50% 100%,40% 60%,0 50%,40% 40%); }
+  .lab.big span{ box-shadow:inset 0 0 0 calc(var(--cell) * .02) rgba(255,255,255,.5), 0 calc(var(--cell) * .06) 0 var(--edge), 0 0 calc(var(--cell) * .5) rgba(255,230,0,.8); }
+  .cols{ position:absolute; top:calc(var(--cell) * -1.08); bottom:0; left:0; right:0; display:grid; grid-template-columns:repeat(var(--n),1fr); }
+  .cols button{ background:none; border:0; cursor:pointer; padding:0; border-radius:14px; }
+  .cols button:focus-visible{ outline:3px solid var(--sun); outline-offset:-3px; }
+  .fx{ position:absolute; inset:0; pointer-events:none; overflow:visible; z-index:3; }
+  .spark{ position:absolute; left:0; top:0; border-radius:50%; will-change:transform, opacity; }
+  .spark.star{ border-radius:2px; transform:rotate(45deg); }
+  .ring{ position:absolute; left:0; top:0; border-radius:50%; border:calc(var(--cell) * .07) solid #fff; box-shadow:0 0 18px #fff, inset 0 0 12px #fff; will-change:transform, opacity; }
+  .float{ position:absolute; font-family:"Lilita One",system-ui,sans-serif; color:var(--sun); font-size:calc(var(--cell) * .32); pointer-events:none;
+    text-shadow:0 0 10px rgba(255,230,0,.9), 0 3px 0 #7A1FA0; animation:rise .9s cubic-bezier(.55,0,.9,.4) forwards; z-index:4; }
+  @keyframes rise{ 0%{ opacity:1; transform:translateY(0) scale(1); } 100%{ opacity:0; transform:translateY(-56px) scale(1.25); } }
+  .combo{ position:absolute; left:50%; top:34%; font-family:"Lilita One",system-ui,sans-serif; font-size:clamp(26px, calc(var(--cell) * .62), 54px); white-space:nowrap; pointer-events:none; z-index:5;
+    background:linear-gradient(180deg,#FFF7A8,var(--sun) 45%,#FF6A00); -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 0 10px rgba(255,43,214,.9)) drop-shadow(0 4px 0 #5A0F80); animation:comboIn 1.2s cubic-bezier(.6,0,.9,.4) forwards; }
+  @keyframes comboIn{ 0%{ opacity:0; transform:translateX(-50%) scale(.3); } 22%{ opacity:1; transform:translateX(-50%) scale(1); } 75%{ opacity:1; transform:translateX(-50%) scale(1.04) translateY(-6px); } 100%{ opacity:0; transform:translateX(-50%) scale(1.25) translateY(-30px); } }
+  .shake{ animation:shake .32s linear; }
+  @keyframes shake{ 0%,100%{ transform:none; } 20%{ transform:translate(-4px,2px); } 40%{ transform:translate(4px,-2px); } 60%{ transform:translate(-3px,1px); } 80%{ transform:translate(2px,-1px); } }
+  .hint{ color:#B9F6FF; font-size:13px; font-weight:700; margin:14px 0 0; text-align:center; text-shadow:0 0 6px rgba(0,229,255,.5); }
+
+  .sheet{ position:fixed; inset:0; display:grid; place-items:center; padding:16px; background:rgba(5,1,18,.72); z-index:50; }
+  .sheet .card{ width:min(460px,100%); background:var(--card); color:var(--ink); border:3px solid var(--ink); border-radius:24px; padding:22px; max-height:calc(100vh - 32px); overflow:auto;
+    box-shadow:0 8px 0 var(--ink), 0 0 0 6px rgba(0,229,255,.35), 0 0 40px rgba(255,43,214,.45); }
+  .card h2{ margin:0 0 6px; font-family:"Lilita One",system-ui,sans-serif; font-weight:400; font-size:28px; color:#5A0F80; }
+  .card p{ margin:0 0 14px; color:var(--soft); line-height:1.45; }
+  .sizes{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:0 0 16px; }
+  .size{ border:3px solid var(--ink); border-radius:16px; background:#fff; padding:10px 4px 8px; cursor:pointer; color:var(--ink); font-weight:800; font-size:15px; }
+  .size small{ display:block; font-weight:600; font-size:11px; color:var(--soft); margin-top:2px; }
+  .size[aria-pressed="true"]{ background:#FFE14D; }
+  .size svg{ display:block; margin:0 auto 6px; }
+  .btn{ border:3px solid var(--ink); border-radius:999px; background:#FFE14D; color:var(--ink); font-weight:800; font-size:16px; padding:11px 22px; cursor:pointer; box-shadow:0 4px 0 var(--ink); }
+  .btn:active{ transform:translateY(2px); box-shadow:0 2px 0 var(--ink); }
+  .btn--paper{ background:#fff; }
+  .btn--blue{ background:var(--blue); color:#fff; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .demo{ display:flex; align-items:center; gap:10px; margin:0 0 16px; flex-wrap:wrap; }
+  .demo .t{ width:34px; height:34px; border-radius:9px; display:grid; place-items:center; color:#fff; font-family:"Lilita One",system-ui,sans-serif; font-size:13px; box-shadow:inset 0 2px 0 rgba(255,255,255,.5), inset 0 -4px 0 rgba(0,0,0,.25); }
+  .demo .e{ width:34px; height:34px; border-radius:9px; background:#E8E1D0; }
+  .demo .g{ display:grid; grid-template-columns:repeat(3,34px); gap:3px; }
+  .demo b{ color:var(--soft); }
+  @media (prefers-reduced-motion: reduce){ .colhi, .blob i, .lab span{ transition:none !important; } .float, .combo, .shake{ animation:none; } .float, .combo{ display:none; } body::after{ display:none; } }
+</style>
+</head>
+<body>
+<div id="ccsLoad" role="status" aria-live="polite" data-name="Drop 2048"><img class="ccsl-lg" src="/assets/brand/logo.webp" alt="Chike's Creative Space"><div class="ccsl-bar"><i></i></div><div class="ccsl-gn"><small>Loading</small><b></b></div></div>
+<script id="ccsLoadJs">(function(){ var el = document.getElementById("ccsLoad"); if (!el) return; var t0 = Date.now(), gone = false, hold = 1000, snd = null; var b = el.querySelector(".ccsl-gn b"); if (b) b.textContent = el.getAttribute("data-name") || "";
+  /* the logo sound (owner's pick 1A, 2026-11-17): played a bit faster; quiet when sound is off on the site or the browser blocks it */
+  var on = true; try { on = localStorage.getItem("ccs-sound") !== "off"; } catch (e) { /* a sealed frame can't read the site's setting */ }
+  if (on){ try { snd = new Audio("/assets/games/loader/logo-intro.mp3"); snd.volume = 0.7; snd.playbackRate = 1.5; var p = snd.play(); if (p && p.then) p.then(function(){ hold = 1600; }, function(){ snd = null; }); } catch (e) { snd = null; } }
+  function fade(){ var a = snd; if (!a) return; var t = setInterval(function(){ a.volume = Math.max(0, a.volume - 0.07); if (a.volume <= 0){ clearInterval(t); a.pause(); } }, 90); }
+  function hide(){ if (gone) return; gone = true; el.className = "ready"; setTimeout(function(){ el.className = "ready gone"; fade(); setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 500); }, 320); }
+  function done(){ setTimeout(function(){ setTimeout(hide, Math.max(0, hold - (Date.now() - t0))); }, 60); }
+  if (document.readyState === "complete") done(); else window.addEventListener("load", done);
+  setTimeout(function(){ hide(); }, 9000); })();</script>
+
+<header class="bar">
+  <span class="name arc">Drop 2048</span>
+  <button class="chipbtn" id="boardChip" type="button">6 x 6 board</button>
+  <div class="pill"><small>Score</small><b id="score">0</b></div>
+  <div class="pill"><small>Best</small><b id="best">0</b></div>
+  <span id="soundSlot"></span>
+</header>
+
+<main class="play" id="play">
+  <div class="nextrow" aria-live="polite">Next <span class="mini" id="nextMini" aria-label="Next gem">2</span></div>
+  <div class="boardwrap" id="bw">
+    <div class="lane"></div>
+    <div class="board" id="board">
+      <div class="slots" id="slots"></div>
+      <div class="colhi" id="colhi"></div>
+      <div class="layer" id="blobs"></div>
+      <div class="layer" id="labs"></div>
+      <div class="fx" id="fx"></div>
+      <div class="cols" id="cols"></div>
+    </div>
+  </div>
+  <p class="hint">Tap a column to drop the gem.<span class="keys"> On a keyboard, use the arrow keys and Enter.</span></p>
+</main>
+
+<!-- the start: pick a board -->
+<div class="sheet" id="sStart">
+  <div class="card" role="dialog" aria-labelledby="startH">
+    <h2 id="startH">Drop 2048</h2>
+    <p>Drop numbered gems into the columns. Gems with the same number that touch smash together into one bigger gem. Can you make 2048?</p>
+    <div class="demo" aria-hidden="true">
+      <div class="g"><span class="e"></span><span class="t" style="background:#FB8500">4</span><span class="e"></span><span class="t" style="background:#FB8500">4</span><span class="t" style="background:#FB8500">4</span><span class="e"></span></div>
+      <b>makes</b>
+      <div class="g"><span class="e"></span><span class="e"></span><span class="e"></span><span class="e"></span><span class="t" style="background:#9B5DE5">16</span><span class="e"></span></div>
+    </div>
+    <p style="margin-top:-6px">Two of the same make double. Three make double again. Corners do not count, only sides.</p>
+    <div class="sizes" id="sizes"></div>
+    <button class="btn" id="bPlay" type="button">Play</button>
+  </div>
+</div>
+
+<!-- 2048! -->
+<div class="sheet" id="sWin" hidden>
+  <div class="card" role="dialog" aria-labelledby="winH">
+    <h2 id="winH">You made 2048!</h2>
+    <p>Amazing! Keep going to see how big your gems can get.</p>
+    <div class="row"><button class="btn" id="bKeep" type="button">Keep playing</button></div>
+  </div>
+</div>
+
+<!-- no more room -->
+<div class="sheet" id="sOver" hidden>
+  <div class="card" role="dialog" aria-labelledby="overH">
+    <h2 id="overH">No more room</h2>
+    <p>Your biggest gem: <b id="bigOut">2</b>. Score: <b id="scoreOut">0</b>.<span id="newBest"></span></p>
+    <div class="row"><button class="btn" id="bAgain" type="button">Play again</button><button class="btn btn--paper" id="bBoards" type="button">Change the board</button></div>
+  </div>
+</div>
+
+<script src="/games/game-sound.js"></script>
+<script>
+/* BEGIN pure */
+const COLORS = { 2:"#FFB703", 4:"#FB8500", 8:"#EF476F", 16:"#9B5DE5", 32:"#3A86FF", 64:"#06D6A0", 128:"#00B4D8", 256:"#F15BB5", 512:"#8338EC", 1024:"#FF006E", 2048:"#E0A800" };
+const colorOf = (v) => COLORS[v] || "#1E2226";
+const SIZES = [5, 6, 7];
+/* what drops (owner, 2026-11-22: 2, 4, 8 or 16), and how often */
+const DROPS = [[2, 34], [4, 30], [8, 22], [16, 14]];
+function pickDrop(rand){ const tot = DROPS.reduce((s, d) => s + d[1], 0); let r = rand() * tot; for (const [v, w] of DROPS){ if ((r -= w) < 0) return v; } return 2; }
+/* two the same make double, and each extra one doubles again: three 4s make 16 (owner, 2026-11-22) */
+function mergeValue(v, n){ return v * Math.pow(2, n - 1); }
+function emptyGrid(n){ return Array.from({ length: n }, () => Array(n).fill(null)); }
+function landRow(grid, c){ for (let r = grid.length - 1; r >= 0; r--) if (!grid[r][c]) return r; return -1; }
+function isFull(grid){ return grid[0].every(Boolean); }
+/** The cubes with the same number joined to (r, c) by their sides, (r, c) first. */
+function groupAt(grid, r, c){
+  const n = grid.length, v = grid[r][c].v, seen = new Set([r + "," + c]), out = [[r, c]], q = [[r, c]];
+  while (q.length){ const [a, b] = q.shift(); for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const y = a + dr, x = b + dc, k = y + "," + x;
+    if (y < 0 || x < 0 || y >= n || x >= n || seen.has(k) || !grid[y][x] || grid[y][x].v !== v) continue; seen.add(k); out.push([y, x]); q.push([y, x]); } }
+  return out;
+}
+/** Cubes fall into the gaps below them. Returns the moves. */
+function gravity(grid){
+  const n = grid.length, moves = [];
+  for (let c = 0; c < n; c++){
+    let w = n - 1;
+    for (let r = n - 1; r >= 0; r--){ const t = grid[r][c]; if (!t) continue; if (r !== w){ grid[w][c] = t; grid[r][c] = null; moves.push({ id: t.id, fromR: r, r: w, c }); } w--; }
+  }
+  return moves;
+}
+const findId = (grid, id) => { for (let r = 0; r < grid.length; r++) for (let c = 0; c < grid.length; c++) if (grid[r][c] && grid[r][c].id === id) return [r, c]; return null; };
+/** After a cube lands at (r, c): every merge and fall, in order. The cube the others melt into is the one that just
+    landed (or the merged cube, in a chain); a chain is a combo. Changes the grid. */
+function settle(grid, r, c){
+  const steps = []; let active = [[r, c]], chain = 0;
+  for (;;){
+    let hit = null;
+    for (const [y, x] of active){ if (!grid[y] || !grid[y][x]) continue; const g = groupAt(grid, y, x); if (g.length >= 2){ hit = { y, x, g }; break; } }
+    if (!hit) break;
+    chain++;
+    const t = grid[hit.y][hit.x], value = mergeValue(t.v, hit.g.length);
+    const from = hit.g.slice(1).map(([y, x]) => ({ id: grid[y][x].id, r: y, c: x }));
+    from.forEach(f => { grid[f.r][f.c] = null; });
+    t.v = value;
+    steps.push({ type: "merge", id: t.id, r: hit.y, c: hit.x, from, value, chain });
+    const moves = gravity(grid);
+    if (moves.length) steps.push({ type: "fall", moves });
+    active = [findId(grid, t.id)].concat(moves.map(m => [m.r, m.c]));
+  }
+  return steps;
+}
+/* the voice: pre-recorded clips (Kokoro, Heart), named by a hash of the line, like Write with Yuna */
+function lineKey(text){
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++){ h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(36);
+}
+const SAY = {
+  start: "Pick a column, and drop the gem!",
+  combo: "Combo!",
+  superCombo: "Super combo!",
+  over: "No more room. Great game!",
+  win: "You made 2048! Amazing!"
+};
+const MILESTONES = [512, 1024];
+const milestoneLine = (v) => "You made " + v + "!";
+/** Every line the voice says, for scripts/drop2048-lines.mjs. */
+function allLines(){
+  const s = new Set(Object.values(SAY));
+  MILESTONES.forEach(v => s.add(milestoneLine(v)));
+  return [...s];
+}
+/* END pure */
+
+const $ = (id) => document.getElementById(id);
+const REDUCED = (() => { try { return matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (_e) { return false; } })();
+const wait = (ms) => new Promise(r => setTimeout(r, REDUCED ? Math.min(ms, 60) : ms));
+try { if (matchMedia("(pointer: coarse)").matches && !matchMedia("(any-pointer: fine)").matches) document.body.classList.add("touch"); } catch (_e) {}
+const sfx = (name, opts) => { if (window.CCSSound) CCSSound.play(name, opts); };
+if (window.CCSSound) $("soundSlot").appendChild(CCSSound.button({ compact: true, background: "rgba(255,255,255,.12)" }));
+
+/* the voice */
+const VOICE_DIR = "/assets/games/drop-2048/voice/";
+const voice = new Audio();
+function say(text){
+  try {
+    if (window.CCSSound && !CCSSound.isOn()) return;
+    voice.pause(); voice.src = VOICE_DIR + lineKey(text) + ".mp3";
+    voice.volume = window.CCSSound && CCSSound.volume ? CCSSound.volume("sfx") : 1;
+    const p = voice.play(); if (p && p.catch) p.catch(() => {});
+  } catch (_e) { /* no voice, still plays */ }
+}
+
+/* saved on this device: the board picked last, and the best score for each board */
+const store = { get(k){ try { return localStorage.getItem(k); } catch (_e) { return null; } }, set(k, v){ try { localStorage.setItem(k, v); } catch (_e) {} } };
+const bestOf = (n) => Number(store.get("drop2048-best-" + n)) || 0;
+
+let N = SIZES.includes(Number(store.get("drop2048-board"))) ? Number(store.get("drop2048-board")) : 6;
+let cell = 0, grid = [], tiles = new Map(), held = null, busy = false, over = false, uid = 0;
+let score = 0, best = 0, col = 2, cur = 2, nxt = 4, maxMade = 0, won = false;
+
+function fs(v){ const n = String(v).length; return n <= 2 ? .36 : n === 3 ? .27 : .21; }
+/* a lighter top and a darker underside give each cube its 3D look */
+function shade(hex, amt){
+  const n = parseInt(hex.slice(1), 16), t = amt < 0 ? 0 : 255, p = Math.abs(amt);
+  const ch = (x) => Math.round((t - x) * p + x);
+  return "#" + [n >> 16, (n >> 8) & 255, n & 255].map(ch).map(x => x.toString(16).padStart(2, "0")).join("");
+}
+function cubeVars(el, v){ const c = colorOf(v); el.style.setProperty("--c", c); el.style.setProperty("--hi", shade(c, .45)); el.style.setProperty("--mid", shade(c, .18));
+  el.style.setProperty("--lo", shade(c, -.3)); el.style.setProperty("--edge", shade(c, -.55)); el.style.setProperty("--glow", c + "66"); }
+/* the motion (owner, 2026-11-22): a dramatic ease-in, so gems start slow and slam down fast, land with one small
+   bounce, and merges pull back, slam together and pop out with a bounce. Drop 2048 only: the rest of the site keeps
+   its gentle slow-down and never bounces. */
+const EASE_IN = "cubic-bezier(.62,0,.86,.28)";
+const EASE_SLAM = "cubic-bezier(.75,0,1,.5)";
+const EASE_OUT = "cubic-bezier(.2,.7,.2,1)";
+function makeTile(v){
+  const t = { id: ++uid, v };
+  t.blob = document.createElement("div"); t.blob.className = "blob"; t.blob.innerHTML = "<i></i>";
+  t.lab = document.createElement("div"); t.lab.className = "lab"; t.lab.innerHTML = "<span></span>";
+  paintTile(t);
+  $("blobs").appendChild(t.blob); $("labs").appendChild(t.lab); tiles.set(t.id, t);
+  return t;
+}
+function paintTile(t){ t.blob.firstChild.style.setProperty("--c", colorOf(t.v)); cubeVars(t.lab, t.v); const s = t.lab.firstChild; s.textContent = t.v; s.style.setProperty("--fs", fs(t.v)); t.lab.classList.toggle("big", t.v >= 512); }
+function place(t, r, c, ms, scale, ease){
+  const tr = "translate(" + (c * cell) + "px," + (r * cell) + "px)" + (scale ? " scale(" + scale + ")" : "");
+  for (const el of [t.blob, t.lab]){ el.style.transition = ms && !REDUCED ? "transform " + ms + "ms " + (ease || EASE_IN) : "none"; el.style.transform = tr; }
+}
+/* the landing (owner, 2026-11-22: "bounce just a bit"): a squash, one small hop, a puff of sparks, and a thud */
+function impact(t, r, c, heavy){
+  if (REDUCED) return;
+  t.lab.firstChild.animate([
+    { transform: "translateY(7%) scale(1.16,.82)", offset: 0 },
+    { transform: "translateY(-13%) scale(.96,1.05)", offset: .38 },
+    { transform: "translateY(2%) scale(1.04,.97)", offset: .72 },
+    { transform: "none", offset: 1 }], { duration: 330, easing: "ease-out" });
+  burst(r + .9, c + .5, 6, "#FFFFFF", cell * .35, 380, true);
+  if (heavy) shakeBoard();
+}
+/* rock-like debris for a slam: chips in the gem's colors that fly out and fall */
+function chips(r, c, color, n){
+  if (REDUCED) return;
+  const fx = $("fx");
+  for (let i = 0; i < n; i++){
+    const s = document.createElement("i"), size = Math.max(5, cell * (.09 + Math.random() * .08));
+    s.className = "spark star"; s.style.width = s.style.height = size + "px";
+    s.style.background = i % 3 ? shade(color, i % 2 ? .35 : -.25) : "#FFF3B0"; s.style.boxShadow = i % 3 ? "none" : "0 0 10px #FFD54A";
+    const a = Math.random() * Math.PI * 2, d = cell * (.6 + Math.random() * .9), x0 = c * cell - size / 2, y0 = r * cell - size / 2;
+    const x1 = x0 + Math.cos(a) * d, y1 = y0 + Math.sin(a) * d * .8, spin = (Math.random() * 540 - 270) | 0;
+    fx.appendChild(s);
+    s.animate([{ transform: "translate(" + x0 + "px," + y0 + "px) rotate(0deg) scale(1)", opacity: 1 },
+      { transform: "translate(" + x1 + "px," + y1 + "px) rotate(" + spin / 2 + "deg) scale(.9)", opacity: 1, offset: .45 },
+      { transform: "translate(" + (x1 + Math.cos(a) * cell * .2) + "px," + (y1 + cell * .9) + "px) rotate(" + spin + "deg) scale(.4)", opacity: 0 }],
+      { duration: 650 + Math.random() * 250, easing: "cubic-bezier(.15,.6,.4,1)", fill: "forwards" }).onfinish = () => s.remove();
+  }
+}
+/* candy-style sparkles: little dots and stars flying out from a point (in cells), fading as they go */
+function burst(r, c, n, color, dist, ms, low){
+  if (REDUCED) return;
+  const fx = $("fx");
+  for (let i = 0; i < n; i++){
+    const s = document.createElement("i"), size = Math.max(4, cell * (.08 + Math.random() * .1));
+    s.className = "spark" + (i % 3 === 0 ? " star" : "");
+    s.style.width = s.style.height = size + "px";
+    s.style.background = i % 2 ? color : "#FFFFFF"; s.style.boxShadow = "0 0 8px " + (i % 2 ? color : "#FFFFFF");
+    const a = low ? Math.PI + Math.random() * Math.PI : Math.random() * Math.PI * 2, d = dist * (.55 + Math.random() * .6);
+    const x0 = c * cell - size / 2, y0 = r * cell - size / 2;
+    fx.appendChild(s);
+    s.animate([{ transform: "translate(" + x0 + "px," + y0 + "px) scale(1)", opacity: 1 },
+      { transform: "translate(" + (x0 + Math.cos(a) * d) + "px," + (y0 + Math.sin(a) * d) + "px) scale(.2)", opacity: 0 }],
+      { duration: ms * (.75 + Math.random() * .5), easing: EASE_OUT, fill: "forwards" }).onfinish = () => s.remove();
+  }
+}
+function ring(r, c, color){
+  if (REDUCED) return;
+  const o = document.createElement("i"), size = cell * 1.1;
+  o.className = "ring"; o.style.width = o.style.height = size + "px"; o.style.borderColor = "#FFFFFF"; o.style.boxShadow = "0 0 18px " + color + ", inset 0 0 12px " + color;
+  const x = (c + .5) * cell - size / 2, y = (r + .5) * cell - size / 2;
+  $("fx").appendChild(o);
+  o.animate([{ transform: "translate(" + x + "px," + y + "px) scale(.25)", opacity: 1 }, { transform: "translate(" + x + "px," + y + "px) scale(1.7)", opacity: 0 }],
+    { duration: 480, easing: EASE_OUT, fill: "forwards" }).onfinish = () => o.remove();
+}
+function shakeBoard(){ if (REDUCED) return; const b = $("board"); b.classList.remove("shake"); void b.offsetWidth; b.classList.add("shake"); }
+function removeTile(t){ t.blob.remove(); t.lab.remove(); tiles.delete(t.id); }
+
+function layout(){
+  const top = document.querySelector(".bar").offsetHeight + 34 + 56;
+  cell = Math.floor(Math.min((innerWidth - 28) / N, (innerHeight - top - 12) / (N + 1.08), 104));
+  document.body.style.setProperty("--cell", cell + "px");
+  document.body.style.setProperty("--n", N);
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (grid[r] && grid[r][c]) place(grid[r][c], r, c, 0);
+  if (held) place(held, -1.04, col, 0);
+  setCol(col, true);
+}
+function setCol(c, now){
+  col = Math.max(0, Math.min(N - 1, c));
+  const h = $("colhi"); h.style.transition = now ? "none" : ""; h.style.transform = "translateX(" + (col * cell) + "px)";
+  if (held) place(held, -1.04, col, now ? 0 : 160, 0, EASE_OUT);
+}
+function showHeld(){
+  if (held) removeTile(held);
+  held = makeTile(cur);
+  place(held, -1.04, col, 0);
+  $("nextMini").textContent = nxt; cubeVars($("nextMini"), nxt);
+}
+function paintScore(){
+  if (score > best){ best = score; store.set("drop2048-best-" + N, String(best)); }
+  $("score").textContent = score; $("best").textContent = best;
+}
+function newGame(){
+  tiles.forEach(removeTile); held = null; $("fx").innerHTML = "";
+  grid = emptyGrid(N);
+  score = 0; over = false; busy = false; won = false; maxMade = 0; col = Math.floor(N / 2);
+  best = bestOf(N); store.set("drop2048-board", String(N));
+  $("slots").innerHTML = "<i></i>".repeat(N * N);
+  $("cols").innerHTML = Array.from({ length: N }, (_, i) => '<button type="button" aria-label="Drop in column ' + (i + 1) + '" data-c="' + i + '"></button>').join("");
+  $("boardChip").textContent = N + " x " + N + " board";
+  cur = pickDrop(Math.random); nxt = pickDrop(Math.random);
+  layout(); showHeld(); paintScore();
+  ["sOver", "sWin"].forEach(id => { $(id).hidden = true; });
+}
+
+async function drop(){
+  if (busy || over || !$("sStart").hidden) return;
+  const r = landRow(grid, col);
+  if (r < 0){ const h = $("colhi"); h.classList.remove("full"); void h.offsetWidth; h.classList.add("full"); sfx("bad", { volume: 0.4 }); return; }
+  busy = true;
+  const t = held; held = null;
+  grid[r][col] = t;
+  const ms = 130 + 30 * (r + 1);   /* faster (owner, 2026-11-22), still speeding up as it falls */
+  place(t, r, col, ms);
+  await wait(ms);
+  sfx("thud", { volume: 0.5 }); impact(t, r, col, false);
+  cur = nxt; nxt = pickDrop(Math.random); showHeld();
+  const before = maxMade;
+  const steps = settle(grid, r, col);
+  let chain = 0, newBig = 0;
+  for (const s of steps){
+    if (s.type === "merge"){ chain = s.chain; await playMerge(s); if (s.value > maxMade){ newBig = s.value; maxMade = s.value; } }
+    else await playFall(s);
+  }
+  if (chain >= 3) say(SAY.superCombo); else if (chain === 2) say(SAY.combo);
+  busy = false;
+  if (isFull(grid)){ gameOver(); return; }
+  if (newBig >= 2048 && !won){ won = true; $("sWin").hidden = false; sfx("win"); say(SAY.win); return; }
+  if (MILESTONES.includes(newBig) && newBig > before && chain < 2) say(milestoneLine(newBig));
+}
+async function playMerge(s){
+  const t = tiles.get(s.id), others = s.from.map(f => tiles.get(f.id)).filter(Boolean);
+  /* the slam (owner, 2026-11-22): the matching gems pull back a little, then slam into the landing spot hard; sparks
+     and chips fly like rocks colliding, and the new gem pops out with a bounce */
+  const back = 0.2;
+  others.forEach(x => { const f = s.from.find(p => p.id === x.id), dr = f.r - s.r, dc = f.c - s.c; place(x, f.r + dr * back, f.c + dc * back, 150, 0, EASE_OUT); });
+  if (!REDUCED) t.lab.firstChild.animate([{ transform: "none" }, { transform: "scale(.92)" }], { duration: 150, easing: EASE_OUT, fill: "forwards" });
+  await wait(150);
+  others.forEach(x => place(x, s.r, s.c, 150, .7, EASE_SLAM));
+  await wait(140);
+  others.forEach(x => { x.lab.style.opacity = "0"; });
+  await wait(10);
+  others.forEach(removeTile);
+  t.v = s.value; paintTile(t);
+  if (!REDUCED){
+    t.lab.firstChild.getAnimations().forEach(a => a.cancel());
+    t.lab.firstChild.animate([
+      { transform: "scale(.45)", filter: "brightness(2.2)", offset: 0 },
+      { transform: "scale(1.28)", filter: "brightness(1.5)", offset: .4 },
+      { transform: "scale(.9)", filter: "brightness(1.1)", offset: .65 },
+      { transform: "scale(1.06)", offset: .84 },
+      { transform: "scale(1)", filter: "brightness(1)", offset: 1 }], { duration: 560, easing: "ease-out" });
+  }
+  const color = colorOf(s.value);
+  shakeBoard(); ring(s.r, s.c, color);
+  burst(s.r + .5, s.c + .5, 8 + Math.min(10, s.chain * 3), "#FFD54A", cell * 1.35, 520, false);
+  chips(s.r + .5, s.c + .5, color, 8 + Math.min(8, s.chain * 2));
+  sfx("boom", { volume: 0.35 });
+  sfx("match", { pitch: Math.min(2, 0.85 + Math.log2(s.value) / 12), volume: 0.6 });
+  score += s.value; paintScore(); floatText("+" + s.value, s.r, s.c);
+  if (s.chain >= 2) comboBadge(s.chain);
+  await wait(260);
+}
+async function playFall(s){
+  let longest = 0;
+  const landed = [];
+  s.moves.forEach(m => { const t = tiles.get(m.id); if (!t) return; const ms = 120 + 30 * (m.r - m.fromR); place(t, m.r, m.c, ms); longest = Math.max(longest, ms); landed.push([t, m, ms]); });
+  landed.forEach(([t, m, ms]) => setTimeout(() => { if (tiles.has(t.id)) impact(t, m.r, m.c, false); }, REDUCED ? 0 : ms));
+  await wait(longest);
+  if (landed.length) sfx("thud", { volume: 0.4 });
+}
+function floatText(text, r, c){ if (REDUCED) return; const f = document.createElement("div"); f.className = "float"; f.textContent = text; f.style.left = (c * cell + cell * .28) + "px"; f.style.top = (r * cell + cell * .05) + "px"; $("board").appendChild(f); setTimeout(() => f.remove(), 950); }
+function comboBadge(n){ sfx("level", { volume: 0.5 }); if (REDUCED) return; $("board").querySelectorAll(".combo").forEach(x => x.remove()); const b = document.createElement("div"); b.className = "combo"; b.textContent = "Combo x" + n; $("board").appendChild(b); setTimeout(() => b.remove(), 1250); }
+
+function gameOver(){
+  over = true;
+  const big = Math.max(0, ...[...tiles.values()].filter(x => x !== held).map(x => x.v));
+  $("bigOut").textContent = big; $("scoreOut").textContent = score;
+  $("newBest").textContent = score > 0 && score >= best ? " A new best for this board!" : "";
+  $("sOver").hidden = false;
+  sfx("lose", { volume: 0.5 }); say(SAY.over);
+  setTimeout(() => $("bAgain").focus(), 60);
+}
+
+$("bKeep").onclick = () => { sfx("click", { volume: 0.5 }); $("sWin").hidden = true; };
+
+/* the start: pick a board */
+function paintSizes(){
+  $("sizes").innerHTML = SIZES.map(n => '<button class="size" type="button" data-n="' + n + '" aria-pressed="' + (n === N) + '"><svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">'
+    + Array.from({ length: n * n }, (_, i) => { const s = 40 / n, row = Math.floor(i / n), on = row >= n - 2 && (i % 3); return '<rect x="' + (2 + (i % n) * s + .8) + '" y="' + (2 + row * s + .8) + '" width="' + (s - 1.6) + '" height="' + (s - 1.6) + '" rx="1.6" fill="' + (on ? Object.values(COLORS)[i % 7] : "#DCD5C4") + '"/>'; }).join("")
+    + "</svg>" + n + " x " + n + "<small>" + (bestOf(n) ? "Best " + bestOf(n) : n === 5 ? "Quick and tight" : n === 6 ? "Just right" : "Long and roomy") + "</small></button>").join("");
+}
+$("sizes").addEventListener("click", (e) => { const b = e.target.closest("button[data-n]"); if (!b) return; N = Number(b.dataset.n); sfx("click", { volume: 0.5 }); paintSizes(); });
+function openStart(){ busy = false; paintSizes(); $("sStart").hidden = false; setTimeout(() => $("bPlay").focus(), 60); }
+$("bPlay").onclick = () => { sfx("start", { volume: 0.5 }); $("sStart").hidden = true; newGame(); say(SAY.start); };
+$("boardChip").onclick = () => { sfx("click", { volume: 0.5 }); openStart(); };
+$("bAgain").onclick = () => { sfx("click", { volume: 0.5 }); newGame(); };
+$("bBoards").onclick = () => { $("sOver").hidden = true; openStart(); };
+
+/* columns: point to aim, tap to drop */
+$("cols").addEventListener("pointermove", (e) => { const b = e.target.closest("button[data-c]"); if (b && e.pointerType === "mouse") setCol(Number(b.dataset.c)); });
+$("cols").addEventListener("click", (e) => { const b = e.target.closest("button[data-c]"); if (!b) return; setCol(Number(b.dataset.c)); drop(); });
+addEventListener("keydown", (e) => {
+  if (!$("sStart").hidden || !$("sOver").hidden || !$("sWin").hidden) return;
+  if (e.key === "ArrowLeft"){ setCol(col - 1); e.preventDefault(); }
+  else if (e.key === "ArrowRight"){ setCol(col + 1); e.preventDefault(); }
+  else if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown"){ drop(); e.preventDefault(); }
+});
+addEventListener("resize", () => requestAnimationFrame(layout));
+
+newGame();
+openStart();
+</script>
+</body>
+</html>

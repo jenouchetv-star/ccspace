@@ -1,0 +1,111 @@
+// Drop 2048 (owner, 2026-11-22): a free arcade game. Drop a numbered gem into a column; gems with the same number that
+// touch by their sides smash into one where the dropped gem landed (two make double, each extra one doubles again),
+// gems above fall, and new matches chain. The rules live in the game's pure block, so they are tested here directly.
+import { describe, it, expect } from "vitest";
+import { readFileSync, existsSync } from "node:fs";
+import { LINES, PHONEMES, lineKey as scriptKey } from "../scripts/drop2048-lines.mjs";
+
+const game = readFileSync(new URL("../games/drop-2048.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+const pure = game.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
+const D = new Function(pure + "; return { COLORS, SIZES, DROPS, pickDrop, mergeValue, emptyGrid, landRow, isFull, groupAt, gravity, settle, lineKey, SAY, allLines };")();
+
+let uid = 0;
+/** A grid from rows of numbers (0 = empty), top row first. */
+const gridOf = (rows) => rows.map(r => r.map(v => (v ? { id: ++uid, v } : null)));
+const values = (g) => g.map(r => r.map(t => (t ? t.v : 0)));
+/** Drop v into column c the way the game does, and settle it. */
+function dropInto(g, c, v){ const r = D.landRow(g, c); g[r][c] = { id: ++uid, v }; return D.settle(g, r, c); }
+
+describe("the rules", () => {
+  it("drops 2, 4, 8 or 16, and the boards are 5 x 5, 6 x 6 and 7 x 7", () => {
+    expect(D.DROPS.map(d => d[0])).toEqual([2, 4, 8, 16]);
+    expect(D.SIZES).toEqual([5, 6, 7]);
+    const seen = new Set(); for (let i = 0; i < 200; i++) seen.add(D.pickDrop(() => i / 200));
+    expect([...seen].sort((a, b) => a - b)).toEqual([2, 4, 8, 16]);
+  });
+  it("two the same make double, and each extra one doubles again", () => {
+    expect(D.mergeValue(4, 2)).toBe(8);
+    expect(D.mergeValue(4, 3)).toBe(16);
+    expect(D.mergeValue(4, 4)).toBe(32);
+    expect(D.mergeValue(1024, 2)).toBe(2048);
+  });
+  it("three 4s in a row make 16 where the dropped gem landed", () => {
+    const g = gridOf([[0, 0, 0], [0, 0, 0], [4, 0, 4]]);
+    const steps = dropInto(g, 1, 4);
+    expect(values(g)).toEqual([[0, 0, 0], [0, 0, 0], [0, 16, 0]]);
+    expect(steps[0]).toMatchObject({ type: "merge", r: 2, c: 1, value: 16, chain: 1 });
+    expect(steps[0].from).toHaveLength(2);
+  });
+  it("corners never count: only up, down, left and right", () => {
+    const g = gridOf([[0, 0, 0], [0, 0, 0], [8, 0, 0]]);
+    dropInto(g, 1, 4); dropInto(g, 1, 8);
+    expect(values(g)).toEqual([[0, 0, 0], [0, 8, 0], [8, 4, 0]]);
+  });
+  it("a merge on top falls into the gap and chains into a combo", () => {
+    /* 8 | 4 | 16: two 4s make 8, which falls, meets the 8 (16), then the 16 (32) */
+    const g = gridOf([[0, 0, 0], [0, 0, 0], [8, 4, 16]]);
+    const steps = dropInto(g, 1, 4);
+    expect(values(g)).toEqual([[0, 0, 0], [0, 0, 0], [0, 32, 0]]);
+    const merges = steps.filter(s => s.type === "merge");
+    expect(merges.map(m => [m.value, m.chain])).toEqual([[8, 1], [16, 2], [32, 3]]);
+    expect(steps.some(s => s.type === "fall")).toBe(true);
+  });
+  it("gems fall into gaps, and a full top row ends the game", () => {
+    const g = gridOf([[2, 0], [0, 0]]);
+    expect(D.gravity(g)).toEqual([expect.objectContaining({ fromR: 0, r: 1, c: 0 })]);
+    expect(values(g)).toEqual([[0, 0], [2, 0]]);
+    expect(D.landRow(gridOf([[2], [4]]), 0)).toBe(-1);
+    expect(D.isFull(gridOf([[2, 4], [4, 2]]))).toBe(true);
+    expect(D.isFull(gridOf([[0, 4], [4, 2]]))).toBe(false);
+  });
+  it("every number on the way to 2048 has its own color", () => {
+    for (let v = 2; v <= 2048; v *= 2) expect(D.COLORS[v], String(v)).toMatch(/^#[0-9A-F]{6}$/i);
+    expect(new Set(Object.values(D.COLORS)).size).toBe(Object.keys(D.COLORS).length);
+  });
+});
+
+describe("the look, the feel and the voice", () => {
+  it("never stops for a quiz (owner, 2026-11-22) and sends no answers", () => {
+    expect(game).not.toMatch(/quizFor|askQuiz|id="sQuiz"|ccsAnswer|Quick question/);
+  });
+  it("is an arcade with glossy gems: a neon board, Lilita One lettering, faceted gems with a glint", () => {
+    expect(game).toContain("family=Lilita+One");
+    expect(game).not.toContain("Bungee");     /* its 4 read like a different letter */
+    expect(game).toContain("background:conic-gradient(from -45deg, var(--hi) 0 25%, var(--c) 0 50%, var(--lo) 0 75%, var(--mid) 0 100%);");
+    expect(game).toContain("border:3px solid var(--cyan);");
+  });
+  it("drops with a dramatic ease-in and lands with one small bounce; merges pull back, slam, spark and pop", () => {
+    expect(game).toContain('const EASE_IN = "cubic-bezier(.62,0,.86,.28)";');
+    expect(game).toContain("const ms = 130 + 30 * (r + 1);");
+    expect(game).toMatch(/function impact\(t, r, c, heavy\)\{[\s\S]*translateY\(-13%\)/);
+    expect(game).toContain("place(x, f.r + dr * back, f.c + dc * back, 150, 0, EASE_OUT)");
+    expect(game).toContain("others.forEach(x => place(x, s.r, s.c, 150, .7, EASE_SLAM));");
+    expect(game).toContain("chips(s.r + .5, s.c + .5, color,");
+    expect(game).toMatch(/\{ transform: "scale\(1\.28\)"/);
+  });
+  it("holds still for anyone who asks for less motion", () => {
+    expect(game).toMatch(/const REDUCED = \(\(\) => \{ try \{ return matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches;/);
+    expect(game).toMatch(/function burst\([^)]*\)\{\n  if \(REDUCED\) return;/);
+    expect(game).toMatch(/function chips\([^)]*\)\{\n  if \(REDUCED\) return;/);
+    expect(game).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+  it("uses the site's sound kit and keeps the best score for each board on the device", () => {
+    expect(game).toContain('<script src="/games/game-sound.js"></script>');
+    expect(game).toContain('CCSSound.button({ compact: true');
+    expect(game).toContain('store.set("drop2048-best-" + N, String(best))');
+  });
+  it("has a recorded clip in Heart's voice for every line, keyed the same way as the game", () => {
+    expect(LINES).toEqual(D.allLines());
+    expect(LINES).toHaveLength(7);
+    for (const t of LINES){
+      expect(scriptKey(t)).toBe(D.lineKey(t));
+      expect(existsSync(new URL("../assets/games/drop-2048/voice/" + D.lineKey(t) + ".mp3", import.meta.url)), t).toBe(true);
+    }
+    expect(Object.keys(PHONEMES)).toEqual(["You made 2048! Amazing!"]);   /* said "two thousand forty-eight" */
+  });
+  it("has its Play page cover, and no em dashes or emojis", () => {
+    for (const f of ["assets/games/drop-2048.jpg", "assets/games/drop-2048-thumb.jpg"]) expect(existsSync(new URL("../" + f, import.meta.url)), f).toBe(true);
+    expect(game).not.toContain("—");
+    expect(game).not.toMatch(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
+  });
+});
