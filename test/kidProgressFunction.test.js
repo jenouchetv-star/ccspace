@@ -51,7 +51,7 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
         const gone = rows.filter(hit);
         db.tables[this.t] = rows.filter((r) => !hit(r));
         // the real tables cascade from children
-        if (this.t === "children") for (const c of gone) for (const t of ["child_progress", "child_nuggets", "child_quizzes", "child_game_answers"]) db.tables[t] = (db.tables[t] || []).filter((r) => r.child_id !== c.id);
+        if (this.t === "children") for (const c of gone) for (const t of ["child_progress", "child_nuggets", "child_quizzes", "child_game_answers", "child_days"]) db.tables[t] = (db.tables[t] || []).filter((r) => r.child_id !== c.id);
         return { data: null, error: null };
       }
       if (this.op === "insert") {
@@ -682,6 +682,7 @@ describe("kid-progress function", () => {
     expect(table("child_game_answers")).toEqual([{
       id: 1, child_id: A_CHILD, game: "g".repeat(40), qid: "q".repeat(40), subject: "science", level: "g23", correct: true,
       question: "x".repeat(300), answer: "y".repeat(200), why: "z".repeat(400), at: NOW,
+      given: null, hints: 0, tries: 1, skill: null,   // the parent report's optional fields, left out by this game
     }]);
     expect(db.rate.calls).toEqual([{ name: "rate_take", args: { p_bucket: "kid_answer", p_key: "sub-a", p_max: 200, p_window_seconds: 3600 } }]);
     // the why may be left out; every level and subject is taken
@@ -766,12 +767,13 @@ describe("kid-progress function", () => {
     const r = await a("report", { child: A_CHILD });
     expect(r.ok).toBe(true);
     expect(r.answers.bySubject).toEqual({ science: { asked: 4, right: 3 }, math: { asked: 12, right: 0 }, music: { asked: 1, right: 1 }, reading: { asked: 2, right: 2 } });
-    expect(JSON.stringify(r)).not.toMatch(/Old spelling/);
+    expect(JSON.stringify(r.answers)).not.toMatch(/Old spelling/);   /* the parent report's 26-week rows may carry it */
     expect(r.answers.missed).toEqual([
       { game: "pop-quiz", question: "Science miss", answer: "Right one", why: "Why one", at: day(20) },
       ...[12, 11, 10, 9, 8, 7, 6, 5, 4].map((n) => ({ game: "solar-system-sandbox", question: `M${n}`, answer: `A${n}`, why: `W${n}`, at: day(n) })),
     ]);
-    expect(JSON.stringify(r)).not.toMatch(/Too old|Leo's|Zed's|child_id|"id":|"level"/);
+    expect(JSON.stringify(r.answers)).not.toMatch(/Too old/);   /* in the 26-week answerRows, but not the 8-week summary */
+    expect(JSON.stringify(r)).not.toMatch(/Leo's|Zed's|child_id|"id":|"level"/);
     // every other part of the report is still there
     for (const k of ["progress", "nuggets", "lessons", "subjects", "quizzes"]) expect(r, k).toHaveProperty(k);
     // a child with no answers gets an empty summary, not a level for every subject
@@ -832,7 +834,9 @@ describe("kid-progress function", () => {
     db.fail.add("child_game_answers");
     const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await a("report", { child: A_CHILD })).toMatchObject({ status: 200, ok: true, progress: [{ item_id: "ep-1" }], answers: { bySubject: {}, missed: [] } });
-    expect(quiet).toHaveBeenCalledOnce(); quiet.mockRestore();
+    // logged once for the 8-week summary and once for the parent report's rows
+    expect(quiet.mock.calls.map((c) => c[0])).toEqual(["kid-progress: answers not read for the report:", "kid-progress: answer rows not read for the report:"]);
+    quiet.mockRestore();
   });
 
   describe("seen", () => {
@@ -869,6 +873,79 @@ describe("kid-progress function", () => {
         expect((await call({ action: "seen", session })).error).toBe("no_session");
       }
       for (const s of table("portal_sessions")) expect(s.last_seen_at).toBeUndefined();
+    });
+  });
+
+  /* the parent report (owner, 2026-11-23): fuller answers, a day log for the calendar, raw rows for the charts */
+  describe("parent report data", () => {
+    const dayRow = (child, day, kind, item) => table("child_days").find((d) => d.child_id === child && d.day === day && d.kind === kind && d.item_id === item);
+
+    it("keeps the child's own answer, hints, tries and skill when a game sends them", async () => {
+      expect(await a("game_answer", { child: A_CHILD, ...gameAnswer({ correct: false, given: "  One moon  ", hints: 1, tries: 2, skill: " Planets " }) })).toMatchObject({ ok: true });
+      expect(table("child_game_answers")[0]).toMatchObject({ given: "One moon", hints: 1, tries: 2, skill: "Planets" });
+    });
+
+    it("still takes an answer without them, with no hints and one try", async () => {
+      await a("game_answer", { child: A_CHILD, ...gameAnswer() });
+      expect(table("child_game_answers")[0]).toMatchObject({ given: null, hints: 0, tries: 1, skill: null });
+    });
+
+    it("refuses hints and tries that are not whole numbers in range", async () => {
+      for (const bad of [{ hints: -1 }, { hints: 21 }, { hints: 1.5 }, { hints: "1" }, { tries: 0 }, { tries: 51 }, { given: 5 }, { skill: [] }]) {
+        expect((await a("game_answer", { child: A_CHILD, ...gameAnswer(bad) })).error, JSON.stringify(bad)).toBe("invalid");
+      }
+      expect(table("child_game_answers")).toEqual([]);
+    });
+
+    it("adds each answer to the child's day, on the family's date", async () => {
+      at("2026-11-21T03:00:00.000Z");   // still Nov 20 in the family's time zone
+      await a("game_answer", { child: A_CHILD, day: "2026-11-20", ...gameAnswer({ correct: true }) });
+      await a("game_answer", { child: A_CHILD, day: "2026-11-20", ...gameAnswer({ qid: "sun-2", correct: false }) });
+      expect(dayRow(A_CHILD, "2026-11-20", "game", "solar-system-sandbox")).toMatchObject({ answers: 2, right_count: 1, done: false });
+    });
+
+    it("uses the server's date when the browser's is more than a day off or not a date", async () => {
+      for (const day of ["2026-11-25", "2025-01-01", "11/21/2026", 20261121]) await a("game_answer", { child: A_CHILD, day, ...gameAnswer() });
+      expect(table("child_days").map((d) => d.day)).toEqual(["2026-11-21"]);
+      expect(dayRow(A_CHILD, "2026-11-21", "game", "solar-system-sandbox").answers).toBe(4);
+    });
+
+    it("marks a finished item done on its day, and a day log fault never fails the record", async () => {
+      await a("record", { child: A_CHILD, kind: "book", item: "space-adventure", day: "2026-11-21" });
+      expect(dayRow(A_CHILD, "2026-11-21", "book", "space-adventure")).toMatchObject({ done: true, answers: 0 });
+      db.fail.add("child_days");
+      expect(await a("record", { child: A_CHILD, kind: "book", item: "flying-box" })).toMatchObject({ ok: true });
+      expect(await a("game_answer", { child: A_CHILD, ...gameAnswer() })).toMatchObject({ ok: true });
+    });
+
+    it("reports 26 weeks of answer rows, newest first, with the words only for answers to look at", async () => {
+      rowsOf("child_game_answers").push(
+        { id: 1, ...answerRow(A_CHILD, "2026-05-01T00:00:00Z", { qid: "too-old" }) },
+        { id: 2, ...answerRow(A_CHILD, "2026-11-10T00:00:00Z", { qid: "mars-1", correct: false, given: "One", hints: 0, tries: 1, skill: "Mars" }) },
+        { id: 3, ...answerRow(A_CHILD, "2026-11-11T00:00:00Z", { qid: "moon-1", correct: true, hints: 1, given: "No air", skill: "The Moon" }) },
+        { id: 4, ...answerRow(A_CHILD, "2026-11-12T00:00:00Z", { qid: "moon-2", correct: true, hints: 0, skill: "The Moon" }) },
+        { id: 5, ...answerRow(B_CHILD, "2026-11-12T00:00:00Z", { qid: "not-mine" }) },
+      );
+      const r = await a("report", { child: A_CHILD });
+      expect(r.answerRows.map((x) => x.q)).toEqual(["moon-2", "moon-1", "mars-1"]);
+      expect(r.answerRows[0]).toEqual({ g: "solar-system-sandbox", q: "moon-2", s: "science", k: "The Moon", c: true, h: 0, at: "2026-11-12T00:00:00Z" });
+      expect(r.answerRows[2]).toMatchObject({ c: false, qt: "Q", a: "A", gv: "One", w: "W" });
+      expect(r.answerRows[1]).toMatchObject({ h: 1, gv: "No air" });
+    });
+
+    it("reports the child's days for the calendar", async () => {
+      rowsOf("child_days").push(
+        { child_id: A_CHILD, day: "2026-11-20", kind: "game", item_id: "spelling-detective", done: false, answers: 4, right_count: 3, last_at: "2026-11-20T15:00:00Z" },
+        { child_id: A_CHILD, day: "2026-04-01", kind: "book", item_id: "old", done: true, answers: 0, right_count: 0, last_at: "2026-04-01T15:00:00Z" },
+        { child_id: B_CHILD, day: "2026-11-20", kind: "book", item_id: "theirs", done: true, answers: 0, right_count: 0, last_at: "2026-11-20T15:00:00Z" },
+      );
+      expect((await a("report", { child: A_CHILD })).days).toEqual([{ day: "2026-11-20", kind: "game", item_id: "spelling-detective", done: false, answers: 4, right_count: 3 }]);
+    });
+
+    it("still reports when the day log or the new columns cannot be read", async () => {
+      db.fail.add("child_days");
+      const r = await a("report", { child: A_CHILD });
+      expect(r).toMatchObject({ ok: true, days: [] });
     });
   });
 });

@@ -23,12 +23,21 @@
 //                 or "reading" (Reading and Writing: spelling and word games, beside STEAMM, not one of it);
 //                 level k1, g23 or g45; correct true or false; question, answer (the right one) and why trimmed and cut
 //                 to 300, 200 and 400 characters (why may be left out). 200 an hour per member ("slow_down"). -> { ok }
+//                 For the parent report it may also send given (what the child answered, cut to 200), hints (a whole
+//                 number 0 to 20, default 0), tries (1 to 50, default 1), skill (cut to 80) and day (the family's date,
+//                 YYYY-MM-DD; kept when within a day of the server's, else the server's date). Each answer is added to
+//                 the child's day (child_days, kind "game", the game's name). record takes the same day and marks the
+//                 item done on it. A day that cannot be kept is logged and never fails the call.
 //   report        { child } what the child finished, the facts they came across, the approved lessons of what they
 //                 finished, each fact's STEAMM subject, the 5 newest quizzes, and answers: { bySubject: { <subject>:
 //                 { asked, right } }, missed: [{ game, question, answer, why, at }] } over the last 8 weeks, counting
 //                 only the first answer to each question (game, qid) so replays cannot inflate a level (only subjects
 //                 with answers; missed is the 10 newest questions missed the first time). If the answers cannot be
-//                 read, the rest of the report still comes back, with empty answers.
+//                 read, the rest of the report still comes back, with empty answers. For the parent report (owner,
+//                 2026-11-23) it also returns answerRows, the last 26 weeks of answers newest first (at most 3000):
+//                 { g, q, s, k, c, h, at } (game, qid, subject, skill, correct, hints), plus qt, a, gv, w (question,
+//                 right answer, given, why) only for answers missed or right after a hint; and days, the last 26 weeks
+//                 of child_days: [{ day, kind, item_id, done, answers, right_count }]. Either is [] when it cannot be read.
 //   quiz_offer    { child } -> { ok, due }: due when no quiz started in the last 7 days and 3 or more facts are eligible.
 //   quiz_start    { child } -> { ok, quizId, level, questions: [{ nuggetId, question, choices, subject }] } or "not_due"
 //                 (subject: the fact's STEAMM subject id, or ""). Never sends the answer or the why.
@@ -87,7 +96,10 @@ const MAX_ANSWERS_PER_HOUR = 200;
 const ANSWER_WINDOW_MS = 56 * DAY_MS;         // the report sums the last 8 weeks of answers
 const REPORT_MISSED = 10;
 const PAGE = 1000;                            // rows per page when every answer in the window is read
-const CAP = { question: 300, answer: 200, why: 400 };
+const CAP = { question: 300, answer: 200, why: 400, given: 200, skill: 80 };
+const REPORT_DAYS = 182;                      // the parent report's answer rows and day log: the last 26 weeks
+const MAX_ANSWER_ROWS = 3000;
+const DAY_KINDS = [...KINDS, "game"];
 /** The 20 avatars a child can have (supabase/child-avatars.sql; drawn by assets/lib/avatars.js, the same ids). */
 const AVATARS = ["robot", "racecar", "pencil", "rocket", "paintbrush", "guitar", "dinosaur", "planet", "lightbulb", "gear",
   "music", "microscope", "book", "telescope", "drum", "crayon", "magnet", "headphones", "airplane", "star"];
@@ -307,6 +319,68 @@ Deno.serve(async (req) => {
     };
   }
 
+  const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  /** The family's own date for the day log: the browser's, when it is a real date within a day of the server's
+   *  (a family west of UTC is still on yesterday in the evening); otherwise the server's own date. */
+  function familyDay(v: unknown) {
+    if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      const t = Date.parse(v + "T12:00:00Z");
+      if (!isNaN(t) && isoDay(t) === v && Math.abs(t - Date.parse(isoDay(now) + "T12:00:00Z")) <= DAY_MS) return v;
+    }
+    return isoDay(now);
+  }
+
+  /** Adds to a child's day for the calendar: finished, or a question answered (and whether right). A fault is logged
+   *  and never fails the call, so recording keeps working before supabase/progress-days.sql is applied. */
+  async function addToDay(childId: string, day: string, kind: string, item: string, add: { done?: boolean; answers?: number; right?: number }) {
+    try {
+      if (!DAY_KINDS.includes(kind)) return;
+      const { data: old, error: oldError } = await db.from("child_days").select("done, answers, right_count")
+        .eq("child_id", childId).eq("day", day).eq("kind", kind).eq("item_id", item).maybeSingle();
+      if (oldError) throw new Error(oldError.message);
+      const { error } = await db.from("child_days").upsert({
+        child_id: childId, day, kind, item_id: item,
+        done: Boolean(old?.done) || Boolean(add.done),
+        answers: Number(old?.answers || 0) + (add.answers || 0),
+        right_count: Number(old?.right_count || 0) + (add.right || 0),
+        last_at: nowDate.toISOString(),
+      }, { onConflict: "child_id,day,kind,item_id" });
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      console.error("kid-progress: day not kept for the report:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  /** The parent report's answer rows: the last 26 weeks, newest first, at most 3000, in short fields. The words of a
+   *  question (question, the right answer, what the child gave, the why) come only with answers to look at: missed,
+   *  or right after a hint. */
+  async function answerRows(childId: string) {
+    const since = new Date(now - REPORT_DAYS * DAY_MS).toISOString();
+    // deno-lint-ignore no-explicit-any
+    const out: any[] = [];
+    for (let from = 0; out.length < MAX_ANSWER_ROWS; from += PAGE) {
+      const { data, error } = await db.from("child_game_answers").select("id, game, qid, subject, skill, correct, hints, question, answer, given, why, at")
+        .eq("child_id", childId).gte("at", since).order("at", { ascending: false }).range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      for (const r of data ?? []) {
+        const c = r.correct === true, h = Number(r.hints) || 0;
+        const row: Record<string, unknown> = { g: r.game, q: r.qid, s: r.subject, k: r.skill ?? null, c, h, at: r.at };
+        if (!c || h > 0) Object.assign(row, { qt: r.question ?? "", a: r.answer ?? "", gv: r.given ?? "", w: r.why ?? "" });
+        if (out.length < MAX_ANSWER_ROWS) out.push(row);
+      }
+      if ((data ?? []).length < PAGE) break;
+    }
+    return out;
+  }
+
+  /** The child's days for the report's calendar, the last 26 weeks, newest first. */
+  async function dayRows(childId: string) {
+    const { data, error } = await db.from("child_days").select("day, kind, item_id, done, answers, right_count")
+      .eq("child_id", childId).gte("day", isoDay(now - REPORT_DAYS * DAY_MS)).order("day", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((d) => ({ day: d.day, kind: d.kind, item_id: d.item_id, done: d.done === true, answers: Number(d.answers) || 0, right_count: Number(d.right_count) || 0 }));
+  }
+
   try {
     const who = await member(body.session);
     if (!who) return fail("no_session");
@@ -385,6 +459,7 @@ Deno.serve(async (req) => {
         child_id: child.id, kind, item_id: item, first_at: old?.first_at || stamp, last_at: stamp, times: Number(old?.times || 0) + 1,
       }, { onConflict: "child_id,kind,item_id" });
       if (error) throw new Error(error.message);
+      await addToDay(child.id, familyDay(body.day), kind, item, { done: true });
       return json({ ok: true });
     }
 
@@ -395,16 +470,27 @@ Deno.serve(async (req) => {
       const game = str(body.game), qid = str(body.qid), subject = str(body.subject), level = str(body.level);
       const question = cleanText(str(body.question), CAP.question), answer = cleanText(str(body.answer), CAP.answer);
       const whyOk = body.why === undefined || body.why === null || typeof body.why === "string";
+      // the parent report's optional fields: what the child gave, hints shown, tries taken, the skill practiced
+      const none = (v: unknown) => v === undefined || v === null;
+      const whole = (v: unknown, lo: number, hi: number, dflt: number) => none(v) ? dflt : (Number.isInteger(v) && (v as number) >= lo && (v as number) <= hi ? v as number : NaN);
+      const hints = whole(body.hints, 0, 20, 0), tries = whole(body.tries, 1, 50, 1);
+      const textOk = (v: unknown) => none(v) || typeof v === "string";
       if (!GAME_ID.test(game) || game === POP_QUIZ || !GAME_ID.test(qid) || !ANSWER_SUBJECTS.includes(subject) || !GAME_LEVELS.includes(level)
-        || typeof body.correct !== "boolean" || !question || !answer || !whyOk) return fail("invalid");
+        || typeof body.correct !== "boolean" || !question || !answer || !whyOk
+        || isNaN(hints) || isNaN(tries) || !textOk(body.given) || !textOk(body.skill)) return fail("invalid");
       const { data: allowed, error: rateError } = await db.rpc("rate_take", { p_bucket: "kid_answer", p_key: who.id, p_max: MAX_ANSWERS_PER_HOUR, p_window_seconds: 3600 });
       if (rateError) throw new Error(rateError.message);
       if (allowed === false) return fail("slow_down");
-      const { error } = await db.from("child_game_answers").insert({
+      const row = {
         child_id: child.id, game, qid, subject, level, correct: body.correct, question, answer,
         why: cleanText(str(body.why), CAP.why), at: nowDate.toISOString(),
-      });
+      };
+      const extra = { given: cleanText(str(body.given), CAP.given) || null, hints, tries, skill: cleanText(str(body.skill), CAP.skill) || null };
+      let { error } = await db.from("child_game_answers").insert({ ...row, ...extra });
+      // before supabase/progress-days.sql is applied the new columns are missing: keep the answer without them
+      if (error && /column/i.test(error.message)) ({ error } = await db.from("child_game_answers").insert(row));
       if (error) throw new Error(error.message);
+      await addToDay(child.id, familyDay(body.day), "game", game, { answers: 1, right: body.correct ? 1 : 0 });
       return json({ ok: true });
     }
 
@@ -430,6 +516,15 @@ Deno.serve(async (req) => {
       try { answers = await answerSummary(child.id); } catch (e) {
         console.error("kid-progress: answers not read for the report:", e instanceof Error ? e.message : e);
       }
+      // the parent report's raw rows; each read on its own so a missing table or column never fails the report
+      // deno-lint-ignore no-explicit-any
+      let rows: any[] = [], days: Awaited<ReturnType<typeof dayRows>> = [];
+      try { rows = await answerRows(child.id); } catch (e) {
+        console.error("kid-progress: answer rows not read for the report:", e instanceof Error ? e.message : e);
+      }
+      try { days = await dayRows(child.id); } catch (e) {
+        console.error("kid-progress: days not read for the report:", e instanceof Error ? e.message : e);
+      }
       return json({
         ok: true,
         progress: progress.map((p) => ({ kind: p.kind, item_id: p.item_id, first_at: p.first_at, last_at: p.last_at, times: p.times })),
@@ -438,6 +533,8 @@ Deno.serve(async (req) => {
         subjects,
         quizzes: (quiz ?? []).map((q) => ({ started_at: q.started_at, asked: q.asked, right_count: q.right_count })),
         answers,
+        answerRows: rows,
+        days,
       });
     }
 
