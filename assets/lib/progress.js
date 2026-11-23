@@ -217,7 +217,193 @@ export function answerFromMessage(data) {
   if (a.why !== undefined && a.why !== null && typeof a.why !== "string") return null;
   const question = str(a.question, ANSWER_CAP.question), answer = str(a.answer, ANSWER_CAP.answer);
   if (!question || !answer) return null;
-  return { game, qid, subject: a.subject, level: a.level, correct: a.correct, question, answer, why: str(a.why, ANSWER_CAP.why) };
+  const out = { game, qid, subject: a.subject, level: a.level, correct: a.correct, question, answer, why: str(a.why, ANSWER_CAP.why) };
+  /* the parent report's optional fields (owner, 2026-11-23): kept only when valid, so an odd value never loses the answer */
+  const whole = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+  if (typeof a.given === "string" && str(a.given, 200)) out.given = str(a.given, 200);
+  if (whole(a.hints, 0, 20)) out.hints = a.hints;
+  if (whole(a.tries, 1, 50)) out.tries = a.tries;
+  if (typeof a.skill === "string" && str(a.skill, 80)) out.skill = str(a.skill, 80);
+  return out;
+}
+
+/* ---- the parent report (owner, 2026-11-23; docs/superpowers/specs/2026-11-23-progress-report-redesign-design.md) ---- */
+
+/** The report's subjects in order: the six STEAMM subjects, then Reading and Writing. */
+export const REPORT_SUBJECTS = [...STEAMM_SUBJECTS, READING_SUBJECT];
+/** What each status is called on the page. */
+export const STATUS_LABELS = { none: "Not enough evidence yet", dev: "Developing", prac: "Practicing", cons: "Consistently demonstrated" };
+/** A subject is rated only from this many answers in the period. */
+export const MIN_EVIDENCE = 5;
+/** How many weeks back the report can go (the server returns 26 weeks). */
+export const REPORT_WEEKS = 26;
+const TREND_WEEKS = 8;
+
+/** A subject's status from its answers in the period: fewer than 5, not enough evidence; under 60% on their own,
+    developing; 85% or more on their own from 2 or more sources, consistently demonstrated; otherwise practicing. */
+export function subjectStatus({ own = 0, hint = 0, miss = 0, sources = 0 } = {}) {
+  const n = own + hint + miss;
+  if (n < MIN_EVIDENCE) return "none";
+  const r = own / n;
+  if (r < 0.6) return "dev";
+  return r >= 0.85 && sources >= 2 ? "cons" : "prac";
+}
+
+/** Where an answer came from, for "at least 2 different games, books or activities": the game, except that each
+    Solar System Sandbox tour counts on its own (its question ids start with the tour, as in "mars-1"). */
+export function sourceOf(row) {
+  const g = String(row && row.g || "");
+  return g === "solar-system-sandbox" ? g + ":" + String(row.q || "").split("-")[0] : g;
+}
+
+/** A date's key in the family's own time zone: YYYY-MM-DD. */
+export function dayKey(d) {
+  const x = new Date(d);
+  return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0");
+}
+
+/** The 7 days a week offset covers, in the family's time zone: offset 0 is the 7 days ending today, 1 the 7 before
+    that, and so on (never below 0, never past 26 weeks back). from is the first day's start, to the day after the last. */
+export function weekPeriod(now, offset) {
+  const k = Math.max(0, Math.min(REPORT_WEEKS - 1, Math.floor(Number(offset) || 0)));
+  const t = new Date(now);
+  const to = new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1 - 7 * k);
+  const from = new Date(to.getFullYear(), to.getMonth(), to.getDate() - 7);
+  return { offset: k, from: from.getTime(), to: to.getTime() };
+}
+
+const pctOf = (a, n) => (n ? Math.round((a / n) * 100) : 0);
+const tallyKind = (r) => (r.c ? (r.h > 0 ? "hint" : "own") : "miss");
+
+function cleanRows(answerRows) {
+  const ok = new Set(REPORT_SUBJECTS.map((s) => s.id));
+  return (answerRows || []).filter((r) => r && ok.has(r.s) && typeof r.g === "string" && !isNaN(Date.parse(r.at)))
+    .map((r) => ({ ...r, c: r.c === true, h: Number(r.h) || 0, ms: Date.parse(r.at) }));
+}
+
+/** Everything the parent report shows, from what the report action returned. span "week" (the 7 days weekOffset
+    covers) or "all" (every answer returned). Pure: the page adds titles, pictures and links. */
+export function parentReport({ answerRows, days, progress, now, weekOffset = 0, span = "week", childName = "" } = {}) {
+  const nowMs = new Date(now).getTime();
+  const rows = cleanRows(answerRows);
+  const period = span === "all" ? { offset: 0, from: -Infinity, to: Infinity, all: true } : weekPeriod(nowMs, weekOffset);
+  const inPeriod = (ms) => ms >= period.from && ms < period.to;
+  const inRows = rows.filter((r) => inPeriod(r.ms));
+
+  /* subjects */
+  const subjects = REPORT_SUBJECTS.map((s) => {
+    const mine = inRows.filter((r) => r.s === s.id);
+    const t = { own: 0, hint: 0, miss: 0 };
+    const sources = new Set(), games = new Set(), skills = new Map();
+    for (const r of mine) {
+      t[tallyKind(r)] += 1;
+      sources.add(sourceOf(r)); games.add(r.g);
+      const key = r.k ? "k:" + r.k : "g:" + r.g;
+      const sk = skills.get(key) || { key, skill: r.k || null, game: r.g, own: 0, hint: 0, miss: 0, games: new Set(), days: new Set() };
+      sk[tallyKind(r)] += 1; sk.games.add(r.g); sk.days.add(dayKey(r.ms));
+      skills.set(key, sk);
+    }
+    const n = t.own + t.hint + t.miss;
+    const status = subjectStatus({ ...t, sources: sources.size });
+    return {
+      id: s.id, label: s.label, n, ...t, status,
+      pct: pctOf(t.own + t.hint, n), ownPct: pctOf(t.own, n),
+      games: [...games],
+      skills: [...skills.values()].map((k) => ({ ...k, n: k.own + k.hint + k.miss, games: [...k.games], days: [...k.days] }))
+        .sort((a, b) => b.n - a.n || (a.key < b.key ? -1 : 1)),
+      look: mine.filter((r) => !r.c || r.h > 0).sort((a, b) => b.ms - a.ms).slice(0, 12),
+    };
+  });
+
+  const totals = subjects.reduce((acc, s) => ({ n: acc.n + s.n, own: acc.own + s.own, hint: acc.hint + s.hint, miss: acc.miss + s.miss }), { n: 0, own: 0, hint: 0, miss: 0 });
+  totals.pct = pctOf(totals.own + totals.hint, totals.n);
+  totals.ownPct = pctOf(totals.own, totals.n);
+  totals.rated = subjects.filter((s) => s.status !== "none").length;
+
+  /* worth practicing: skills with 2 or more answers not on their own, most first, then the ones seen on more days */
+  const focus = subjects.flatMap((s) => s.skills.filter((k) => k.hint + k.miss >= 2).map((k) => ({
+    subject: s.id, ...k, right: k.own + k.hint,
+    examples: s.look.filter((r) => (r.k ? "k:" + r.k : "g:" + r.g) === k.key).slice(0, 3),
+  }))).sort((a, b) => (b.hint + b.miss) - (a.hint + a.miss) || b.days.length - a.days.length || b.games.length - a.games.length).slice(0, 2);
+  focus.forEach((f) => { const w = f.examples.find((r) => r.w); f.tip = w ? w.w : ""; });
+
+  /* going well: skills of 3 or more answers, 85% or more on their own */
+  const going = subjects.flatMap((s) => s.skills.filter((k) => k.n >= 3 && k.own / k.n >= 0.85).map((k) => ({ subject: s.id, ...k })))
+    .sort((a, b) => b.n - a.n).slice(0, 3);
+
+  /* the day log: days from the server (the family's dates), answers by their own date, finished items by last_at */
+  const log = new Map();
+  const put = (key, kind, item, o) => {
+    if (!log.has(key)) log.set(key, new Map());
+    const m = log.get(key), id = kind + ":" + item;
+    const cur = m.get(id) || { kind, item, done: false, answers: 0, right: 0, own: 0, hint: 0 };
+    if (o.done) cur.done = true;
+    if (o.answers > cur.answers) { cur.answers = o.answers; cur.right = o.right || 0; }
+    if (o.own !== undefined) { cur.own = o.own; cur.hint = o.hint; }
+    m.set(id, cur);
+  };
+  for (const d of days || []) if (d && /^\d{4}-\d{2}-\d{2}$/.test(d.day)) put(d.day, d.kind, d.item_id, { done: d.done === true, answers: Number(d.answers) || 0, right: Number(d.right_count) || 0 });
+  const byDayGame = new Map();
+  for (const r of rows) {
+    const key = dayKey(r.ms) + "|" + r.g;
+    const t = byDayGame.get(key) || { answers: 0, right: 0, own: 0, hint: 0 };
+    t.answers += 1; if (r.c) t.right += 1; if (r.c && r.h === 0) t.own += 1; if (r.c && r.h > 0) t.hint += 1;
+    byDayGame.set(key, t);
+  }
+  for (const [key, t] of byDayGame) { const [day, g] = key.split("|"); put(day, "game", g, t); }
+  for (const p of progress || []) if (p && p.last_at && !isNaN(Date.parse(p.last_at))) put(dayKey(p.last_at), p.kind, p.item_id, { done: true });
+  const dayLog = new Map([...log].map(([k, m]) => [k, [...m.values()]]));
+
+  /* engagement */
+  const periodDays = [];
+  if (!period.all) for (let i = 0; i < 7; i++) { const d = new Date(period.from); d.setDate(d.getDate() + i); periodDays.push(dayKey(d)); }
+  const inSpan = (key) => period.all ? true : periodDays.includes(key);
+  const activeKeys = [...dayLog.keys()].filter(inSpan);
+  const items = new Map();
+  for (const k of activeKeys) for (const it of dayLog.get(k)) { const id = it.kind + ":" + it.item; items.set(id, (items.get(id) || false) || it.done); }
+  const engagement = {
+    activeDays: activeKeys.length,
+    week: periodDays.map((k) => ({ key: k, letter: "SMTWTFS"[new Date(k + "T12:00:00").getDay()], on: dayLog.has(k) })),
+    completed: [...items.values()].filter(Boolean).length,
+    inProgress: [...items.values()].filter((v) => !v).length,
+    answered: totals.n,
+  };
+
+  /* progress over time: % on their own per week for the 8 weeks ending with the period, a gap when under 5 answers */
+  const end = period.all ? weekPeriod(nowMs, 0) : period;
+  const weeks = [];
+  for (let i = TREND_WEEKS - 1; i >= 0; i--) weeks.push(weekPeriod(nowMs, end.offset + i));
+  const trend = {
+    weeks: weeks.map((w) => ({ from: w.from, current: w.offset === 0 })),
+    series: subjects.map((s) => ({
+      id: s.id, label: s.label,
+      points: weeks.map((w) => {
+        const ws = rows.filter((r) => r.s === s.id && r.ms >= w.from && r.ms < w.to);
+        const own = ws.filter((r) => r.c && r.h === 0).length;
+        return { n: ws.length, own: ws.length >= MIN_EVIDENCE ? pctOf(own, ws.length) : null };
+      }),
+    })).filter((s) => s.points.some((p) => p.own !== null)),
+  };
+
+  /* the opening sentence */
+  const lower = (s) => (s.id === "reading" ? "reading and writing" : s.label.toLowerCase());
+  const and = (xs) => (xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + " and " + xs[xs.length - 1]);
+  const cons = subjects.filter((s) => s.status === "cons").map(lower);
+  const rest = subjects.filter((s) => s.status === "prac" || s.status === "dev").map(lower);
+  const who = childName || "Your child";
+  let verdict;
+  if (!totals.n) verdict = period.all ? "No questions answered yet." : "No questions answered this week.";
+  else if (cons.length) verdict = (period.all ? "Strong so far in " : "A strong week in ") + and(cons) + (rest.length ? ", with " + and(rest) + " still in practice." : ".");
+  else if (rest.length) verdict = who + " is practicing " + and(rest) + ".";
+  else verdict = who + " has started answering questions. A subject is rated after " + MIN_EVIDENCE + " answers.";
+  const q = (n) => n + (n === 1 ? " question" : " questions");
+  const verdictSub = !totals.n
+    ? "Ratings appear once " + who + " answers questions inside the games, books and activities."
+    : period.all
+      ? who + " has answered " + q(totals.n) + " built into games and books, getting " + totals.pct + "% of them right."
+      : who + " was active on " + engagement.activeDays + (period.offset ? " of those 7 days" : " of the last 7 days") + " and answered " + q(totals.n) + " built into games and books, getting " + totals.pct + "% of them right.";
+
+  return { period, span: period.all ? "all" : "week", subjects, totals, focus, going, engagement, dayLog, trend, verdict, verdictSub };
 }
 
 /** A STEAMM subject's level from the child's answers over the last 8 weeks (owner): none asked, null; fewer than 5 or
