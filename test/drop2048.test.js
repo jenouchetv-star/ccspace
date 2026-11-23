@@ -7,7 +7,7 @@ import { LINES, PHONEMES, lineKey as scriptKey } from "../scripts/drop2048-lines
 
 const game = readFileSync(new URL("../games/drop-2048.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const pure = game.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const D = new Function(pure + "; return { COLORS, SIZES, DROPS, pickDrop, mergeValue, emptyGrid, landRow, isFull, groupAt, gravity, settle, lineKey, SAY, allLines };")();
+const D = new Function(pure + "; return { COLORS, SIZES, DROPS, DROPS_BIG, dropsFor, pickDrop, mergeValue, emptyGrid, landRow, isFull, groupAt, gravity, settle, smashAt, HAMMER_EVERY, chargeAfterDrop, hammerReady, lineKey, SAY, allLines };")();
 
 let uid = 0;
 /** A grid from rows of numbers (0 = empty), top row first. */
@@ -17,11 +17,13 @@ const values = (g) => g.map(r => r.map(t => (t ? t.v : 0)));
 function dropInto(g, c, v){ const r = D.landRow(g, c); g[r][c] = { id: ++uid, v }; return D.settle(g, r, c); }
 
 describe("the rules", () => {
-  it("drops 2, 4, 8 or 16, and the boards are 5 x 5, 6 x 6 and 7 x 7", () => {
-    expect(D.DROPS.map(d => d[0])).toEqual([2, 4, 8, 16]);
+  it("drops 2, 4, 8 or 16 on 5 x 5, and 32 too on 6 x 6 and 7 x 7 (owner, 2026-11-22)", () => {
     expect(D.SIZES).toEqual([5, 6, 7]);
-    const seen = new Set(); for (let i = 0; i < 200; i++) seen.add(D.pickDrop(() => i / 200));
-    expect([...seen].sort((a, b) => a - b)).toEqual([2, 4, 8, 16]);
+    const seen = (n) => { const s = new Set(); for (let i = 0; i < 400; i++) s.add(D.pickDrop(() => i / 400, n)); return [...s].sort((a, b) => a - b); };
+    expect(seen(5)).toEqual([2, 4, 8, 16]);
+    expect(seen(6)).toEqual([2, 4, 8, 16, 32]);
+    expect(seen(7)).toEqual([2, 4, 8, 16, 32]);
+    expect(D.dropsFor(5)).toBe(D.DROPS);
   });
   it("two the same make double, and each extra one doubles again", () => {
     expect(D.mergeValue(4, 2)).toBe(8);
@@ -64,6 +66,42 @@ describe("the rules", () => {
   });
 });
 
+describe("the hammer (owner, 2026-11-22: for a younger child, after every 5 gems)", () => {
+  it("charges one light per gem dropped, is ready at 5, and never stacks", () => {
+    expect(D.HAMMER_EVERY).toBe(5);
+    let c = 0;
+    for (let i = 0; i < 4; i++) c = D.chargeAfterDrop(c);
+    expect(D.hammerReady(c)).toBe(false);
+    c = D.chargeAfterDrop(c);
+    expect(D.hammerReady(c)).toBe(true);
+    expect(D.chargeAfterDrop(c)).toBe(5);
+  });
+  it("smashes one gem: the gems above fall, and new matches smash too", () => {
+    /* smash the 4 under a 2: the 2 falls next to the other 2, and they make 4 */
+    const g = gridOf([[0, 0, 0], [0, 2, 0], [2, 4, 8]]);
+    const res = D.smashAt(g, 2, 1);
+    expect(res.moves).toEqual([expect.objectContaining({ fromR: 1, r: 2, c: 1 })]);
+    expect(res.steps.find(s => s.type === "merge")).toMatchObject({ value: 4 });
+    expect(values(g)).toEqual([[0, 0, 0], [0, 0, 0], [0, 4, 8]]);
+    expect(D.smashAt(gridOf([[0]]), 0, 0)).toBeNull();
+  });
+  it("shows the charge, waits for a tap on a gem, and rescues a full board instead of ending the game", () => {
+    expect(game).toContain('id="bHammer"');
+    expect(game).toContain('<span class="pips" id="pips"><i></i><i></i><i></i><i></i><i></i></span>');
+    expect(game).toContain("if (busy || over || hammerOn || !$(\"sStart\").hidden) return;");
+    expect(game).toContain("if (hammerReady(charge)){ say(SAY.stuck);");
+    expect(game).toContain("busy = true; hammerOn = false; charge = 0;");
+  });
+});
+
+describe("the next gem", () => {
+  it("sits at the top of the board, smaller and lighter than the gem being dropped (owner, 2026-11-22)", () => {
+    expect(game).toMatch(/<div class="topbar">\s*<div class="nextwrap"/);
+    expect(game).toContain('$("nextGem").style.setProperty("--cell", Math.max(30, Math.round(cell * .5)) + "px");');
+    expect(game).toMatch(/\.nextgem\{[^}]*opacity:\.55;/);
+  });
+});
+
 describe("the look, the feel and the voice", () => {
   it("never stops for a quiz (owner, 2026-11-22) and sends no answers", () => {
     expect(game).not.toMatch(/quizFor|askQuiz|id="sQuiz"|ccsAnswer|Quick question/);
@@ -96,7 +134,7 @@ describe("the look, the feel and the voice", () => {
   });
   it("has a recorded clip in Heart's voice for every line, keyed the same way as the game", () => {
     expect(LINES).toEqual(D.allLines());
-    expect(LINES).toHaveLength(7);
+    expect(LINES).toHaveLength(9);
     for (const t of LINES){
       expect(scriptKey(t)).toBe(D.lineKey(t));
       expect(existsSync(new URL("../assets/games/drop-2048/voice/" + D.lineKey(t) + ".mp3", import.meta.url)), t).toBe(true);
