@@ -57,6 +57,7 @@ describe("the voice in the game", () => {
     expect(html).toContain('<script src="/games/game-sound.js"></script>');
     expect(html).toContain('var vb = CCSSound.mixer({ className: "voice-vol" });');
     expect(html).toContain('$("voice").after(vb);');
-    expect(html).toContain('CCSSound.onVolume(function(v){ voiceNow.volume = v.sfx; });');
+    /* every voice at 80% (owner, 2026-11-23) */
+    expect(html).toContain('CCSSound.onVolume(function(v){ voiceNow.volume = 0.8 * v.sfx; });');
   });
 });

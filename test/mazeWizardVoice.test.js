@@ -30,6 +30,7 @@ describe("the wizard's voice", () => {
   });
   it("follows the sound button and the volume panel", () => {
     expect(html).toContain("wizQueue = (window.CCSSound && !CCSSound.isOn()) ? [] : texts.filter(Boolean);");
-    expect(html).toContain("wizVoice.volume = window.CCSSound && CCSSound.volume ? CCSSound.volume('sfx') : 1;");
+    /* every voice at 80% (owner, 2026-11-23) */
+    expect(html).toContain("wizVoice.volume = 0.8 * (window.CCSSound && CCSSound.volume ? CCSSound.volume('sfx') : 1);");
   });
 });
