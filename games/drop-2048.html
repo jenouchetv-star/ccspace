@@ -244,10 +244,12 @@
 const COLORS = { 2:"#FFB703", 4:"#FB8500", 8:"#EF476F", 16:"#9B5DE5", 32:"#3A86FF", 64:"#06D6A0", 128:"#00B4D8", 256:"#F15BB5", 512:"#8338EC", 1024:"#FF006E", 2048:"#E0A800" };
 const colorOf = (v) => COLORS[v] || "#1E2226";
 const SIZES = [5, 6, 7];
-/* what drops (owner, 2026-11-22: 2, 4, 8 or 16; the 6 x 6 and 7 x 7 boards drop 32 too), and how often */
+/* what drops, and how often (owner, 2026-11-22 and -23): 2, 4, 8 or 16 on 5 x 5; 32 and 64 too on 6 x 6; and 128 too
+   on 7 x 7 (the owner wrote 124; 128 is the gem on the way to 2048) */
 const DROPS = [[2, 34], [4, 30], [8, 22], [16, 14]];
-const DROPS_BIG = DROPS.concat([[32, 9]]);
-const dropsFor = (n) => (n >= 6 ? DROPS_BIG : DROPS);
+const DROPS_6 = DROPS.concat([[32, 9], [64, 5]]);
+const DROPS_7 = DROPS_6.concat([[128, 3]]);
+const dropsFor = (n) => (n >= 7 ? DROPS_7 : n === 6 ? DROPS_6 : DROPS);
 function pickDrop(rand, n){ const list = dropsFor(n || 5), tot = list.reduce((s, d) => s + d[1], 0); let r = rand() * tot; for (const [v, w] of list){ if ((r -= w) < 0) return v; } return 2; }
 /* the hammer (owner, 2026-11-22): for a younger child, it smashes one gem, and it charges up again after every 5 gems
    dropped. It never stacks: one smash, then 5 more drops. */
@@ -286,11 +288,16 @@ function smashAt(grid, r, c){
   const moves = gravity(grid);
   return { id: t.id, r, c, moves, steps: settleFrom(grid, moves.map(m => [m.r, m.c])) };
 }
+/* The gems to check are kept by id, newest first, so no waiting match is forgotten when another merges first (a fall
+   can make two matches at once: owner, 2026-11-23, "some of the matching gems are not merging"). When none of them
+   has a match, the whole board is checked, lowest row first, so two touching gems with the same number never stay. */
 function settleFrom(grid, start){
-  const steps = []; let active = start, chain = 0;
+  const steps = []; let chain = 0;
+  let pending = start.map(([y, x]) => grid[y] && grid[y][x] && grid[y][x].id).filter(Boolean);
   for (;;){
     let hit = null;
-    for (const [y, x] of active){ if (!grid[y] || !grid[y][x]) continue; const g = groupAt(grid, y, x); if (g.length >= 2){ hit = { y, x, g }; break; } }
+    for (const id of pending){ const p = findId(grid, id); if (!p) continue; const g = groupAt(grid, p[0], p[1]); if (g.length >= 2){ hit = { y: p[0], x: p[1], g }; break; } }
+    if (!hit) hit = scanBoard(grid);
     if (!hit) break;
     chain++;
     const t = grid[hit.y][hit.x], value = mergeValue(t.v, hit.g.length);
@@ -300,9 +307,21 @@ function settleFrom(grid, start){
     steps.push({ type: "merge", id: t.id, r: hit.y, c: hit.x, from, value, chain });
     const moves = gravity(grid);
     if (moves.length) steps.push({ type: "fall", moves });
-    active = [findId(grid, t.id)].concat(moves.map(m => [m.r, m.c]));
+    const gone = new Set(from.map(f => f.id));
+    pending = [t.id].concat(moves.map(m => m.id), pending.filter(id => id !== t.id && !gone.has(id)));
+    pending = pending.filter((id, i) => pending.indexOf(id) === i);
   }
   return steps;
+}
+/** Any two touching gems with the same number left on the board, lowest row first: the lowest of them takes the merge. */
+function scanBoard(grid){
+  const n = grid.length;
+  for (let r = n - 1; r >= 0; r--) for (let c = 0; c < n; c++){
+    if (!grid[r][c]) continue;
+    const g = groupAt(grid, r, c);
+    if (g.length >= 2) return { y: r, x: c, g };
+  }
+  return null;
 }
 /* the voice: pre-recorded clips (Kokoro, Heart), named by a hash of the line, like Write with Yuna */
 function lineKey(text){

@@ -7,7 +7,7 @@ import { LINES, PHONEMES, lineKey as scriptKey } from "../scripts/drop2048-lines
 
 const game = readFileSync(new URL("../games/drop-2048.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const pure = game.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const D = new Function(pure + "; return { COLORS, SIZES, DROPS, DROPS_BIG, dropsFor, pickDrop, mergeValue, emptyGrid, landRow, isFull, groupAt, gravity, settle, smashAt, HAMMER_EVERY, chargeAfterDrop, hammerReady, lineKey, SAY, allLines };")();
+const D = new Function(pure + "; return { COLORS, SIZES, DROPS, DROPS_6, DROPS_7, dropsFor, pickDrop, scanBoard, mergeValue, emptyGrid, landRow, isFull, groupAt, gravity, settle, smashAt, HAMMER_EVERY, chargeAfterDrop, hammerReady, lineKey, SAY, allLines };")();
 
 let uid = 0;
 /** A grid from rows of numbers (0 = empty), top row first. */
@@ -17,13 +17,34 @@ const values = (g) => g.map(r => r.map(t => (t ? t.v : 0)));
 function dropInto(g, c, v){ const r = D.landRow(g, c); g[r][c] = { id: ++uid, v }; return D.settle(g, r, c); }
 
 describe("the rules", () => {
-  it("drops 2, 4, 8 or 16 on 5 x 5, and 32 too on 6 x 6 and 7 x 7 (owner, 2026-11-22)", () => {
+  it("drops 2 to 16 on 5 x 5, up to 64 on 6 x 6, and up to 128 on 7 x 7 (owner, 2026-11-22 and -23)", () => {
     expect(D.SIZES).toEqual([5, 6, 7]);
-    const seen = (n) => { const s = new Set(); for (let i = 0; i < 400; i++) s.add(D.pickDrop(() => i / 400, n)); return [...s].sort((a, b) => a - b); };
+    const seen = (n) => { const s = new Set(); for (let i = 0; i < 1000; i++) s.add(D.pickDrop(() => i / 1000, n)); return [...s].sort((a, b) => a - b); };
     expect(seen(5)).toEqual([2, 4, 8, 16]);
-    expect(seen(6)).toEqual([2, 4, 8, 16, 32]);
-    expect(seen(7)).toEqual([2, 4, 8, 16, 32]);
+    expect(seen(6)).toEqual([2, 4, 8, 16, 32, 64]);
+    expect(seen(7)).toEqual([2, 4, 8, 16, 32, 64, 128]);
     expect(D.dropsFor(5)).toBe(D.DROPS);
+    /* the big ones are rare */
+    expect(D.DROPS_7.find(d => d[0] === 128)[1]).toBeLessThan(D.DROPS_7.find(d => d[0] === 64)[1]);
+  });
+  it("never leaves two touching gems with the same number (owner, 2026-11-23: some were not merging)", () => {
+    /* one fall makes two matches at once: both must merge, not just the first */
+    const g = gridOf([[0, 0, 0, 0], [0, 4, 0, 0], [2, 8, 4, 0], [2, 8, 4, 0]].map(r => r.map(v => v)));
+    D.settle(g, 3, 0);
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++){ if (!g[r][c]) continue; expect(D.groupAt(g, r, c).length, r + "," + c).toBe(1); }
+    /* and 300 random games on every board, checked after every drop */
+    let seed = 7; const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let game = 0; game < 300; game++){
+      const n = D.SIZES[game % 3], b = D.emptyGrid(n);
+      for (let k = 0; k < 120; k++){
+        const c = Math.floor(rand() * n), r = D.landRow(b, c);
+        if (r < 0){ if (D.isFull(b)) break; continue; }
+        b[r][c] = { id: ++uid, v: D.pickDrop(rand, n) };
+        D.settle(b, r, c);
+        expect(D.scanBoard(b), "game " + game + " drop " + k).toBeNull();
+        for (let x = 0; x < n; x++) for (let y = 0; y < n - 1; y++) if (b[y][x]) expect(b[y + 1][x], "floating gem").not.toBeNull();
+      }
+    }
   });
   it("two the same make double, and each extra one doubles again", () => {
     expect(D.mergeValue(4, 2)).toBe(8);
