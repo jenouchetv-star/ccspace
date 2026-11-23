@@ -336,17 +336,19 @@ export function parentReport({ answerRows, days, progress, now, weekOffset = 0, 
   const put = (key, kind, item, o) => {
     if (!log.has(key)) log.set(key, new Map());
     const m = log.get(key), id = kind + ":" + item;
-    const cur = m.get(id) || { kind, item, done: false, answers: 0, right: 0, own: 0, hint: 0 };
+    const cur = m.get(id) || { kind, item, done: false, answers: 0, right: 0, own: 0, hint: 0, subjects: [] };
     if (o.done) cur.done = true;
     if (o.answers > cur.answers) { cur.answers = o.answers; cur.right = o.right || 0; }
     if (o.own !== undefined) { cur.own = o.own; cur.hint = o.hint; }
+    if (o.subjects) cur.subjects = REPORT_SUBJECTS.map((s) => s.id).filter((id) => o.subjects.has(id));
     m.set(id, cur);
   };
   for (const d of days || []) if (d && /^\d{4}-\d{2}-\d{2}$/.test(d.day)) put(d.day, d.kind, d.item_id, { done: d.done === true, answers: Number(d.answers) || 0, right: Number(d.right_count) || 0 });
   const byDayGame = new Map();
   for (const r of rows) {
     const key = dayKey(r.ms) + "|" + r.g;
-    const t = byDayGame.get(key) || { answers: 0, right: 0, own: 0, hint: 0 };
+    const t = byDayGame.get(key) || { answers: 0, right: 0, own: 0, hint: 0, subjects: new Set() };
+    t.subjects.add(r.s);
     t.answers += 1; if (r.c) t.right += 1; if (r.c && r.h === 0) t.own += 1; if (r.c && r.h > 0) t.hint += 1;
     byDayGame.set(key, t);
   }

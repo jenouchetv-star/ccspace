@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import {
   recordTarget, quizBubbleAllowed, GRADE_LABELS, gradeLabel, STEAMM_SUBJECTS, nuggetsFor, parseNuggetId, subjectFromTopic,
   answerFromMessage, buildReport, READING_SUBJECT, playingFromStored, playingToStore,
+  parentReport, REPORT_WEEKS, STATUS_LABELS, MIN_EVIDENCE, REPORT_SUBJECTS, dayKey,
 } from "../assets/lib/progress.js";
 import { AVATAR_IDS, avatarName, avatarFor, avatarSVG } from "../assets/lib/avatars.js";
 
@@ -56,25 +57,17 @@ describe("the progress report page", () => {
     expect(a).not.toMatch(/localStorage|sessionStorage/);
   });
 
-  it("the report uses the three containers", () => {
+  it("the report is the parent report: a header and four tabs, worked out by parentReport (owner, 2026-11-23)", () => {
     const r = body("progressReportHTML");
-    for (const c of ["box--week", "box--learned", "box--ask"]) expect(r).toContain(c);
-    expect(r).toContain("buildReport(");
+    expect(r).toContain("parentReport({ answerRows: raw.answerRows, days: raw.days, progress: raw.progress");
+    for (const t of ['["sum", "file-text", "Summary"]', '["subj", "list-checks", "By subject"]', '["log", "calendar-days", "Activity log"]', '["method", "info", "How it’s scored"]']) expect(r).toContain(t);
+    expect(r).toContain('role="tablist"');
+    expect(r).not.toContain("buildReport(");
   });
 
-  it("the learned container shows the six STEAMM subjects with the site's icons", () => {
-    const r = body("progressReportHTML");
-    expect(r).toContain("bySubject");
-    expect(r).toContain("STEAMM_ICONS[");
-    expect(r).toContain("Knows it");
-    expect(r).toContain("Came across it");
-    expect(r).toContain("Still remembered it 2 months later");
-  });
-
-  it("shows quizzes as so many right, never a score", () => {
-    const r = body("progressReportHTML");
-    expect(r).toContain('" of " + q.asked + " right"');
-    expect(r).not.toMatch(/%|out of 100|score/i);
+  it("never puts a page action on a link, which would leave the page", () => {
+    expect(body("progressReportHTML")).not.toMatch(/<a [^>]*data-act=/);
+    expect(body("progressDrawTrend")).not.toMatch(/<a [^>]*data-act=/);
   });
 
   it("escapes every child name and content title", () => {
@@ -225,11 +218,11 @@ describe("who's playing, and recording what a child finishes", () => {
     const S = { children: kids };
     let pick = playing;
     const record = fn("progressRecord", "portalSavedSession", "progressKids", "recordTarget", "progressPlaying", "openWhoIsPlaying",
-      "kidCall", "progressSessionEnded", "ProgressState", "progressSetPlaying", "renderTourRoot", "progressPaintMade", "PROGRESS_ASKED", "async ")(
+      "kidCall", "progressSessionEnded", "ProgressState", "progressSetPlaying", "renderTourRoot", "progressPaintMade", "PROGRESS_ASKED", "dayKey", "async ")(
       () => session, async () => (session ? S.children || [] : []), recordTarget, () => pick,
       (after) => { calls.asked++; calls.after = after; },
       async (action, extra) => { calls.kid.push([action, extra]); return typeof answer === "function" ? answer(extra) : answer; },
-      (r) => !!r && r.error === "no_session", S, (v) => { pick = v; calls.picked.push(v); }, () => {}, () => {}, false);
+      (r) => !!r && r.error === "no_session", S, (v) => { pick = v; calls.picked.push(v); }, () => {}, () => {}, false, () => "2026-11-23");
     return { record, calls, S, setPick: (v) => { pick = v; } };
   };
 
@@ -247,7 +240,7 @@ describe("who's playing, and recording what a child finishes", () => {
     expect(grown.calls.asked).toBe(0);
     const maya = recorder({ playing: "c1" });
     await maya.record("book", "story-question-mark");
-    expect(maya.calls.kid).toEqual([["record", { child: "c1", kind: "book", item: "story-question-mark" }]]);
+    expect(maya.calls.kid).toEqual([["record", { child: "c1", kind: "book", item: "story-question-mark", day: "2026-11-23" }]]);   // day: the family's date
   });
 
   it("asks who's playing once per page load, then records for the child picked", async () => {
@@ -257,7 +250,7 @@ describe("who's playing, and recording what a child finishes", () => {
     expect(t.calls.kid).toEqual([]);
     t.setPick("c2");
     await t.calls.after();
-    expect(t.calls.kid).toEqual([["record", { child: "c2", kind: "entry", item: "e1" }]]);
+    expect(t.calls.kid).toEqual([["record", { child: "c2", kind: "entry", item: "e1", day: "2026-11-23" }]]);
     t.setPick("");
     await t.record("episode", "v2");
     expect(t.calls.asked).toBe(1);                              // not asked a second time on this page load
@@ -468,10 +461,10 @@ describe("answers from the site's games, and the report's levels", () => {
     const S = { children: kids, reports: { c1: { ok: true }, c2: { ok: true } } };
     const doc = { getElementById: (id) => (id === "gamestage-frame" ? { contentWindow: win } : null) };
     const send = fn("progressGameAnswer", "document", "answerFromMessage", "portalSavedSession", "progressKids", "recordTarget",
-      "progressPlaying", "kidCall", "progressSessionEnded", "ProgressState", "portalIsAdmin", "async ")(
+      "progressPlaying", "kidCall", "progressSessionEnded", "ProgressState", "portalIsAdmin", "dayKey", "async ")(
       doc, answerFromMessage, () => session, async () => (session ? kids : []), recordTarget, () => playing,
       async (action, extra) => { calls.kid.push([action, extra]); return reply; },
-      (r) => { calls.ended.push(r); return !!r && r.error === "no_session"; }, S, () => admin);
+      (r) => { calls.ended.push(r); return !!r && r.error === "no_session"; }, S, () => admin, () => "2026-11-23");
     return { send, calls, S, win };
   };
 
@@ -483,7 +476,7 @@ describe("answers from the site's games, and the report's levels", () => {
     await t.send({ source: t.win, data: { ccsAnswer: { ...ANSWER, subject: "history" } } });   // not a real answer
     expect(t.calls.kid).toEqual([]);
     await t.send({ source: t.win, data: { ccsAnswer: ANSWER } });
-    expect(t.calls.kid).toEqual([["game_answer", { child: "c1", ...ANSWER }]]);
+    expect(t.calls.kid).toEqual([["game_answer", { child: "c1", day: "2026-11-23", ...ANSWER }]]);
     const empty = answerer({ frameWin: null });                              // a stage with no page in it yet
     await empty.send({ source: null, data: { ccsAnswer: ANSWER } });
     expect(empty.calls.kid).toEqual([]);
@@ -501,7 +494,7 @@ describe("answers from the site's games, and the report's levels", () => {
     expect(body("progressGameAnswer")).not.toContain("openWhoIsPlaying");   // an answer never opens the picker
     const leo = answerer({ playing: "c2" });
     await leo.send({ source: leo.win, data: { ccsAnswer: { ...ANSWER, correct: true } } });
-    expect(leo.calls.kid).toEqual([["game_answer", { child: "c2", ...ANSWER, correct: true }]]);
+    expect(leo.calls.kid).toEqual([["game_answer", { child: "c2", day: "2026-11-23", ...ANSWER, correct: true }]]);
     expect(leo.S.reports.c2).toBeUndefined();                                // the report reads the answers again
     expect(leo.S.reports.c1).toEqual({ ok: true });
     const out = answerer({ reply: { ok: false, error: "no_session" } });
@@ -520,99 +513,63 @@ describe("answers from the site's games, and the report's levels", () => {
     expect(b.indexOf("if (portalIsAdmin()) return;")).toBeLessThan(b.indexOf("kidCall("));
   });
 
-  /* the report drawn with pretend parts and the real buildReport */
-  const ONE_EPISODE = [{ kind: "episode", item_id: "v1", first_at: "2026-11-20T10:00:00Z", last_at: "2026-11-20T10:00:00Z", times: 1 }];
-  const report = (answers, progress = ONE_EPISODE, span = "all") => {
-    const S = { children: KIDS, reportFor: "c1", span, reports: { c1: {
-      ok: true, progress,
-      nuggets: [], lessons: [], subjects: { "episode:v1:discovery": "engineering" }, quizzes: [], answers } }, reportLoading: {} };
-    const videos = { v1: { id: "v1", title: "Bridges", learning: "Triangles are strong.", moral: "" } };
-    return fn("progressReportHTML", "ProgressState", "E", "ic", "progressRange", "progressLoadReport", "progressSkeleton", "progressContent",
-      "buildReport", "parseNuggetId", "progressAnd", "progressWhen", "progressSubjectLabel", "thumbSrc", "STEAMM_ICONS", "avatarSVG", "avatarFor", "READING_SUBJECT")(
-      S, esc, () => "", () => "", () => {}, () => "", () => ({ find: (k, id) => (k === "episode" ? videos[id] : null) || null }),
-      buildReport, parseNuggetId, (l) => l.join(" and "), () => "Friday", (id) => (STEAMM_SUBJECTS.find((s) => s.id === id) || {}).label || "",
-      (s) => s, {}, avatarSVG, avatarFor, READING_SUBJECT)();
+  /* the parent report drawn with pretend parts and the real parentReport, on Monday, November 23, 2026, 9:14 AM */
+  const NOW = new Date(2026, 10, 23, 9, 14).getTime();
+  class FakeDate extends Date { constructor(...a){ if (a.length) super(...a); else super(NOW); } static now(){ return NOW; } }
+  const RP = html.split("const RP_SUBJECT = {")[1].split("/** One child's report")[0];
+  const GAMES = [{ id: "game-spacetime", title: "Solar System Sandbox", portalSlug: "solar-system-sandbox", summary: "Fly around a 3D solar system.", cover: { src: "s.jpg" } }];
+  const draw = (raw, state = {}) => {
+    const S = Object.assign({ children: KIDS, reportFor: "c1", span: "week", reports: { c1: raw }, reportLoading: {}, tab: "sum", weekOffset: 0 }, state);
+    const make = new Function("ProgressState", "E", "ic", "progressLoadReport", "progressSkeleton", "parentReport", "REPORT_WEEKS", "STATUS_LABELS", "MIN_EVIDENCE",
+      "REPORT_SUBJECTS", "dayKey", "avatarSVG", "avatarFor", "gradeLabel", "STEAMM_ICONS", "db", "progressContent", "progressAnd", "thumbSrc", "Date",
+      "const RP_SUBJECT = {" + RP + "\nreturn function progressReportHTML(" + body("progressReportHTML"));
+    return make(S, esc, () => "", () => {}, () => "loading", parentReport, REPORT_WEEKS, STATUS_LABELS, MIN_EVIDENCE, REPORT_SUBJECTS, dayKey, avatarSVG, avatarFor, gradeLabel,
+      {}, { list: (t) => (t === "games" ? GAMES : []) }, () => ({ find: () => null }), (l) => l.join(" and "), (x) => x, FakeDate)();
   };
-  const subjectsOf = (h) => h.split('<ul class="pr-subjects"')[1].split("</ul>")[0];
+  const at = (d, h = 10) => new Date(2026, 10, d, h).toISOString();
+  const ROWS = [
+    ...Array.from({ length: 6 }, (_, i) => ({ g: "solar-system-sandbox", q: "mars-" + i, s: "science", k: "Mars", c: true, h: 0, at: at(22) })),
+    ...Array.from({ length: 6 }, (_, i) => ({ g: "solar-system-sandbox", q: "moon-" + i, s: "science", k: "The Moon", c: i > 0, h: 0, at: at(23),
+      ...(i === 0 ? { qt: "<img src=x onerror=alert(1)>Moons?", a: "<b>Two</b>", gv: "<script>x</script>", w: "Why" } : {}) })),
+  ];
 
-  it("the week's pictures fall back to the full picture when the small copy is missing (owner, 2026-11-22)", () => {
-    const strip = body("progressReportHTML").split("const strip =")[1].split("const boxWeek")[0];
-    expect(strip).toContain(`'<img class="skel" src="' + E(thumbSrc(it.img)) + '" data-full="' + E(it.img) + '" alt="" loading="lazy">'`);
-    expect(body("progressQuizFrom")).toContain('full: pic || ""');
+  it("draws the four tabs, only the chosen one showing", () => {
+    const h = draw({ ok: true, progress: [], answerRows: ROWS, days: [] });
+    for (const id of ["sum", "subj", "log", "method"]) expect(h).toContain('id="rp-p-' + id + '"');
+    expect(h.match(/role="tabpanel"[^>]* hidden>/g)).toHaveLength(3);
+    expect(h).toContain('aria-selected="true" data-act="progress-tab" data-tab="sum"');
+    expect(h).toContain("A strong week in science.");
+    expect(h).toContain("Maya’s progress report");
+    expect(h.split('<ul class="rp-glance">')[1].split("</ul>")[0].split("<li>").length - 1).toBe(7);   // seven subject cards
+    expect(h).not.toContain("undefined");
   });
 
-  it("subjects with no answers show no level", () => {
-    const none = report(undefined);
-    expect(none).not.toContain("pr-level");
-    expect(none).not.toMatch(/Getting started|Growing|Strong/);
-    const h = report({ bySubject: { science: { asked: 6, right: 4 } }, missed: [] });
-    const items = subjectsOf(h).split("<li").slice(1);
-    expect(items[0]).toContain("<b>Science</b>");
-    expect(items[0]).toContain('<span class="pr-level">Growing</span>');
-    expect(items[0]).not.toContain("pr-none");                             // answered, so not greyed out
-    expect(items[0]).not.toContain("nothing yet");
-    expect(items[2]).toContain("<b>Engineering</b><span>1 thing");           // the counts stay as they were
-    for (const i of [1, 2, 3, 4, 5]) expect(items[i]).not.toContain("pr-level");
-    expect(h).not.toMatch(/\d+ ?%|4 of 6|out of/);                         // a word, never a number
+  it("shows only escaped text from games and children", () => {
+    const h = draw({ ok: true, progress: [], answerRows: ROWS, days: [] }, { tab: "subj", openSubj: new Set(["science"]) });
+    expect(h).toContain("&lt;img src=x onerror=alert(1)&gt;Moons?");
+    expect(h).toContain("&lt;script&gt;x&lt;/script&gt;");
+    expect(h).not.toMatch(/<img src=x|<script>|<b>Two/);
   });
 
-  it("Reading and Writing sits after the six STEAMM subjects, set apart by a line (owner, 2026-11-22)", () => {
-    const none = subjectsOf(report(undefined)).split("<li").slice(1);
-    expect(none).toHaveLength(8);                                           // six subjects, the line, Reading and Writing
-    expect(none[6]).toContain('class="pr-sep"');
-    expect(none[6]).toContain('aria-hidden="true"');
-    expect(none[7]).toContain("<b>Reading and Writing</b>");
-    expect(none[7]).toContain("pr-none");
-    expect(none[7]).toContain("nothing yet");
-    const items = subjectsOf(report({ bySubject: { reading: { asked: 6, right: 5 } }, missed: [] })).split("<li").slice(1);
-    expect(items[7]).toContain('<span class="pr-level">Strong</span>');
-    expect(items[7]).not.toContain("pr-none");
-    expect(items[7]).not.toContain("nothing yet");
-    for (const i of [0, 1, 2, 3, 4, 5]) expect(items[i]).not.toContain("pr-level");
-    // the heading still says STEAMM: Reading and Writing is beside it, not one of its subjects
-    expect(report(undefined)).toContain("by STEAMM subject");
+  it("links a game to its own page with what it is, opening in a new tab", () => {
+    const h = draw({ ok: true, progress: [], answerRows: ROWS, days: [] }, { tab: "log", day: "2026-11-23" });
+    expect(h).toContain('<a href="#/play/game-spacetime" target="_blank" rel="noopener">Solar System Sandbox');
+    expect(h).toContain("Game. Fly around a 3D solar system.");
   });
 
-  it("questions to go over", () => {
-    expect(report({ bySubject: {}, missed: [] })).not.toContain("Questions to go over");
-    const missed = [1, 2, 3, 4, 5, 6, 7].map((n) => ({ game: "solar-system-sandbox", question: "Question " + n + "?", answer: "Answer " + n, why: "Why " + n, at: "2026-11-1" + n + "T10:00:00Z" }));
-    missed[0] = { ...missed[0], question: "<img src=x onerror=alert(1)>Which?", answer: "<b>Mars</b>", why: "<script>x</script>" };
-    const h = report({ bySubject: { science: { asked: 7, right: 0 } }, missed });
-    const learned = h.split('box--learned')[1].split("</section>")[0];
-    expect(learned).toContain('<h3 class="pr-quiz-title">Questions to go over</h3>');
-    expect(learned.indexOf("pr-learned")).toBeLessThan(learned.indexOf("Questions to go over"));   // below the facts
-    const list = learned.split('<ul class="pr-goover">')[1].split("</ul>")[0];
-    expect(list.split("<li>").length - 1).toBe(5);
-    expect(list).toContain("<span>The answer: Answer 2</span><p>Why 2</p>");
-    expect(list).not.toContain("Question 6?");
-    expect(list).not.toMatch(/<img|<script|<b>Mars/);                        // what a browser sent is only shown escaped
-    expect(list).toContain("&lt;img src=x onerror=alert(1)&gt;Which?");
-    expect(h.split("box--").length - 1).toBe(3);                            // no new box
+  it("an empty report says so plainly, and the week after today cannot be picked", () => {
+    const h = draw({ ok: true, progress: [] });
+    expect(h).toContain("No questions answered this week.");
+    expect(h.match(/Not enough evidence yet/g).length).toBeGreaterThanOrEqual(7);
+    expect(h).toContain('aria-label="The week after" disabled');
+    expect(h).not.toContain("undefined");
   });
 
-  it("a report with answers but nothing else recorded still draws the levels and questions to go over", () => {
-    const answers = { bySubject: { science: { asked: 3, right: 1 } },
-      missed: [{ game: "solar-system-sandbox", question: "Which planet is biggest?", answer: "Jupiter", why: "Jupiter is the biggest planet.", at: "2026-11-20T10:00:00Z" }] };
-    for (const span of ["week", "all"]) {
-      const h = report(answers, [], span);
-      const weekBox = h.split("box--week")[1].split("box--learned")[0];
-      expect(weekBox).toContain("Maya answered questions in the games.");     // the week box does not say "nothing"
-      expect(weekBox).toContain("See how it went under What Maya learned.");
-      expect(weekBox).not.toMatch(/Nothing recorded|A quiet week/);
-      expect(weekBox).not.toContain("pr-strip");                               // no pictures to show
-      const learned = h.split("box--learned")[1].split("</section>")[0];
-      expect(learned).toContain('<span class="pr-level">Getting started</span>');
-      expect(learned).toContain("<b>Which planet is biggest?</b><span>The answer: Jupiter</span><p>Jupiter is the biggest planet.</p>");
-      expect(learned).not.toContain('<ul class="pr-learned">');               // no facts to list
-      expect(h).toContain("box--ask");
-      expect(h).not.toContain("undefined");
-    }
-    const empty = report({ bySubject: {}, missed: [] }, []);                  // truly nothing: unchanged
-    expect(empty).not.toContain("box--learned");
-    expect(empty).toContain("Nothing recorded for Maya yet.");
-    expect(empty).toContain("When Maya watches an episode, reads a book, tries a lesson or makes an activity on a device where you are signed in, I write it down here.");
-    expect(empty).not.toContain("answered questions");
-    expect(report(answers)).toContain("Everything Maya has done so far.");     // with items, the usual headings
+  it("the trend chart draws from the page's numbers after the page is on screen", () => {
+    expect(body("progressAfterRender")).toContain('if (AppState.route && AppState.route.name === "progress") progressDrawTrend();');
+    const d = body("progressDrawTrend");
+    expect(d).toContain("if (!box || !tr || !box.offsetParent) return;");   // a hidden tab measures 0 wide: drawn when shown
+    expect(d).toContain("tip.innerHTML = '<b>' + E(");                     // every label escaped
   });
 
   it("no em dashes and no he/she in the new copy", () => {
@@ -947,7 +904,7 @@ describe("Your children: edit and remove as icons (owner, 2026-11-21)", () => {
 
   it("the report opens with the child's avatar, not Chike", () => {
     const r = body("progressReportHTML");
-    expect(r).toContain("'<span class=\"kid-av kid-av--lg\">' + avatarSVG(avatarFor(child)) + '</span>'");
+    expect(r).toContain("'<span class=\"rp-av\" aria-hidden=\"true\">' + avatarSVG(avatarFor(child)) + '</span>'");
     expect(r).not.toContain("chike-avatar-moving");
     expect(html).toContain('import * as Avatars from "./assets/lib/avatars.js";');
   });

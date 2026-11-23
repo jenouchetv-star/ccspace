@@ -90,7 +90,8 @@ describe("the report", () => {
 
   it("logs each day: games from their answers, finished books from the day log and from progress", () => {
     expect(r.dayLog.get("2026-11-21").map((x) => x.kind + ":" + x.item).sort()).toEqual(["book:flying-box", "book:space-adventure", "game:math-runner"]);
-    expect(r.dayLog.get("2026-11-23").find((x) => x.item === "solar-system-sandbox")).toMatchObject({ answers: 6, right: 6, own: 6 });
+    expect(r.dayLog.get("2026-11-23").find((x) => x.item === "solar-system-sandbox")).toMatchObject({ answers: 6, right: 6, own: 6, subjects: ["science"] });
+    expect(r.dayLog.get("2026-11-21").find((x) => x.item === "flying-box").subjects).toEqual([]);
     expect(r.dayLog.get("2026-11-12")).toHaveLength(1);
   });
 
