@@ -265,7 +265,11 @@ export function dayKey(d) {
 /** The 7 days a week offset covers, in the family's time zone: offset 0 is the 7 days ending today, 1 the 7 before
     that, and so on (never below 0, never past 26 weeks back). from is the first day's start, to the day after the last. */
 export function weekPeriod(now, offset) {
-  const k = Math.max(0, Math.min(REPORT_WEEKS - 1, Math.floor(Number(offset) || 0)));
+  return periodAt(now, Math.max(0, Math.min(REPORT_WEEKS - 1, Math.floor(Number(offset) || 0))));
+}
+/* the 7 days k weeks back, with no limit: the trend can reach past the 26 weeks the server returns (those weeks are
+   simply empty) without repeating the last one */
+function periodAt(now, k) {
   const t = new Date(now);
   const to = new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1 - 7 * k);
   const from = new Date(to.getFullYear(), to.getMonth(), to.getDate() - 7);
@@ -374,7 +378,7 @@ export function parentReport({ answerRows, days, progress, now, weekOffset = 0, 
   /* progress over time: % on their own per week for the 8 weeks ending with the period, a gap when under 5 answers */
   const end = period.all ? weekPeriod(nowMs, 0) : period;
   const weeks = [];
-  for (let i = TREND_WEEKS - 1; i >= 0; i--) weeks.push(weekPeriod(nowMs, end.offset + i));
+  for (let i = TREND_WEEKS - 1; i >= 0; i--) weeks.push(periodAt(nowMs, end.offset + i));
   const trend = {
     weeks: weeks.map((w) => ({ from: w.from, current: w.offset === 0 })),
     series: subjects.map((s) => ({

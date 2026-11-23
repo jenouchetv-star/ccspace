@@ -125,6 +125,13 @@ describe("the report", () => {
     expect(all.engagement.week).toEqual([]);
   });
 
+  it("never repeats a week in the trend, even 25 weeks back", () => {
+    const far = parentReport({ answerRows: rows, now: NOW, weekOffset: 25 });
+    const froms = far.trend.weeks.map((w) => w.from);
+    expect(new Set(froms).size).toBe(8);
+    expect(froms).toEqual([...froms].sort((a, b) => a - b));
+  });
+
   it("still works with nothing at all", () => {
     const empty = parentReport({ now: NOW, childName: "Zech" });
     expect(empty.subjects.every((s) => s.status === "none")).toBe(true);

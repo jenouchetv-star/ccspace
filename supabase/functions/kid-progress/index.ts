@@ -335,16 +335,11 @@ Deno.serve(async (req) => {
   async function addToDay(childId: string, day: string, kind: string, item: string, add: { done?: boolean; answers?: number; right?: number }) {
     try {
       if (!DAY_KINDS.includes(kind)) return;
-      const { data: old, error: oldError } = await db.from("child_days").select("done, answers, right_count")
-        .eq("child_id", childId).eq("day", day).eq("kind", kind).eq("item_id", item).maybeSingle();
-      if (oldError) throw new Error(oldError.message);
-      const { error } = await db.from("child_days").upsert({
-        child_id: childId, day, kind, item_id: item,
-        done: Boolean(old?.done) || Boolean(add.done),
-        answers: Number(old?.answers || 0) + (add.answers || 0),
-        right_count: Number(old?.right_count || 0) + (add.right || 0),
-        last_at: nowDate.toISOString(),
-      }, { onConflict: "child_id,day,kind,item_id" });
+      // one statement in the database (child_days_add), so two answers arriving together both count
+      const { error } = await db.rpc("child_days_add", {
+        p_child: childId, p_day: day, p_kind: kind, p_item: item,
+        p_done: Boolean(add.done), p_answers: add.answers || 0, p_right: add.right || 0,
+      });
       if (error) throw new Error(error.message);
     } catch (e) {
       console.error("kid-progress: day not kept for the report:", e instanceof Error ? e.message : e);
@@ -358,9 +353,16 @@ Deno.serve(async (req) => {
     const since = new Date(now - REPORT_DAYS * DAY_MS).toISOString();
     // deno-lint-ignore no-explicit-any
     const out: any[] = [];
+    // before supabase/progress-days.sql is applied the new columns are missing: read without them rather than nothing
+    let columns = "id, game, qid, subject, skill, correct, hints, question, answer, given, why, at";
     for (let from = 0; out.length < MAX_ANSWER_ROWS; from += PAGE) {
-      const { data, error } = await db.from("child_game_answers").select("id, game, qid, subject, skill, correct, hints, question, answer, given, why, at")
-        .eq("child_id", childId).gte("at", since).order("at", { ascending: false }).range(from, from + PAGE - 1);
+      let { data, error } = await db.from("child_game_answers").select(columns)
+        .eq("child_id", childId).gte("at", since).order("at", { ascending: false }).order("id", { ascending: false }).range(from, from + PAGE - 1);
+      if (error && /column/i.test(error.message) && columns.includes("skill")) {
+        columns = "id, game, qid, subject, correct, question, answer, why, at";
+        ({ data, error } = await db.from("child_game_answers").select(columns)
+          .eq("child_id", childId).gte("at", since).order("at", { ascending: false }).order("id", { ascending: false }).range(from, from + PAGE - 1));
+      }
       if (error) throw new Error(error.message);
       for (const r of data ?? []) {
         const c = r.correct === true, h = Number(r.hints) || 0;

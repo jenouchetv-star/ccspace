@@ -35,3 +35,18 @@ create table if not exists public.child_days (
 create index if not exists child_days_child_idx on public.child_days (child_id, day desc);
 alter table public.child_days enable row level security;
 revoke all on table public.child_days from public, anon, authenticated;
+
+-- Adds to a child's day in one statement, so two answers arriving together both count (a read then a write would lose
+-- one). Called by kid-progress with the service role only.
+create or replace function public.child_days_add(p_child uuid, p_day date, p_kind text, p_item text, p_done boolean, p_answers int, p_right int)
+returns void language sql security invoker set search_path = public as $$
+  insert into public.child_days (child_id, day, kind, item_id, done, answers, right_count, last_at)
+  values (p_child, p_day, p_kind, p_item, coalesce(p_done, false), greatest(coalesce(p_answers, 0), 0), greatest(coalesce(p_right, 0), 0), now())
+  on conflict (child_id, day, kind, item_id) do update
+    set done = child_days.done or excluded.done,
+        answers = child_days.answers + excluded.answers,
+        right_count = child_days.right_count + excluded.right_count,
+        last_at = now();
+$$;
+revoke all on function public.child_days_add(uuid, date, text, text, boolean, int, int) from public, anon, authenticated;
+grant execute on function public.child_days_add(uuid, date, text, text, boolean, int, int) to service_role;

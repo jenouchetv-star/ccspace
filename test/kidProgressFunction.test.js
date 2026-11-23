@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 
 // cap: like hosted PostgREST, a read returns at most 1000 rows, so a read that is not scoped quietly loses rows.
-const db = vi.hoisted(() => ({ tables: {}, rate: { allow: true, calls: [] }, fail: new Set(), cap: 1000 }));
+const db = vi.hoisted(() => ({ tables: {}, rate: { allow: true, calls: [] }, fail: new Set(), cap: 1000, noNewColumns: false }));
 vi.mock("jsr:@supabase/supabase-js@2", () => {
   const copy = (v) => JSON.parse(JSON.stringify(v));
   // timestamps written by the function (".000Z") and by the tests ("Z") compare as times
@@ -13,7 +13,7 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
   const like = (p) => new RegExp("^" + p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/[*%]/g, ".*").replace(/_/g, ".") + "$");
   class Q {
     constructor(t) { this.t = t; this.op = "select"; this.f = []; this.one = false; this.ord = null; this.lim = null; this.rng = null; this.ret = false; }
-    select() { if (this.op === "insert" || this.op === "update") this.ret = true; return this; }
+    select(c) { if (this.op === "insert" || this.op === "update") this.ret = true; else this.cols = c; return this; }
     insert(v) { this.op = "insert"; this.v = v; return this; }
     update(v) { this.op = "update"; this.v = v; return this; }
     delete() { this.op = "delete"; return this; }
@@ -40,6 +40,9 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
     then(a, b) { return Promise.resolve(this.run()).then(a, b); }
     run() {
       if (db.fail.has(this.t)) return { data: null, error: { message: `relation "public.${this.t}" does not exist` } };
+      // before supabase/progress-days.sql: the answers table has no given, hints, tries or skill columns
+      if (db.noNewColumns && this.t === "child_game_answers" && ((this.cols && /skill|given|hints/.test(this.cols)) || (this.op === "insert" && this.v && "given" in this.v)))
+        return { data: null, error: { message: "Could not find the 'given' column of 'child_game_answers' in the schema cache" } };
       const rows = (db.tables[this.t] = db.tables[this.t] || []);
       const hit = (r) => this.f.every((f) => f(r));
       if (this.op === "update") {
@@ -80,7 +83,18 @@ vi.mock("jsr:@supabase/supabase-js@2", () => {
   return {
     createClient: () => ({
       from: (t) => new Q(t),
-      rpc: async (name, args) => { db.rate.calls.push({ name, args }); return { data: name === "rate_take" ? db.rate.allow : null, error: null }; },
+      rpc: async (name, args) => {
+        // child_days_add (supabase/progress-days.sql): one statement that adds to a child's day
+        if (name === "child_days_add") {
+          if (db.fail.has("child_days")) return { data: null, error: { message: "function child_days_add does not exist" } };
+          const rows = (db.tables.child_days = db.tables.child_days || []);
+          let d = rows.find((x) => x.child_id === args.p_child && x.day === args.p_day && x.kind === args.p_kind && x.item_id === args.p_item);
+          if (!d) { d = { child_id: args.p_child, day: args.p_day, kind: args.p_kind, item_id: args.p_item, done: false, answers: 0, right_count: 0 }; rows.push(d); }
+          d.done = d.done || args.p_done; d.answers += args.p_answers; d.right_count += args.p_right; d.last_at = new Date().toISOString();
+          return { data: null, error: null };
+        }
+        db.rate.calls.push({ name, args }); return { data: name === "rate_take" ? db.rate.allow : null, error: null };
+      },
     }),
   };
 });
@@ -160,7 +174,7 @@ describe("kid-progress function", () => {
         { id: B_CHILD, subscriber_id: "sub-b", name: "Zed", grade: 4, grade_year: 2026, created_at: "2026-09-03T00:00:00Z" },
       ],
     };
-    db.rate.allow = true; db.rate.calls.length = 0; db.fail.clear(); db.cap = 1000;
+    db.rate.allow = true; db.rate.calls.length = 0; db.fail.clear(); db.cap = 1000; db.noNewColumns = false;
   });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -940,6 +954,21 @@ describe("kid-progress function", () => {
         { child_id: B_CHILD, day: "2026-11-20", kind: "book", item_id: "theirs", done: true, answers: 0, right_count: 0, last_at: "2026-11-20T15:00:00Z" },
       );
       expect((await a("report", { child: A_CHILD })).days).toEqual([{ day: "2026-11-20", kind: "game", item_id: "spelling-detective", done: false, answers: 4, right_count: 3 }]);
+    });
+
+    it("counts two answers that arrive together", async () => {
+      await Promise.all([a("game_answer", { child: A_CHILD, day: "2026-11-21", ...gameAnswer() }), a("game_answer", { child: A_CHILD, day: "2026-11-21", ...gameAnswer({ qid: "sun-2" }) })]);
+      expect(dayRow(A_CHILD, "2026-11-21", "game", "solar-system-sandbox")).toMatchObject({ answers: 2, right_count: 2 });
+    });
+
+    it("keeps and reports answers before the new columns exist (the SQL not applied yet)", async () => {
+      db.noNewColumns = true;
+      expect(await a("game_answer", { child: A_CHILD, ...gameAnswer({ given: "One", hints: 1 }) })).toMatchObject({ ok: true });
+      expect(table("child_game_answers")).toHaveLength(1);
+      expect(table("child_game_answers")[0]).not.toHaveProperty("given");
+      const r = await a("report", { child: A_CHILD });
+      expect(r.answerRows).toHaveLength(1);
+      expect(r.answerRows[0]).toMatchObject({ g: "solar-system-sandbox", q: "sun-1", c: true, h: 0, k: null });
     });
 
     it("still reports when the day log or the new columns cannot be read", async () => {
