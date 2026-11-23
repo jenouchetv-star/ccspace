@@ -436,7 +436,8 @@ describe("Solar System Sandbox tours: in the game", () => {
     const wrong = (Q[0].g23.answer + 1) % 3;
     b.T.act("answer", wrong); b.T.act("answer", wrong); b.T.act("answer", Q[0].g23.answer);
     expect(b.answers()).toEqual([{ game: "solar-system-sandbox", qid: "gas-giants-q1", subject: "science", level: "g23", correct: false,
-      question: Q[0].g23.q, answer: Q[0].g23.choices[Q[0].g23.answer], why: Q[0].g23.why }]);
+      question: Q[0].g23.q, answer: Q[0].g23.choices[Q[0].g23.answer], why: Q[0].g23.why,
+      given: Q[0].g23.choices[wrong], skill: "Gas giants" }]);   // the pick and the tour, for the parent report (owner, 2026-11-23)
     q = b.els.quiz.innerHTML;
     expect(q).toContain("<b>Good try!</b>");
     expect(q).toContain('class="topt right"');

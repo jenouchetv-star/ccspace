@@ -250,10 +250,10 @@ export function subjectStatus({ own = 0, hint = 0, miss = 0, sources = 0 } = {})
 }
 
 /** Where an answer came from, for "at least 2 different games, books or activities": the game, except that each
-    Solar System Sandbox tour counts on its own (its question ids start with the tour, as in "mars-1"). */
+    Solar System Sandbox tour counts on its own (a question id is the tour and its number, as in "gas-giants-q1"). */
 export function sourceOf(row) {
   const g = String(row && row.g || "");
-  return g === "solar-system-sandbox" ? g + ":" + String(row.q || "").split("-")[0] : g;
+  return g === "solar-system-sandbox" ? g + ":" + String(row.q || "").replace(/-q?\d+$/, "") : g;
 }
 
 /** A date's key in the family's own time zone: YYYY-MM-DD. */

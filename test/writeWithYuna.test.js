@@ -205,6 +205,11 @@ describe("the progress report", () => {
     }
     expect(W.answerFor(W.itemsFor(0)[2], 0, 3, "great")).toMatchObject({ question: "Write the capital letter B.", answer: "B", why: "Great writing!" });
     expect(W.answerFor(W.itemsFor(1)[1], 1, 2, "start").question).toBe("Write the word the.");
+    /* the skill the parent report groups answers under (owner, 2026-11-23) */
+    expect(W.answerFor(W.itemsFor(0)[2], 0, 3, "great").skill).toBe("Writing capital letters");
+    expect(W.answerFor(W.itemsFor(1)[1], 1, 2, "start").skill).toBe("Writing words");
+    const skills = new Set([0, 1, 2, 3, 4, 5].flatMap((g) => W.itemsFor(g).map((it) => W.answerFor(it, g, 3, "great").skill)));
+    for (const k of skills) expect(k).toMatch(/^Writing (capital letters|lowercase letters|cursive letters|words|words in cursive|sentences|their name)$/);
   });
   it("never puts the child's name in an answer", () => {
     for (const g of [1, 4, 5]){

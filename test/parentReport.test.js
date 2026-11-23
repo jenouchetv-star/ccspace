@@ -28,6 +28,7 @@ describe("sources and dates", () => {
   it("counts each Solar System Sandbox tour as its own source", () => {
     expect(sourceOf({ g: "solar-system-sandbox", q: "mars-1" })).toBe("solar-system-sandbox:mars");
     expect(sourceOf({ g: "solar-system-sandbox", q: "moon-4" })).not.toBe(sourceOf({ g: "solar-system-sandbox", q: "mars-1" }));
+    expect(sourceOf({ g: "solar-system-sandbox", q: "gas-giants-q1" })).toBe("solar-system-sandbox:gas-giants");
     expect(sourceOf({ g: "spelling-detective", q: "spell-cat" })).toBe("spelling-detective");
   });
   it("covers the 7 days ending today, steps back a week at a time, and never into the future or past 26 weeks", () => {
