@@ -557,6 +557,17 @@ describe("answers from the site's games, and the report's levels", () => {
     expect(h).toContain("Game. Fly around a 3D solar system.");
   });
 
+  it("worth practicing quotes only wrong answers, never one that was right after a hint", () => {
+    const rows = [
+      { g: "spelling-detective", q: "spell-seat", s: "reading", k: "ea", c: false, h: 0, at: at(22), qt: "Spell: a place to sit", a: "seat", gv: "se_t" },
+      { g: "spelling-detective", q: "spell-leaf", s: "reading", k: "ea", c: true, h: 1, at: at(23), qt: "Spell: falls from a tree", a: "leaf", gv: "leaf" },
+    ];
+    const h = draw({ ok: true, progress: [], answerRows: rows, days: [] });
+    const focus = h.split('class="rp-focus"')[1].split("</div></div>")[0];
+    expect(focus).toContain("Maya answered “se_t” for “seat”.");
+    expect(focus).not.toContain("“leaf” for");
+  });
+
   it("an empty report says so plainly, and the week after today cannot be picked", () => {
     const h = draw({ ok: true, progress: [] });
     expect(h).toContain("No questions answered this week.");
