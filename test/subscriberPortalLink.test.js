@@ -26,6 +26,28 @@ describe("the Subscriber’s Portal link in the top bar", () => {
   });
 });
 
+describe("Sign in in the top bar (owner, 2026-11-24: people could not find a login)", () => {
+  const signIn = index.split("function navSignInHTML(cls){")[1].split("\n}\n")[0];
+  it("opens the Welcome back box, which emails a code, for the portal", () => {
+    expect(signIn).toContain('data-act="open-mailing-list" data-member data-next="/newsletter"');
+    expect(signIn).toContain("' Sign in</button>'");
+  });
+  it("is in the bar at every width, before Join, and in the phone menu beside Join, only for someone not signed in", () => {
+    const bar = nav.indexOf('(portalIsSubscriber() ? "" : navSignInHTML(" nav__signin"))');
+    expect(bar).toBeGreaterThan(-1);
+    expect(bar).toBeLessThan(nav.indexOf("' Join</button>'"));
+    const drawer = nav.split('class="nav__drawer-cta nav__only-sm"')[1].split("'</nav>'")[0];
+    expect(drawer.indexOf('navSignInHTML(" nav__drawer-signin")')).toBeGreaterThan(drawer.indexOf("Join our mailing list"));
+  });
+  it("opens the portal once the code is right", () => {
+    const send = index.split('if (act === "newsletter-submit"){')[1].split("\n  }\n")[0];
+    expect(send).toContain("newsletterCodeHTML(email, game, member && !!back)");
+    const box = index.split("function newsletterCodeHTML(")[1].split("\n}\n")[0];
+    expect(box).toContain(`(game || go ? '<input type="hidden" name="go" value="1">' : "")`);
+    expect(index.split('if (act === "newsletter-code"){')[1].split("\n  }\n")[0]).toContain('if (form.elements["go"]) navigate("#" + (r.next || "/newsletter"));');
+  });
+});
+
 describe("the grown-up tick box on the mailing-list forms", () => {
   it("is one shared box with plain wording, required, and not pre-ticked", () => {
     const box = index.split("function adultCheckHTML(id){")[1].split("\n}\n")[0];

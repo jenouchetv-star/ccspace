@@ -781,7 +781,8 @@ describe("the footer for a subscriber signed in on this device", () => {
     expect(html).toContain('"portal-signout": () => {');
     expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--icon btn--cyan nav__only-xs" type="button" data-act="open-mailing-list"`);
     expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--sm btn--cyan nav__hide-sm" type="button" data-act="open-mailing-list"`);
-    expect(nav).toContain(`: '<button class="btn btn--sm btn--cyan" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join our mailing list</button>')`);
+    expect(nav).toContain(`: '<button class="btn btn--sm btn--cyan" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join our mailing list</button>'`);
+    expect(nav).toContain('(portalIsSubscriber() ? "" : navSignInHTML(" nav__signin"))');     /* Sign in goes too */
   });
   it("leaves out Already joined? Sign in", () => {
     expect(body("signInLinkHTML")).toContain('if (portalIsSubscriber()) return "";');
@@ -834,6 +835,8 @@ describe("an email that links to a portal post that subscribers cannot see yet",
   it("is fine once the post is published, and for buttons that go anywhere else", () => {
     expect(make([{ id: "p1", slug: "arcade-makeover", title: "Arcade", status: "published", publishedAt: "2026-10-30" }])(url, Date.parse("2026-10-31T00:00:00Z"))).toBe(null);
     expect(make([])("https://www.chikescreativespace.com/#/play")).toBe(null);
+    // the progress report is a page of the portal, not a post (the progress newsletter's button, owner 2026-11-24)
+    expect(make([])("https://www.chikescreativespace.com/newsletter/progress")).toBe(null);
   });
   it("is held back when the post only appears after the send", () => {
     const f = make([{ id: "p1", slug: "arcade-makeover", title: "Arcade", status: "published", publishedAt: "2026-11-05" }]);

@@ -998,6 +998,9 @@ body.qu-panel-open .nav__menu, body.qu-panel-open .nav__chev{ display:none; }
   .nav__only-sm{ display:flex; align-items:center; gap:10px; }
   .nav__drawer-cta{ display:flex; gap:10px; margin-top:14px; padding-top:14px; border-top:var(--line-thin); }
   .nav__drawer-cta .btn{ flex:1; }
+  /* Sign in takes only its own width beside Join, so "Join our mailing list" stays on one line */
+  .nav__drawer-cta .btn{ white-space:nowrap; }
+  .nav__drawer-cta .nav__drawer-signin{ flex:0 0 auto; }
   .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 - 32px); }
 }
 /* Below 768px the bottom nav's "More" button already opens this same
@@ -8299,14 +8302,15 @@ function shareModalHTML(url, title){
     becomes a subscriber by it (it proves the inbox is theirs); someone already subscribed is signed in by it. The same
     box shows either way, so it never gives away who is already on the list. `game` (a subscribers-only game's name)
     means the right code opens that game. */
-function newsletterCodeHTML(email, game){
+function newsletterCodeHTML(email, game, go){
   return '<div style="text-align:center;padding:6px 4px">'
     + '<div style="margin:0 auto 16px;width:56px;height:56px;border-radius:50%;background:var(--teal);color:#F2FBF9;display:flex;align-items:center;justify-content:center">' + ic("mail","i-lg") + '</div>'
     + '<h3 style="margin:0 0 8px;font-size:1.5rem">Check your email</h3>'
     + '<p style="margin:0 0 16px">We sent a 6-digit code to <b style="overflow-wrap:anywhere">' + E(email) + '</b>. ' + (game ? 'Type it here to play.' : 'Type it here to finish.') + '</p>'
     + '<form data-act="newsletter-code" style="text-align:left">'
     + '<input type="hidden" name="email" value="' + E(email) + '">'
-    + (game ? '<input type="hidden" name="go" value="1">' : "")
+    /* the right code opens the game, or the page a Sign in was for (the top bar's Sign in: the portal) */
+    + (game || go ? '<input type="hidden" name="go" value="1">' : "")
     + '<div class="field"><label for="ml-code">Your code</label>'
     + '<input class="inp" id="ml-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required placeholder="123456"'
     + ' style="font-size:1.5rem;font-weight:800;letter-spacing:.3em;text-align:center"></div>'
@@ -10527,6 +10531,12 @@ function announceBar(){
     + '</p><button type="button" class="announce__x" data-act="announce-close" aria-label="Hide this announcement">' + ic("x") + '</button></div>';
 }
 
+/** The top bar's Sign in (and the phone menu's): the "Welcome back!" box, which emails a 6-digit code and then opens
+    the Subscriber's Portal. `cls` adds classes after the button's own. */
+function navSignInHTML(cls){
+  return '<button class="btn btn--sm btn--paper' + cls + '" type="button" data-act="open-mailing-list" data-member data-next="/newsletter"'
+    + ' aria-label="Sign in to the Subscriber’s Portal">' + ic("log-in") + ' Sign in</button>';
+}
 function navBar(isAdmin){
   const r = AppState.route;
   const under = {
@@ -10572,7 +10582,9 @@ function navBar(isAdmin){
     + (DONATE_LINKS_ENABLED ? '<a class="btn btn--sm btn--teal" href="#/donate">' + ic("heart-handshake") + ' Support</a>' : '')
     /* a subscriber has joined already: the way back into the portal takes Join's place */
     + (portalIsSubscriber() ? '<a class="btn btn--sm btn--cyan" href="#/newsletter">' + ic("mail-open") + ' Subscriber’s Portal</a>'
-      : '<button class="btn btn--sm btn--cyan" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join our mailing list</button>')
+      : '<button class="btn btn--sm btn--cyan" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join our mailing list</button>'
+        /* someone who already joined signs in right here, not inside the Join box (owner, 2026-11-24) */
+        + navSignInHTML(" nav__drawer-signin"))
     + '</div>'
     + '</nav>'
     + '<div class="nav__actions">'
@@ -10582,6 +10594,8 @@ function navBar(isAdmin){
        cart button only appears once something is in it, on every width -
        an empty cart icon sitting in the nav forever is just noise. */
     + (cartCount() ? '<button class="btn btn--icon btn--paper" type="button" data-act="cart-open" aria-label="Cart, ' + cartCount() + ' item' + (cartCount() === 1 ? "" : "s") + '">' + ic("shopping-cart") + '<span class="btn__count">' + cartCount() + '</span></button>' : '')
+    /* Sign in, in words at every width, so parents who already joined find it (owner, 2026-11-24): before Join */
+    + (portalIsSubscriber() ? "" : navSignInHTML(" nav__signin"))
     + (portalIsSubscriber() ? "" : '<button class="btn btn--icon btn--cyan nav__only-xs" type="button" data-act="open-mailing-list" aria-label="Join our mailing list">' + ic("mail") + '</button>')
     + (DONATE_LINKS_ENABLED ? '<a class="btn btn--icon btn--teal nav__only-xs" href="#/donate" aria-label="Support">' + ic("heart-handshake") + '</a>' : '')
     /* A subscriber (signed in to the portal on this device) has joined already: the way back in takes Join's place. */
@@ -22626,6 +22640,8 @@ function nlPortalProblem(ctaUrl, atMs){
   const m = String(ctaUrl || "").match(/\/newsletter\/([^/?#]+)/);
   if (!m) return null;
   let slug = m[1]; try { slug = decodeURIComponent(slug); } catch(_e){}
+  /* the progress report is a page of the portal, not a post: it is always there (owner, 2026-11-24) */
+  if (slug === "progress") return null;
   const e = db.list("portalEntries").find(x => x.slug === slug || x.id === slug);
   if (!e) return { title: slug, text: "The button links to a Subscriber’s Portal post that does not exist (“" + slug + "”). Check the button link, or pick the post from the list below it." };
   const when = Date.parse(String(e.publishedAt || "").length === 10 ? e.publishedAt + "T00:00:00Z" : e.publishedAt);
@@ -32654,7 +32670,8 @@ async function handleSubmit(form, act){
       return;
     }
     form.reset();
-    openModal(newsletterCodeHTML(email, game), null, "modal--narrow");
+    /* a Sign in for a portal page (the top bar's goes to the portal itself) opens that page once the code is right */
+    openModal(newsletterCodeHTML(email, game, member && !!back), null, "modal--narrow");
     const codeBox = $("#ml-code"); if (codeBox) codeBox.focus();
     return;
   }

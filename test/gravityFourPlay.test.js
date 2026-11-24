@@ -106,7 +106,7 @@ describe("the code box after Send my link", () => {
     expect(box).toContain("Verify and play");
     const send = index.split('if (act === "newsletter-submit"){')[1].split("\n  }\n")[0];
     expect(send).toContain("code: true");
-    expect(send).toContain('openModal(newsletterCodeHTML(email, game), null, "modal--narrow");');
+    expect(send).toContain('openModal(newsletterCodeHTML(email, game, member && !!back), null, "modal--narrow");');
   });
   it("checks the code with the portal, keeps the session, and opens the game", () => {
     const check = index.split('if (act === "newsletter-code"){')[1].split("\n  }\n")[0];

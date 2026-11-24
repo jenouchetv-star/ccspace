@@ -22,7 +22,7 @@ describe("the mailing-list forms on the page", () => {
 
   it("ask for the 6-digit code from the email, not tell them they are already in", () => {
     expect(handler).toContain("code: true");                          // every sign-up confirms with a code
-    expect(handler).toContain("openModal(newsletterCodeHTML(email, game)");
+    expect(handler).toContain("openModal(newsletterCodeHTML(email, game, member && !!back)");
     const modal = html.split("function newsletterCodeHTML(")[1].split("\n}\n")[0];
     expect(modal).toContain("Check your email");
     expect(modal).toContain("We sent a 6-digit code to");
