@@ -7,7 +7,7 @@ import { LINES, PHONEMES, lineKey as scriptKey } from "../scripts/drop2048-lines
 
 const game = readFileSync(new URL("../games/drop-2048.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const pure = game.split("/* BEGIN pure */")[1].split("/* END pure */")[0];
-const D = new Function(pure + "; return { COLORS, SIZES, DROPS, DROPS_6, DROPS_7, dropsFor, pickDrop, scanBoard, mergeValue, emptyGrid, landRow, isFull, groupAt, gravity, settle, smashAt, HAMMER_EVERY, chargeAfterDrop, hammerReady, lineKey, SAY, allLines };")();
+const D = new Function(pure + "; return { COLORS, SIZES, DROPS, DROPS_6, DROPS_7, dropsFor, pickDrop, scanBoard, mergeValue, emptyGrid, landRow, isFull, groupAt, gravity, settle, smashAt, HAMMER_EVERY, chargeAfterDrop, hammerReady, lineKey, SAY, allLines, comboLine };")();
 
 let uid = 0;
 /** A grid from rows of numbers (0 = empty), top row first. */
@@ -153,9 +153,19 @@ describe("the look, the feel and the voice", () => {
     expect(game).toContain('CCSSound.button({ compact: true');
     expect(game).toContain('store.set("drop2048-best-" + N, String(best))');
   });
+  it("cheers a chain of 2 as a combo, 3 as a super combo, and 4 or more as a super duper combo (owner, 2026-11-24)", () => {
+    expect(D.comboLine(0)).toBe(null);
+    expect(D.comboLine(1)).toBe(null);
+    expect(D.comboLine(2)).toBe("Combo!");
+    expect(D.comboLine(3)).toBe("Super combo!");
+    expect(D.comboLine(4)).toBe("Super duper combo!");
+    expect(D.comboLine(7)).toBe("Super duper combo!");
+    expect(game.match(/const line = comboLine\(chain\); if \(line\) say\(line\);/g)).toHaveLength(2);   /* after a drop and after the hammer */
+    expect(game).not.toContain("say(SAY.superCombo)");
+  });
   it("has a recorded clip in Heart's voice for every line, keyed the same way as the game", () => {
     expect(LINES).toEqual(D.allLines());
-    expect(LINES).toHaveLength(9);
+    expect(LINES).toHaveLength(10);
     for (const t of LINES){
       expect(scriptKey(t)).toBe(D.lineKey(t));
       expect(existsSync(new URL("../assets/games/drop-2048/voice/" + D.lineKey(t) + ".mp3", import.meta.url)), t).toBe(true);
