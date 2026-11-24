@@ -153,19 +153,20 @@ describe("the look, the feel and the voice", () => {
     expect(game).toContain('CCSSound.button({ compact: true');
     expect(game).toContain('store.set("drop2048-best-" + N, String(best))');
   });
-  it("cheers a chain of 2 as a combo, 3 as a super combo, and 4 or more as a super duper combo (owner, 2026-11-24)", () => {
+  it("cheers a chain of 2 as a combo, 3 super, 4 super duper, and 5 or more mega (owner, 2026-11-24)", () => {
     expect(D.comboLine(0)).toBe(null);
     expect(D.comboLine(1)).toBe(null);
     expect(D.comboLine(2)).toBe("Combo!");
     expect(D.comboLine(3)).toBe("Super combo!");
     expect(D.comboLine(4)).toBe("Super duper combo!");
-    expect(D.comboLine(7)).toBe("Super duper combo!");
+    expect(D.comboLine(5)).toBe("Mega combo!");
+    expect(D.comboLine(8)).toBe("Mega combo!");
     expect(game.match(/const line = comboLine\(chain\); if \(line\) say\(line\);/g)).toHaveLength(2);   /* after a drop and after the hammer */
     expect(game).not.toContain("say(SAY.superCombo)");
   });
   it("has a recorded clip in Heart's voice for every line, keyed the same way as the game", () => {
     expect(LINES).toEqual(D.allLines());
-    expect(LINES).toHaveLength(10);
+    expect(LINES).toHaveLength(11);
     for (const t of LINES){
       expect(scriptKey(t)).toBe(D.lineKey(t));
       expect(existsSync(new URL("../assets/games/drop-2048/voice/" + D.lineKey(t) + ".mp3", import.meta.url)), t).toBe(true);
