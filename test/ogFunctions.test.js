@@ -30,17 +30,29 @@ const ctx = (ua, id = "game-pathbuilder", path = "/play/game-pathbuilder") => ({
   params: { id },
   next: async () => new Response("<html></html>"),
 });
-const OPTS = { table: "games", titleKey: "title", descKey: "summary", imageKey: "cover.src", fallbackTitle: "Chike's Creative Space" };
+const OPTS = { table: "games", titleKey: "title", descKey: "summary", imageKey: "cover.src", fallbackTitle: "Chike's Creative Space", label: "Learning Game for Kids" };
 
 describe("what a bot reads for a game page", () => {
   it("is the game's own title, description, picture and address, not the home page's", async () => {
     await renderWithOg(ctx("Googlebot/2.1"), OPTS);
-    expect(run(rw.calls, "title").inner).toBe("Pathbuilder | Chike's Creative Space");
+    expect(run(rw.calls, "title").inner).toBe("Pathbuilder - Learning Game for Kids | Chike's Creative Space");
     expect(run(rw.calls, 'meta[name="description"]').content).toBe("A 3D engineering puzzle.");
     expect(run(rw.calls, 'meta[property="og:description"]').content).toBe("A 3D engineering puzzle.");
     expect(run(rw.calls, 'meta[property="og:image"]').content).toBe("https://www.chikescreativespace.com/assets/games/pathbuilder.jpg");
     expect(run(rw.calls, 'meta[property="og:url"]').content).toBe("https://www.chikescreativespace.com/play/game-pathbuilder");
     expect(run(rw.calls, "link#canonical-link").href).toBe("https://www.chikescreativespace.com/play/game-pathbuilder");
+  });
+
+  it("has a readable body with the game's name, description and picture, for crawlers that don't run the app", async () => {
+    await renderWithOg(ctx("Bingbot/2.0"), OPTS);
+    const body = run(rw.calls, "div#app").inner;
+    expect(body).toContain("<h1>Pathbuilder</h1><p>A 3D engineering puzzle.</p>");
+    expect(body).toContain('<img src="https://www.chikescreativespace.com/assets/games/pathbuilder.jpg" alt="Pathbuilder">');
+  });
+
+  it("names the kind of page for every item route (owner, 2026-11-24)", () => {
+    for (const [r, label] of [["play", "Learning Game for Kids"], ["activity", "Kids Activity"], ["stories", "Children's Book"], ["watch", "Kids Video"]])
+      expect(readFileSync(new URL("../functions/" + r + "/[id].js", import.meta.url), "utf8"), r).toContain('label: "' + label + '"');
   });
 
   it("ignores a trailing slash in the address", async () => {

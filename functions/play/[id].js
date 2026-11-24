@@ -8,5 +8,6 @@ export const onRequest = (context) => renderWithOg(context, {
   titleKey: "title",
   descKey: "summary",
   imageKey: "cover.src",
-  fallbackTitle: "Chike's Creative Space"
+  fallbackTitle: "Chike's Creative Space",
+  label: "Learning Game for Kids"
 });

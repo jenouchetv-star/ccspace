@@ -5,5 +5,6 @@ export const onRequest = (context) => renderWithOg(context, {
   titleKey: "title",
   descKey: "blurb",
   imageKey: "image.src",
-  fallbackTitle: "Chike's Creative Space"
+  fallbackTitle: "Chike's Creative Space",
+  label: "Children's Book"
 });

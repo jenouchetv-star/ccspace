@@ -18,12 +18,16 @@
    own <script> (SUPABASE_ANON_KEY) - it's public by design (RLS gates
    what it can read/write), not a new secret. */
 
-const SUPABASE_URL = "https://wdctkfhwygwwulipwnys.supabase.co";
+import { crawlerBody } from "./seo.js";
+
+const SUPABASE_URL ="https://wdctkfhwygwwulipwnys.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY3RrZmh3eWd3d3VsaXB3bnlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMTUzNjUsImV4cCI6MjEwMzU5MTM2NX0.5KraVohURHNDx-n0mb6o3egJPf1KkpecBSz8fMRlQcI";
 
-const CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|Slackbot|LinkedInBot|WhatsApp|Pinterest|Discordbot|TelegramBot|SkypeUriPreview|redditbot|Googlebot|Applebot|Bingbot|vkShare|W3C_Validator|Iframely|Embedly/i;
+/* link-preview bots, search engines (DuckDuckGo, Yahoo, Yandex, Baidu and the rest too, 2026-11-24), and the
+   AI search crawlers that answer questions like "fun learning games for kids" */
+const CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|Slackbot|LinkedInBot|WhatsApp|Pinterest|Discordbot|TelegramBot|SkypeUriPreview|redditbot|Googlebot|Applebot|Bingbot|vkShare|W3C_Validator|Iframely|Embedly|DuckDuckBot|Slurp|YandexBot|Baiduspider|PetalBot|SeznamBot|OAI-SearchBot|GPTBot|PerplexityBot|ClaudeBot/i;
 
-function isCrawler(request){
+export function isCrawler(request){
   return CRAWLER_UA.test(request.headers.get("user-agent") || "");
 }
 
@@ -41,7 +45,7 @@ function absoluteUrl(src, origin){
     record this route is about and which of its fields hold the title,
     description, and cover image - the same field names the app's own
     admin editors already use for that collection. */
-export async function renderWithOg(context, { table, titleKey, descKey, imageKey, fallbackTitle }){
+export async function renderWithOg(context, { table, titleKey, descKey, imageKey, fallbackTitle, label }){
   const response = await context.next();
   if (!isCrawler(context.request)) return response;
 
@@ -66,20 +70,29 @@ export async function renderWithOg(context, { table, titleKey, descKey, imageKey
   const here = new URL(context.request.url);
   const origin = here.origin;
   const pageUrl = origin + here.pathname.replace(/\/+$/, "");        /* this page's own address, not the home page's */
-  const title = (getPath(record, titleKey) || fallbackTitle) + " | Chike's Creative Space";
+  const name = getPath(record, titleKey) || fallbackTitle;
+  /* the kind of page after its name, the words people search for (owner, 2026-11-24): "Drop 2048 - Learning Game for Kids" */
+  const title = name + (label ? " - " + label : "") + " | Chike's Creative Space";
   const desc = getPath(record, descKey) || "";
-  const image = absoluteUrl(getPath(record, imageKey), origin) || (origin + "/assets/icons/icon-512.png");
+  const ownImage = absoluteUrl(getPath(record, imageKey), origin);
+  const image = ownImage || (origin + "/assets/icons/icon-512.png");
+  return applyMeta(response, { title, desc, image, pageUrl, body: crawlerBody({ h1: name, desc, image: ownImage, imageAlt: name }) });
+}
 
+/** Writes a page's own title, description, picture and address into the head a crawler reads, and a short readable
+    body (see crawlerBody) into the app's empty container, which a crawler that does not run JavaScript would see blank. */
+export function applyMeta(response, { title, desc, image, pageUrl, body }){
   return new HTMLRewriter()
+    .on('div#app', { element(el){ if (body) el.setInnerContent(body, { html: true }); } })
     .on('title', { element(el){ el.setInnerContent(title); } })
     .on('meta[name="description"]', { element(el){ if (desc) el.setAttribute("content", desc); } })
     .on('link#canonical-link', { element(el){ el.setAttribute("href", pageUrl); } })
     .on('meta[property="og:url"]', { element(el){ el.setAttribute("content", pageUrl); } })
     .on('meta[property="og:title"]', { element(el){ el.setAttribute("content", title); } })
     .on('meta[property="og:description"]', { element(el){ if (desc) el.setAttribute("content", desc); } })
-    .on('meta[property="og:image"]', { element(el){ el.setAttribute("content", image); } })
+    .on('meta[property="og:image"]', { element(el){ if (image) el.setAttribute("content", image); } })
     .on('meta[name="twitter:title"]', { element(el){ el.setAttribute("content", title); } })
     .on('meta[name="twitter:description"]', { element(el){ if (desc) el.setAttribute("content", desc); } })
-    .on('meta[name="twitter:image"]', { element(el){ el.setAttribute("content", image); } })
+    .on('meta[name="twitter:image"]', { element(el){ if (image) el.setAttribute("content", image); } })
     .transform(response);
 }
