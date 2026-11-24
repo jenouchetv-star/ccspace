@@ -81,9 +81,9 @@ describe("openGameStage", () => {
     expect(priv.srcdoc).toBe(HTML.replace("<head>", "<head><script>window.CCS_GRADE=0;</script>"));
   });
 
-  it("never adds it to a book, a studio app or anything outside games/", async () => {
+  it("adds it to a book, for its questions at the end (owner, 2026-11-23), but never to a studio app or anything outside games/ and books/", async () => {
     const book = { id: "book-x", title: "B", path: "books/reader.html?story=book-x&read=1" };
-    expect((await opened(book, 3)).path).toBe(book.path);
+    expect((await opened(book, 3)).path).toBe("books/reader.html?story=book-x&read=1&grade=3");
     const studio = { id: "studio-art", title: "Art", bare: true, path: "assets/apps/art-space.html" };
     expect((await opened(studio, 3)).path).toBe(studio.path);
     const lesson = { id: "x", title: "L", path: "assets/lessons/example.html" };

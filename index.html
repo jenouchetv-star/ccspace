@@ -13183,12 +13183,13 @@ async function openGameStage(idOrRecord){
     if (html === null){ toast("This game\u2019s file could not be loaded.", "bad"); return; }
     g = Object.assign({}, g, { srcdoc: html });
   }
-  /* a picked child's grade goes to a game (never a book or a studio app), so it can start at that grade:
-     a public game gets ?grade=N, a private game's sealed code sets window.CCS_GRADE first (kept on Start over) */
+  /* a picked child's grade goes to a game (never a studio app), so it can start at that grade: a public game gets
+     ?grade=N, a private game's sealed code sets window.CCS_GRADE first (kept on Start over); a book gets ?grade=N too,
+     for its questions at the end (owner, 2026-11-23: Let's find out what you learned!) */
   const grade = progressPickedGrade();
   if (grade !== null && !g.bare){
     if (g.srcdoc !== undefined) g = Object.assign({}, g, { srcdoc: withChildGrade(g.srcdoc, grade) });
-    else if (/^\/?games\/[^?#]+\.html/.test(g.path)){
+    else if (/^\/?(games|books)\/[^?#]+\.html/.test(g.path)){
       const hash = g.path.indexOf("#"), base = hash < 0 ? g.path : g.path.slice(0, hash), tail = hash < 0 ? "" : g.path.slice(hash);
       g = Object.assign({}, g, { path: base + (base.indexOf("?") < 0 ? "?" : "&") + "grade=" + grade + tail });
     }
@@ -15867,6 +15868,8 @@ function rpItem(kind, id){
   const KIND = { episode: "Episode", book: "Book", activity: "Activity", entry: "Subscriber’s Portal", game: "Game" };
   const out = { kind: KIND[kind] || "", title: "", img: "", what: "", href: "" };
   if (kind === "game"){
+    /* a book's questions answer as the game "book-<story id>" (Let's find out what you learned!, owner 2026-11-23) */
+    if (/^book-/.test(id)){ const b = rpItem("book", id.slice(5)); if (b) return b; }
     const g = db.list("games").find(x => x.slug === id || x.portalSlug === id || x.id === id || x.id === "game-" + id || String(x.path || "").endsWith("/" + id + ".html"));
     if (g) return Object.assign(out, { title: g.title, img: (g.cover && g.cover.src) || "", what: g.summary || "", href: "#/play/" + g.id });
     const a = db.list("activities").find(x => String(x.appPath || "").endsWith("/" + id + ".html"));

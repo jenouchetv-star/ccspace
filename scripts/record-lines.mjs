@@ -8,7 +8,8 @@ import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 const LIST = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const OUT = process.argv[3];
 mkdirSync(OUT, { recursive: true });
-const SAY = [[/\bChike\b/g, "Chee-kay"], [/\bZech\b/g, "Zack"], [/\bYuna\b/g, "You-nah"], [/\bAveri\b/g, "Avery"]];
+const SAY = [[/\bChike\b/g, "Chee-kay"], [/\bZech\b/g, "Zack"], [/\bYuna\b/g, "You-nah"], [/\bAveri\b/g, "Avery"],
+  [/\bZectune\b/g, "Zack-tune"], [/\bChikopia\b/g, "Chee-koh-pee-uh"]];   /* the planets in the Space Adventure book, said as its narration says them */
 const spoken = t => SAY.reduce((s, [re, to]) => s.replace(re, to), t);
 
 function mp3(f, sr){
