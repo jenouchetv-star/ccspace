@@ -98,6 +98,24 @@ export function withChildGrade(html, g) {
   return s.slice(0, at) + tag + s.slice(at);
 }
 
+const NAME_TAG = /<script>window\.CCS_NAME=[^<]*;<\/script>/g;
+
+/** A private game's code with the picked child's name set before anything of its own runs, like withChildGrade
+    (owner, 2026-11-24: Robo Math Buddy knows who is playing). The name is a JSON string with <, >, & and the two line
+    separators escaped, so it can never end its script tag. Only for a sealed game's code: a name never goes in an
+    address. No name: the code is unchanged. */
+export function withChildName(html, name) {
+  const src = String(html ?? "");
+  const n = String(name ?? "").trim();
+  if (!n) return src;
+  const json = JSON.stringify(n).replace(/[<>&\u2028\u2029]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+  const tag = "<script>window.CCS_NAME=" + json + ";</script>";
+  const s = src.replace(NAME_TAG, "");
+  const head = /<head(\s[^>]*)?>/i.exec(s);
+  const at = head ? head.index + head[0].length : ((/^\s*<!doctype[^>]*>\s*/i.exec(s) || [""])[0]).length;
+  return s.slice(0, at) + tag + s.slice(at);
+}
+
 /** "episode:<id>:discovery" */
 export function nuggetId(kind, itemId, part) {
   return kind + ":" + itemId + ":" + part;

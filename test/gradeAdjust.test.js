@@ -2,7 +2,7 @@
 // openGameStage), and every game reads it with the same one-line snippet (assets/lib/childGrade.snippet.js).
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { recordTarget, childGradeFrom, withChildGrade, activityFitsGrade, difficultyDistance, findAgeForGrade, gradeLabel } from "../assets/lib/progress.js";
+import { recordTarget, childGradeFrom, withChildGrade, withChildName, activityFitsGrade, difficultyDistance, findAgeForGrade, gradeLabel } from "../assets/lib/progress.js";
 
 const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const SNIPPET_LINE = 'const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSearchParams(location.search).get("grade"); const n = typeof raw === "number" ? raw : /^[0-6]$/.test(String(raw)) ? Number(raw) : NaN; return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null; } catch (_e) { return null; } })();';
@@ -52,17 +52,17 @@ describe("progressPickedGrade", () => {
 describe("openGameStage", () => {
   const games = { "game-a": { id: "game-a", title: "A", path: "games/a.html" }, "game-p": { id: "game-p", title: "P", hasFile: true } };
   const HTML = "<!doctype html><html><head><script>start()</script></head><body></body></html>";
-  async function opened(record, grade) {
+  async function opened(record, grade, name = "") {
     let staged = null;
     const modal = { innerHTML: "" };
     const open = new Function(
       "db", "loadGameHtml", "toast", "$", "gameStage", "rootAssetPaths", "document", "drawIcons",
-      "progressPickedGrade", "withChildGrade", "closeGameStage",
+      "progressPickedGrade", "withChildGrade", "closeGameStage", "progressPickedName", "withChildName",
       fn("openGameStage") + "; return openGameStage;",
     )(
       { find: (_t, id) => games[id] || null }, async () => HTML, () => {},
       (sel) => (sel === "#modal-root" ? modal : null), (g) => { staged = g; return ""; }, () => {},
-      { body: { classList: { add() {} } } }, () => {}, () => grade, withChildGrade, () => {},
+      { body: { classList: { add() {} } } }, () => {}, () => grade, withChildGrade, () => {}, () => name, withChildName,
     );
     await open(record);
     return staged;
@@ -79,6 +79,17 @@ describe("openGameStage", () => {
     expect((await opened("game-p", 3)).srcdoc.startsWith("<!doctype html><html><head><script>window.CCS_GRADE=3;</script><script>start()")).toBe(true);
     const priv = await opened({ id: "portal", title: "X", hasFile: true, srcdoc: HTML }, 0);
     expect(priv.srcdoc).toBe(HTML.replace("<head>", "<head><script>window.CCS_GRADE=0;</script>"));
+  });
+
+  it("gives a private game the picked child's name, and never puts a name in an address (owner, 2026-11-24)", async () => {
+    const p = await opened("game-p", 3, "Maya");
+    expect(p.srcdoc).toContain('<script>window.CCS_NAME="Maya";</script>');
+    expect(p.srcdoc).toContain("<script>window.CCS_GRADE=3;</script>");
+    expect(p.srcdoc.indexOf("CCS_NAME")).toBeLessThan(p.srcdoc.indexOf("start()"));
+    expect((await opened("game-a", 3, "Maya")).path).toBe("games/a.html?grade=3");
+    expect((await opened({ id: "book-x", title: "B", path: "books/reader.html?story=book-x" }, 3, "Maya")).path).not.toContain("Maya");
+    expect((await opened({ id: "studio-art", title: "Art", bare: true, hasFile: true, srcdoc: HTML }, 3, "Maya")).srcdoc).toBe(HTML);
+    expect((await opened("game-p", null, "")).srcdoc).toBe(HTML);
   });
 
   it("adds it to a book, for its questions at the end (owner, 2026-11-23), but never to a studio app or anything outside games/ and books/", async () => {

@@ -4,7 +4,7 @@ import {
   STEAMM_SUBJECTS, subjectFromTopic, GRADE_LABELS, gradeLabel, nuggetId, parseNuggetId,
   nuggetsFor, recordTarget, watchedEnough, doneFromMessage, grownUpQuestion,
   buildReport, QUIZ_ROUTES, quizBubbleAllowed, questionDraftMessages, parseQuestionDraft,
-  gradeAges, activityFitsGrade, difficultyDistance, findAgeForGrade, childGradeFrom, withChildGrade,
+  gradeAges, activityFitsGrade, difficultyDistance, findAgeForGrade, childGradeFrom, withChildGrade, withChildName,
   subjectLevel, answerFromMessage, READING_SUBJECT, playingFromStored, playingToStore,
 } from "../assets/lib/progress.js";
 
@@ -400,6 +400,26 @@ describe("grade adjust: the shared rule", () => {
     // a bad grade changes nothing
     expect(withChildGrade(game, null)).toBe(game);
     expect(withChildGrade(game, 7)).toBe(game);
+  });
+
+  it("withChildName puts the picked child's name in a private game's code, once, as plain text (owner, 2026-11-24)", () => {
+    const game = "<!doctype html><html><head><script>start()</script></head><body></body></html>";
+    const out = withChildName(game, "Maya");
+    expect(out).toBe(game.replace("<head>", '<head><script>window.CCS_NAME="Maya";</script>'));
+    expect(withChildName(withChildName(out, "Leo"), "Leo").match(/CCS_NAME/g)).toHaveLength(1);
+    expect(withChildName(out, "Leo")).toContain('window.CCS_NAME="Leo";');
+    // with the grade too, both before the game's own code
+    const both = withChildName(withChildGrade(game, 2), "Maya");
+    expect(both.indexOf("CCS_NAME")).toBeLessThan(both.indexOf("start()"));
+    expect(both.indexOf("CCS_GRADE")).toBeLessThan(both.indexOf("start()"));
+    // a name can never break out of its script
+    const odd = withChildName(game, '</script><script>alert(1)</script>"\u2028x');
+    expect(odd).not.toContain("</script><script>alert(1)");
+    const win = {};
+    new Function("window", odd.match(/<script>(window\.CCS_NAME=[^<]*)<\/script>/)[1])(win);
+    expect(win.CCS_NAME).toBe('</script><script>alert(1)</script>"\u2028x');
+    // no name: nothing changes
+    for (const none of [null, undefined, "", "   "]) expect(withChildName(game, none)).toBe(game);
   });
 });
 

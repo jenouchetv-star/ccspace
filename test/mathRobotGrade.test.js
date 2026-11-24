@@ -15,16 +15,63 @@ const startBlock = html.slice(html.indexOf("  const CCS_CHILD_GRADE"), html.inde
 const askMenu = html.slice(html.indexOf("  var ASK_MENU"), html.indexOf("\n", html.indexOf("  var ASK_MENU")) + 1);
 
 /** Opens the buddy with this grade passed (undefined: none) and what this computer remembers; returns a chat to talk to. */
-function openBuddy(grade, remembered = null) {
-  const store = new Map(remembered ? [["robo-math-buddy", JSON.stringify(remembered)]] : []);
+function openBuddy(grade, remembered = null, name, store = new Map(remembered ? [["robo-math-buddy", JSON.stringify(remembered)]] : [])) {
   const localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
   const said = [];
   const code = startBlock + fnText("greeting") + fnText("cleanName") + fnText("readGrade") + askMenu + fnText("startChat") + fnText("respond")
-    + "; return { mem: () => mem, state: () => state, respond, CHILD_GRADE };";
+    + "; return { mem: () => mem, state: () => state, respond, save, CHILD_GRADE, CHILD_NAME, KEY, FIRST_VISIT };";
+  const win = Object.assign(grade === undefined ? {} : { CCS_GRADE: grade }, name === undefined ? {} : { CCS_NAME: name });
   const api = new Function("window", "location", "localStorage", "say", "mood", "showOnBoard", "scores", "askQuestion",
-    code)(grade === undefined ? {} : { CCS_GRADE: grade }, { search: "" }, localStorage, (t) => said.push(t), () => {}, () => {}, () => {}, () => {});
-  return { ...api, said, hear: (t) => api.respond(t, t.toLowerCase()) };
+    code)(win, { search: "" }, localStorage, (t) => said.push(t), () => {}, () => {}, () => {}, () => {});
+  return { ...api, said, store, hear: (t) => api.respond(t, t.toLowerCase()) };
 }
+
+describe("Robo Math Buddy: the picked child (owner, 2026-11-24: it knows the child's name and grade)", () => {
+  it("never asks the name or the grade when the site passes both", () => {
+    const b = openBuddy(3, null, "Maya");
+    expect(b.mem().name).toBe("Maya");
+    expect(b.mem().grade).toBe(3);
+    expect(b.state().phase).toBe("chat");
+    expect(b.FIRST_VISIT).toBe(true);
+    expect(html).toContain('  if (state.phase === "chat" && FIRST_VISIT) startChat("");');
+  });
+  it("asks only the grade when the child has a name but no grade", () => {
+    expect(openBuddy(undefined, null, "Maya").state().phase).toBe("askGrade");
+  });
+  it("keeps each child's own memory on a shared computer: scores, and a nickname the child chose", () => {
+    const store = new Map();
+    const maya = openBuddy(2, null, "Maya", store);
+    maya.mem().highFives = 4; maya.mem().botName = "Sparky"; maya.save();
+    expect(maya.KEY).toBe("robo-math-buddy:maya");
+    const leo = openBuddy(4, null, "Leo", store);
+    expect(leo.mem().name).toBe("Leo");
+    expect(leo.mem().highFives).toBe(0);
+    expect(leo.mem().botName).toBe("");
+    const back = openBuddy(2, null, "Maya", store);
+    expect(back.mem().highFives).toBe(4);
+    expect(back.FIRST_VISIT).toBe(false);
+    // a nickname Maya gave herself is kept
+    back.mem().name = "Super M"; back.save();
+    expect(openBuddy(2, null, "Maya", store).mem().name).toBe("Super M");
+    // the shared memory from before (no child picked) is never mixed in
+    store.set("robo-math-buddy", JSON.stringify({ name: "Grown-up", highFives: 9 }));
+    expect(openBuddy(4, null, "Leo", store).mem().highFives).toBe(0);
+  });
+  it("takes only a plain name: letters, spaces, apostrophes and hyphens, 24 letters at most", () => {
+    expect(openBuddy(2, null, "  Mary-Kate O'Neil ").CHILD_NAME).toBe("Mary-Kate O'Neil");
+    expect(openBuddy(2, null, "José").CHILD_NAME).toBe("José");
+    for (const bad of ["<b>Maya</b>", "Maya2", "", "   ", 42, null, "A".repeat(25)]) {
+      const b = openBuddy(2, null, bad);
+      expect(b.CHILD_NAME, String(bad)).toBe("");
+      expect(b.state().phase).toBe("askName");
+      expect(b.KEY).toBe("robo-math-buddy");
+    }
+  });
+  it("Clear memory keeps the child's name and grade, and goes straight back to chatting", () => {
+    expect(html).toContain('mem = { name:CHILD_NAME, grade:CHILD_GRADE, botName:"", right:0, highFives:0 };');
+    expect(html).toContain('if (CHILD_NAME && mem.grade !== null){ startChat("My memory is all clear! "); return; }');
+  });
+});
 
 describe("Robo Math Buddy: the child's grade", () => {
   it("uses the child's grade: it asks the name, never the grade", () => {
@@ -83,6 +130,6 @@ describe("Robo Math Buddy: the child's grade", () => {
   });
 
   it("Clear memory keeps the child's grade", () => {
-    expect(html).toContain('mem = { name:"", grade:CHILD_GRADE, botName:"", right:0, highFives:0 };');
+    expect(html).toContain('mem = { name:CHILD_NAME, grade:CHILD_GRADE, botName:"", right:0, highFives:0 };');
   });
 });

@@ -13223,6 +13223,10 @@ async function openGameStage(idOrRecord){
       g = Object.assign({}, g, { path: base + (base.indexOf("?") < 0 ? "?" : "&") + "grade=" + grade + tail });
     }
   }
+  /* and the picked child's name, so a game like Robo Math Buddy doesn't ask it: only into a private game's sealed
+     code (kept on Start over), never into an address (owner, 2026-11-24) */
+  const kidName = g.srcdoc !== undefined && !g.bare ? progressPickedName() : "";
+  if (kidName) g = Object.assign({}, g, { srcdoc: withChildName(g.srcdoc, kidName) });
   $("#modal-root").innerHTML = gameStage(g);
   rootAssetPaths($("#modal-root"));
   document.body.classList.add("no-scroll");
@@ -16347,6 +16351,16 @@ function progressPickedGrade(){
   if (!id || id === "ask") return null;
   const child = kids.find(c => c && c.id === id);
   return child ? childGradeFrom(child.grade) : null;
+}
+/** The picked child's name, or "": the same rules as progressPickedGrade. Only a private game's sealed code gets it
+    (withChildName), never an address (owner, 2026-11-24: Robo Math Buddy knows who is playing). */
+function progressPickedName(){
+  const kids = ProgressState.children;
+  if (!Array.isArray(kids)) return "";
+  const id = recordTarget(!!portalSavedSession(), progressPlaying(), kids);
+  if (!id || id === "ask") return "";
+  const child = kids.find(c => c && c.id === id);
+  return child && typeof child.name === "string" ? child.name.trim() : "";
 }
 /** A picked child's grade puts the activities that fit it first, the rest by how close their difficulty is; ties
     keep the order given (progress.js: activityFitsGrade, difficultyDistance). No grade: the list unchanged. */

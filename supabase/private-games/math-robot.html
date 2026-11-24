@@ -247,13 +247,20 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
   /* the picked child's grade, passed by the site (null when none): the buddy teaches Kindergarten to 5th grade, so a 6th grader plays 5th */
   const CCS_CHILD_GRADE = (() => { try { const raw = window.CCS_GRADE ?? new URLSearchParams(location.search).get("grade"); const n = typeof raw === "number" ? raw : /^[0-6]$/.test(String(raw)) ? Number(raw) : NaN; return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null; } catch (_e) { return null; } })();
   var CHILD_GRADE = CCS_CHILD_GRADE === null ? null : Math.min(CCS_CHILD_GRADE, 5);
+  /* the picked child's name, passed by the site into this sealed code (owner, 2026-11-24): with it, the buddy never asks
+     the name. Only a plain name is taken (letters, spaces, apostrophes, hyphens; 24 at most), or "" */
+  var CHILD_NAME = (function(){ try { var n = window.CCS_NAME; if (typeof n !== "string") return ""; n = n.trim().replace(/\s+/g, " "); return n.length <= 24 && /^[\p{L}][\p{L}' -]*$/u.test(n) ? n : ""; } catch(_e){ return ""; } })();
 
   /* ---------------- memory: only on this computer, and fine without it ---------------- */
-  var KEY = "robo-math-buddy";
+  /* each picked child has their own (scores, the robot's name), so siblings sharing a computer don't mix */
+  var KEY = "robo-math-buddy" + (CHILD_NAME ? ":" + CHILD_NAME.toLowerCase() : "");
   var mem = { name:"", grade:null, botName:"", right:0, highFives:0 };
-  try { var saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved) for (var k in mem) if (k in saved) mem[k] = saved[k]; } catch(e) {}
-  /* with the child's grade the chat never asks it (it still asks the name); "grade 3" in the chat still changes it */
+  var FIRST_VISIT = true;
+  try { var saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved){ FIRST_VISIT = false; for (var k in mem) if (k in saved) mem[k] = saved[k]; } } catch(e) {}
+  /* with the child's grade the chat never asks it; "grade 3" in the chat still changes it */
   if (CHILD_GRADE !== null) mem.grade = CHILD_GRADE;
+  /* the child's name, unless they gave the buddy a nickname of their own */
+  if (CHILD_NAME && !mem.name) mem.name = CHILD_NAME;
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(mem)); } catch(e) { /* saving not allowed here: remember until the page closes */ } }
 
   var state = { phase: mem.name ? (mem.grade === null ? "askGrade" : "chat") : "askName", awaitBotName:false, pending:"", q:null, quiz:false, streak:0, wantFive:false, voice:false };
@@ -1556,14 +1563,16 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
   $("sureNo").addEventListener("click", function(){ $("sure").style.display = "none"; });
   $("sureYes").addEventListener("click", function(){
     $("sure").style.display = "none";
-    mem = { name:"", grade:CHILD_GRADE, botName:"", right:0, highFives:0 };   /* the child's grade (if passed) stays */
+    mem = { name:CHILD_NAME, grade:CHILD_GRADE, botName:"", right:0, highFives:0 };   /* the child's name and grade (if passed) stay */
     try { localStorage.removeItem(KEY); } catch(e) {}
-    state = { phase:"askName", awaitBotName:false, pending:"", q:null, quiz:false, streak:0, wantFive:false, voice:state.voice };
+    state = { phase:CHILD_NAME ? (mem.grade === null ? "askGrade" : "chat") : "askName", awaitBotName:false, pending:"", q:null, quiz:false, streak:0, wantFive:false, voice:state.voice };
     $("hint").style.display = "none"; scores();
     if (typing) typing.finish();
     log.innerHTML = "";
     showOnBoard("ROBO MATH", ["Ask me math!", "Like: 12 times 8", "or: 15 plus 27"]);
     mood("surprised", 1.6); robot.wave = 2.5;
+    if (CHILD_NAME && mem.grade !== null){ startChat("My memory is all clear! "); return; }
+    if (CHILD_NAME){ say("Hi again, " + mem.name + "! What grade are you in?"); return; }
     say("My memory is all clear! Hi there, I'm your robot math buddy. What's your first name or a nickname?");
   });
 
@@ -1588,7 +1597,9 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
   if (window.THREE) build(); else window.addEventListener("three-ready", build, { once: true });
   setTimeout(function(){ if (!three) $("nogl").style.display = "grid"; }, 12000);
   scores();
-  if (state.phase === "askName"){
+  /* a picked child the buddy hasn't met: it greets them by name and asks what they'd like to do (no "Welcome back") */
+  if (state.phase === "chat" && FIRST_VISIT) startChat("");
+  else if (state.phase === "askName"){
     say("Hi there! I'm your robot math buddy. What's your first name or a nickname?");
   } else if (state.phase === "askGrade"){
     say("Hi again, " + mem.name + "! What grade are you in?");
