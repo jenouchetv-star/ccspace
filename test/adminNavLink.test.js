@@ -8,7 +8,7 @@ const nav = index.split("function navBar(isAdmin){")[1].split("\n}\n")[0];
 
 describe("the Admin link in the public navigation", () => {
   it("points at the portal and has an accessible name", () => {
-    expect(nav).toContain('<a class="btn btn--sm btn--plum" href="#/admin" aria-label="Admin portal">');
+    expect(nav).toContain('<a class="btn btn--sm btn--plum" href="#/admin" aria-label="Admin portal" title="Admin portal">');
   });
 
   it("shows only for a signed-in, active (second-factor) admin", () => {
@@ -24,7 +24,8 @@ describe("the Admin link in the public navigation", () => {
     expect(index).toContain('const ownHeader = AppState.route.name === "admin";');
   });
 
-  it("keeps the word on wide screens and shows just the icon on a phone", () => {
-    expect(nav).toContain('<span class="nav__hide-sm"> Admin</span>');
+  it("is just the icon at every width (owner, 2026-11-24)", () => {
+    expect(nav).toContain('aria-label="Admin portal" title="Admin portal">\' + ic("layout-dashboard") + \'</a>\'');
+    expect(nav).not.toContain('<span class="nav__hide-sm"> Admin</span>');
   });
 });
