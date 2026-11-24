@@ -38,24 +38,17 @@ describe("Robo Math Buddy: the picked child (owner, 2026-11-24: it knows the chi
   it("asks only the grade when the child has a name but no grade", () => {
     expect(openBuddy(undefined, null, "Maya").state().phase).toBe("askGrade");
   });
-  it("keeps each child's own memory on a shared computer: scores, and a nickname the child chose", () => {
+  it("uses the picked child's name over one remembered on this computer, and keeps its one memory as before (owner: only the name and grade bypass)", () => {
     const store = new Map();
     const maya = openBuddy(2, null, "Maya", store);
-    maya.mem().highFives = 4; maya.mem().botName = "Sparky"; maya.save();
-    expect(maya.KEY).toBe("robo-math-buddy:maya");
+    maya.mem().highFives = 4; maya.save();
+    expect(maya.KEY).toBe("robo-math-buddy");
     const leo = openBuddy(4, null, "Leo", store);
     expect(leo.mem().name).toBe("Leo");
-    expect(leo.mem().highFives).toBe(0);
-    expect(leo.mem().botName).toBe("");
-    const back = openBuddy(2, null, "Maya", store);
-    expect(back.mem().highFives).toBe(4);
-    expect(back.FIRST_VISIT).toBe(false);
-    // a nickname Maya gave herself is kept
-    back.mem().name = "Super M"; back.save();
-    expect(openBuddy(2, null, "Maya", store).mem().name).toBe("Super M");
-    // the shared memory from before (no child picked) is never mixed in
-    store.set("robo-math-buddy", JSON.stringify({ name: "Grown-up", highFives: 9 }));
-    expect(openBuddy(4, null, "Leo", store).mem().highFives).toBe(0);
+    expect(leo.mem().grade).toBe(4);
+    expect(leo.state().phase).toBe("chat");
+    expect(leo.mem().highFives).toBe(4);   /* the same memory as today */
+    expect(leo.FIRST_VISIT).toBe(false);
   });
   it("takes only a plain name: letters, spaces, apostrophes and hyphens, 24 letters at most", () => {
     expect(openBuddy(2, null, "  Mary-Kate O'Neil ").CHILD_NAME).toBe("Mary-Kate O'Neil");
