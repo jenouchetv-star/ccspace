@@ -18,6 +18,29 @@ function fixed(hands, pile){
   return s;
 }
 
+describe("truly random shuffles and deals (owner, 2026-11-24: \"absolute random cards\")", () => {
+  it("draws from the browser's crypto source, 53 bits at a time, always in [0, 1)", () => {
+    const R = new Function(pure + "; return { secureRandom };")();
+    const seen = new Set();
+    for (let k = 0; k < 5000; k++){ const x = R.secureRandom(); expect(x).toBeGreaterThanOrEqual(0); expect(x).toBeLessThan(1); seen.add(x); }
+    expect(seen.size).toBe(5000);
+    expect(game).toMatch(/function secureRandom\(\)\{ const u = crypto\.getRandomValues\(new Uint32Array\(2\)\);/);
+  });
+  it("puts every card in every place about equally often", () => {
+    const R = new Function(pure + "; return { secureRandom, shuffle, newDeck };")();
+    const RUNS = 20000, firsts = {};
+    for (let k = 0; k < RUNS; k++){ const c = R.shuffle(R.newDeck(), R.secureRandom)[0]; firsts[c] = (firsts[c] || 0) + 1; }
+    expect(Object.keys(firsts)).toHaveLength(52);
+    for (const n of Object.values(firsts)) expect(Math.abs(n - RUNS / 52)).toBeLessThan(110);   /* about 385 each, give or take 5 spreads */
+  });
+  it("uses it for the deal, the free new hand and the once-a-game reshuffle, never Math.random", () => {
+    expect(game).toContain("G.state = startGame(G.seats.map(s => ({ id: s.id, name: s.name, bot: s.bot })), secureRandom);");
+    expect(game).toContain("!newHand(st, i, secureRandom)) return;");
+    expect(game).toContain("!reshuffle(st, i, secureRandom)) return;");
+    expect(game).not.toMatch(/(startGame|newHand|reshuffle|deal|shuffle)\([^)]*Math\.random/);
+  });
+});
+
 describe("the deck and the deal", () => {
   it("is 52 different cards", () => {
     const d = M.newDeck();

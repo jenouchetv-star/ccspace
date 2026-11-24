@@ -227,6 +227,9 @@ const rankValue = (r) => RANKS.indexOf(r) + 1;
 function newDeck(){ const d = []; for (const s of ["s", "h", "d", "c"]) for (const r of RANKS) d.push(r + s); return d; }
 /* a small repeatable random number maker (xorshift), so tests can replay a game */
 function seeded(n){ let x = (Math.imul(n | 0, 2654435761) >>> 0) || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; }
+/* the real games shuffle and deal from the browser's crypto source (owner, 2026-11-24: "absolute random cards"), not
+   Math.random, which is predictable and can't reach most of the possible orders of a 52-card deck: 53 random bits, in [0, 1) */
+function secureRandom(){ const u = crypto.getRandomValues(new Uint32Array(2)); return ((u[0] >>> 5) * 67108864 + (u[1] >>> 6)) / 9007199254740992; }
 /* the riffle shuffle's picture (owner's pick, 2026-11-17): cards fall one at a time from the bottom of each half,
    alternating, into one stack */
 function riffle(left, right){ const out = []; for (let k = 0; k < Math.max(left.length, right.length); k++){ if (k < left.length) out.push(left[k]); if (k < right.length) out.push(right[k]); } return out; }
@@ -911,7 +914,7 @@ $("bStart").onclick = () => { if (G.seats.length >= 2) startRound(); };
 function startRound(by){
   G.round++;   /* anything still waiting from the last round sees this and stops */
   sfx("start");
-  G.state = startGame(G.seats.map(s => ({ id: s.id, name: s.name, bot: s.bot })), Math.random);
+  G.state = startGame(G.seats.map(s => ({ id: s.id, name: s.name, bot: s.bot })), secureRandom);
   G.phase = "race"; G.revealed = {}; G.chosen = {}; G.redealing = {}; G.busy = false; G.raceWinner = -1; HERE.heart = null;
   $("lobby").hidden = true; $("podium").hidden = true; $("again").hidden = true; $("confetti").innerHTML = "";
   buildTable(); paintCounts(); paintSeats();
@@ -950,7 +953,7 @@ function reveal(i, pick){
    ones fly back. The deck keeps the same number of cards. */
 async function redeal(i){
   const st = G.state, r = G.round;
-  if (G.phase !== "race" || G.revealed[i] || G.redealing[i] || !newHand(st, i, Math.random)) return;
+  if (G.phase !== "race" || G.revealed[i] || G.redealing[i] || !newHand(st, i, secureRandom)) return;
   G.redealing[i] = true; paintSeats(); tell(i);
   if (G.seats[i].local){ HERE.heart = null; paintTray(); }
   sfx("flip", { volume: .5 });
@@ -1085,7 +1088,7 @@ let glowFlash = 0;
    each other, then the cards fall one at a time from each half, alternating, into one stack in the middle */
 async function doShuffle(i){
   const st = G.state;
-  if (G.busy || !st || !reshuffle(st, i, Math.random)) return;
+  if (G.busy || !st || !reshuffle(st, i, secureRandom)) return;
   const r = G.round;
   G.busy = true; tellAll();
   news(nm(i) + " shuffled their cards into the draw deck and took new ones. Everyone gets one shuffle a game.");
