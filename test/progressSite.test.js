@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import {
   recordTarget, quizBubbleAllowed, GRADE_LABELS, gradeLabel, STEAMM_SUBJECTS, nuggetsFor, parseNuggetId, subjectFromTopic,
   answerFromMessage, buildReport, READING_SUBJECT, playingFromStored, playingToStore,
-  parentReport, REPORT_WEEKS, STATUS_LABELS, MIN_EVIDENCE, REPORT_SUBJECTS, dayKey,
+  parentReport, REPORT_WEEKS, STATUS_LABELS, MIN_EVIDENCE, REPORT_SUBJECTS, dayKey, overallRating, OVERALL_RATINGS,
 } from "../assets/lib/progress.js";
 import { AVATAR_IDS, avatarName, avatarFor, avatarSVG } from "../assets/lib/avatars.js";
 
@@ -530,10 +530,10 @@ describe("answers from the site's games, and the report's levels", () => {
   const draw = (raw, state = {}) => {
     const S = Object.assign({ children: KIDS, reportFor: "c1", span: "week", reports: { c1: raw }, reportLoading: {}, tab: "sum", weekOffset: 0 }, state);
     const make = new Function("ProgressState", "E", "ic", "progressLoadReport", "progressSkeleton", "parentReport", "REPORT_WEEKS", "STATUS_LABELS", "MIN_EVIDENCE",
-      "REPORT_SUBJECTS", "dayKey", "avatarSVG", "avatarFor", "gradeLabel", "STEAMM_ICONS", "db", "progressContent", "progressAnd", "thumbSrc", "Date",
+      "REPORT_SUBJECTS", "dayKey", "avatarSVG", "avatarFor", "gradeLabel", "STEAMM_ICONS", "db", "progressContent", "progressAnd", "thumbSrc", "Date", "overallRating", "OVERALL_RATINGS",
       "const RP_SUBJECT = {" + RP + "\nreturn function progressReportHTML(" + body("progressReportHTML"));
     return make(S, esc, () => "", () => {}, () => "loading", parentReport, REPORT_WEEKS, STATUS_LABELS, MIN_EVIDENCE, REPORT_SUBJECTS, dayKey, avatarSVG, avatarFor, gradeLabel,
-      {}, { list: (t) => (t === "games" ? GAMES : []) }, () => ({ find: () => null }), (l) => l.join(" and "), (x) => x, FakeDate)();
+      {}, { list: (t) => (t === "games" ? GAMES : []) }, () => ({ find: () => null }), (l) => l.join(" and "), (x) => x, FakeDate, overallRating, OVERALL_RATINGS)();
   };
   const at = (d, h = 10) => new Date(2026, 10, d, h).toISOString();
   const ROWS = [
@@ -1207,5 +1207,18 @@ describe("the 'last seen' heartbeat", () => {
     expect(pings).toBe(3);
     expect(html).toContain("const PORTAL_SEEN_EVERY_MS = 120000;");
     expect(body("boot")).toContain("portalSeenStart();");
+  });
+});
+describe("the Understanding block shows a rating, not a percent (owner, 2026-11-24)", () => {
+  const src = readFileSync(new URL("../index.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const r = src.slice(src.indexOf("function progressReportHTML("), src.indexOf("\n}\n", src.indexOf("function progressReportHTML(")));
+  it("the word, a four-step scale from Needs improvement to Excellent, and how many were correct", () => {
+    expect(r).toContain("const rating = overallRating(T.pct, T.n);");
+    expect(r).toContain('<div class="rp-rate rp-rate--\' + rating.id + \'"><b>\' + E(rating.label) + \'</b><span>\' + (T.own + T.hint) + \' of \' + T.n + \' correct</span></div>');
+    expect(r).toContain("OVERALL_RATINGS.map((x, i) => '<li' + (i === rating.step ? ' class=\"on\" aria-current=\"true\"' : \"\") + '>' + E(x.label) + '</li>').join(\"\")");
+    expect(r).not.toContain("<div class=\"rp-num\"><b>' + T.pct + '%</b>");
+  });
+  it("with too few answers it says so instead", () => {
+    expect(r).toContain("Not enough questions yet");
   });
 });

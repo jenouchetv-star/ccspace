@@ -274,6 +274,22 @@ export function subjectStatus({ own = 0, hint = 0, miss = 0, sources = 0 } = {})
   return r >= 0.85 && sources >= 2 ? "cons" : "prac";
 }
 
+/** The report's overall rating, shown in place of the big percent (owner, 2026-11-24: "from needs improvement to
+    excellent"): four steps on the report's own cut-offs, under 60, 60 to 74, 75 to 84, and 85 or more. */
+export const OVERALL_RATINGS = [
+  { id: "needs", label: "Needs improvement", from: 0 },
+  { id: "good", label: "Good", from: 60 },
+  { id: "very", label: "Very good", from: 75 },
+  { id: "excellent", label: "Excellent", from: 85 },
+];
+/** The step for a percent correct, or null under MIN_EVIDENCE answers (as a subject, nothing is rated from a few). */
+export function overallRating(pct, n) {
+  if (!(n >= MIN_EVIDENCE)) return null;
+  let step = 0;
+  OVERALL_RATINGS.forEach((r, i) => { if (pct >= r.from) step = i; });
+  return { ...OVERALL_RATINGS[step], step };
+}
+
 /** Where an answer came from, for "at least 2 different games, books or activities": the game, except that each
     Solar System Sandbox tour counts on its own (a question id is the tour and its number, as in "gas-giants-q1"). */
 export function sourceOf(row) {

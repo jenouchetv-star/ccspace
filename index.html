@@ -4691,6 +4691,15 @@ body.portal-locked{ overflow:hidden; }
 .rp-num b{ font-size:2.75rem; line-height:1; font-weight:800; letter-spacing:-.02em; }
 .rp-num b small{ font-size:1.18rem; color:var(--rp-slate); font-weight:600; letter-spacing:0; }
 .rp-num span{ font-weight:600; }
+/* the overall rating (owner, 2026-11-24): the word, how many were correct, then the four steps with this one marked */
+.rp-rate{ display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-top:14px; }
+.rp-rate b{ font-size:2.3rem; line-height:1.05; font-weight:800; letter-spacing:-.02em; }
+.rp-rate span{ font-weight:600; color:var(--rp-slate); }
+.rp-rate--none b{ font-size:1.5rem; }
+.rp-scale{ list-style:none; padding:0; margin:12px 0 4px; display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; max-width:460px; }
+.rp-scale li{ font-size:.78rem; font-weight:600; color:var(--rp-slate); padding-top:9px; border-top:6px solid #DDE3E6; line-height:1.25; }
+.rp-scale li:first-child{ border-top-left-radius:3px; } .rp-scale li:last-child{ border-top-right-radius:3px; }
+.rp-scale li.on{ color:var(--ink); font-weight:800; border-top-color:var(--ink); }
 .rp-twin ul{ list-style:none; margin:18px 0 0; padding:0; }
 .rp-twin li{ padding:5px 0; }
 .rp-week{ display:flex; gap:5px; margin-top:12px; max-width:320px; }
@@ -16083,6 +16092,7 @@ function progressReportHTML(){
     + '</div></header>';
   const panel = (id, inner) => '<section class="rp-panel" role="tabpanel" id="rp-p-' + id + '" aria-labelledby="rp-t-' + id + '"' + (tab === id ? "" : " hidden") + '>' + inner + '</section>';
   const T = rep.totals, G = rep.engagement;
+  const rating = overallRating(T.pct, T.n);
 
   /* ---- Summary ---- */
   const focus = rep.focus.length ? '<div class="rp-block"><h3>Worth practicing' + weekWord + '</h3><div class="rp-focus">'
@@ -16099,7 +16109,11 @@ function progressReportHTML(){
     }).join("") + '</div></div>' : "";
   const twin = '<div class="rp-block"><div class="rp-twin">'
     + '<div><h3>Understanding <span class="rp-meta">from questions inside the play</span></h3>'
-    + (T.n ? '<div class="rp-num"><b>' + T.pct + '%</b><span>correct, ' + (T.own + T.hint) + ' of ' + T.n + '</span></div>'
+    + (T.n ? (rating
+        /* the rating in place of the percent (owner, 2026-11-24), with where it sits from Needs improvement to Excellent */
+        ? '<div class="rp-rate rp-rate--' + rating.id + '"><b>' + E(rating.label) + '</b><span>' + (T.own + T.hint) + ' of ' + T.n + ' correct</span></div>'
+          + '<ol class="rp-scale" aria-label="From Needs improvement to Excellent">' + OVERALL_RATINGS.map((x, i) => '<li' + (i === rating.step ? ' class="on" aria-current="true"' : "") + '>' + E(x.label) + '</li>').join("") + '</ol>'
+        : '<div class="rp-rate rp-rate--none"><b>Not enough questions yet</b><span>' + (T.own + T.hint) + ' of ' + T.n + ' correct. A rating needs ' + MIN_EVIDENCE + ' or more.</span></div>')
       + '<ul><li>' + T.own + ' correct on their own</li><li>' + T.hint + ' correct after a hint</li><li>' + T.miss + ' not yet correct</li></ul>'
       : '<p class="rp-empty">No questions answered' + weekWord + '.</p>') + '</div>'
     + '<div><h3>Engagement <span class="rp-meta">how often and how much</span></h3>'

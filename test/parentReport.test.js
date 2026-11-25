@@ -1,7 +1,7 @@
 // The parent report's numbers (owner, 2026-11-23; docs/superpowers/specs/2026-11-23-progress-report-redesign-design.md):
 // statuses, the week, practice picks, the day log, the trend and the opening sentence, all from the report action's rows.
 import { describe, it, expect } from "vitest";
-import { subjectStatus, sourceOf, dayKey, weekPeriod, parentReport, answerFromMessage, REPORT_SUBJECTS, STATUS_LABELS } from "../assets/lib/progress.js";
+import { overallRating, OVERALL_RATINGS, subjectStatus, sourceOf, dayKey, weekPeriod, parentReport, answerFromMessage, REPORT_SUBJECTS, STATUS_LABELS } from "../assets/lib/progress.js";
 
 const NOW = new Date(2026, 10, 23, 9, 14);   // Monday, November 23, 2026, 9:14 AM in the family's time zone
 const at = (d, h = 10) => new Date(2026, 10, d, h).toISOString();
@@ -150,5 +150,23 @@ describe("a game's answer keeps the parent report's fields", () => {
     const a = answerFromMessage({ ccsAnswer: { ...base, given: 5, hints: -1, tries: 0, skill: "" } });
     expect(a).toMatchObject({ game: "solar-system-sandbox", correct: false });
     expect(a).not.toHaveProperty("given"); expect(a).not.toHaveProperty("hints"); expect(a).not.toHaveProperty("tries"); expect(a).not.toHaveProperty("skill");
+  });
+});
+
+describe("the overall rating, in place of the big percent (owner, 2026-11-24: \"from needs improvement to excellent\")", () => {
+  it("is one of four steps, on the report's own cut-offs (60 and 85), with Very good from 75", () => {
+    expect(OVERALL_RATINGS.map(r => r.label)).toEqual(["Needs improvement", "Good", "Very good", "Excellent"]);
+    expect(overallRating(59, 20)).toMatchObject({ id: "needs", step: 0, label: "Needs improvement" });
+    expect(overallRating(60, 20)).toMatchObject({ id: "good", step: 1 });
+    expect(overallRating(73, 33)).toMatchObject({ id: "good", label: "Good" });
+    expect(overallRating(74, 20).id).toBe("good");
+    expect(overallRating(75, 20)).toMatchObject({ id: "very", step: 2, label: "Very good" });
+    expect(overallRating(84, 20).id).toBe("very");
+    expect(overallRating(85, 20)).toMatchObject({ id: "excellent", step: 3, label: "Excellent" });
+    expect(overallRating(100, 5).id).toBe("excellent");
+  });
+  it("needs 5 answers, like a subject, before it rates anything", () => {
+    expect(overallRating(100, 4)).toBe(null);
+    expect(overallRating(0, 0)).toBe(null);
   });
 });
