@@ -5337,7 +5337,8 @@ if (typeof window.supabase === "undefined") {
   import * as CopilotLib from "./assets/lib/copilot.js";
   import * as Shares from "./assets/lib/shares.js";
   import * as Avatars from "./assets/lib/avatars.js";
-  Object.assign(window, ActivityFinder, AcceptInvite, Mfa, PlayAll, Portal, Progress, Shares, Avatars);
+  import * as ReportPdf from "./assets/lib/reportPdf.js";
+  Object.assign(window, ActivityFinder, AcceptInvite, Mfa, PlayAll, Portal, Progress, Shares, Avatars, ReportPdf);
   window.WriterLib = WriterLib;
   window.CopilotLib = CopilotLib;
 </script>
@@ -15927,6 +15928,118 @@ function rpDateRange(p){
   return (a.getMonth() === b.getMonth() ? md(a) + " to " + b.getDate() : md(a) + " to " + md(b)) + ", " + b.getFullYear();
 }
 
+/* ---- Export PDF (owner, 2026-11-24: in place of Print, "a custom pdf design using HTML" made into a PDF file). The
+   design and the PDF writer are assets/lib/reportPdf.js (docs/mockups/progress-report-pdf-draft.html is the look);
+   here the report on screen becomes its model, the pages are laid out off screen and drawn by html2canvas, which
+   loads only now. ---- */
+/** The report on screen (this child, this week or all time), as the PDF's model; null while it isn't loaded. */
+function progressPdfModel(){
+  const S = ProgressState, kids = S.children || [];
+  const child = kids.find(c => c.id === S.reportFor) || kids[0];
+  const raw = child && S.reports[child.id];
+  if (!raw || !raw.ok) return null;
+  const nowMs = Date.now();
+  const rep = parentReport({ answerRows: raw.answerRows, days: raw.days, progress: raw.progress, now: nowMs, weekOffset: S.weekOffset, span: S.span, childName: child.name });
+  const all = rep.span === "all";
+  const longDay = (ms, o) => new Date(ms).toLocaleDateString("en-US", Object.assign({ month: "long", day: "numeric" }, o || {}));
+  const last = rep.period.to - 86400000;
+  const periodLabel = all ? "The last 26 weeks" : "Week of " + longDay(rep.period.from) + " to "
+    + (new Date(rep.period.from).getMonth() === new Date(last).getMonth() ? new Date(last).getDate() : longDay(last)) + ", " + new Date(last).getFullYear();
+  const titleOf = g => rpItem("game", g).title;
+  const DONE = { book: "read to the end", episode: "watched", activity: "made it", entry: "opened", game: "played" };
+  const dayKeys = all ? [...rep.dayLog.keys()].sort().reverse() : rep.engagement.week.map(d => d.key).filter(k => rep.dayLog.has(k));
+  return {
+    name: child.name, grade: gradeLabel(child.grade), periodLabel, shortPeriod: all ? "the last 26 weeks" : "week of " + longDay(rep.period.from),
+    madeOn: longDay(nowMs, { year: "numeric" }), day: dayKey(all ? nowMs : rep.period.from),
+    verdict: rep.verdict, verdictSub: rep.verdictSub,
+    subjects: rep.subjects.map(s => ({ label: s.label, status: s.status, statusLabel: STATUS_LABELS[s.status], n: s.n,
+      ownPct: s.status === "none" ? null : s.ownPct, from: s.games.map(titleOf) })),
+    practice: rep.focus.map(f => ({ title: rpSkill(f), tip: f.tip || "",
+      text: f.right + " of " + f.n + " right" + (f.hint ? ", " + f.hint + " after a hint" : "") + ", in " + progressAnd(f.games.map(titleOf)) + "." })),
+    questions: rep.subjects.flatMap(s => s.look.map(r => ({ r, subject: s.label }))).filter(x => x.r.qt && x.r.a)
+      .sort((a, b) => b.r.ms - a.r.ms).slice(0, 12)
+      .map(({ r, subject }) => ({ subject, from: titleOf(r.g), question: r.qt, gave: r.gv || "", answer: r.a, why: r.w || "", hinted: !!r.c })),
+    days: dayKeys.map(k => ({ label: longDay(k + "T12:00:00", { weekday: "long" }),
+      items: rep.dayLog.get(k).map(it => {
+        const x = rpItem(it.kind, it.item) || { kind: "", title: it.item };
+        const detail = it.answers > 0 ? it.right + " of " + it.answers + " right" : it.done ? (DONE[it.kind] || "finished") : "opened";
+        return { title: x.title, detail: (x.kind ? x.kind + ", " : "") + detail };
+      }) }))
+  };
+}
+/** A script from the site, once (a second call waits for the same load). */
+const PROGRESS_SCRIPTS = {};
+function progressLoadScript(src){
+  if (!PROGRESS_SCRIPTS[src]) PROGRESS_SCRIPTS[src] = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src; s.async = true;
+    s.onload = () => resolve(); s.onerror = () => { delete PROGRESS_SCRIPTS[src]; reject(new Error("could not load " + src)); };
+    document.head.appendChild(s);
+  });
+  return PROGRESS_SCRIPTS[src];
+}
+let PROGRESS_PDF_BUSY = false;
+/** Export PDF: page 1, then the rest filled block by block (a block that doesn't fit starts the next page), each page
+    drawn at twice its size, joined into one PDF and downloaded as "<name>-progress-report-<week>.pdf". */
+async function progressExportPdf(btn){
+  if (PROGRESS_PDF_BUSY) return;
+  const model = progressPdfModel();
+  if (!model) return;
+  PROGRESS_PDF_BUSY = true;
+  const label = btn ? btn.innerHTML : "";
+  if (btn){ btn.disabled = true; btn.innerHTML = ic("loader") + "Making the PDF"; drawIcons(); }
+  const host = document.createElement("div");
+  host.className = "rpdf";
+  host.setAttribute("aria-hidden", "true");
+  host.style.cssText = "position:fixed;left:-20000px;top:0;width:816px;pointer-events:none";
+  try {
+    await progressLoadScript("assets/vendor/html2canvas.min.js");
+    host.innerHTML = "<style>" + REPORT_PDF_CSS + "</style>";
+    document.body.appendChild(host);
+    /* the pages are measured in their own font, so it loads first (a fallback font would break the pages early) */
+    try { await Promise.all(["400", "700", "800"].map(w => document.fonts.load(w + ' 14px "Plus Jakarta Sans"'))); await document.fonts.ready; } catch(_e){ /* measured in what there is */ }
+    const pages = [];
+    const addPage = (inner) => {
+      const t = document.createElement("div");
+      t.innerHTML = reportPdfPage(inner, 0, 0);
+      const page = t.firstElementChild;
+      host.appendChild(page); pages.push(page);
+      return page.querySelector(".rpdf-body");
+    };
+    addPage(reportPdfFirstPage(model));
+    let room = null;
+    for (const block of reportPdfBlocks(model)){
+      if (!room) room = addPage(reportPdfContinued(model));
+      room.insertAdjacentHTML("beforeend", block);
+      if (room.scrollHeight > room.clientHeight + 1 && room.children.length > 2){
+        room.lastElementChild.remove();
+        room = addPage(reportPdfContinued(model));
+        room.insertAdjacentHTML("beforeend", block);
+      }
+    }
+    pages.forEach((p, i) => { const n = p.querySelector(".rpdf-foot span:last-child"); if (n) n.textContent = "Page " + (i + 1) + " of " + pages.length; });
+    await Promise.all([...host.querySelectorAll("img")].map(img => img.complete ? null : new Promise(r => { img.onload = img.onerror = r; })));
+    const jpegs = [];
+    for (const page of pages){
+      const canvas = await html2canvas(page, { scale: 2, backgroundColor: "#FFFFFF", logging: false, width: 816, height: 1056, windowWidth: 816 });
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.92));
+      jpegs.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), w: canvas.width, h: canvas.height });
+    }
+    const bytes = pdfFromJpegs(jpegs, { title: model.name + "’s progress report" });
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = pdfFileName(model.name, model.day);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch(_e){
+    toast("The PDF couldn’t be made just now. Try again in a moment.", "bad");
+  } finally {
+    host.remove();
+    PROGRESS_PDF_BUSY = false;
+    if (btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = label; }
+  }
+}
+
 /** One child's report: the switcher (two or more children), then the report sheet with its four tabs. */
 function progressReportHTML(){
   const S = ProgressState, kids = S.children || [];
@@ -15964,7 +16077,7 @@ function progressReportHTML(){
         + '<button type="button" data-act="progress-week" data-dir="1" aria-label="The week before"' + (rep.period.offset >= REPORT_WEEKS - 1 ? " disabled" : "") + '>' + ic("chevron-left") + '</button>'
         + '<span>' + E(rpDateRange(rep.period)) + '</span>'
         + '<button type="button" data-act="progress-week" data-dir="-1" aria-label="The week after"' + (rep.period.offset ? "" : " disabled") + '>' + ic("chevron-right") + '</button></div>')
-    + '<button type="button" class="rp-btn" data-act="progress-print">' + ic("printer") + 'Print</button></div></div>'
+    + '<button type="button" class="rp-btn" data-act="progress-export">' + ic("file-down") + 'Export PDF</button></div></div>'
     + '<div class="rp-tabs" role="tablist" aria-label="Report sections">'
     + TABS.map(([id, icon, label]) => '<button type="button" role="tab" id="rp-t-' + id + '" aria-controls="rp-p-' + id + '" aria-selected="' + (tab === id) + '"' + (tab === id ? "" : ' tabindex="-1"') + ' data-act="progress-tab" data-tab="' + id + '">' + ic(icon) + label + '</button>').join("")
     + '</div></header>';
@@ -30043,7 +30156,8 @@ const ACTIONS = {
     const S = ProgressState, d = Number(el.getAttribute("data-dir")) || 0;
     S.weekOffset = Math.max(0, Math.min(REPORT_WEEKS - 1, (S.weekOffset || 0) + d)); rerender();
   },
-  "progress-print": () => { window.print(); },
+  /* the report as a PDF file, in place of Print (owner, 2026-11-24) */
+  "progress-export": (el) => progressExportPdf(el),
   /* the grown-up check: one of its 4 answers tapped (owner, 2026-11-24) */
   "progress-check-pick": (el) => progressCheckAnswer(Number(el.getAttribute("data-n"))),
   "progress-subject": (el) => {
