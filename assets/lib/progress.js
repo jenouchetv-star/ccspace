@@ -624,6 +624,61 @@ export function quizBubbleAllowed(route) {
    g45 }, 4 per grade band, each { q, choices, why } with the right choice first (scripts/item-quiz.mjs). The first time
    the child finishes it, Chike asks 2; the second time the other 2; after that 2 again just for fun, not counted. ---- */
 export const ITEM_QUIZ_PER_TIME = 2;
+
+/* ---- Chike reads the K-1 questions aloud in Heart's voice (owner, 2026-11-25), on the weekly quiz and the quick
+   questions. Each thing said is a few pieces recorded with Kokoro (scripts/quiz-voice-lines.mjs, then
+   scripts/record-lines.mjs into assets/voice/quiz/<key>.mp3) and played one after another: the choices come mixed, so
+   the question, each choice and "or" are separate pieces. A piece with no recording: the device's own voice. ---- */
+export const QUIZ_VOICE_DIR = "assets/voice/quiz/";
+export const QUIZ_POP_SIZE = 3;   /* the weekly quiz asks 3 (kid-progress QUIZ_SIZE) */
+/** The recording's name for a piece of text (FNV-1a, 32 bit, base 36, as the games' lineKey). */
+export function quizLineKey(text) {
+  let h = 0x811c9dc5;
+  const t = String(text);
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(36);
+}
+const sayPiece = (s) => String(s == null ? "" : s).replace(/\s+/g, " ").trim();
+/** A question read aloud: the question, then the choices with "or" between them. */
+export function quizQuestionParts(question, choices) {
+  const parts = [sayPiece(question)];
+  (choices || []).forEach((c, i) => { if (i) parts.push("or"); parts.push(sayPiece(c)); });
+  return parts.filter(Boolean);
+}
+/** What Chike says after an answer (the words on the card, progressQuizReplyHTML in index.html). */
+export function quizReplyParts(st, choices) {
+  if (!st) return [];
+  if (st.error) return ["That didn’t go through. Tap your answer again."];
+  const res = st.result;
+  if (!res) return [];
+  if (res.skipped) return ["Let’s skip that one. On to the next!"];
+  const why = sayPiece(res.why);
+  if (res.correct) return ["You got it!", why].filter(Boolean);
+  const right = (choices || [])[res.answer];
+  return ["Good try!", right != null ? "It’s " + sayPiece(right).replace(/[.!?]+$/, "") + "." : "", why].filter(Boolean);
+}
+/** The weekly quiz's last line: so many right of those answered. */
+export function quizPopEndLine(right, answered) {
+  return (answered ? "You got " + right + " of " + answered + " right. " : "") + "See you next week!";
+}
+/** The quick questions' last line. */
+export function quizItemEndLine(right, n, practice) {
+  return "You got " + right + " of " + n + " right. " + (practice ? "Great practice!" : "Great job!");
+}
+/** Every piece to record for the K-1 questions of these items' quizzes (right choice first, as stored), with the
+    lines every quiz can say. Each once. */
+export function quizVoiceLines(quizzes) {
+  const lines = new Set(["or", "You got it!", "Good try!", "That didn’t go through. Tap your answer again.", "Let’s skip that one. On to the next!"]);
+  for (let a = 0; a <= QUIZ_POP_SIZE; a++) for (let r = 0; r <= a; r++) lines.add(quizPopEndLine(r, a));
+  for (let n = 1; n <= ITEM_QUIZ_PER_TIME; n++) for (let r = 0; r <= n; r++) { lines.add(quizItemEndLine(r, n, false)); lines.add(quizItemEndLine(r, n, true)); }
+  for (const quiz of quizzes || []) for (const x of (quiz && Array.isArray(quiz.k1) ? quiz.k1 : [])) {
+    if (!okItemQuestion(x)) continue;
+    quizQuestionParts(x.q, x.choices).forEach((p) => lines.add(p));
+    quizReplyParts({ result: { correct: true, why: x.why } }, x.choices).forEach((p) => lines.add(p));
+    quizReplyParts({ result: { correct: false, answer: 0, why: x.why } }, x.choices).forEach((p) => lines.add(p));
+  }
+  return [...lines];
+}
 /** The band a grade's questions come from: K and 1st k1, 2nd and 3rd g23, 4th to 6th g45. Null for no grade. */
 export function quizLevelFor(grade) {
   const g = childGradeFrom(grade);

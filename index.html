@@ -16960,7 +16960,7 @@ function progressQuizQuestionHTML(q, i, n, st, from, canSay){
 /** The end: so many right of the questions actually answered (one taken back mid-quiz isn't counted). */
 function progressQuizEndHTML(right, answered){
   return '<div class="quiz__row"><img class="quiz__chike" src="assets/characters/chike-pose-thumbs-up.png" alt="" width="84" height="84" decoding="async">'
-    + '<h3 id="quiz-title" class="quiz__q" tabindex="-1">' + (answered ? "You got " + right + " of " + answered + " right. " : "") + "See you next week!</h3></div>"
+    + '<h3 id="quiz-title" class="quiz__q" tabindex="-1">' + E(quizPopEndLine(right, answered)) + "</h3></div>"
     + '<div class="quiz__foot quiz__foot--end"><button type="button" class="btn btn--sm btn--cyan" data-quiz="close">Done</button></div>';
 }
 /** What kid-progress's reply to one answer means for the card: a result (counted), a question skipped kindly (it was
@@ -16973,12 +16973,48 @@ function progressQuizOutcome(res){
   if (res && (res.error === "not_found" || res.error === "invalid")) return { result: { skipped: true }, counted: false, error: false };
   return { result: null, counted: false, error: true };
 }
+/* Chike reading a K-1 quiz card aloud in Heart's voice (owner, 2026-11-25): the pieces (quizQuestionParts,
+   quizReplyParts, the end lines, assets/lib/progress.js) are recordings in assets/voice/quiz, played one after another
+   at 80%. From the first piece with no recording, the rest is said by the device's own voice. */
+let QUIZ_VOICE = null;
+function quizVoiceStop(){
+  if (QUIZ_VOICE){ QUIZ_VOICE.clips.forEach(a => { try { a.pause(); } catch(_e){ /* already stopped */ } }); QUIZ_VOICE = null; }
+  if ("speechSynthesis" in window){ try { speechSynthesis.cancel(); } catch(_e){ /* nothing to stop */ } }
+}
+function quizVoiceHere(text){
+  if (!text || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance !== "function") return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US"; u.rate = 0.9; u.volume = 0.8;
+    const v = speechSynthesis.getVoices().find(x => x.localService && /^en/i.test(x.lang));
+    if (v) u.voice = v;
+    speechSynthesis.speak(u);
+  } catch(_e){ /* no voice here: the words are on the card */ }
+}
+function quizVoicePlay(parts){
+  quizVoiceStop();
+  const list = (parts || []).filter(Boolean);
+  if (!list.length) return;
+  /* all the pieces start loading at once, so there is no wait between them */
+  const run = QUIZ_VOICE = { clips: list.map(t => { const a = new Audio("/" + QUIZ_VOICE_DIR + quizLineKey(t) + ".mp3"); a.preload = "auto"; a.volume = 0.8; return a; }) };
+  const step = (i) => {
+    if (QUIZ_VOICE !== run || i >= run.clips.length) return;
+    const a = run.clips[i];
+    let gone = false;
+    const fail = () => { if (gone || QUIZ_VOICE !== run) return; gone = true; QUIZ_VOICE = null; run.clips.forEach(c => { try { c.pause(); } catch(_e){ /* stopped */ } }); quizVoiceHere(list.slice(i).join(" ")); };
+    a.onended = () => { if (!gone){ gone = true; step(i + 1); } };
+    a.onerror = fail;
+    try { const p = a.play(); if (p && p.catch) p.catch(fail); } catch(_e){ fail(); }
+  };
+  step(0);
+}
 /** Takes Chike's quiz card away (its Close button, Escape, or the page changing under it) and stops any reading aloud.
     True when there was a card. */
 function closePopQuiz(){
   const box = document.getElementById("quiz-root");
   if (!box) return false;
-  if ("speechSynthesis" in window){ try { speechSynthesis.cancel(); } catch(_e){ /* nothing to stop */ } }
+  quizVoiceStop();
   box.remove();
   if (!$("#modal-root").innerHTML && !document.getElementById("who-root")) document.body.classList.remove("no-scroll");
   return true;
@@ -17012,20 +17048,10 @@ async function openPopQuiz(childId){
   /* the child left the list page while it started: the card doesn't pop up on an episode, a book or a game */
   if (!quizBubbleAllowed(AppState.route)) return;
 
-  /* Kindergarten and 1st grade: read aloud, with a voice that lives on this device */
-  const canSay = level === "k1" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance === "function";
-  const say = (text) => {
-    if (!canSay || !text) return;
-    try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "en-US"; u.rate = 0.9; u.volume = 0.8;
-      const v = speechSynthesis.getVoices().find(x => x.localService && /^en/i.test(x.lang));
-      if (v) u.voice = v;
-      speechSynthesis.speak(u);
-    } catch(_e){ /* no voice here: the words are on the card */ }
-  };
-  const sayQuestion = (q) => say(q.question + " " + q.choices.join(", or ") + "?");
+  /* Kindergarten and 1st grade: read aloud in Heart's voice (quizVoicePlay) */
+  const canSay = level === "k1";
+  const say = (parts) => { if (canSay) quizVoicePlay(parts); };
+  const sayQuestion = (q) => say(quizQuestionParts(q.question, q.choices));
 
   const st = { i: 0, right: 0, answered: 0, busy: false, result: null, choice: -1, error: false, ended: false };
   const back = document.activeElement;
@@ -17065,9 +17091,8 @@ async function openPopQuiz(childId){
     st.result = out.result; st.error = out.error;
     if (out.counted){ st.answered++; if (st.result.correct) st.right++; }
     paint(st.result ? '[data-quiz="next"]' : '[data-quiz="pick"]');
-    const words = plain(progressQuizReplyHTML(q, st));
-    live.textContent = words;
-    say(words);
+    live.textContent = plain(progressQuizReplyHTML(q, st));
+    say(quizReplyParts(st, q.choices));
   };
   const next = () => {
     if (!st.result) return;
@@ -17075,9 +17100,9 @@ async function openPopQuiz(childId){
     if (st.i >= qs.length){
       st.ended = true;
       paint('[data-quiz="close"]');
-      const words = plain(progressQuizEndHTML(st.right, st.answered));
+      const words = quizPopEndLine(st.right, st.answered);
       live.textContent = words;
-      say(words);
+      say([words]);
       return;
     }
     paint("#quiz-title");
@@ -17137,7 +17162,7 @@ function progressItemBubbleHTML(o){
 }
 function progressItemQuizEndHTML(right, n, practice){
   return '<div class="quiz__row"><img class="quiz__chike" src="assets/characters/chike-pose-thumbs-up.png" alt="" width="84" height="84" decoding="async">'
-    + '<h3 id="quiz-title" class="quiz__q" tabindex="-1">You got ' + right + ' of ' + n + ' right. ' + (practice ? "Great practice!" : "Great job!") + '</h3></div>'
+    + '<h3 id="quiz-title" class="quiz__q" tabindex="-1">' + E(quizItemEndLine(right, n, practice)) + '</h3></div>'
     + '<div class="quiz__foot quiz__foot--end"><button type="button" class="btn btn--sm btn--cyan" data-quiz="close">Done</button></div>';
 }
 async function openItemQuiz(){
@@ -17158,13 +17183,10 @@ async function openItemQuiz(){
   const pic = o.kind === "episode" ? (rec.thumb && rec.thumb.src) : (typeof rec.image === "string" ? rec.image : rec.image && rec.image.src);
   const from = { title: (rec.title || "") + (set.practice ? ". Just for fun" : ""), pic: pic ? thumbSrc(pic) : "", full: pic || "" };
 
-  /* Kindergarten and 1st grade: read aloud, as in the weekly quiz */
-  const canSay = level === "k1" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance === "function";
-  const say = (text) => {
-    if (!canSay || !text) return;
-    try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = "en-US"; u.rate = 0.9; u.volume = 0.8; speechSynthesis.speak(u); } catch(_e){ /* the words are on the card */ }
-  };
-  const sayQuestion = (q) => say(q.question + " " + q.choices.join(", or ") + "?");
+  /* Kindergarten and 1st grade: read aloud in Heart's voice, as in the weekly quiz */
+  const canSay = level === "k1";
+  const say = (parts) => { if (canSay) quizVoicePlay(parts); };
+  const sayQuestion = (q) => say(quizQuestionParts(q.question, q.choices));
   const st = { i: 0, right: 0, busy: false, result: null, choice: -1, error: false, ended: false };
   const back = document.activeElement;
   const box = document.createElement("div");
@@ -17191,16 +17213,16 @@ async function openItemQuiz(){
     if (counted) kidCall("game_answer", { child: kid.id, game: game, qid: q.qid, subject: q.subject, level: level, correct: correct,
       question: q.question, answer: q.right, why: q.why, given: q.choices[choice], day: dayKey(Date.now()) }).catch(() => {});
     paint('[data-quiz="next"]');
-    const words = plain(progressQuizReplyHTML(q, st));
-    live.textContent = words; say(words);
+    live.textContent = plain(progressQuizReplyHTML(q, st));
+    say(quizReplyParts(st, q.choices));
   };
   const next = () => {
     if (!st.result) return;
     st.i++; st.result = null; st.choice = -1;
     if (st.i >= qs.length){
       st.ended = true; paint('[data-quiz="close"]');
-      const words = plain(progressItemQuizEndHTML(st.right, qs.length, set.practice));
-      live.textContent = words; say(words);
+      const words = quizItemEndLine(st.right, qs.length, set.practice);
+      live.textContent = words; say([words]);
       return;
     }
     paint("#quiz-title"); sayQuestion(qs[st.i]);

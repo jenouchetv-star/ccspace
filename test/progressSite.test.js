@@ -7,6 +7,7 @@ import {
   recordTarget, quizBubbleAllowed, GRADE_LABELS, gradeLabel, STEAMM_SUBJECTS, nuggetsFor, parseNuggetId, subjectFromTopic,
   answerFromMessage, buildReport, READING_SUBJECT, playingFromStored, playingToStore,
   parentReport, REPORT_WEEKS, STATUS_LABELS, MIN_EVIDENCE, REPORT_SUBJECTS, dayKey, overallRating, OVERALL_RATINGS,
+  quizPopEndLine,
 } from "../assets/lib/progress.js";
 import { AVATAR_IDS, avatarName, avatarFor, avatarSVG } from "../assets/lib/avatars.js";
 
@@ -758,11 +759,14 @@ describe("Chike's pop quiz", () => {
 
   it("K to 1st is read aloud", () => {
     const o = body("openPopQuiz");
-    expect(o).toContain("speechSynthesis");
-    expect(o).toContain('level === "k1"');
-    expect(o).toContain('"speechSynthesis" in window');
-    expect(o).toContain("speechSynthesis.cancel()");                         // and quiet again when the card closes
-    expect(body("closePopQuiz")).toContain("speechSynthesis.cancel()");
+    /* in Heart's voice: the recorded pieces (owner, 2026-11-25), the device's voice only for a piece not recorded */
+    expect(o).toContain('const canSay = level === "k1";');
+    expect(o).toContain("quizVoicePlay(parts)");
+    expect(o).toContain("say(quizQuestionParts(q.question, q.choices))");
+    expect(o).toContain("say(quizReplyParts(st, q.choices))");
+    expect(o).not.toContain("SpeechSynthesisUtterance");
+    expect(body("closePopQuiz")).toContain("quizVoiceStop();");               // and quiet again when the card closes
+    expect(body("quizVoiceStop")).toContain("speechSynthesis.cancel()");
     expect(o).toMatch(/const close = \(\) => \{\s*closePopQuiz\(\);/);
     const hear = questionHTML(Q, 0, 3, { result: null }, null, true);
     expect(hear).toContain('data-quiz="hear"');
@@ -771,7 +775,7 @@ describe("Chike's pop quiz", () => {
   });
 
   it("no score out of 100", () => {
-    const end = fn("progressQuizEndHTML")();
+    const end = fn("progressQuizEndHTML", "E", "quizPopEndLine")((x) => String(x), quizPopEndLine);
     expect(end(2, 3)).toContain("You got 2 of 3 right. See you next week!");
     expect(end(1, 2)).toContain("You got 1 of 2 right. See you next week!");  // a question taken back is not counted
     expect(end(0, 0)).toContain("See you next week!");
@@ -844,8 +848,8 @@ describe("Chike's pop quiz", () => {
       getElementById: (id) => (id === "quiz-root" && open ? card : null),
       body: { classList: { remove: (c) => { if (c === "no-scroll") unlocked++; } } },
     });
-    const close = (open, win) => fn("closePopQuiz", "document", "window", "speechSynthesis", "$")(
-      doc(open), win, { cancel: () => { cancelled++; } }, () => ({ innerHTML: "" }))();
+    const close = (open, win) => fn("closePopQuiz", "document", "window", "quizVoiceStop", "$")(
+      doc(open), win, () => { cancelled++; }, () => ({ innerHTML: "" }))();
     expect(close(true, { speechSynthesis: {} })).toBe(true);
     expect([removed, cancelled, unlocked]).toEqual([1, 1, 1]);
     expect(close(false, { speechSynthesis: {} })).toBe(false);              // no card: nothing to do, no voice stopped
