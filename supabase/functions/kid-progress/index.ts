@@ -45,6 +45,9 @@
 //                 sending it again returns the first result and changes nothing. The first answer is also kept as a
 //                 game answer (game "pop-quiz", qid the nugget id) when the fact has a STEAMM subject; a fault there is
 //                 logged and never fails the answer.
+//   answered      { child, game } -> { ok, qids }: the question ids this child has answered in that game (not "pop-quiz"),
+//                 so Chike's quick questions after an episode or an activity ("episode-<id>", "activity-<id>") can ask
+//                 fresh ones the next time (owner, 2026-11-24). Read only.
 //   seen          the signed-in member has a page of the site open: sets this session's portal_sessions.last_seen_at
 //                 to now, skipped when it was set less than 60 seconds ago (supabase/parent-sign-ins.sql). -> { ok }
 //
@@ -494,6 +497,18 @@ Deno.serve(async (req) => {
       if (error) throw new Error(error.message);
       await addToDay(child.id, familyDay(body.day), "game", game, { answers: 1, right: body.correct ? 1 : 0 });
       return json({ ok: true });
+    }
+
+    if (action === "answered") {
+      // Chike's quick questions after an episode or an activity (owner, 2026-11-24): which of the item's questions this
+      // child has already answered, so the next time brings fresh ones. Read only.
+      const child = await ownChild(who.id, body.child);
+      if (!child) return fail("not_found");
+      const game = typeof body.game === "string" ? body.game : "";
+      if (!GAME_ID.test(game) || game === POP_QUIZ) return fail("invalid");
+      const { data, error } = await db.from("child_game_answers").select("qid").eq("child_id", child.id).eq("game", game).limit(500);
+      if (error) throw new Error(error.message);
+      return json({ ok: true, qids: [...new Set((data ?? []).map((r) => String(r.qid)))] });
     }
 
     if (action === "report") {

@@ -977,4 +977,25 @@ describe("kid-progress function", () => {
       expect(r).toMatchObject({ ok: true, days: [] });
     });
   });
+
+  describe("answered: what a child already answered in one game (owner, 2026-11-24: fresh questions the next time)", () => {
+    it("lists the question ids the child answered in that game, once each, and nothing from other games or children", async () => {
+      rowsOf("child_game_answers").push(
+        answerRow(A_CHILD, NOW, { game: "episode-vid-ep2", qid: "g23-1" }),
+        answerRow(A_CHILD, NOW, { game: "episode-vid-ep2", qid: "g23-2" }),
+        answerRow(A_CHILD, NOW, { game: "episode-vid-ep2", qid: "g23-1" }),
+        answerRow(A_CHILD, NOW, { game: "episode-vid-ep3", qid: "g23-3" }),
+        answerRow(A_CHILD2, NOW, { game: "episode-vid-ep2", qid: "k1-1" }));
+      const r = await a("answered", { child: A_CHILD, game: "episode-vid-ep2" });
+      expect(r.ok).toBe(true);
+      expect(r.qids.sort()).toEqual(["g23-1", "g23-2"]);
+      expect((await a("answered", { child: A_CHILD, game: "activity-act-x" })).qids).toEqual([]);
+    });
+    it("only for the member's own child, and only a real game name (never the pop quiz)", async () => {
+      expect(await b("answered", { child: A_CHILD, game: "episode-vid-ep2" })).toMatchObject({ ok: false, error: "not_found" });
+      expect(await a("answered", { child: A_CHILD, game: "pop-quiz" })).toMatchObject({ ok: false, error: "invalid" });
+      expect(await a("answered", { child: A_CHILD, game: "Bad Game!" })).toMatchObject({ ok: false, error: "invalid" });
+      expect(await a("answered", { child: A_CHILD })).toMatchObject({ ok: false, error: "invalid" });
+    });
+  });
 });

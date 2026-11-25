@@ -618,3 +618,51 @@ export function quizBubbleAllowed(route) {
   const params = (route && route.params) || {};
   return !!route && QUIZ_ROUTES.includes(route.name) && !params.id && !params.app;
 }
+
+/* ---- Chike's quick questions after an episode or a "We made it!" activity (owner, 2026-11-24; drafts
+   docs/mockups/tracker-quick-questions-*.png). Each item keeps its questions in its record as quiz: { subject, k1, g23,
+   g45 }, 4 per grade band, each { q, choices, why } with the right choice first (scripts/item-quiz.mjs). The first time
+   the child finishes it, Chike asks 2; the second time the other 2; after that 2 again just for fun, not counted. ---- */
+export const ITEM_QUIZ_PER_TIME = 2;
+/** The band a grade's questions come from: K and 1st k1, 2nd and 3rd g23, 4th to 6th g45. Null for no grade. */
+export function quizLevelFor(grade) {
+  const g = childGradeFrom(grade);
+  return g === null ? null : g <= 1 ? "k1" : g <= 3 ? "g23" : "g45";
+}
+/** The game an item's answers are kept under ("episode-<id>", "activity-<id>"), or "" when it can't be one. */
+export function itemQuizGame(kind, id) {
+  const g = String(kind) + "-" + String(id == null ? "" : id);
+  return (kind === "episode" || kind === "activity") && /^[a-z0-9-]{1,40}$/.test(g) ? g : "";
+}
+/** The subject an item's answers count toward, or "". */
+export function itemQuizSubject(quiz) {
+  return quiz && ANSWER_SUBJECTS.includes(quiz.subject) ? quiz.subject : "";
+}
+const okItemQuestion = (x) => x && typeof x.q === "string" && x.q.trim() && Array.isArray(x.choices)
+  && x.choices.length >= 2 && x.choices.every((c) => typeof c === "string" && c.trim());
+/** The questions to ask now: the first 2 at this level not yet answered (qid "<level>-<n>", n from 1), counted; or, once
+    all are answered, 2 of them at random just for fun (practice). Each comes with its choices mixed, the right one's
+    place (answer) and words (right), the why and the subject. Nothing to ask: an empty list. */
+export function itemQuizPick(quiz, level, answered, rand) {
+  const subject = itemQuizSubject(quiz);
+  const list = subject && Array.isArray(quiz[level]) ? quiz[level] : [];
+  const done = new Set(answered || []);
+  const all = list.map((x, i) => ({ x, qid: level + "-" + (i + 1) })).filter((o) => okItemQuestion(o.x));
+  let pick = all.filter((o) => !done.has(o.qid)).slice(0, ITEM_QUIZ_PER_TIME);
+  const practice = !pick.length && all.length > 0;
+  if (practice) {
+    const pool = all.slice();
+    pick = [];
+    while (pick.length < ITEM_QUIZ_PER_TIME && pool.length) pick.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
+  }
+  return {
+    practice,
+    questions: pick.map(({ x, qid }) => {
+      const order = x.choices.map((_, i) => i);
+      for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+      const choices = order.map((i) => x.choices[i]);
+      const answer = order.indexOf(0);
+      return { qid, question: x.q, choices, answer, right: choices[answer], why: typeof x.why === "string" ? x.why : "", subject };
+    }),
+  };
+}
