@@ -2600,7 +2600,11 @@ body.has-bottom-nav .tour-bubble{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 7
 /* Desktop-only invitation - on a phone the avatar alone (already visible,
    already tappable) is enough; the bubble competing with a narrow
    viewport's own content is the tradeoff this skips. */
-@media (max-width:767px){ .tour-bubble{ display:none; } }
+/* Someone who has opened the tour before: the welcome only while the pointer is on Chike, or Chike has the keyboard
+   (owner, 2026-11-25). No animation: it just appears. */
+.tour-bubble--hover{ display:none; pointer-events:none; }
+.tour-avatar:hover ~ .tour-bubble--hover, .tour-avatar:focus-visible ~ .tour-bubble--hover{ display:block; }
+@media (max-width:767px){ .tour-bubble, .tour-avatar:hover ~ .tour-bubble--hover{ display:none; } }
 /* The name tag of the child who's playing, just left of Chike (docs/mockups/progress-report-draft-5.html). No
    animation at all: the corner is drawn again on every page, and the tag must never replay anything. */
 .tour-tag{
@@ -2609,6 +2613,7 @@ body.has-bottom-nav .tour-bubble{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 7
   font:inherit; font-size:.85rem; font-weight:800; line-height:1.4; color:var(--ink);
   background:var(--paper-card); border:2px solid var(--ink); border-radius:999px; padding:4px 12px; cursor:pointer;
 }
+.tour-tag__pop{ width:14px; height:14px; margin-left:6px; vertical-align:-2px; flex:none; }
 .tour-tag--alone{ right:18px; }
 .tour-tag--quiet{ font-weight:700; color:var(--ink-mute); }
 body.has-bottom-nav .tour-tag{ bottom:calc(12px + var(--bottom-nav-h, 0px)); }
@@ -11137,10 +11142,12 @@ function renderTourRoot(){
     + '<img src="assets/characters/chike-avatar-moving.webp" width="140" height="140" decoding="async" alt="" role="presentation"></picture></button>'
     /* the name tag of the child who's creating, beside Chike (never animated, so a redraw doesn't replay anything) */
     + progressChipHTML(false)
-    /* the tour's welcome waits while Chike offers his quiz in the same spot */
-    + (state.status === "not_started" && !quizOn
-        ? '<div class="tour-bubble" role="status">Welcome! I would love to give you a tour of our new site.</div>'
-        : "");
+    /* the tour's welcome waits while Chike offers his quiz in the same spot. Shown to someone who has never opened the
+       tour; once they have (seen, or any step past not started), only while the pointer is on Chike (owner, 2026-11-25) */
+    + (quizOn || state.status === "in_progress" ? ""
+        : state.status === "not_started" && !state.seen
+          ? '<div class="tour-bubble" role="status">Welcome! I would love to give you a tour of our new site.</div>'
+          : '<div class="tour-bubble tour-bubble--hover" aria-hidden="true">Welcome! I would love to give you a tour of our new site.</div>');
 
   if (state.status === "in_progress"){
     const stop = TOUR_STOPS[state.stepIndex];
@@ -16693,10 +16700,14 @@ function progressChipHTML(alone){
   if (!portalSavedSession() || !Array.isArray(ProgressState.children) || !ProgressState.children.length) return "";
   const cls = "tour-tag" + (alone ? " tour-tag--alone" : "");
   const kid = ProgressState.children.find(c => c.id === progressPlaying());
+  /* a small window: tapping the tag opens "Who's creating today?" (owner, 2026-11-25). Drawn inline, so a redraw of
+     the corner never waits on the icon set */
+  const pop = '<svg class="tour-tag__pop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"'
+    + ' stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8h20M6 4v4M10 4v4"/></svg>';
   /* nobody picked yet, or "Just me, the grown-up": the tag lets a child say it's their turn */
-  if (!kid) return '<button type="button" class="' + cls + ' tour-tag--quiet" data-act="who-open">Who’s creating?</button>';
+  if (!kid) return '<button type="button" class="' + cls + ' tour-tag--quiet" data-act="who-open">Who’s creating?' + pop + '</button>';
   return '<button type="button" class="' + cls + '" data-act="who-open"'
-    + ' aria-label="' + E(kid.name) + ' is creating. Change who’s creating">' + E(kid.name) + '</button>';
+    + ' aria-label="' + E(kid.name) + ' is creating. Change who’s creating">' + E(kid.name) + pop + '</button>';
 }
 
 /** "We made it!" under an activity's steps, for a child who's playing; afterwards, when they made it. */
@@ -30764,7 +30775,14 @@ const ACTIONS = {
   },
 
   /* ---- site tour ---- */
-  "tour-open": (el) => { teardownTourStep(); openModal(tourWelcomeDialogHTML(), null, "tour-modal", el); },
+  /* opening the tour once counts as having seen it: the welcome bubble then only shows on hover (owner, 2026-11-25) */
+  "tour-open": (el) => {
+    saveTourState({ seen: true });
+    /* the bubble already on screen turns hover-only now (the corner isn't redrawn: Chike gets the focus back) */
+    const b = document.querySelector("#tour-root .tour-bubble:not(.tour-bubble--hover)");
+    if (b){ b.classList.add("tour-bubble--hover"); b.removeAttribute("role"); b.setAttribute("aria-hidden", "true"); }
+    teardownTourStep(); openModal(tourWelcomeDialogHTML(), null, "tour-modal", el);
+  },
   "tour-start": () => {
     closeModal();
     saveTourState({ status:"in_progress", stepIndex:0 });

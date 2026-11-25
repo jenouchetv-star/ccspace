@@ -801,7 +801,7 @@ describe("Chike's pop quiz", () => {
   };
 
   it("only one bubble in Chike's corner: a quiz offer that comes back due, Later and Let's go redraw the whole corner", async () => {
-    expect(corner("not_started", false)).toContain("tour-bubble");
+    expect(corner("not_started", false)).toContain('<div class="tour-bubble" role="status">');
     expect(corner("not_started", true)).not.toContain("tour-bubble");      // the welcome waits while the quiz is offered
     const offer = {};
     let drawn = 0;
