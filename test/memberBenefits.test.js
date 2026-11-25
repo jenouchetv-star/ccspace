@@ -15,7 +15,10 @@ describe("Member benefits", () => {
   });
   it("uses the About and Guide parts: the header band, the story, numbered cards, photo-and-card pairs, the closing card", () => {
     for (const part of ['cmsHeader(M, "Grown-Ups", \'Member <span class="hl-cyan">benefits</span>.\'', '<section class="aboutstory">', '<blockquote class="aboutstory__quote">',
-      '<div class="grid guide__steps">', '<div class="guide__pair"><div class="taped guide__photo">', '<div class="panel guide__end">']) expect(branch, part).toContain(part);
+      '<div class="grid guide__steps">', '<div class="guide__pair"><div class="taped guide__photo guide__photo--fit">', '<div class="panel guide__end">']) expect(branch, part).toContain(part);
+    /* the report picture keeps its own shape, so longer wording beside it never crops it */
+    expect(html).toContain(".guide__photo--fit{ align-self:start; aspect-ratio:1037 / 1353; height:auto; }");
+    expect(branch).toContain('slot(M, "notGrades")');
   });
   it("asks visitors to join or sign in, and sends members to the portal and the report", () => {
     expect(branch).toContain("const member = portalIsSubscriber();");
