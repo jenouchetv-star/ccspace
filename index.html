@@ -4624,9 +4624,11 @@ body.portal-locked{ overflow:hidden; }
 .prog .pr-check{ max-width:540px; margin:clamp(20px,5vw,60px) auto; }
 .pr-check h1{ font-size:clamp(1.8rem,4vw,2.4rem); margin:4px 0 8px; }
 .pr-check > p{ color:var(--ink-soft); margin:0 0 18px; }
-.pr-check form{ display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
-.pr-check__q{ font-size:1.6rem; font-weight:800; }
-.pr-check .inp{ width:120px; font-size:1.5rem; font-weight:800; text-align:center; }
+.pr-check__q{ font-size:1.6rem; font-weight:800; margin:0 0 12px; }
+/* the 4 answers to tap: big, even targets in one row, two by two on a narrow phone */
+.pr-check__choices{ display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:12px; }
+.pr-check__choice{ justify-content:center; font-size:1.5rem; font-weight:800; min-height:64px; }
+@media (max-width: 420px){ .pr-check__choices{ grid-template-columns:repeat(2, 1fr); } }
 .pr-check .pr-msg{ flex-basis:100%; margin:0; }
 /* ---- the parent report (owner, 2026-11-23; docs/mockups/progress-report-draft-8.html) ---- */
 .prog{ --rp-slate:#56616A; --rp-line:#DDE6EB; --rp-line2:#C3D2DB; --rp-wash:#F2F7FA; --rp-sky:#EAF4FA; --rp-skyline:#C6DDEB; --rp-track:#E4ECF1; --rp-lav:#A57FD8; --rp-plum:#6C3E8C; --rp-plumbg:#F4EFFA; }
@@ -15825,28 +15827,26 @@ function viewProgress(){
     + '</div></section>';
 }
 
-/** Grown-ups only: a two-digit by one-digit multiplication, typed in. A wrong answer just gets a new question. */
+/** Grown-ups only: a single-digit multiplication, answered by tapping one of 4 choices (owner, 2026-11-24: nothing to
+    type). A wrong tap just gets a new question. */
 function progressCheckHTML(){
   const S = ProgressState;
-  if (!S.check) S.check = grownUpQuestion(Math.random);
+  if (!S.check || !S.check.choices) S.check = grownUpQuestion(Math.random);
   return '<section class="section prog"><div class="shell"><div class="box pr-check" role="group" aria-labelledby="pr-check-title">'
     + '<span class="eyebrow">A quick grown-up check</span>'
     + '<h1 id="pr-check-title">Grown-ups only</h1>'
-    + '<p>Type the answer to open the progress report and Your children.</p>'
-    + '<form data-act="progress-check" novalidate>'
-    + '<label class="pr-check__q" for="pr-check-answer">' + S.check.a + ' &times; ' + S.check.b + ' =</label>'
-    + '<input class="inp" id="pr-check-answer" name="answer" type="text" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="?" required'
-    + (S.checkMissed ? ' aria-describedby="pr-check-msg"' : "") + '>'
+    + '<p>Tap the answer to open the progress report and Your children.</p>'
+    + '<p class="pr-check__q" id="pr-check-q">' + S.check.a + ' &times; ' + S.check.b + ' =</p>'
+    + '<div class="pr-check__choices" role="group" aria-labelledby="pr-check-q"' + (S.checkMissed ? ' aria-describedby="pr-check-msg"' : "") + '>'
+    + S.check.choices.map(n => '<button type="button" class="btn btn--paper pr-check__choice" data-act="progress-check-pick" data-n="' + n + '">' + n + '</button>').join("")
+    + '</div>'
     + (S.checkMissed ? '<p class="pr-msg" id="pr-check-msg" role="status">Not quite. Here is a new one.</p>' : "")
-    + '<div class="pr-check__go"><a class="btn btn--ghost" href="#/newsletter">Cancel</a>'
-    + '<button class="btn btn--cyan" type="submit">' + ic("lock-open") + ' Open the report</button></div>'
-    + '</form></div></div></section>';
+    + '<div class="pr-check__go"><a class="btn btn--ghost" href="#/newsletter">Cancel</a></div>'
+    + '</div></div></section>';
 }
-function progressCheckAnswer(form){
+function progressCheckAnswer(n){
   const S = ProgressState;
-  const typed = String((form.elements.answer && form.elements.answer.value) || "").replace(/\D/g, "");
-  if (!typed){ if (form.elements.answer) form.elements.answer.focus(); return; }
-  if (S.check && parseInt(typed, 10) === S.check.answer){
+  if (S.check && n === S.check.answer){
     ProgressState.grownUpOk = true;
     S.check = null; S.checkMissed = false;
     rerender();
@@ -15855,8 +15855,8 @@ function progressCheckAnswer(form){
   S.check = grownUpQuestion(Math.random);
   S.checkMissed = true;
   rerender();
-  const box = document.getElementById("pr-check-answer");
-  if (box) box.focus({ preventScroll: true });
+  const first = document.querySelector(".pr-check__choice");
+  if (first) first.focus({ preventScroll: true });
 }
 
 function progressSkeleton(){
@@ -30044,6 +30044,8 @@ const ACTIONS = {
     S.weekOffset = Math.max(0, Math.min(REPORT_WEEKS - 1, (S.weekOffset || 0) + d)); rerender();
   },
   "progress-print": () => { window.print(); },
+  /* the grown-up check: one of its 4 answers tapped (owner, 2026-11-24) */
+  "progress-check-pick": (el) => progressCheckAnswer(Number(el.getAttribute("data-n"))),
   "progress-subject": (el) => {
     const S = ProgressState, id = el.getAttribute("data-id") || "";
     const open = S.openSubj || (S.openSubj = new Set());
@@ -32542,10 +32544,6 @@ async function handleSubmit(form, act){
   }
   if (act === "portal-code"){
     await portalVerifyCode(form);
-    return;
-  }
-  if (act === "progress-check"){
-    progressCheckAnswer(form);
     return;
   }
   if (act === "progress-save"){

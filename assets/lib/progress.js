@@ -209,11 +209,18 @@ export function doneFromMessage(data, origin, siteOrigin) {
   return null;
 }
 
-/** The grown-up check: a single-digit multiplication, 3 to 9 times 3 to 9 (owner, 2026-11-21). */
+/** The grown-up check: a single-digit multiplication, 3 to 9 times 3 to 9 (owner, 2026-11-21), answered by tapping one
+    of 4 choices (owner, 2026-11-24). The 3 wrong ones are the mistakes a near miss makes (one row too many or too few,
+    off by ten or by one), so the right one can't be picked out by its size. Listed smallest first. */
 export function grownUpQuestion(rand) {
   const a = 3 + Math.floor(rand() * 7);
   const b = 3 + Math.floor(rand() * 7);
-  return { a, b, answer: a * b };
+  const answer = a * b;
+  const pool = [...new Set([answer - a, answer + a, answer - b, answer + b, answer - 10, answer + 10, answer - 1, answer + 1])]
+    .filter((n) => n > 0 && n !== answer);
+  const picked = [];
+  while (picked.length < 3 && pool.length) picked.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
+  return { a, b, answer, choices: [answer, ...picked].sort((x, y) => x - y) };
 }
 
 /* ---- answers from the site's games (Solar System Sandbox's tours, ...) ---- */

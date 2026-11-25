@@ -50,6 +50,15 @@ describe("the progress report page", () => {
     expect(html).toMatch(/ProgressState = \{[^}]*children: null[^}]*grownUpOk: false[^}]*reportFor: ""/);
   });
 
+  it("is tapped, not typed: 4 answer buttons and no box to type in (owner, 2026-11-24)", () => {
+    const check = body("progressCheckHTML");
+    expect(check).toContain("S.check.choices.map(n => '<button type=\"button\" class=\"btn btn--paper pr-check__choice\" data-act=\"progress-check-pick\" data-n=\"' + n + '\"");
+    expect(check).toContain('role="group" aria-labelledby="pr-check-q"');
+    expect(check).not.toMatch(/<input|<form/);
+    expect(check).toContain("Tap the answer to open the progress report and Your children.");
+    expect(html).toContain('"progress-check-pick": (el) => progressCheckAnswer(Number(el.getAttribute("data-n")))');
+  });
+
   it("gives a new question after a wrong answer, and remembers a right one only in memory", () => {
     const a = body("progressCheckAnswer");
     expect(a).toContain("ProgressState.grownUpOk = true");

@@ -104,8 +104,22 @@ describe("doneFromMessage", () => {
 
 describe("grownUpQuestion", () => {
   it("grownUpQuestion is a single-digit multiplication (owner, 2026-11-21)", () => {
-    expect(grownUpQuestion(() => 0)).toEqual({ a: 3, b: 3, answer: 9 });
-    expect(grownUpQuestion(() => 0.999)).toEqual({ a: 9, b: 9, answer: 81 });
+    expect(grownUpQuestion(() => 0)).toMatchObject({ a: 3, b: 3, answer: 9 });
+    expect(grownUpQuestion(() => 0.999)).toMatchObject({ a: 9, b: 9, answer: 81 });
+  });
+  it("offers 4 answers to tap, the right one among 3 close ones, smallest first (owner, 2026-11-24)", () => {
+    for (let k = 0; k < 500; k++) {
+      const q = grownUpQuestion(Math.random);
+      expect(q.choices).toHaveLength(4);
+      expect(new Set(q.choices).size).toBe(4);
+      expect(q.choices).toContain(q.answer);
+      expect([...q.choices].sort((x, y) => x - y)).toEqual(q.choices);
+      for (const c of q.choices) {
+        expect(Number.isInteger(c) && c > 0).toBe(true);
+        expect(Math.abs(c - q.answer)).toBeLessThanOrEqual(Math.max(q.a, q.b, 10));   /* close, so it can't be guessed by size */
+      }
+    }
+    expect(grownUpQuestion(() => 0).choices).toEqual(grownUpQuestion(() => 0).choices);   /* the same rand, the same choices */
   });
 });
 
