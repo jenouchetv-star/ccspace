@@ -2282,7 +2282,8 @@ async function showHome(){
   closeMore(false); closeSongSheet(false);   /* phones: nothing of the editor stays open over Home */
   stopAll();
   if (liveChains) liveChains.disconnect();
-  if (song){ await saveNow(); await flushPush(); }
+  /* Home at once: the save to the account carries on, with its progress in the status line (owner, 2026-11-25) */
+  if (song){ await saveNow(); flushPush(); }
   $("#editor").hidden = true; $("#home").hidden = false;
   startHomeFx();
   await paintHome();
@@ -4521,10 +4522,16 @@ document.addEventListener("click", async e => {
   const act = b.dataset.act;
   if (act === "close-app"){
     stopAll();
-    (song ? saveNow().then(flushPush) : Promise.resolve()).finally(() => {
-      if (window.parent && window.parent !== window){ try { window.parent.postMessage({ ccsStudio:"close" }, location.origin); } catch(err){} }
-      else location.href = "/create/studio";
-    });
+    /* back to the site: inside the site, the song is saved here, the site sends it to the account in the background
+       and closes the app at once (owner, 2026-11-25); opened on its own, finish the save, then go to the Studio page */
+    if (window.parent && window.parent !== window){
+      (song && saveTimer ? saveNow() : Promise.resolve()).catch(() => {}).then(() => {
+        handOffSave();
+        try { window.parent.postMessage({ ccsStudio:"close" }, location.origin); } catch(err){}
+      });
+    } else {
+      (song ? saveNow().then(flushPush) : Promise.resolve()).finally(() => { location.href = "/create/studio"; });
+    }
     return;
   }
   if (act === "theme"){ const t = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"; applyTheme(t); try { localStorage.setItem(THEME_KEY, t); } catch(err){} return; }
@@ -4666,8 +4673,10 @@ function pushNow(){
   if (wait > 0){ pushTimer = setTimeout(pushNow, wait); return pushing || Promise.resolve(); }
   const s = song, copy = clone(song);
   pushGate.sent();
+  /* how far it has gone, as the site sends it (owner, 2026-11-25) */
+  const onProgress = pct => { if (song === s && !saveTimer && song.updatedMs === copy.updatedMs) setStatus("Saving to your account… " + pct + "%"); };
   const run = (pushing || Promise.resolve()).then(() => pushGate.delay(true) > 0 ? null
-    : cloud.call("put", { project:C.forCloud(copy, thumbOf(copy)) })).then(r => {
+    : cloud.call("put", { project:C.forCloud(copy, thumbOf(copy)), onProgress })).then(r => {
     if (r === null){ if (song === s && !pushTimer) pushTimer = setTimeout(pushNow, pushGate.delay(true)); return; }   // held by the save before
     pushGate.result(r);
     if (r && r.ok && !r.stale){
@@ -4685,6 +4694,25 @@ function pushNow(){
 }
 /** Before leaving the song: send what's waiting to the account. */
 function flushPush(){ return pushTimer ? pushNow() : (pushing || Promise.resolve()); }
+/** Closing the app inside the site (owner, 2026-11-25): the site finishes sending the song to the account in the
+    background, with its saving card, so nobody waits. The whole song goes over in one step (once the app is closed,
+    nothing in it runs any more), with the song's lock, which the site lets go of once the save lands. Nothing goes
+    when the account already has the song as it is here. False when there is nothing to send, or no site to send it. */
+function handOffSave(){
+  const w = cloud.host();
+  if (!w || typeof w.studioSaveOnClose !== "function" || !song || !cloud.on() || !mineToPush()) return false;
+  const waiting = !!pushTimer && accountHas.get(song.id) !== song.updatedMs;
+  if (!waiting && !pushing) return false;
+  clearTimeout(pushTimer); pushTimer = 0;
+  const copy = clone(song), lockNow = !!songLock && songLock.current === song.id;
+  try {
+    w.studioSaveOnClose({ fn:"sound-cloud", id:song.id, title:song.title || "My song",
+      project: waiting ? C.forCloud(copy, thumbOf(copy)) : null,
+      unlock: lockNow ? { id:song.id, holder:songLock.holder } : null });
+  } catch(e){ return false; }
+  if (lockNow) songLock.handOff();
+  return true;
+}
 /* Home: bring this browser and the account into step (newer copies win, deletes stay deleted), then repaint */
 let syncing = null, fullWarned = false;
 function syncHome(){

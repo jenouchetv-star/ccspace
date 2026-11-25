@@ -1185,6 +1185,15 @@ function createArtLock(o){
       if (!id) return Promise.resolve();
       const extra = Object.assign({ id, holder: o.holder }, opts && opts.keepalive ? { keepalive: true } : {});
       try { return Promise.resolve(o.call("unlock", extra)).catch(() => {}); } catch(e){ return Promise.resolve(); }
+    },
+    /** Closing inside the site while the picture still goes to the account: the site lets go of the lock once that
+        save lands (owner, 2026-11-25), so this tab stops renewing it and doesn't let go of it itself. Returns what the
+        site needs to let go of it ({ id, holder }), or null when this tab holds no lock. */
+    handOff(){
+      const id = lock.current;
+      if (timer){ stop(timer); timer = 0; }
+      lock.current = null;
+      return id ? { id, holder: o.holder } : null;
     }
   };
   return lock;
@@ -1415,9 +1424,11 @@ async function pushNow(){
   clearTimeout(pushTimer); pushTimer = 0;
   if (!cur || !cloud.on() || (cur.owner && cloud.email && cur.owner !== cloud.email)) return;
   if (pushing) await pushing;
-  const p = JSON.parse(JSON.stringify(cur));
+  const p = JSON.parse(JSON.stringify(cur)), id = p.id;
   setStatus("Saving to your account…");
-  pushing = cloud.call("put", { project:forCloud(p) }).then(r => {
+  /* how far it has gone, as the site sends it (owner, 2026-11-25) */
+  const onProgress = pct => { if (cur && cur.id === id) setStatus("Saving to your account… " + pct + "%"); };
+  pushing = cloud.call("put", { project:forCloud(p), onProgress }).then(r => {
     cloudFull(r);
     if (r && r.ok){ if (cloud.email && !cur.owner){ cur.owner = cloud.email; } setStatus("Saved to your account"); }
     else if (!r || r.error === "network") setStatus("Saved in this browser. It goes to your account when you’re back online.");
@@ -1432,6 +1443,26 @@ async function pushNow(){
 }
 /** Before leaving the picture: finish any save to the account that is waiting. */
 function flushPush(){ return pushTimer ? pushNow() : (pushing || Promise.resolve()); }
+/** Closing the app inside the site (owner, 2026-11-25): the site finishes sending the picture to the account in the
+    background, with its saving card, so nobody waits. The whole picture goes over in one step (once the app is
+    closed, nothing in it runs any more), with the picture's lock, which the site lets go of once the save lands.
+    False when there is nothing to send, or no site to send it. */
+function handOffSave(){
+  const w = cloud.host();
+  if (!w || typeof w.studioSaveOnClose !== "function" || !cur || !cloud.on()) return false;
+  if (cur.owner && cloud.email && cur.owner !== cloud.email) return false;
+  const waiting = !!pushTimer;
+  if (!waiting && !pushing) return false;
+  clearTimeout(pushTimer); pushTimer = 0;
+  const lockNow = artLock.current === cur.id;
+  try {
+    w.studioSaveOnClose({ fn:"art-cloud", id:cur.id, title:cur.title || "Untitled",
+      project: waiting ? forCloud(JSON.parse(JSON.stringify(cur))) : null,
+      unlock: lockNow ? { id:cur.id, holder:artLock.holder } : null });
+  } catch(e){ return false; }
+  if (lockNow) artLock.handOff();
+  return true;
+}
 const savedText = () => cloud.on() ? "Saved to your account" : "Saved on this device";
 /* leaving the tab: send what's waiting. Coming back to the gallery: bring in what changed in another browser. */
 document.addEventListener("visibilitychange", () => {
@@ -2186,7 +2217,7 @@ function setStatus(text, bad, full){ const s = $("#status"); s.textContent = tex
 function queueSave(){ if (!cur) return; setStatus("Saving…"); clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 800); }
 async function saveNow(){
   if (!cur) return;
-  clearTimeout(saveTimer);
+  clearTimeout(saveTimer); saveTimer = 0;
   cur.updated = Date.now(); cur.thumb = thumbOf(cur);
   if (cloud.email && !cur.owner) cur.owner = cloud.email;
   try { await store.put(JSON.parse(JSON.stringify(cur))); if (!cloud.on()) setStatus(store.ok ? "Saved on this device" : "Not saved here: use Save a project file", !store.ok); }
@@ -3218,13 +3249,19 @@ document.addEventListener("click", e => {
   if (b.dataset.obj) return objAction(b.dataset.obj);
   if (b.dataset.pxsize){ cur.n = +b.dataset.pxsize; cur.cells = new Array(cur.n * cur.n).fill(""); const s = $("#px-size"); if (s) s.remove(); fit(); inspector(); return; }
   const act = b.dataset.act; if (!act) return;
-  if (act === "home"){ saveNow().then(flushPush).then(showHome); return; }
+  /* back to the pictures at once: the save to the account carries on, with its progress in the status line */
+  if (act === "home"){ saveNow().then(() => { flushPush(); showHome(); }); return; }
   if (act === "close-app"){
-    /* back to the site: inside the site, the site closes the app; opened on its own, go to the Studio page */
-    (cur ? saveNow().then(flushPush) : Promise.resolve()).finally(() => {
-      if (window.parent && window.parent !== window){ try { window.parent.postMessage({ ccsStudio:"close" }, location.origin); } catch(err){} }
-      else location.href = "/create/studio";
-    });
+    /* back to the site: inside the site, the picture is saved here, the site sends it to the account in the background
+       and closes the app at once (owner, 2026-11-25); opened on its own, finish the save, then go to the Studio page */
+    if (window.parent && window.parent !== window){
+      (cur && saveTimer ? saveNow() : Promise.resolve()).catch(() => {}).then(() => {
+        handOffSave();
+        try { window.parent.postMessage({ ccsStudio:"close" }, location.origin); } catch(err){}
+      });
+    } else {
+      (cur ? saveNow().then(flushPush) : Promise.resolve()).finally(() => { location.href = "/create/studio"; });
+    }
     return;
   }
   if (act === "theme"){ const t = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"; applyTheme(t); try { localStorage.setItem("ccs-art-theme", t); } catch(err){} if (cur) draw(); return; }

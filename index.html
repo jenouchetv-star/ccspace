@@ -2614,6 +2614,41 @@ body.has-bottom-nav .tour-bubble{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 7
   background:var(--paper-card); border:2px solid var(--ink); border-radius:999px; padding:4px 12px; cursor:pointer;
 }
 .tour-tag__pop{ width:14px; height:14px; margin-left:6px; vertical-align:-2px; flex:none; }
+/* A save to the account still on its way after Art Space or Sound Space closed (owner, 2026-11-25; draft
+   docs/mockups/background-save-draft-*.png): small dark cards in the apps' own look, bottom-left, clear of Chike's
+   corner. On a phone only the newest shows, beside Chike. "Saved" fades out (decelerating); nothing else moves. */
+.bgsave-wrap{ position:fixed; left:18px; bottom:18px; z-index:1050; display:flex; flex-direction:column; gap:10px; width:min(320px, calc(100vw - 36px)); }
+body.has-bottom-nav .bgsave-wrap{ bottom:calc(10px + var(--bottom-nav-h, 0px)); }
+body.is-admin .bgsave-wrap{ display:none; }
+.bgsave{ position:relative; display:grid; grid-template-columns:40px 1fr auto; gap:4px 12px; align-items:center;
+  background:#1B1B1E; border:1px solid #37373D; border-radius:14px; box-shadow:0 18px 44px rgba(0,0,0,.35), 0 0 0 1px rgba(0,0,0,.4);
+  padding:10px 14px 12px 10px; color:#ECECF0; transition:opacity .4s var(--mo-ease-out, ease-out); }
+.bgsave.is-gone{ opacity:0; }
+.bgsave__icon{ grid-row:1 / span 2; width:40px; height:40px; border-radius:10px; display:grid; place-items:center; }
+.bgsave__icon svg{ width:20px; height:20px; }
+.bgsave--art .bgsave__icon{ background:rgba(242,194,48,.16); color:#F2C230; }
+.bgsave--song .bgsave__icon{ background:rgba(76,125,255,.18); color:#8EAEFF; }
+.bgsave--done .bgsave__icon{ background:rgba(111,207,122,.16); color:#6FCF7A; }
+.bgsave--bad .bgsave__icon{ background:rgba(255,107,97,.16); color:#FF6B61; }
+.bgsave__title{ font-weight:800; font-size:.9rem; line-height:1.25; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bgsave__side{ font-weight:800; font-size:.85rem; color:#A1A1AB; font-variant-numeric:tabular-nums; }
+.bgsave--done .bgsave__side{ color:#6FCF7A; }
+.bgsave__bar{ grid-column:2 / span 2; height:6px; border-radius:999px; background:rgba(255,255,255,.12); overflow:hidden; }
+.bgsave__bar i{ display:block; height:100%; background:#4C7DFF; border-radius:999px; }
+.bgsave__note{ grid-column:2 / span 2; font-size:.82rem; font-weight:600; color:#A1A1AB; line-height:1.35; margin:0; }
+.bgsave__note button{ font:inherit; font-weight:800; color:#8EAEFF; background:none; border:0; padding:0; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+.bgsave--bad:has(.bgsave__x) .bgsave__title{ padding-right:22px; }
+.bgsave__x{ position:absolute; top:6px; right:6px; width:28px; height:28px; display:grid; place-items:center; padding:0; border:0; border-radius:8px; background:none; color:#A1A1AB; cursor:pointer; }
+.bgsave__x svg{ width:16px; height:16px; }
+.bgsave__x:hover{ background:rgba(255,255,255,.08); color:#ECECF0; }
+.bgsave button:focus-visible{ outline:2px solid #8EAEFF; outline-offset:2px; }
+@media (max-width:767px){
+  .bgsave-wrap{ left:12px; width:calc(100vw - 12px - 18px - 72px - 10px); }
+  .bgsave{ grid-template-columns:34px 1fr auto; padding:8px 12px 10px 8px; }
+  .bgsave__icon{ width:34px; height:34px; }
+  .bgsave:not(:last-child){ display:none; }
+}
+@media (prefers-reduced-motion: reduce){ .bgsave{ transition:none; } }
 .tour-tag--alone{ right:18px; }
 .tour-tag--quiet{ font-weight:700; color:var(--ink-mute); }
 body.has-bottom-nav .tour-tag{ bottom:calc(12px + var(--bottom-nav-h, 0px)); }
@@ -5367,7 +5402,8 @@ if (typeof window.supabase === "undefined") {
   import * as Shares from "./assets/lib/shares.js";
   import * as Avatars from "./assets/lib/avatars.js";
   import * as ReportPdf from "./assets/lib/reportPdf.js";
-  Object.assign(window, ActivityFinder, AcceptInvite, Mfa, PlayAll, Portal, Progress, Shares, Avatars, ReportPdf);
+  import * as BgSave from "./assets/lib/bgSave.js";
+  Object.assign(window, ActivityFinder, AcceptInvite, Mfa, PlayAll, Portal, Progress, Shares, Avatars, ReportPdf, BgSave);
   window.WriterLib = WriterLib;
   window.CopilotLib = CopilotLib;
 </script>
@@ -13446,6 +13482,8 @@ function closeGameStage(){
   GAMESTAGE_KEY_HANDLER = null;
   $("#modal-root").innerHTML = "";
   document.body.classList.remove("no-scroll");
+  /* Art Space or Sound Space closed with a save still on its way: its card shows in the corner (owner, 2026-11-25) */
+  bgSaveReveal();
   return true;
 }
 
@@ -15203,6 +15241,14 @@ async function artCloudCall(action, extra){
     } catch(_e){}
     return { ok: true };
   }
+  /* a picture taken to work on in this tab: a save that lands afterwards keeps out of its lock (bgSaveUnlock) */
+  if (action === "lock" && extra && typeof extra.id === "string") BG_LOCK_TAKEN.set("art-cloud:" + extra.id, Date.now());
+  /* a picture going to the account: sent with its progress, one after another per picture (bgSavePut) */
+  if (action === "put"){
+    const data = await bgSavePut("art-cloud", extra, session);
+    if (data && data.error === "no_session" && portalSavedSession() === session) artCloudForget();
+    return data;
+  }
   try {
     const res = await sb.functions.invoke("art-cloud", { body: Object.assign({}, extra || {}, { action: action, session: session }) });
     if (res.error || !res.data) return { ok: false, error: "network" };
@@ -15230,6 +15276,12 @@ async function soundCloudCall(action, extra){
     } catch(_e){}
     return { ok: true };
   }
+  if (action === "lock" && extra && typeof extra.id === "string") BG_LOCK_TAKEN.set("sound-cloud:" + extra.id, Date.now());
+  if (action === "put"){
+    const data = await bgSavePut("sound-cloud", extra, session);
+    if (data && data.error === "no_session" && portalSavedSession() === session) artCloudForget();
+    return data;
+  }
   try {
     const res = await sb.functions.invoke("sound-cloud", { body: Object.assign({}, extra || {}, { action: action, session: session }) });
     if (res.error || !res.data) return { ok: false, error: "network" };
@@ -15237,6 +15289,212 @@ async function soundCloudCall(action, extra){
     return res.data;
   } catch(_e){ return { ok: false, error: "network" }; }
 }
+
+/* ---- Saving in the background (owner, 2026-11-25; draft docs/mockups/background-save-draft-*.png) ----
+   Art Space's and Sound Space's saves to the account go through here, one after another per file, with how far
+   each has gone. Closing either app inside the site hands its last save over (studioSaveOnClose), so the app closes
+   at once; a save still on its way when the app closes then shows as a small dark card in the bottom-left corner
+   (renderBgSave): its progress, "saved", or "didn't save yet" and trying again. The file's lock is let go of once
+   its save lands. The words and the waits are in assets/lib/bgSave.js. */
+const BG_SAVES = new Map();       /* "<function>:<file id>" -> that file's save on its way, and its card */
+const BG_LOCK_TAKEN = new Map();  /* "<function>:<file id>" -> when an app here last took that file's lock */
+/** One save sent to the account, with the share of it sent so far (onPct). Resolves with the account's answer, or
+    { ok:false, error:"network" }; never rejects. */
+function bgSaveSend(fn, text, onPct){
+  return new Promise((resolve) => {
+    try {
+      const x = new XMLHttpRequest();
+      x.open("POST", SUPABASE_URL + "/functions/v1/" + fn);
+      x.setRequestHeader("Content-Type", "application/json");
+      x.setRequestHeader("apikey", SUPABASE_ANON_KEY);
+      x.setRequestHeader("Authorization", "Bearer " + SUPABASE_ANON_KEY);
+      x.timeout = BG_SAVE_TIMEOUT_MS;
+      x.upload.onprogress = (e) => { if (e.lengthComputable) onPct(bgSavePct(e.loaded, e.total)); };
+      x.onload = () => {
+        let d = null;
+        try { d = JSON.parse(x.responseText); } catch(_e){ /* not an answer from the function */ }
+        resolve(d && typeof d === "object" ? d : { ok: false, error: "network" });
+      };
+      x.onerror = x.ontimeout = x.onabort = () => resolve({ ok: false, error: "network" });
+      x.send(text);
+    } catch(_e){ resolve({ ok: false, error: "network" }); }
+  });
+}
+/** A picture or song going to the account (an app's own save, or one handed over as it closed). Saves of the same
+    file go one after another, so an older copy never lands after a newer one; the same version already on its way is
+    not sent twice. The app's onProgress (a whole percent) is told how far it has gone. */
+function bgSavePut(fn, extra, session){
+  const onProgress = extra && typeof extra.onProgress === "function" ? extra.onProgress : null;
+  /* a copy that belongs to this page: an app's own things can't be used once the app is closed */
+  let payload;
+  try { payload = JSON.parse(JSON.stringify(Object.assign({}, extra || {}, { onProgress: undefined }))); }
+  catch(_e){ return Promise.resolve({ ok: false, error: "invalid" }); }
+  delete payload.action; delete payload.session;
+  const p = payload.project || {};
+  const id = typeof p.id === "string" ? p.id : "";
+  const text = JSON.stringify(Object.assign({}, payload, { action: "put", session: session }));
+  if (!id) return bgSaveSend(fn, text, () => {});
+  const key = fn + ":" + id, stamp = p.updated || p.updatedMs || 0;
+  let job = BG_SAVES.get(key);
+  if (job && job.state === "sending" && job.stamp === stamp && job.run){
+    if (onProgress) job.watchers.push(onProgress);
+    return job.run;
+  }
+  if (!job){
+    job = { key: key, fn: fn, kind: fn === "sound-cloud" ? "song" : "art", visible: false, chain: Promise.resolve(), seq: 0, watchers: [], unlock: null, timer: 0 };
+    BG_SAVES.set(key, job);
+  }
+  clearTimeout(job.timer); job.timer = 0;
+  const seq = ++job.seq;
+  Object.assign(job, { title: typeof p.title === "string" ? p.title : "", stamp: stamp, payload: payload, state: "sending", pct: 0, error: "", gone: false,
+    watchers: onProgress ? [onProgress] : [] });
+  const run = job.chain.then(() => bgSaveSend(fn, text, (pct) => {
+    if (job.seq !== seq) return;
+    job.pct = pct;
+    job.watchers.forEach(w => { try { w(pct); } catch(_e){ /* that app has closed */ } });
+    bgSavePaintPct(job);
+  })).then((r) => { try { bgSaveSettled(job, seq, r); } catch(_e){ /* the card only */ } return r; });
+  job.chain = run.catch(() => {});
+  job.run = run;
+  if (job.visible) renderBgSave();
+  return run;
+}
+/** The account answered one save. Only the newest save of a file speaks for it. */
+function bgSaveSettled(job, seq, r){
+  if (job.seq !== seq) return;
+  if (r && r.ok){
+    job.state = "done";
+    bgSaveUnlock(job);
+    if (!job.visible){ BG_SAVES.delete(job.key); return; }
+    bgSaveSay(bgSaveView(job).title + ".");
+    renderBgSave();
+    job.timer = setTimeout(() => {
+      job.gone = true; renderBgSave();
+      job.timer = setTimeout(() => { if (job.state === "done"){ BG_SAVES.delete(job.key); renderBgSave(); } }, 400);
+    }, BG_SAVE_DONE_MS);
+    return;
+  }
+  job.error = (r && r.error) || "network";
+  /* the app is still open: it says so itself, and the card waits in case the app closes before it's fixed */
+  if (!job.visible){ job.state = "hidden"; return; }
+  bgSaveFailed(job);
+}
+/** A save that didn't land, on its card: try again after a while, or say why it can't. */
+function bgSaveFailed(job){
+  const wait = bgSaveRetryMs(job.error);
+  job.state = wait ? "waiting" : "failed";
+  clearTimeout(job.timer);
+  job.timer = wait ? setTimeout(() => bgSaveRetry(job.key), wait) : 0;
+  if (!wait) bgSaveUnlock(job);
+  const v = bgSaveView(job);
+  bgSaveSay(v.title + ". " + v.note);
+  renderBgSave();
+}
+function bgSaveRetry(key){
+  const job = BG_SAVES.get(key);
+  if (!job || (job.state !== "waiting" && job.state !== "hidden")) return;
+  clearTimeout(job.timer); job.timer = 0;
+  const session = portalSavedSession();
+  if (!session){ job.error = "no_session"; bgSaveFailed(job); return; }
+  bgSavePut(job.fn, job.payload, session).then((data) => {
+    if (data && data.error === "no_session" && portalSavedSession() === session) artCloudForget();
+  });
+}
+/** Let go of the file's lock once its save has landed (or can't), unless an app here took the file again since. */
+function bgSaveUnlock(job){
+  const u = job.unlock;
+  if (!u) return;
+  job.unlock = null;
+  if ((BG_LOCK_TAKEN.get(job.key) || 0) > u.at) return;
+  const call = job.fn === "sound-cloud" ? soundCloudCall : artCloudCall;
+  Promise.resolve(call("unlock", { id: u.id, holder: u.holder })).catch(() => {});
+}
+/** Art Space or Sound Space closing inside the site hands over its last save: the open file as it is now (or null when
+    only a save already on its way is left) and its lock. The site sends it in the background; the card shows once the
+    app has closed (bgSaveReveal, in closeGameStage). */
+function studioSaveOnClose(o){
+  if (!o || (o.fn !== "art-cloud" && o.fn !== "sound-cloud") || typeof o.id !== "string" || !o.id) return false;
+  const key = o.fn + ":" + o.id;
+  const unlock = o.unlock && typeof o.unlock.holder === "string" ? { id: o.id, holder: String(o.unlock.holder), at: Date.now() } : null;
+  const session = portalSavedSession();
+  if (o.project && session) bgSavePut(o.fn, { project: o.project }, session);
+  const job = BG_SAVES.get(key);
+  if (job && (job.state === "sending" || job.state === "hidden")){
+    if (!job.title && typeof o.title === "string") job.title = o.title;
+    job.unlock = unlock;
+    return true;
+  }
+  /* nothing on its way: let go of the lock now, as closing always did */
+  if (unlock) bgSaveUnlock({ key: key, fn: o.fn, unlock: unlock });
+  return true;
+}
+/** The app closed: its saves still on their way, or that didn't land while it was open, get their cards. */
+function bgSaveReveal(){
+  let any = false;
+  BG_SAVES.forEach((job) => {
+    if (job.visible) return;
+    if (job.state === "sending"){ job.visible = true; any = true; bgSaveSay(bgSaveView(job).title + " to your account."); }
+    else if (job.state === "hidden"){ job.visible = true; any = true; bgSaveFailed(job); }
+  });
+  if (any) renderBgSave();
+}
+const BG_SAVE_ICONS = {
+  art: '<circle cx="13.5" cy="6.5" r=".8" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".8" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".8" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".8" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.56-2.5 5.56-5.55C21.97 6.01 17.46 2 12 2z"/>',
+  song: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  done: '<path d="M20 6 9 17l-5-5"/>',
+  bad: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+};
+const bgSaveSvg = (d) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + d + '</svg>';
+function bgSaveCardHTML(job){
+  const v = bgSaveView(job), k = E(job.key);
+  return '<div class="bgsave bgsave--' + v.tone + (job.gone ? " is-gone" : "") + '" data-bgsave="' + k + '">'
+    + '<span class="bgsave__icon">' + bgSaveSvg(BG_SAVE_ICONS[v.tone]) + '</span>'
+    + '<span class="bgsave__title">' + E(v.title) + '</span>'
+    + '<span class="bgsave__side">' + E(v.side) + '</span>'
+    + (v.bar != null ? '<span class="bgsave__bar" role="progressbar" aria-label="' + E(v.title) + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + v.bar + '"><i style="width:' + v.bar + '%"></i></span>' : "")
+    + (v.note ? '<p class="bgsave__note">' + E(v.note)
+      + (v.tryNow ? ' <button type="button" data-act="bgsave-retry" data-key="' + k + '">Try now</button>' : "") + '</p>' : "")
+    + (v.dismiss ? '<button type="button" class="bgsave__x" data-act="bgsave-dismiss" data-key="' + k + '" aria-label="Close this message">'
+      + bgSaveSvg('<path d="M18 6 6 18M6 6l12 12"/>') + '</button>' : "")
+    + '</div>';
+}
+/** The corner's cards, drawn again when one changes state (the percent alone is changed in place, bgSavePaintPct). */
+function renderBgSave(){
+  let root = document.getElementById("bgsave-root");
+  const list = Array.from(BG_SAVES.values()).filter(j => j.visible && j.state !== "hidden");
+  if (!root){
+    if (!list.length) return;
+    root = document.createElement("div");
+    root.id = "bgsave-root"; root.className = "bgsave-wrap";
+    document.body.appendChild(root);
+  }
+  root.innerHTML = list.map(bgSaveCardHTML).join("");
+}
+function bgSavePaintPct(job){
+  if (!job.visible) return;
+  const card = Array.from(document.querySelectorAll("#bgsave-root [data-bgsave]")).find(c => c.getAttribute("data-bgsave") === job.key);
+  if (!card) return;
+  const v = bgSaveView(job), bar = card.querySelector(".bgsave__bar"), side = card.querySelector(".bgsave__side");
+  if (side) side.textContent = v.side;
+  if (bar){ bar.setAttribute("aria-valuenow", String(v.bar)); bar.firstElementChild.style.width = v.bar + "%"; }
+}
+/** A screen reader hears when a save starts, lands or doesn't (never every percent). */
+function bgSaveSay(text){
+  let live = document.getElementById("bgsave-live");
+  if (!live){
+    live = document.createElement("p");
+    live.id = "bgsave-live"; live.className = "sr-only"; live.setAttribute("aria-live", "polite");
+    document.body.appendChild(live);
+  }
+  live.textContent = text;
+}
+/* leaving the site while a save is still on its way or waiting to try again: the browser asks first */
+window.addEventListener("beforeunload", (e) => {
+  const busy = Array.from(BG_SAVES.values()).some(j => j.visible && (j.state === "sending" || j.state === "waiting"));
+  if (!busy) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
 /** The progress report's calls (the kid-progress function): a member's children, what each finished, the report and
     Chike's quiz. The same sign-in as Sound Space's, forgotten the same way when the server no longer takes it. */
 async function kidCall(action, extra){
@@ -30827,6 +31085,14 @@ const ACTIONS = {
     navigate(TOUR_STOPS[0].hash);
   },
   "tour-explore": () => { closeModal(); navigate("#/"); },
+
+  /* a save in the background (owner, 2026-11-25): "Try now" on a card waiting to try again, and closing a card that
+     can't be saved to the account (the file is still safe in this browser) */
+  "bgsave-retry": (el) => { bgSaveRetry(el.getAttribute("data-key") || ""); },
+  "bgsave-dismiss": (el) => {
+    const job = BG_SAVES.get(el.getAttribute("data-key") || "");
+    if (job && job.state === "failed"){ BG_SAVES.delete(job.key); renderBgSave(); }
+  },
 
   "contact-form-reset": () => { AppState.contactFormSent.ticket = false; rerender(); },
   "business-form-reset": () => { AppState.contactFormSent.business = false; rerender(); },

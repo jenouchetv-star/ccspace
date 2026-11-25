@@ -315,6 +315,15 @@
         if (!id) return Promise.resolve();
         const extra = Object.assign({ id, holder: o.holder }, opts && opts.keepalive ? { keepalive: true } : {});
         try { return Promise.resolve(o.call("unlock", extra)).catch(() => {}); } catch (e) { return Promise.resolve(); }
+      },
+      /** Closing inside the site while the song still goes to the account: the site lets go of the lock once that
+          save lands (owner, 2026-11-25), so this tab stops renewing it and doesn't let go of it itself. Returns what
+          the site needs to let go of it ({ id, holder }), or null when this tab holds no lock. */
+      handOff() {
+        const id = lock.current;
+        if (timer) { stop(timer); timer = 0; }
+        lock.current = null;
+        return id ? { id, holder: o.holder } : null;
       }
     };
     return lock;
