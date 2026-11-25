@@ -1222,3 +1222,12 @@ describe("the Understanding block shows a rating, not a percent (owner, 2026-11-
     expect(r).toContain("Not enough questions yet");
   });
 });
+
+describe("the rating's colours (owner, 2026-11-24)", () => {
+  const src = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  it("needs improvement red, good blue, very good teal, excellent green, on the word and the scale", () => {
+    expect(src).toContain(".rp-rate--needs{ --rc:#BC3229; } .rp-rate--good{ --rc:#1273B0; } .rp-rate--very{ --rc:#0F8C76; } .rp-rate--excellent{ --rc:#2F6B2C; }");
+    expect(src).toContain(".rp-rate b{ color:var(--rc, var(--ink)); }");
+    expect(src).toContain(".rp-scale li:nth-child(1){ --c:#BC3229; } .rp-scale li:nth-child(2){ --c:#1273B0; } .rp-scale li:nth-child(3){ --c:#0F8C76; } .rp-scale li:nth-child(4){ --c:#2F6B2C; }");
+  });
+});
