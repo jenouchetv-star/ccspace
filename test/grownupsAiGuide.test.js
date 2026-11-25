@@ -53,7 +53,7 @@ describe("the Parent & Teacher Guide", () => {
     expect(html).toContain(".guide__tips .tips-grid > *{");
   });
   it("gives the stories and While they make their own taped photos, alternating sides like the home and class rows", () => {
-    const page = html.slice(html.indexOf('photo("homePhoto")'), html.indexOf('<div class="panel guide__end">'));
+    const page = html.slice(html.indexOf('photo("homePhoto")'), html.indexOf('<div class="panel guide__end">', html.indexOf('photo("homePhoto")')));   /* the Guide's own closing card (Member benefits has one too) */
     /* stories: the photo on the left, the card on the right */
     expect(page).toContain(`'<div class="guide__pair guide__pair--story">' + photo("storyPhoto") + '<div class="panel guide__story">`);
     /* While they make: the card on the left, the photo on the right */

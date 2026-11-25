@@ -543,6 +543,8 @@ p:last-child{ margin-bottom:0; }
 .guide__steptitle{ display:flex; align-items:flex-start; gap:10px; margin:0 0 .35em; font-size:1.35rem; }
 .guide__steptitle .i{ flex:none; margin-top:.15em; }
 /* the home / class rows: a card and its taped photo, both columns the same width */
+/* the short card to Member benefits on the Guide */
+.guide__members{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px 24px; margin:0 0 var(--guide-gap); }
 .guide__pair{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:36px; align-items:stretch; margin-bottom:var(--guide-gap); }
 /* the card sets the row's height and the photo fills it, so both sides end level */
 .guide__photo{ display:block; position:relative; min-height:280px; }
@@ -9596,6 +9598,7 @@ const FREE_PRINTABLES_LIVE = false;
 
 const GROWNUP_NAV = [
   { hash:"#/grown-ups",          sub:"",         label:"Parent & Teacher Guide" },
+  { hash:"#/grown-ups/members",  sub:"members",  label:"Member benefits" },
   { hash:"#/grown-ups/articles", sub:"articles", label:"News & Articles" },
   { hash:"#/grown-ups/printables", sub:"printables", label:"Free Printables" },
   { hash:"#/grown-ups/help",     sub:"help",     label:"Help and Support" },
@@ -14496,6 +14499,46 @@ function viewGrownUps(sub){
       + contactForm()
       + '</div>';
   }
+  else if (sub === "members"){
+    /* Member benefits (owner, 2026-11-24): what joining adds, and how the progress report works. The same parts as the
+       About and Guide pages (docs/mockups/grownups-member-benefits-draft-2.png): the header band, the About story, the
+       Guide's numbered cards and photo-and-card pairs, and the closing card. Every word is a page slot. */
+    const M = "grown-ups/members";
+    const member = portalIsSubscriber();
+    const join = '<button type="button" class="btn btn--cyan" data-act="open-mailing-list">' + ic("mail") + ' ' + slot(M, "joinButton") + '</button>';
+    const signIn = '<button type="button" class="btn btn--paper" data-act="open-mailing-list" data-member data-next="/newsletter">' + ic("log-in") + ' ' + slot(M, "signInButton") + '</button>';
+    const mine = '<a class="btn btn--cyan" href="#/newsletter">' + ic("door-open") + ' ' + slot(M, "portalButton") + '</a>'
+      + '<a class="btn btn--paper" href="#/newsletter/progress">' + ic("chart-no-axes-column") + ' ' + slot(M, "reportButton") + '</a>';
+    head = cmsHeader(M, "Grown-Ups", 'Member <span class="hl-cyan">benefits</span>.', slotText(M, "intro"),
+      member ? mine : join + signIn, { aside: bannerAside(M, '<div class="taped">' + slotImgHTML(M, "headPhoto") + '</div>'), asideNarrow: true, gradient: true });
+    /* the members-only games, as they are on the Play page today */
+    const games = db.list("games").filter(g => g.kind === "members" && g.status === "published")
+      .sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.title).localeCompare(String(b.title)))
+      .map(g => '<a href="#/play/' + E(g.id) + '">' + E(g.title) + '</a>');
+    const lvl = (k) => '<li>' + ic("circle-check") + '<span>' + slot(M, k) + '</span></li>';
+    const step = (k, bg, n) => '<div class="panel panel--flat" style="background:' + bg + '"><div class="chip chip--ink" style="margin-bottom:12px">' + n + '</div>'
+      + '<h3 class="guide__steptitle">' + slot(M, k + "Title") + '</h3><p class="mute" style="margin:0">' + slot(M, k + "Text") + '</p></div>';
+    body = '<section class="aboutstory"><div class="aboutstory__left"><h2>' + slot(M, "storyHeading") + '</h2>'
+      + '<blockquote class="aboutstory__quote"><p>' + slot(M, "storyQuote") + '</p></blockquote>'
+      + '<div class="taped aboutstory__photo">' + slotImgHTML(M, "storyPhoto") + '</div></div>'
+      + '<div class="aboutstory__right"><div class="copy">'
+      + '<p><b>' + slot(M, "gamesLabel") + '</b> ' + slot(M, "gamesText") + (games.length ? ' ' + progressAnd(games) + '.' : "") + '</p>'
+      + '<p><b>' + slot(M, "studioLabel") + '</b> ' + slot(M, "studioText") + '</p>'
+      + '<p><b>' + slot(M, "lessonsLabel") + '</b> ' + slot(M, "lessonsText") + '</p>'
+      + '<p><b>' + slot(M, "reportLabel") + '</b> ' + slot(M, "reportText") + '</p>'
+      + '</div></div></section>'
+      + '<div class="section-head"><div><span class="eyebrow">' + slot(M, "stepsEyebrow") + '</span><h2 style="font-size:2rem">' + slot(M, "stepsHeading") + '</h2></div></div>'
+      + '<div class="grid guide__steps">' + step("add", "#FFF6E2", 1) + step("pick", "#DFF3F8", 2) + step("read", "#EDE3F8", 3) + '</div>'
+      + '<div class="guide__pair"><div class="taped guide__photo">' + slotImgHTML(M, "reportPhoto") + '</div>'
+      + '<div class="panel"><h3 class="guide__steptitle">' + slot(M, "countTitle") + '</h3><p style="margin:0">' + slot(M, "countText") + '</p>'
+      + '<p class="guide__asklabel">' + slot(M, "levelsLabel") + '</p><ul class="guide__asks">' + lvl("levelDev") + lvl("levelPrac") + lvl("levelCons") + lvl("levelNone") + '</ul></div></div>'
+      + '<div class="guide__pair"><div class="panel"><h3 class="guide__steptitle">' + slot(M, "infoTitle") + '</h3><p style="margin:0">' + slot(M, "infoText") + '</p>'
+      + '<p class="guide__asklabel">' + slot(M, "infoLabel") + '</p><ul class="guide__asks">'
+      + '<li>' + ic("lock") + '<span>' + slot(M, "info1") + '</span></li><li>' + ic("trash-2") + '<span>' + slot(M, "info2") + '</span></li><li>' + ic("user") + '<span>' + slot(M, "info3") + '</span></li>'
+      + '</ul></div><div class="taped guide__photo">' + slotImgHTML(M, "infoPhoto") + '</div></div>'
+      + '<div class="panel guide__end"><h3>' + slot(M, "endTitle") + '</h3><p class="lede" style="margin-inline:auto">' + slot(M, member ? "endTextMember" : "endText") + '</p>'
+      + '<div class="row" style="justify-content:center;margin-top:18px">' + (member ? mine : join) + '</div></div>';
+  }
   else {
     const grownupsRec0 = pageRec("grown-ups");
     const grownupsId0 = grownupsRec0 ? grownupsRec0.id : null;
@@ -14523,6 +14566,11 @@ function viewGrownUps(sub){
           + '<div class="chip chip--ink" style="margin-bottom:12px">' + (i + 1) + '</div>'
           + '<h3 class="guide__steptitle">' + slot(G, s[0] + "Title") + '</h3>'
           + '<p class="mute" style="margin:0">' + slot(G, s[0] + "Text") + '</p></div>').join("") + '</div>'
+
+      /* a short card to Member benefits (owner, 2026-11-24) */
+      + '<div class="panel guide__members"><div><h3 style="margin:0">' + slot(G, "membersTitle") + '</h3>'
+      + '<p class="mute" style="margin:4px 0 0">' + slot(G, "membersText") + '</p></div>'
+      + '<a class="btn btn--cyan" href="#/grown-ups/members">' + ic("sparkles") + ' ' + slot(G, "membersButton") + '</a></div>'
 
       /* at home and in class: a card and a taped photo side by side, the photos left then right down the page */
       + '<div class="guide__pair">'
@@ -24236,6 +24284,7 @@ function sitemapExplorerHTML(){
     sitemapColumn("/play", "Play", published("games").map(r => leaf("/play/"+r.id, r.title)), SITEMAP_SECTION_COLOR.play),
     sitemapColumn("/characters", "Chike & Friends", published("characters").map(r => leaf("/characters/"+r.slug, r.name)), SITEMAP_SECTION_COLOR.characters),
     sitemapColumn("/grown-ups", "For Grown-Ups", [
+      leaf("/grown-ups/members", "Member benefits"),
       leaf("/grown-ups/articles", "News & Articles"),
       ...published("articles").map(r => leaf("/article/"+r.id, r.title)),
       leaf("/grown-ups/help", "Help and Support"),
@@ -26169,7 +26218,68 @@ const PAGE_SLOTS = {
   "home": [
     { key:"grownupsButton", section:"For parents & teachers", label:"Button", fb:"Explore the Parent & Teacher Guide" }
   ],
+  "grown-ups/members": [
+    { key:"intro", section:"Top of the page", label:"Intro", type:"para",
+      fb:"Joining our mailing list is free. It opens the Subscriber’s Portal, with more games and apps to explore, and a progress report for each child you add.\n\nFor parents, caregivers, and educators." },
+    { key:"joinButton", section:"Top of the page", label:"Join button (visitors)", fb:"Join for free" },
+    { key:"signInButton", section:"Top of the page", label:"Sign in button (visitors)", fb:"Sign in" },
+    { key:"portalButton", section:"Top of the page", label:"Portal button (members)", fb:"Open the Subscriber’s Portal" },
+    { key:"reportButton", section:"Top of the page", label:"Report button (members)", fb:"See the progress report" },
+    { key:"headPhoto", section:"Top of the page", label:"Photo", type:"image",
+      fb:{ src:"assets/grownups/members-together.jpg", alt:"A mother and her young son laugh together at a laptop on the kitchen table, the boy pointing at the screen" } },
+    { key:"storyHeading", section:"What members get", label:"Heading", fb:"More to make and explore." },
+    { key:"storyQuote", section:"What members get", label:"Quote", type:"para",
+      fb:"Everything on Chike’s Creative Space stays free and open. Members get more of it, and a clearer view of what their child is learning." },
+    { key:"storyPhoto", section:"What members get", label:"Photo", type:"image",
+      fb:{ src:"assets/grownups/members-drawing.jpg", alt:"A smiling girl draws on a tablet with a stylus at a bright table, colored pencils and a sketchbook beside the tablet" } },
+    { key:"gamesLabel", section:"What members get", label:"Games, bold start", fb:"Members-only games." },
+    { key:"gamesText", section:"What members get", label:"Games text (the game names follow)", type:"para", fb:"More games, and the math games start at your child’s grade:" },
+    { key:"studioLabel", section:"What members get", label:"Studio, bold start", fb:"Chike’s Creative Studio." },
+    { key:"studioText", section:"What members get", label:"Studio text", type:"para",
+      fb:"Apps for making, right in the browser. In Art Space, children draw and paint. In Sound Space, they build songs bar by bar. Their work is saved, so it opens again on any device." },
+    { key:"lessonsLabel", section:"What members get", label:"Lessons, bold start", fb:"Computer lessons." },
+    { key:"lessonsText", section:"What members get", label:"Lessons text", type:"para",
+      fb:"Step-by-step lessons that turn screen time into making time, like building your own puzzle game with AI, or reading a book you turn with a wave of the hand." },
+    { key:"reportLabel", section:"What members get", label:"Report, bold start", fb:"A progress report for each child." },
+    { key:"reportText", section:"What members get", label:"Report text", type:"para",
+      fb:"See what they play, read, watch and make, and how they are doing in each subject, week by week." },
+    { key:"stepsEyebrow", section:"How the report works", label:"Eyebrow", fb:"The progress report" },
+    { key:"stepsHeading", section:"How the report works", label:"Heading", fb:"How the progress report works" },
+    { key:"addTitle", section:"How the report works", label:"1. Title", fb:"Add your children" },
+    { key:"addText", section:"How the report works", label:"1. Text", type:"para", fb:"In the Subscriber’s Portal, add each child’s first name and grade, and let them choose a picture." },
+    { key:"pickTitle", section:"How the report works", label:"2. Title", fb:"They pick who’s creating" },
+    { key:"pickText", section:"How the report works", label:"2. Text", type:"para",
+      fb:"On each device, your child taps their picture before they start, and games begin at their grade. Choose “Just me, the grown-up” and nothing is saved." },
+    { key:"readTitle", section:"How the report works", label:"3. Title", fb:"Read their report" },
+    { key:"readText", section:"How the report works", label:"3. Text", type:"para",
+      fb:"See a summary, each subject, and everything they did, week by week, up to 26 weeks back. Save it as a PDF to keep or to share with a teacher." },
+    { key:"reportPhoto", section:"What gets counted", label:"Picture of a report", type:"image",
+      fb:{ src:"assets/grownups/members-report.jpg", alt:"A progress report on Chike’s Creative Space, showing a child’s subjects with their levels" } },
+    { key:"countTitle", section:"What gets counted", label:"Title", fb:"What gets counted" },
+    { key:"countText", section:"What gets counted", label:"Text", type:"para",
+      fb:"Games keep each answer, and whether a hint helped. Books read to the last page, episodes watched to the end, and activities marked “We made it!” go in the activity log. Answers count toward the six STEAMM subjects (science, technology, engineering, art, math and music), plus reading and writing." },
+    { key:"levelsLabel", section:"What gets counted", label:"Label over the levels", fb:"Each subject’s level, each week" },
+    { key:"levelDev", section:"What gets counted", label:"Developing", fb:"Developing: under 60% answered on their own." },
+    { key:"levelPrac", section:"What gets counted", label:"Practicing", fb:"Practicing: 60% or more on their own." },
+    { key:"levelCons", section:"What gets counted", label:"Consistently demonstrated", fb:"Consistently demonstrated: 85% or more on their own, in at least 2 different games, books or activities." },
+    { key:"levelNone", section:"What gets counted", label:"Not enough evidence yet", fb:"Not enough evidence yet: fewer than 5 answers that week." },
+    { key:"infoTitle", section:"Your child’s information", label:"Title", fb:"Your child’s information" },
+    { key:"infoText", section:"Your child’s information", label:"Text", type:"para",
+      fb:"For each child we keep a first name, a grade, the picture they tap, and what they did on this site. Only you can open the report, after a quick grown-up check." },
+    { key:"infoLabel", section:"Your child’s information", label:"Label over the list", fb:"Good to know" },
+    { key:"info1", section:"Your child’s information", label:"1", fb:"No photos, school names or addresses are ever asked for." },
+    { key:"info2", section:"Your child’s information", label:"2", fb:"Remove a child at any time, and everything kept for them goes with them." },
+    { key:"info3", section:"Your child’s information", label:"3", fb:"“Just me, the grown-up” lets you explore without adding to anyone’s report." },
+    { key:"infoPhoto", section:"Your child’s information", label:"Photo", type:"image",
+      fb:{ src:"assets/grownups/members-phone.jpg", alt:"A father smiles at his phone on the sofa while his young daughter builds a tall tower of wooden blocks on the rug beside the sofa" } },
+    { key:"endTitle", section:"Closing card", label:"Title", fb:"Ready to see what they can do?" },
+    { key:"endText", section:"Closing card", label:"Text (visitors)", type:"para", fb:"Join for free, add your children, and their first week of progress shows up on its own." },
+    { key:"endTextMember", section:"Closing card", label:"Text (members)", type:"para", fb:"Add your children in the Subscriber’s Portal, and their first week of progress shows up on its own." }
+  ],
   "grown-ups": [
+    { key:"membersTitle", section:"Member benefits card", label:"Title", fb:"Members get more, and a progress report" },
+    { key:"membersText", section:"Member benefits card", label:"Text", type:"para", fb:"Extra games, the Creative Studio and a report on each child’s subjects, free when you join." },
+    { key:"membersButton", section:"Member benefits card", label:"Button", fb:"See member benefits" },
     { key:"findButton", section:"Top of the guide", label:"First button (opens the activity finder)", fb:"Find an activity" },
     { key:"stepsEyebrow", section:"Your part", label:"Eyebrow", fb:"Your part" },
     { key:"stepsHeading", section:"Your part", label:"Heading", fb:"How to help with any activity" },
@@ -30070,6 +30180,7 @@ const SEO_PAGES = {
   "/stories": { h1: "Children's books", title: "Children's Books and Ebooks to Read Online | Chike's Creative Space", desc: "Read children's picture books online with Chike and friends: illustrated stories about making, discovering and trying again, for kids ages 5 to 11." },
   "/characters": { h1: "Meet Chike and friends", title: "Meet Chike and Friends | Chike's Creative Space", desc: "Meet the characters of Chike's Creative Space, young makers who each love a different part of STEAMM: science, technology, engineering, art, math and music." },
   "/grown-ups": { h1: "Parent and teacher guide", title: "Parent and Teacher Guide to Kids Learning | Chike's Creative Space", desc: "Answers for parents and teachers: ages, materials, safety, and how to use Chike's Creative Space games and activities at home or in the classroom." },
+  "/grown-ups/members": { h1: "Member benefits", title: "Member Benefits: More Learning Games and a Progress Report | Chike's Creative Space", desc: "Join for free to get members-only learning games, drawing and music apps, computer lessons, and a progress report on each child's subjects." },
   "/grown-ups/articles": { h1: "Articles for parents and teachers", title: "Articles on Creative Learning for Kids | Chike's Creative Space", desc: "Ideas and news for parents and teachers on creative learning, STEAMM education and making the most of screen time for kids." },
   "/grown-ups/help": { h1: "Help and support", title: "Help and Support | Chike's Creative Space", desc: "Help with Chike's Creative Space: the games, the books, the Subscriber's Portal and your account." },
   "/grown-ups/contact": { h1: "Contact us", title: "Contact Us | Chike's Creative Space", desc: "Get in touch with the team behind Chike's Creative Space." },
