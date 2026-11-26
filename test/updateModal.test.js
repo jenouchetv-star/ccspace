@@ -43,3 +43,9 @@ describe("the new-version box, without its icon (owner, 2026-11-25)", () => {
     expect(fn).toContain("'<div class=\"who__card swup__card\">'\n    + '<h3 id=\"sw-update-title\">");
   });
 });
+
+describe("the new-version box's words (owner, 2026-11-25)", () => {
+  it("says what the change may bring", () => {
+    expect(fn).toContain('<p id="sw-update-text">This change may include a new game, book, and site update.</p>');
+  });
+});

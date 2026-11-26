@@ -92,7 +92,16 @@ describe("the portal page", () => {
 
 describe("the portal page's spacing", () => {
   it("leaves clear room between Your children this week and the posts below (owner, 2026-11-25)", () => {
-    expect(html).toContain(".pkids{ margin:20px 0 clamp(36px,4vw,52px); }");
+    expect(html).toContain(".pposts{ padding-top:clamp(28px,3.4vw,44px); }");
+  });
+  it("the heading and Your children this week sit in the site's gradient banner, the posts below it (owner, 2026-11-25)", () => {
+    const v = body("viewNewsletter");
+    expect(v).toContain("'<section class=\"section pagehead band-grad pbanner\"><div class=\"shell\">'");
+    const band = v.split("band-grad pbanner")[1].split("'</div></section>'")[0];
+    expect(band).toContain('slot("system", "portalHeading")');
+    expect(band).toContain("portalKidsHTML()");
+    expect(band).not.toContain("portalPostsTitle");
+    expect(v.indexOf("'<section class=\"section pposts\"><div class=\"shell\">'")).toBeLessThan(v.indexOf('slot("system", "portalPostsTitle")'));
   });
 });
 
