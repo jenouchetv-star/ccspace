@@ -53,7 +53,8 @@ describe("the portal page", () => {
   it("shows the section under the page's words, for a signed-in member only", () => {
     const v = body("viewNewsletter");
     /* under the heading; the words that introduce the posts come after it, just above them (owner, 2026-11-25) */
-    expect(v).toContain("+ portalKidsHTML()\n    + '<p class=\"lede\">' + slot(\"system\", \"portalText\") + '</p>'");
+    expect(v.indexOf("portalKidsHTML()")).toBeLessThan(v.indexOf('slot("system", "portalPostsTitle")'));
+    expect(v.indexOf('slot("system", "portalPostsTitle")')).toBeLessThan(v.indexOf('slot("system", "portalText")'));
     expect(v.indexOf("portalKidsHTML()")).toBeGreaterThan(v.indexOf('slot("system", "portalHeading")'));
     expect(v.indexOf('slot("system", "portalText")')).toBeLessThan(v.indexOf("pfilters"));
     const k = body("portalKidsHTML");
@@ -92,5 +93,25 @@ describe("the portal page", () => {
 describe("the portal page's spacing", () => {
   it("leaves clear room between Your children this week and the posts below (owner, 2026-11-25)", () => {
     expect(html).toContain(".pkids{ margin:20px 0 clamp(36px,4vw,52px); }");
+  });
+});
+
+describe("streamlined (owner, 2026-11-25; docs/mockups/portal-children-slim-draft.png)", () => {
+  it("each card has a small Full report link at the top right, not a big button", () => {
+    const k = body("portalKidsHTML");
+    expect(k).toContain('<button type="button" class="pkid__link" data-act="portal-kid-report"');
+    expect(k).toContain("aria-label=\"See ' + name + '’s full report\"");
+    expect(k).not.toContain("btn btn--cyan btn--sm\" data-act=\"portal-kid-report\"");
+    expect(html).toContain(".pkid{ display:grid; grid-template-columns:48px 1fr auto;");
+    expect(html).toContain(".pkid__link{ grid-row:1 / span 2; grid-column:3;");
+  });
+  it("the counts are one quiet row with thin lines between, no boxes", () => {
+    expect(html).toContain(".pkid__stat + .pkid__stat{ border-left:1.5px solid rgba(30,34,38,.15); }");
+    expect(html).not.toMatch(/\.pkid__stat\{[^}]*border:2px solid/);
+  });
+  it("the posts get their own editable title, Subscriber exclusives, over the words that introduce them", () => {
+    expect(html).toContain('{ key:"portalPostsTitle", section:"Subscriber’s Portal", label:"Posts title", fb:"Subscriber exclusives" }');
+    const v = body("viewNewsletter");
+    expect(v).toContain("+ '<h2 class=\"pposts__title\">' + slot(\"system\", \"portalPostsTitle\") + '</h2>'\n    + '<p class=\"lede\">'");
   });
 });
