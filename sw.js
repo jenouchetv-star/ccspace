@@ -170,6 +170,10 @@ self.addEventListener("fetch", (event) => {
      under INDEX_URL in place of index.html. */
   if (request.mode === "navigate" && sameOrigin && isStaticAsset(url)) return;
 
+  /* The standalone pages (/tv, the TV screen for Play on your TV; /join, a game's join page) are their own documents,
+     not the app shell: hand them to the network untouched, so neither is ever stored under INDEX_URL. */
+  if (request.mode === "navigate" && sameOrigin && /^\/(tv|join)(\/|$)/.test(url.pathname)) return;
+
   if (request.mode === "navigate" && sameOrigin) {
     event.respondWith(networkFirstNavigation(request));
     return;

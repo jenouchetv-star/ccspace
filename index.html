@@ -2090,6 +2090,14 @@ body.qu-panel-open .nav__drawer-cta .btn--teal{ max-width:calc((100% - 10px)/2 -
 .tvpanel__x{ position:absolute; top:8px; right:8px; width:32px; height:32px; border:0; background:none; border-radius:50%; cursor:pointer; color:var(--ink); display:grid; place-items:center; }
 .tvpanel__x:hover{ background:#F1E8D2; } .tvpanel__x svg{ width:18px; height:18px; }
 .gamestage__iconbtn[aria-expanded="true"]{ background:#8FE3F0; }
+.tvpair{ display:flex; gap:8px; margin:6px 0 4px; }
+.tvpair input{ flex:1; min-width:0; border:3px solid var(--ink); border-radius:12px; background:#fff; text-align:center; font:800 1.5rem "Baloo 2", var(--font, sans-serif); letter-spacing:.3em; color:var(--cyan); padding:2px 6px; text-transform:uppercase; }
+.tvpair input:focus-visible{ outline:3px solid var(--cyan); outline-offset:2px; }
+.tvpair__msg{ min-height:1.2em; margin:4px 0 8px !important; font-size:.86rem; font-weight:700; }
+.tvpair__msg.is-ok{ color:#1F5A40; } .tvpair__msg.is-bad{ color:#8E2C2C; }
+.tvh-connect{ margin-bottom:24px; background:#E6F4FB; }
+.tvh-code{ font-family:"Baloo 2", sans-serif; letter-spacing:.2em; color:var(--cyan); font-size:1.2em; }
+.tvh-msg{ margin:14px 0 0; font-weight:700; } .tvh-msg.is-ok{ color:#1F5A40; } .tvh-msg.is-bad{ color:#8E2C2C; }
 /* the help page, For Grown-Ups > Play on your TV */
 .tvh-qs{ display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-bottom:24px; }
 .tvh-card{ background:#fff; border:var(--line); border-radius:var(--r-lg); box-shadow:var(--hard); padding:24px 26px; }
@@ -13402,6 +13410,25 @@ let GAMESTAGE_KEY_HANDLER = null;
    controllers, a code on the TV) is not built yet, so nothing here points at it. */
 let GAMESTAGE_CURRENT = null;
 const TV_READY_TITLES = ["Stack 'Em Up!"];
+/* part 2: games that run on the TV itself, by private game file (the tv-link function has the same list) */
+const TV_READY_GAMES = { "pg-matching-suits": "Stack 'Em Up!" };
+const TV_PAIR_ERRORS = {
+  sign_in: "Sign in to the Subscriber\u2019s Portal on this phone first, then try again.",
+  no_code: "That code didn\u2019t work. Check the 4 letters on the TV. A new code comes every 10 minutes.",
+  taken: "That TV is already playing. Tap Get a new code on the TV.",
+  not_tv_ready: "This game can\u2019t run on a TV yet."
+};
+/** Send a TV-ready game to the TV showing this code. Resolves to { ok, title } or { ok:false, message }. */
+async function tvPair(code, gameId){
+  const clean = String(code || "").toUpperCase().replace(/[^A-Z]/g, "");
+  if (clean.length !== 4) return { ok:false, message:"Type the 4 letters shown on the TV." };
+  try {
+    const { data, error } = await sb.functions.invoke("tv-link", { body:{ action:"pair", code:clean, game:gameId, session:portalSavedSession() } });
+    if (error || !data) return { ok:false, message:"Couldn\u2019t reach the TV. Check your connection and try again." };
+    if (data.ok) return { ok:true, title:data.title };
+    return { ok:false, message:TV_PAIR_ERRORS[data.error] || "Couldn\u2019t connect. Try again." };
+  } catch(_e){ return { ok:false, message:"Couldn\u2019t reach the TV. Check your connection and try again." }; }
+}
 const TV_KINDS = [["gtv","Google TV or Chromecast"],["fire","Fire TV"],["roku","Roku"],["smart","Samsung, LG or Vizio TV"],["atv","Apple TV"],["none","Something else, or not a smart TV"]];
 const TV_DEVICES = [["iphone","iPhone or iPad"],["android","Android phone or tablet"],["win","Windows computer"],["mac","Mac"],["chromebook","Chromebook"]];
 const TV_DEV_NAME = { iphone:"iPhone or iPad", android:"Android phone or tablet", win:"Windows computer", mac:"Mac", chromebook:"Chromebook" };
@@ -13443,10 +13470,17 @@ function tvWay(tv, dev){
 }
 function tvPanelHTML(g){
   const dev = tvDetectDevice(), way = tvWay("", dev), name = (g && g.title) || "this game";
-  const ready = g && TV_READY_TITLES.indexOf(g.title) >= 0;
+  const pg = g && g.privateGameId && TV_READY_GAMES[g.privateGameId] ? g.privateGameId : "";
+  const ready = !pg && g && TV_READY_TITLES.indexOf(g.title) >= 0;
   return '<div class="tvpanel" role="dialog" aria-label="Show it on your TV">'
     + '<button type="button" class="tvpanel__x" data-act="game-tv-close" aria-label="Close">' + ic("x") + '</button>'
-    + '<h3>Show ' + E(name) + ' on your TV</h3>'
+    + '<h3>' + (pg ? "Play " + E(name) + " on the TV" : "Show " + E(name) + " on your TV") + '</h3>'
+    + (pg ? '<p>The game runs on the TV itself and everyone plays on their own phone. No delay.</p>'
+        + '<p style="margin:0">In the TV\u2019s web browser, go to <b>chikescreativespace.com/tv</b> and type its code here:</p>'
+        + '<div class="tvpair"><input id="tv-code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="The code on the TV" placeholder="ABCD">'
+        + '<button type="button" class="btn btn--sm btn--sun" data-act="tv-pair" data-game="' + E(pg) + '">Connect</button></div>'
+        + '<p class="tvpair__msg" id="tv-pair-msg" role="status"></p>'
+        + '<p class="tvworks" style="margin-top:4px"><b>No browser on your TV?</b> Show this screen instead:</p>' : '')
     + (ready ? '<p class="tvready"><b>Playing together?</b> Put the table on the TV and everyone joins on their own phone with the room code.</p>' : '')
     + '<span class="tvtag">' + E(way.tag[1]) + (way.key === "hdmi" ? "" : ", fine for most games") + '</span>'
     + '<p>On this ' + E(TV_DEV_NAME[dev]) + ':</p>'
@@ -13474,15 +13508,28 @@ function openTvPanel(btn){
   p.style.left = Math.max(12, Math.min(window.innerWidth - p.offsetWidth - 12, r.right - p.offsetWidth)) + "px";
   btn.setAttribute("aria-expanded", "true");
   p.addEventListener("keydown", e => { if (e.key === "Escape"){ e.stopPropagation(); closeTvPanel(); btn.focus(); } });
+  const codeIn = p.querySelector("#tv-code");
+  if (codeIn){
+    codeIn.addEventListener("input", () => { codeIn.value = codeIn.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4); });
+    codeIn.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); const go = p.querySelector('[data-act="tv-pair"]'); if (go) go.click(); } });
+  }
   document.addEventListener("pointerdown", tvPanelOutside, true);
-  const x = p.querySelector(".tvpanel__x"); if (x) x.focus();
+  const x = codeIn || p.querySelector(".tvpanel__x"); if (x) x.focus();
 }
 /** For Grown-Ups > Play on your TV: what TV, what device, then the one way that fits. */
 function tvHelpBody(){
   const st = AppState.tvHelp = AppState.tvHelp || { tv:"", dev:tvDetectDevice() };
   const way = tvWay(st.tv, st.dev), tvName = (TV_KINDS.find(k => k[0] === st.tv) || [0, ""])[1];
+  const qcode = String(((AppState.route && AppState.route.query) || {}).code || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
+  const signedIn = !!portalSavedSession() || (typeof isAuthed === "function" && isAuthed() && isActiveAdmin());
+  const connect = qcode.length === 4 ? '<section class="tvh-card tvh-connect" aria-labelledby="tvh-c"><h2 id="tvh-c">Connect your TV</h2>'
+      + '<p>Your TV shows the code <b class="tvh-code">' + E(qcode) + '</b>. Pick the game to play on it. Everyone joins on their own phone.</p>'
+      + (signedIn ? '<div class="tvh-chips">' + Object.keys(TV_READY_GAMES).map(id => '<button type="button" class="btn btn--sun" data-act="tv-pair-help" data-game="' + E(id) + '"' + (st.pairBusy ? " disabled" : "") + '>' + ic("tv") + ' Play ' + E(TV_READY_GAMES[id]) + ' on the TV</button>').join("") + '</div>'
+        : '<p><b>Subscribers only.</b> <a href="#/newsletter">Sign in to the Subscriber\u2019s Portal</a> on this phone, then scan the code on the TV again.</p>')
+      + (st.pairMsg ? '<p class="tvh-msg' + (st.pairMsg.ok ? " is-ok" : " is-bad") + '" role="status">' + E(st.pairMsg.text) + '</p>' : (st.pairBusy ? '<p class="tvh-msg" role="status">Connecting\u2026</p>' : ''))
+      + '</section>' : '';
   const chips = (list, key, act) => list.map(([k, l]) => '<button type="button" class="tvh-chip" aria-pressed="' + (st[key] === k) + '" data-act="' + act + '" data-v="' + k + '">' + E(l) + '</button>').join("");
-  return '<div class="tvh-qs">'
+  return connect + '<div class="tvh-qs">'
     + '<section class="tvh-card"><h2>What’s on your TV?</h2><p>The TV itself, or the stick or box plugged into it.</p><div class="tvh-chips" role="group" aria-label="Your TV">' + chips(TV_KINDS, "tv", "tvh-tv") + '</div></section>'
     + '<section class="tvh-card"><h2>What are you holding?</h2><p>The phone, tablet or computer you’ll use.</p><div class="tvh-chips" role="group" aria-label="Your device">' + chips(TV_DEVICES, "dev", "tvh-dev") + '</div></section></div>'
     + '<section class="tvh-card" aria-live="polite"><div class="tvh-result"><div>'
@@ -13491,6 +13538,7 @@ function tvHelpBody(){
     + '<ol class="tvh-steps">' + way.steps.map(x => '<li><span>' + x + '</span></li>').join("") + '</ol></div>'
     + '<div class="tvh-side"><h3>Works with</h3><p>' + E(way.works) + '</p>'
     + '<h3>Good to know</h3><p>' + (way.key === "hdmi" ? "A cable has no delay, so it’s the best way for fast games." : "Mirroring has a short delay. It’s fine for puzzles, books and videos; fast games feel it a little. An HDMI cable has none.") + '</p>'
+    + (st.tv === "fire" || st.tv === "smart" || st.tv === "gtv" || !st.tv ? '<h3>Playing Stack \u2019Em Up!?</h3><p>If your TV has a web browser, the game can run on the TV itself with no delay: open <b>chikescreativespace.com/tv</b> on the TV, then tap On TV in the game on your phone.</p>' : '')
     + '<a class="btn btn--paper" href="#/grown-ups/contact">' + ic("message-circle") + ' Still stuck? Ask us</a></div></div></section>';
 }
 /* games with their own Start over in their toolbar: the site bar leaves its copy out, so there is only one
@@ -31888,7 +31936,7 @@ const ACTIONS = {
         else if (e) entry = e;
       }
       const ownRestart = OWN_RESTART_SLUGS.indexOf(slug) >= 0 || !!(entry && OWN_RESTART_SLUGS.indexOf(String(entry.privateGameId || "").replace(/^pg-/, "")) >= 0);
-      if (html){ openGameStage({ id: "portal", title: title, icon: "dices", hasFile: true, srcdoc: html, sharePath: sharePath, ownRestart: ownRestart }); return; }
+      if (html){ openGameStage({ id: "portal", title: title, icon: "dices", hasFile: true, srcdoc: html, sharePath: sharePath, ownRestart: ownRestart, privateGameId: (entry && entry.privateGameId) || "" }); return; }
       const path = entry && portalSafeUrl(entry.gamePath);
       if (path){ openGameStage({ id: "portal", title: title, path: path, icon: "dices", sharePath: sharePath, ownRestart: ownRestart }); return; }
       /* anything else (a game that lives on its portal page): go there */
@@ -31902,7 +31950,7 @@ const ACTIONS = {
     if (!html && portalIsAdmin()) html = await loadPortalGameHtml(e.privateGameId) || "";
     if (!html){ toast("This game couldn\u2019t be loaded. Try again in a moment.", "bad"); return; }
     openGameStage({ id: "portal", title: el.getAttribute("data-title") || e.title || "Game", icon: "dices", hasFile: true, srcdoc: html,
-      sharePath: "/newsletter/" + encodeURIComponent(e.slug || e.id), ownRestart: OWN_RESTART_SLUGS.indexOf(e.slug) >= 0 || OWN_RESTART_SLUGS.indexOf(String(e.privateGameId || "").replace(/^pg-/, "")) >= 0 });
+      sharePath: "/newsletter/" + encodeURIComponent(e.slug || e.id), privateGameId: e.privateGameId || "", ownRestart: OWN_RESTART_SLUGS.indexOf(e.slug) >= 0 || OWN_RESTART_SLUGS.indexOf(String(e.privateGameId || "").replace(/^pg-/, "")) >= 0 });
     /* a game entry counts for the progress report once it is played */
     progressEntryPlayed();
   },
@@ -32679,6 +32727,21 @@ const ACTIONS = {
   },
   "close-game": () => closeGameStage(),
   "game-tv": (el) => openTvPanel(el),
+  "tv-pair": async (el) => {
+    const input = document.getElementById("tv-code"), msg = document.getElementById("tv-pair-msg");
+    el.disabled = true; if (msg){ msg.className = "tvpair__msg"; msg.textContent = "Connecting\u2026"; }
+    const r = await tvPair(input ? input.value : "", el.getAttribute("data-game"));
+    el.disabled = false;
+    if (msg){ msg.className = "tvpair__msg" + (r.ok ? " is-ok" : " is-bad");
+      msg.textContent = r.ok ? r.title + " is opening on the TV. Everyone joins with the room code on the TV. You can close it here and join too." : r.message; }
+  },
+  "tv-pair-help": async (el) => {
+    const st = AppState.tvHelp = AppState.tvHelp || { tv:"", dev:tvDetectDevice() };
+    st.pairBusy = true; st.pairMsg = null; rerender();
+    const r = await tvPair((AppState.route.query || {}).code, el.getAttribute("data-game"));
+    st.pairBusy = false; st.pairMsg = r.ok ? { ok:true, text:r.title + " is opening on the TV. Everyone joins with the room code on the TV." } : { ok:false, text:r.message };
+    rerender();
+  },
   "game-tv-close": () => { const b = document.querySelector('.gamestage [data-act="game-tv"]'); closeTvPanel(); if (b) b.focus(); },
   "tvh-tv": (el) => { AppState.tvHelp = Object.assign(AppState.tvHelp || { dev:tvDetectDevice() }, { tv: el.getAttribute("data-v") }); rerender(); },
   "tvh-dev": (el) => { AppState.tvHelp = Object.assign(AppState.tvHelp || { tv:"" }, { dev: el.getAttribute("data-v") }); rerender(); },
