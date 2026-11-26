@@ -66,7 +66,7 @@ describe("maker demo v3: the single journey", () => {
     expect(css).toContain("--hl-now:#8FE3F0");
     const pub = fn("pubShell");
     expect(pub).toContain('const cur = { schools: "schools", libraries: "libraries", how: "how", pricing: "pricing" }[S.screen] || "";');
-    for (const l of ['"For schools"', '"For libraries"', '"How it works"', '"Pricing"']) expect(pub).toContain(l);
+    for (const l of ['"After school program"', '"Local STEAMM workshops"', '"How it works"', '"Pricing"']) expect(pub).toContain(l);
   });
 
   it("gives the portal an ink rail with the transparent logo at 64px, partner name, nav and user", () => {
