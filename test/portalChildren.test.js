@@ -85,3 +85,9 @@ describe("the portal page", () => {
     expect((k.match(/'[^']*'/g) || []).join(" ")).not.toMatch(/\b(he|she|his|her)\b/i);
   });
 });
+
+describe("the portal page's spacing", () => {
+  it("leaves clear room between Your children this week and the posts below (owner, 2026-11-25)", () => {
+    expect(html).toContain(".pkids{ margin:20px 0 clamp(36px,4vw,52px); }");
+  });
+});
