@@ -561,9 +561,9 @@ describe("what the portal calls its readers", () => {
   it("labels the archive and the sign-in screen 'Subscribers only', not 'Members only'", () => {
     expect(html).not.toContain("Members only");
     expect(body("portalGateHTML")).toContain(`'<span class="chip chip--members pgate__badge">' + ic("lock") + ' Subscribers only</span>'`);
-    /* the archive's eyebrow is an editable page slot whose built-in wording is "Subscribers only" */
-    expect(html).toMatch(/\{ key:"portalEyebrow", section:"[^"]+", label:"Eyebrow", fb:"Subscribers only" \}/);
-    expect(body("viewNewsletter")).toContain('<span class="eyebrow">\' + slot("system", "portalEyebrow") + \'</span>\'\n    + \'<h1');
+    /* the archive has no "Subscribers only" label above its heading any more (owner, 2026-11-25) */
+    expect(html).not.toContain("portalEyebrow");
+    expect(body("viewNewsletter")).not.toContain('class="eyebrow"');
   });
 });
 
