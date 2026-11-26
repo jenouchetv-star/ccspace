@@ -3671,19 +3671,16 @@ h1.admin-page-title{ font-size:1.7rem; }
 .toast svg{ width:17px; height:17px; color:var(--sun); }
 .toast--bad svg{ color:#FF8E80; }
 
-/* PWA update banner: pinned to the top so it never fights with the mobile
-   bottom navigation for space. */
-#sw-update-banner{
-  position:fixed; top:0; left:0; right:0; z-index:1300;
-  padding:12px calc(16px + env(safe-area-inset-right)) 12px calc(16px + env(safe-area-inset-left));
-  padding-top:calc(12px + env(safe-area-inset-top));
-  background:var(--ink); color:var(--paper);
-  display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
-  font-size:.88rem; box-shadow:var(--hard-sm); animation:pop .22s cubic-bezier(.2,.9,.3,1.5);
-}
-#sw-update-banner span{ display:flex; align-items:center; gap:8px; }
-#sw-update-banner svg{ width:18px; height:18px; color:var(--sun); flex:none; }
-@media (prefers-reduced-motion: reduce){ #sw-update-banner{ animation:none; } }
+/* "A new version is ready": a box in the middle of the page (owner, 2026-11-25), the "Who's creating today?" layer
+   (.who: dimmed page, fades in) above everything, even an open game or app. */
+#sw-update-banner{ z-index:1300; }
+.swup__card{ width:min(420px,100%); text-align:center; }
+.swup__icon{ display:inline-grid; place-items:center; width:56px; height:56px; border-radius:16px; margin:0 auto 12px;
+  background:var(--sun); border:var(--line); box-shadow:var(--hard-sm); }
+.swup__icon svg{ width:28px; height:28px; color:var(--ink); }
+.swup__card p{ color:var(--ink-soft); font-size:1rem; line-height:1.5; margin:8px 0 18px; }
+.swup__acts{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+.swup__acts .btn svg{ width:18px; height:18px; }
 
 /* ============================================================ TEST PANEL */
 .test-row{
@@ -34584,20 +34581,42 @@ else boot();
    file:// has no service-worker support at all, and registering one
    against a bare filesystem origin throws - only run this over http(s).
    ============================================================ */
+/** "A new version is ready": a box in the middle of the page (owner, 2026-11-25), in the same look as "Who's creating
+    today?". Refresh now, or Later (also Escape, or a tap outside the box), which just closes it. */
 function showUpdateBanner(onRefresh){
   if ($("#sw-update-banner")) return;
-  const bar = document.createElement("div");
-  bar.id = "sw-update-banner";
-  bar.setAttribute("role", "status");
-  bar.innerHTML = '<span>' + ic("sparkles") + ' <b>A new version is ready.</b></span>'
-    + '<div class="row" style="gap:8px">'
-    + '<button type="button" class="btn btn--sm btn--ink" id="sw-update-refresh">Refresh</button>'
-    + '<button type="button" class="btn btn--sm btn--ghost" id="sw-update-dismiss" aria-label="Dismiss">' + ic("x") + '</button>'
-    + '</div>';
-  document.body.appendChild(bar);
+  const back = document.activeElement;
+  const box = document.createElement("div");
+  box.id = "sw-update-banner";
+  box.className = "who swup";
+  box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true");
+  box.setAttribute("aria-labelledby", "sw-update-title"); box.setAttribute("aria-describedby", "sw-update-text");
+  box.innerHTML = '<div class="who__card swup__card">'
+    + '<span class="swup__icon" aria-hidden="true">' + ic("sparkles") + '</span>'
+    + '<h3 id="sw-update-title">A new version is ready</h3>'
+    + '<p id="sw-update-text">Refresh to get the newest games, books and fixes.</p>'
+    + '<div class="swup__acts">'
+    + '<button type="button" class="btn btn--cyan" id="sw-update-refresh">' + ic("refresh-cw") + ' Refresh now</button>'
+    + '<button type="button" class="btn btn--paper" id="sw-update-dismiss">Later</button>'
+    + '</div></div>';
+  document.body.appendChild(box);
   drawIcons();
+  const close = () => {
+    box.remove();
+    if (back && document.contains(back) && back.focus) back.focus();
+  };
   $("#sw-update-refresh").addEventListener("click", onRefresh);
-  $("#sw-update-dismiss").addEventListener("click", () => bar.remove());
+  $("#sw-update-dismiss").addEventListener("click", close);
+  box.addEventListener("click", (ev) => { if (ev.target === box) close(); });
+  box.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape"){ ev.stopPropagation(); close(); return; }
+    if (ev.key === "Tab"){
+      const all = Array.from(box.querySelectorAll("button")), first = all[0], last = all[all.length - 1];
+      if (ev.shiftKey && document.activeElement === first){ ev.preventDefault(); last.focus(); }
+      else if (!ev.shiftKey && document.activeElement === last){ ev.preventDefault(); first.focus(); }
+    }
+  });
+  $("#sw-update-refresh").focus();
 }
 
 /* PWA install prompt - Chrome/Edge/Android fire beforeinstallprompt and
