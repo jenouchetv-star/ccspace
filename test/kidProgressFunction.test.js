@@ -209,19 +209,21 @@ describe("kid-progress function", () => {
     it("a new child gets one at random, one no brother or sister has", async () => {
       rowsOf("children").find((c) => c.id === A_CHILD).avatar = "robot";
       rowsOf("children").find((c) => c.id === A_CHILD2).avatar = "rocket";
-      for (let i = 0; i < 4; i++) {
+      /* up to 3 children (owner, 2026-11-25): the third gets one neither brother nor sister has */
+      for (let i = 0; i < 1; i++) {
         const r = await a("child_save", { child: { name: "Kid" + "abcd"[i], grade: 1 } });
         expect(r.ok).toBe(true);
         expect(AVATARS).toContain(r.avatar);
         expect(table("children").find((c) => c.id === r.id).avatar).toBe(r.avatar);
       }
       const mine = table("children").filter((c) => c.subscriber_id === "sub-a").map((c) => c.avatar);
-      expect(new Set(mine).size).toBe(6);
+      expect(new Set(mine).size).toBe(3);
       expect((await a("children")).children.map((c) => c.avatar)).toEqual(mine);
     });
 
     it("random means random: Math.random picks from the free ones", async () => {
       rowsOf("children").find((c) => c.id === A_CHILD).avatar = "robot";
+      rowsOf("children").splice(rowsOf("children").findIndex((c) => c.id === A_CHILD2), 1);   // room for two more (3 at most)
       const spy = vi.spyOn(Math, "random").mockReturnValue(0);
       expect((await a("child_save", { child: { name: "Ann", grade: 1 } })).avatar).toBe("racecar");
       spy.mockReturnValue(0.9999);
@@ -273,13 +275,13 @@ describe("kid-progress function", () => {
     expect((await a("report", { child: A_CHILD })).ok).toBe(true);
   });
 
-  it("adds up to 6 children and then says full", async () => {
-    for (const n of ["Ann", "Bo", "Cy"]) expect(await b("child_save", { child: { name: n, grade: 1 } })).toMatchObject({ ok: true, id: expect.stringMatching(/^[0-9a-f-]{36}$/) });
-    expect((await b("children")).children).toHaveLength(4);
-    expect((await b("child_save", { child: { name: "Di", grade: 1 } })).ok).toBe(true);
-    expect((await b("child_save", { child: { name: "Ed", grade: 1 } })).ok).toBe(true);
+  it("adds up to 3 children and then says full (owner, 2026-11-25; it was 6)", async () => {
+    const src = (await import("node:fs")).readFileSync(new URL("../supabase/functions/kid-progress/index.ts", import.meta.url), "utf8");
+    expect(src).toMatch(/^const MAX_CHILDREN = 3;/m);
+    for (const n of ["Ann", "Bo"]) expect(await b("child_save", { child: { name: n, grade: 1 } })).toMatchObject({ ok: true, id: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+    expect((await b("children")).children).toHaveLength(3);
     expect(await b("child_save", { child: { name: "Fay", grade: 1 } })).toMatchObject({ ok: false, error: "full" });
-    expect(table("children").filter((c) => c.subscriber_id === "sub-b")).toHaveLength(6);
+    expect(table("children").filter((c) => c.subscriber_id === "sub-b")).toHaveLength(3);
     // a full family can still change a child, and another family is unaffected
     expect((await b("child_save", { child: { id: B_CHILD, name: "Zed", grade: 5 } })).ok).toBe(true);
     expect((await a("child_save", { child: { name: "Ivy", grade: 3 } })).ok).toBe(true);
@@ -297,9 +299,12 @@ describe("kid-progress function", () => {
     for (const child of [null, [], "Mia", undefined]) expect((await a("child_save", { child })).error).toBe("invalid");
     expect(table("children")).toHaveLength(3);
     // good ones, with the name trimmed, edge lengths and the allowed marks
+    /* a family has 3 at most (Maya and Leo already): Leo makes way, then each good one is taken and (but Mia) removed */
+    expect((await a("child_remove", { id: A_CHILD2 })).ok).toBe(true);
     for (const [name, grade] of [["  Mia  ", 0], ["x".repeat(24), 6], ["Mary-Jo O'Neil Jr.", 3], ["Zoë", 1]]) {
       const r = await a("child_save", { child: { name, grade } });
       expect(r.ok, name).toBe(true);
+      if (name !== "  Mia  ") expect((await a("child_remove", { id: r.id })).ok).toBe(true);
     }
     expect(table("children").map((c) => c.name)).toContain("Mia");
     expect(table("children").find((c) => c.name === "Mia")).toMatchObject({ grade: 0, grade_year: 2026, subscriber_id: "sub-a" });
@@ -310,6 +315,7 @@ describe("kid-progress function", () => {
 
   it("grade moves up each August and stops at 6th", async () => {
     vi.setSystemTime(new Date("2026-09-01T12:00:00Z"));
+    rowsOf("children").splice(rowsOf("children").findIndex((c) => c.id === A_CHILD2), 1);   // room for Kay and Sam (3 at most)
     const two = (await a("child_save", { child: { name: "Kay", grade: 2 } })).id;
     const six = (await a("child_save", { child: { name: "Sam", grade: 6 } })).id;
     const gradeOf = async (id) => (await a("children")).children.find((c) => c.id === id).grade;
@@ -323,6 +329,7 @@ describe("kid-progress function", () => {
     expect(await gradeOf(two)).toBe(6);
     // set in the spring, it belongs to the school year that began the August before
     vi.setSystemTime(new Date("2027-03-01T12:00:00Z"));
+    expect((await a("child_remove", { id: six })).ok).toBe(true);                             // and room for Tia
     const spring = (await a("child_save", { child: { name: "Tia", grade: 1 } })).id;
     expect(table("children").find((c) => c.id === spring).grade_year).toBe(2026);
     vi.setSystemTime(new Date("2027-08-02T12:00:00Z"));
@@ -462,6 +469,7 @@ describe("kid-progress function", () => {
     const r = await a("child_save", { child: { name: "Zoë", grade: 1 } });
     expect(r.ok).toBe(true);
     expect(table("children").find((c) => c.id === r.id).name).toBe("Zoë");
+    expect((await a("child_remove", { id: r.id })).ok).toBe(true);                            // room again (3 at most)
     expect((await a("child_save", { child: { name: "J.", grade: 1 } })).ok).toBe(true);
   });
 

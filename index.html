@@ -2652,6 +2652,33 @@ body.is-admin .bgsave-wrap{ display:none; }
   .bgsave:not(:last-child){ display:none; }
 }
 @media (prefers-reduced-motion: reduce){ .bgsave{ transition:none; } }
+/* "Your children this week" on the Subscriber's Portal page (owner, 2026-11-25; draft
+   docs/mockups/portal-children-summary-draft-*.png): up to 3 cards, what each child did, never how well */
+.pkids{ margin:20px 0 8px; }
+.pkids__head{ display:flex; align-items:baseline; justify-content:space-between; gap:6px 12px; flex-wrap:wrap; margin:0 0 12px; }
+.pkids__head h2{ font-size:clamp(1.25rem,2vw,1.5rem); margin:0; }
+.pkids__head a{ font-weight:800; font-size:.95rem; }
+.pkids__grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap:16px; }
+.pkids__empty{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px 18px; background:var(--paper-card); border:var(--line); border-radius:20px; box-shadow:var(--hard-sm); padding:14px 16px; }
+.pkids__empty p{ margin:0; font-weight:600; }
+.pkid{ display:grid; grid-template-columns:64px 1fr; gap:2px 14px; align-items:center; background:var(--paper-card); border:var(--line); border-radius:20px; box-shadow:var(--hard-sm); padding:14px 16px 16px; }
+.pkid__pic{ grid-row:1 / span 2; width:64px; height:64px; border-radius:50%; border:2px solid var(--ink); overflow:hidden; background:#fff; }
+.pkid__pic svg{ width:100%; height:100%; display:block; }
+.pkid__name{ align-self:end; font-weight:800; font-size:1.15rem; line-height:1.2; margin:0; overflow-wrap:anywhere; }
+.pkid__grade{ align-self:start; font-weight:700; font-size:.85rem; color:var(--ink-mute); margin:0; }
+.pkid__days{ grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:12px 0 2px; font-size:.85rem; font-weight:700; color:var(--ink-soft); }
+.pkid__day{ width:26px; height:26px; border-radius:50%; border:2px solid var(--ink); display:grid; place-items:center; font-size:.7rem; font-weight:800; background:#fff; color:var(--ink-mute); }
+.pkid__day--on{ background:var(--sun); color:var(--ink); }
+.pkid__daysnote{ margin-left:6px; }
+.pkid__stats{ grid-column:1 / -1; display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:10px 0 12px; }
+.pkid__stat{ text-align:center; border:2px solid var(--ink); border-radius:14px; padding:8px 4px; background:var(--paper-2); min-width:0; }
+.pkid__stat b{ display:block; font-size:1.35rem; line-height:1.1; }
+.pkid__stat span{ font-size:.75rem; font-weight:700; color:var(--ink-soft); }
+.pkid__statwait{ height:58px; border-radius:14px; }
+.pkid__note{ grid-column:1 / -1; margin:12px 0; font-weight:600; color:var(--ink-soft); }
+.pkid__retry{ font:inherit; font-weight:800; color:var(--ink); background:none; border:0; padding:0; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+.pkid > .btn{ grid-column:1 / -1; justify-self:start; }
+@media (max-width:420px){ .pkid__daysnote{ flex-basis:100%; margin:2px 0 0; } }
 .tour-tag--alone{ right:18px; }
 .tour-tag--quiet{ font-weight:700; color:var(--ink-mute); }
 body.has-bottom-nav .tour-tag{ bottom:calc(12px + var(--bottom-nav-h, 0px)); }
@@ -15962,6 +15989,60 @@ function portalEntriesForAdmin(){
     .sort((a, b) => String(b.publishedAt || "").localeCompare(String(a.publishedAt || "")));
 }
 
+/** "Your children this week" on the Subscriber's Portal page (owner, 2026-11-25; draft docs/mockups/portal-children-
+    summary-draft-*.png): for each child (3 at most), their picture, name and grade, the days of the last 7 they were
+    creating, and how many things they made, books, episodes and games. Only what they did, never how well: anyone
+    using this browser sees this page, so the ratings stay in the full report behind the grown-up check. Nothing for
+    an admin without a member's sign-in. */
+function portalKidsHTML(){
+  if (!portalSavedSession()) return "";
+  const S = ProgressState;
+  if (S.children === null){
+    if (!S.loading && !S.error) progressLoadChildren();
+    return "";
+  }
+  const head = (link) => '<div class="pkids__head"><h2 id="pkids-title">Your children this week</h2>' + link + '</div>';
+  if (!S.children.length){
+    return '<section class="pkids" aria-labelledby="pkids-title">' + head("")
+      + '<div class="pkids__empty"><p>Add your children to see what each one made, read, watched and played this week.</p>'
+      + '<a class="btn btn--cyan btn--sm" href="#/newsletter/progress">' + ic("plus") + ' Add your children</a></div></section>';
+  }
+  const now = Date.now();
+  const cards = S.children.slice(0, PROGRESS_MAX_CHILDREN).map((c) => {
+    const raw = S.reports[c.id];
+    if (!raw && !S.reportLoading[c.id]) progressLoadReport(c.id);
+    const sum = raw ? portalWeekSummary(raw, now) : null;
+    const name = E(c.name);
+    let week;
+    if (sum){
+      week = '<div class="pkid__days" role="img" aria-label="' + name + ' was creating on ' + sum.activeDays + ' of the last 7 days">'
+        + sum.days.map(d => '<span class="pkid__day' + (d.on ? " pkid__day--on" : "") + '" aria-hidden="true">' + d.letter + '</span>').join("")
+        + '<span class="pkid__daysnote" aria-hidden="true">' + sum.activeDays + (sum.activeDays === 1 ? " day" : " days") + ' this week</span></div>'
+        + '<div class="pkid__stats">'
+        + [["Made", sum.made], ["Books", sum.books], ["Episodes", sum.episodes], ["Games", sum.games]]
+            .map(x => '<div class="pkid__stat"><b>' + x[1] + '</b><span>' + x[0] + '</span></div>').join("")
+        + '</div>';
+    } else if (raw){
+      week = '<p class="pkid__note">This week’s numbers didn’t load just now.'
+        + ' <button type="button" class="pkid__retry" data-act="progress-retry-report" data-id="' + E(c.id) + '">Try again</button></p>';
+    } else {
+      week = '<div class="pkid__days pkid__days--wait" aria-busy="true"><span class="sr-only">Loading</span>'
+        + '<div class="skel-block" style="height:26px;width:100%"></div></div>'
+        + '<div class="pkid__stats">' + [0, 1, 2, 3].map(() => '<div class="skel-block pkid__statwait"></div>').join("") + '</div>';
+    }
+    return '<article class="pkid" aria-label="' + name + '">'
+      + '<div class="pkid__pic">' + avatarSVG(avatarFor(c)) + '</div>'
+      + '<p class="pkid__name">' + name + '</p><p class="pkid__grade">' + E(gradeLabel(c.grade)) + '</p>'
+      + week
+      + '<button type="button" class="btn btn--cyan btn--sm" data-act="portal-kid-report" data-id="' + E(c.id) + '">'
+      + ic("chart-no-axes-column") + ' See ' + name + '’s full report</button>'
+      + '</article>';
+  }).join("");
+  return '<section class="pkids" aria-labelledby="pkids-title">'
+    + head('<a href="#/newsletter/progress">Add or change children</a>')
+    + '<div class="pkids__grid">' + cards + '</div></section>';
+}
+
 function viewNewsletter(){
   const admin = portalIsAdmin();
   portalKick();
@@ -15978,6 +16059,7 @@ function viewNewsletter(){
     + '<span class="eyebrow">' + slot("system", "portalEyebrow") + '</span>'
     + '<h1 style="font-size:clamp(2rem,4vw,3rem);margin:4px 0 6px">' + slot("system", "portalHeading") + '</h1>'
     + '<p class="lede">' + slot("system", "portalText") + '</p>'
+    + portalKidsHTML()
     + (cats.length > 1
         ? '<div class="tagrow pfilters" role="group" aria-label="Filter by category" style="margin:16px 0 4px">'
           + '<button type="button" class="chip pfilter" data-act="portal-cat" data-cat="" aria-pressed="' + (!cat) + '">All</button>'
@@ -16001,7 +16083,7 @@ function viewNewsletter(){
    page load only. The look is docs/mockups/progress-report-draft-5.html: three containers for the report
    (.box--week, .box--learned, .box--ask) and one for Your children, nothing boxed inside them (owner, 2026-11-21).
    ============================================================ */
-const PROGRESS_MAX_CHILDREN = 6;
+const PROGRESS_MAX_CHILDREN = 3;   /* owner, 2026-11-25: up to 3 children (it was 6) */
 const ProgressState = {
   children: null,      /* the member's children as kid-progress sent them, or null until loaded */
   grownUpOk: false,    /* the grown-up check was answered right on this page load (memory only) */
@@ -16034,6 +16116,9 @@ function progressForget(){
   S.tab = "sum"; S.weekOffset = 0; S.openSubj = null; S.day = ""; S.calMonth = ""; S.trend = null; S.trendHidden = null;
 }
 function progressOnRoute(){ return !!AppState.route && AppState.route.name === "progress"; }
+/** The children or a report just loaded: draw again where they show, the report page or the portal's "Your children
+    this week" (owner, 2026-11-25). */
+function progressShownHere(){ return progressOnRoute() || (!!AppState.route && AppState.route.name === "newsletter"); }
 /** kid-progress no longer takes the sign-in (it ran out, or the member left the list): no error is kept, the state is
     cleared, and the portal's sign-in gate shows; a new sign-in then loads everything fresh. True when that happened. */
 function progressSessionEnded(r){
@@ -16075,7 +16160,7 @@ async function progressLoadChildren(){
     } else {
       S.error = (r && r.error) || "network";
     }
-    if (progressOnRoute()) rerender();
+    if (progressShownHere()) rerender();
   })();
   S.pending = run;
   run.finally(() => { if (S.pending === run) S.pending = null; }).catch(() => {});
@@ -16092,7 +16177,7 @@ async function progressLoadReport(id){
   /* removed on another device: load the children again, and the report of whoever is first */
   if (r && r.error === "not_found"){ S.children = null; S.reportFor = ""; }
   else S.reports[id] = r && r.ok ? Object.assign(r, { loadedAt: Date.now() }) : { ok: false, error: (r && r.error) || "network" };
-  if (progressOnRoute()) rerender();
+  if (progressShownHere()) rerender();
 }
 
 /** The site's own content for the report: an item that is gone or no longer published is left out. */
@@ -16658,7 +16743,7 @@ function progressDrawTrend(){
 let RP_RESIZE = 0;
 window.addEventListener("resize", () => { clearTimeout(RP_RESIZE); RP_RESIZE = setTimeout(progressDrawTrend, 120); });
 
-/** Your children: a first name or a nickname and a school grade each, up to 6. */
+/** Your children: a first name or a nickname and a school grade each, up to 3. */
 function progressChildrenHTML(){
   const S = ProgressState, kids = S.children || [];
   const level = g => (g <= 1 ? "Chike’s quizzes for Kindergarten and 1st grade, read aloud."
@@ -16697,7 +16782,7 @@ function progressChildrenHTML(){
   }).join("");
   const d = draft("");
   const add = kids.length >= PROGRESS_MAX_CHILDREN
-    ? '<li><p class="pr-small" style="margin:0">That’s 6 children, the most there can be. Remove one to add another.</p></li>'
+    ? '<li><p class="pr-small" style="margin:0">That’s ' + PROGRESS_MAX_CHILDREN + ' children, the most there can be. Remove one to add another.</p></li>'
     : '<li><form class="pr-form" data-act="progress-save" data-id="" novalidate>'
       + nameBox(d ? d.name : "", false) + grades(d && d.grade !== "" ? Number(d.grade) : null)
       + '<button class="btn btn--cyan btn--sm" type="submit"' + busy + '>' + ic("plus") + ' Add a child</button></form></li>';
@@ -16708,7 +16793,7 @@ function progressChildrenHTML(){
       + '<button type="button" class="btn btn--sm" data-act="progress-remove-yes" data-id="' + E(gone.id) + '"' + busy + '>Remove ' + E(gone.name) + '</button></div>'
     : "";
   return '<section class="pr-part box" id="your-children" aria-labelledby="pr-kids-title">'
-    + '<h2 id="pr-kids-title">Your children<small>Up to 6 children. Just a first name or a nickname, their school grade and an avatar (change it with the pencil). Grades move up on their own each August.</small></h2><div>'
+    + '<h2 id="pr-kids-title">Your children<small>Up to 3 children. Just a first name or a nickname, their school grade and an avatar (change it with the pencil). Grades move up on their own each August.</small></h2><div>'
     + (kids.length ? "" : '<p class="pr-intro">Add a child to start. Then, on the device your child uses, Chike asks who’s playing and keeps track of what they finish.</p>')
     + '<ul class="pr-kidlist">' + rows + add + '</ul>'
     + (S.formMsg ? '<p class="pr-msg" role="alert">' + E(S.formMsg) + '</p>' : "")
@@ -16754,7 +16839,7 @@ async function progressSaveChild(form){
   }
   S.formMsg = {
     invalid: "Type a first name or a nickname (up to 24 letters), pick a school grade and an avatar.",
-    full: "That’s 6 children, the most there can be.",
+    full: "That’s 3 children, the most there can be.",
     not_found: "That child isn’t here any more."
   }[r && r.error] || "We couldn’t save that just now. Check your connection and try again.";
   if (r && r.error === "not_found"){ S.editing = ""; S.draft = null; progressLoadChildren(); }
@@ -30793,6 +30878,12 @@ const ACTIONS = {
     progressDrawTrend();
   },
   "progress-retry": () => { ProgressState.error = ""; ProgressState.children = null; rerender(); },
+  /* the portal's "See <name>'s full report": that child's report, after the grown-up check */
+  "portal-kid-report": (el) => {
+    const id = el.getAttribute("data-id") || "";
+    if ((ProgressState.children || []).some(c => c.id === id)) ProgressState.reportFor = id;
+    navigate("#/newsletter/progress");
+  },
   "progress-retry-report": (el) => { delete ProgressState.reports[el.getAttribute("data-id") || ""]; rerender(); },
   "progress-edit": (el) => {
     const S = ProgressState;

@@ -619,6 +619,30 @@ export function quizBubbleAllowed(route) {
   return !!route && QUIZ_ROUTES.includes(route.name) && !params.id && !params.app;
 }
 
+/** One child's week on the Subscriber's Portal page (owner, 2026-11-25; draft docs/mockups/portal-children-summary-
+    draft-*.png): only what they did in the 7 days ending today, never how well (the full report stays behind the
+    grown-up check). From the report action's answer: the 7 days (each { key, letter, on }), how many had something,
+    and how many activities made, books read and episodes watched, and games played (a game's answers, or a
+    Subscriber's Portal game). Chike's questions after an episode or an activity, and his weekly quiz, aren't games.
+    Null when there is no report. */
+export function portalWeekSummary(raw, now) {
+  if (!raw || raw.ok !== true) return null;
+  const r = parentReport({ answerRows: raw.answerRows, days: raw.days, progress: raw.progress, now });
+  const week = new Set(r.engagement.week.map((d) => d.key));
+  const seen = { activity: new Set(), book: new Set(), episode: new Set(), game: new Set() };
+  for (const [day, items] of r.dayLog) {
+    if (!week.has(day)) continue;
+    for (const it of items) {
+      const id = String(it.item);
+      if (it.kind === "game") { if (!/^(episode|activity)-/.test(id) && id !== "pop-quiz") seen.game.add("g:" + id); }
+      else if (it.kind === "entry") seen.game.add("e:" + id);
+      else if (seen[it.kind] && it.done) seen[it.kind].add(id);
+    }
+  }
+  return { days: r.engagement.week, activeDays: r.engagement.activeDays,
+    made: seen.activity.size, books: seen.book.size, episodes: seen.episode.size, games: seen.game.size };
+}
+
 /* ---- Chike's quick questions after an episode or a "We made it!" activity (owner, 2026-11-24; drafts
    docs/mockups/tracker-quick-questions-*.png). Each item keeps its questions in its record as quiz: { subject, k1, g23,
    g45 }, 4 per grade band, each { q, choices, why } with the right choice first (scripts/item-quiz.mjs). The first time

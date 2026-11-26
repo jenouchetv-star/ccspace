@@ -86,12 +86,12 @@ describe("the progress report page", () => {
     expect(r).not.toMatch(/\+ (it|item|f|fact)\.title \+/);
   });
 
-  it("Your children offers Kindergarten to 6th grade and at most 6", () => {
+  it("Your children offers Kindergarten to 6th grade and at most 3 (owner, 2026-11-25; it was 6)", () => {
     const c = body("progressChildrenHTML");
     expect(c).toContain("GRADE_LABELS");
-    expect(c).toContain("Up to 6 children");
+    expect(c).toContain("Up to 3 children");
     expect(c).toContain("PROGRESS_MAX_CHILDREN");
-    expect(html).toContain("const PROGRESS_MAX_CHILDREN = 6;");
+    expect(html).toContain("const PROGRESS_MAX_CHILDREN = 3;");
     expect(c).toContain('maxlength="24"');
   });
 
@@ -181,13 +181,13 @@ describe("the progress report page", () => {
     const ended = fn("progressSessionEnded", "progressForget", "portalSavedSession", "PortalState", "artCloudForget", "progressOnRoute", "rerender")(
       forget, () => "", { phase: "ready" }, () => { signedOut++; }, () => true, () => {});
     const noSession = async () => ({ ok: false, error: "no_session" });
-    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressOnRoute", "rerender", "async ")(S, noSession, ended, () => true, () => {});
+    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressShownHere", "rerender", "async ")(S, noSession, ended, () => true, () => {});
     await load();
     expect(S.error).toBe("");
     expect(S.children).toBe(null);
     expect(forgot).toBe(1);
     expect(signedOut).toBe(1);                                 // the portal's sign-in gate shows
-    const report = fn("progressLoadReport", "ProgressState", "kidCall", "progressSessionEnded", "progressOnRoute", "rerender", "async ")(S, noSession, ended, () => true, () => {});
+    const report = fn("progressLoadReport", "ProgressState", "kidCall", "progressSessionEnded", "progressShownHere", "rerender", "async ")(S, noSession, ended, () => true, () => {});
     await report("c1");
     expect(S.reports.c1).toBe(undefined);
     for (const f of ["progressSaveChild", "progressRemoveChild"]) {
@@ -349,7 +349,7 @@ describe("who's playing, and recording what a child finishes", () => {
     const S = { children: null, loading: false, error: "", reportFor: "" };
     let calls = 0, release;
     const kidCall = (action) => { calls++; return new Promise((res) => { release = () => res({ ok: true, children: KIDS }); }); };
-    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressOnRoute", "rerender", "async ")(
+    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressShownHere", "rerender", "async ")(
       S, kidCall, () => false, () => false, () => {});
     const kids = fn("progressKids", "ProgressState", "portalSavedSession", "progressLoadChildren")(S, () => "tok", load);
     const first = load();                                       // the report page (or Remove) started a load
@@ -369,7 +369,7 @@ describe("who's playing, and recording what a child finishes", () => {
   it("a load the family signed out of meanwhile keeps nothing", async () => {
     const S = { children: null, loading: false, error: "", reportFor: "" };
     let release;
-    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressOnRoute", "rerender", "async ")(
+    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressShownHere", "rerender", "async ")(
       S, () => new Promise((res) => { release = () => res({ ok: true, children: KIDS }); }), () => false, () => false, () => {});
     const p = load();
     S.pending = null; S.loading = false;                        // progressForget() ran: another member, or signed out

@@ -14,7 +14,7 @@
 //   child_save    { child: { id?, name, grade, avatar? } } add a child or change one. Name 1 to 24 letters, spaces, ' - or
 //                 .; grade a whole number 0 (Kindergarten) to 6; avatar one of the 20 AVATARS. A new child with no avatar
 //                 gets one at random, one their brothers and sisters don't have while any are left; a change with no
-//                 avatar keeps the one they have. Six children at most ("full"). -> { ok, id, avatar }
+//                 avatar keeps the one they have. Three children at most ("full"; owner, 2026-11-25). -> { ok, id, avatar }
 //   child_remove  { id } remove a child; everything kept for the child goes with it (cascade).
 //   record        { child, kind, item } the child finished an episode, book, entry or activity. One row per child per
 //                 item: first_at stays, last_at is now, times goes up by one. 300 an hour per member ("slow_down").
@@ -76,7 +76,7 @@ const json = (body: unknown, status = 200) =>
 const fail = (error: string) => json({ ok: false, error });
 
 const MAX_BODY_BYTES = 16_000;
-const MAX_CHILDREN = 6;
+const MAX_CHILDREN = 3;                     // owner, 2026-11-25: up to 3 children per member (it was 6)
 const MAX_RECORDS_PER_HOUR = 300;
 const KINDS = ["episode", "book", "entry", "activity"];
 const REPORT_QUIZZES = 5;
