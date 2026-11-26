@@ -192,13 +192,17 @@
     on = !!v;
     try { localStorage.setItem(KEY, on ? "on" : "off"); } catch (e) {}
     if (!on && master && ctx){ master.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.03); setTimeout(function(){ if (!on && master) master.gain.value = 0.5; }, 300); }
-    buttons.forEach(paint);
+    buttons.forEach(paint); mixers.forEach(paintMixer); paintSwitch();
     if (on){ unlock(); play("click"); }
   }
   /* opts.compact: icon only (for tight top bars). The button carries an inline background so the shared skin's
      pill rule does not restyle it; style it further with the class "ccs-sound-btn". */
   function button(opts){
     opts = opts || {};
+    /* ONE Sound button for every game (owner, 2026-11-26: "place this in a single menu or settings button"): its
+       speaker shows whether sound is on, and a tap opens one panel with the on/off switch and the volume sliders.
+       opts.mixer === false keeps the old plain on/off button. */
+    if (opts.mixer !== false) return mixer({ background: opts.background, className: opts.className, compact: !!opts.compact });
     var b = document.createElement("button");
     b.type = "button";
     b.className = "ccs-sound-btn" + (opts.className ? " " + opts.className : "");
@@ -206,11 +210,6 @@
     b.style.background = opts.background || "#FFFBF3";
     b.addEventListener("click", function(){ setOn(!on); });
     buttons.push(b); paint(b);
-    /* the volume button goes just before it, in the same look, as soon as the game puts the sound button on the page */
-    if (opts.mixer !== false){
-      var m = mixer({ background: b.style.background, className: opts.className }), tries = 0;
-      (function attach(){ if (b.parentNode){ if (!m.parentNode) b.parentNode.insertBefore(m, b); return; } if (tries++ < 200) setTimeout(attach, 50); })();
-    }
     return b;
   }
 
@@ -253,13 +252,20 @@
     try { window.parent.postMessage({ ccsSave: "get", game: "volume" }, "*"); } catch (e) {}
   }
 
-  /* the volume button and its panel of sliders */
-  var ICON_MUSIC = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
-  var ICON_LEVELS = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg>';
+  /* the Sound button and its one panel: on/off switch, then the volume sliders. A game that keeps its own on/off
+     setting passes opts.toggle = { isOn(), set(v) } and the switch drives that instead of the kit's. */
+  function isOnFor(b){ return b && b._toggle ? !!b._toggle.isOn() : on; }
+  function setFor(b, v){ if (b && b._toggle){ b._toggle.set(!!v); } else { setOn(!!v); } mixers.forEach(paintMixer); paintSwitch(); }
   function paintMixer(b){
-    b.innerHTML = hasMusicFlag ? ICON_MUSIC : ICON_LEVELS;
-    var label = hasMusicFlag ? "Music and sound volume" : "Sound volume";
-    b.setAttribute("aria-label", label); b.title = label;
+    var o = isOnFor(b);
+    b.innerHTML = (o ? ICON_ON : ICON_OFF) + (b.dataset.compact ? "" : "<span>" + (o ? "Sound on" : "Sound off") + "</span>");
+    b.setAttribute("aria-label", "Sound settings, sound " + (o ? "on" : "off")); b.title = "Sound settings";
+  }
+  function paintSwitch(){
+    if (!panel) return;
+    var o = isOnFor(panelFor), sw = panel.querySelector(".ccs-mix-switch button");
+    if (sw){ sw.setAttribute("aria-checked", o ? "true" : "false"); sw.querySelector("span").textContent = o ? "On" : "Off"; }
+    panel.classList.toggle("is-off", !o);
   }
   var panel = null, panelFor = null;
   function stop(e){ e.stopPropagation(); }
@@ -268,7 +274,8 @@
     var b = document.createElement("button");
     b.type = "button";
     b.className = "ccs-sound-btn ccs-mix-btn" + (opts.className ? " " + opts.className : "");
-    b.dataset.compact = "1";
+    if (opts.compact !== false) b.dataset.compact = "1";
+    if (opts.toggle && typeof opts.toggle.isOn === "function" && typeof opts.toggle.set === "function") b._toggle = opts.toggle;
     b.style.background = opts.background || "#FFFBF3";
     b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("aria-expanded", "false");
     b.addEventListener("click", function(e){ e.stopPropagation(); togglePanel(b); });
@@ -297,8 +304,13 @@
     closePanel();
     panel = document.createElement("div");
     panel.className = "ccs-mix";
-    panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Volume");
+    panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Sound settings");
     ["pointerdown", "mousedown", "touchstart", "click", "wheel"].forEach(function(t){ panel.addEventListener(t, stop); });
+    var sw = document.createElement("div");
+    sw.className = "ccs-mix-switch";
+    sw.innerHTML = '<span>Sound</span><button type="button" role="switch" aria-label="Sound"><i aria-hidden="true"></i><span></span></button>';
+    sw.querySelector("button").addEventListener("click", function(){ setFor(b, !isOnFor(b)); });
+    panel.appendChild(sw);
     var rows = (hasMusicFlag ? [["music", "Music"]] : []).concat([["sfx", hasMusicFlag ? "Game sounds" : "Sound volume"]]);
     rows.forEach(function(r){
       var w = document.createElement("label");
@@ -308,7 +320,7 @@
       inp.value = Math.round(VOL[r[0]] * 100);
       inp.setAttribute("aria-label", r[1]);
       w.querySelector("b").textContent = inp.value + "%";
-      inp.addEventListener("input", function(){ setVolume(r[0], inp.value / 100); if (r[0] === "sfx") play("tick"); });
+      inp.addEventListener("input", function(){ if (!isOnFor(b)) setFor(b, true); setVolume(r[0], inp.value / 100); if (r[0] === "sfx") play("tick"); });
       panel.appendChild(w);
     });
     var note = document.createElement("small");
@@ -319,15 +331,15 @@
     var left = Math.min(window.innerWidth - pw - 8, Math.max(8, rc.right - pw)), top = rc.bottom + 8;
     if (top + ph > window.innerHeight - 8) top = Math.max(8, rc.top - ph - 8);
     panel.style.left = left + "px"; panel.style.top = top + "px";
-    panelFor = b; b.setAttribute("aria-expanded", "true");
+    panelFor = b; b.setAttribute("aria-expanded", "true"); paintSwitch();
     document.addEventListener("pointerdown", outside, true);
     window.addEventListener("keydown", onKey, true);
-    var first = panel.querySelector("input"); if (first) first.focus();
+    var first = panel.querySelector(".ccs-mix-switch button"); if (first) first.focus();
   }
 
   /* another tab of the site switching sound, or changing the volume, keeps this one in step */
   window.addEventListener("storage", function(e){
-    if (e.key === KEY){ on = e.newValue !== "off"; buttons.forEach(paint); }
+    if (e.key === KEY){ on = e.newValue !== "off"; buttons.forEach(paint); mixers.forEach(paintMixer); paintSwitch(); }
     if (e.key === VKEY){ try { takeVol(JSON.parse(e.newValue || "null")); } catch (x) {} }
   });
 
@@ -337,7 +349,6 @@
     + "border:3px solid #1E2226;border-radius:999px;box-shadow:3px 3px 0 #1E2226;padding:6px 14px;min-height:40px;cursor:pointer;line-height:1}"
     + ":where(.ccs-sound-btn[data-compact]){padding:6px;min-width:40px;justify-content:center}"
     + ":where(.ccs-sound-btn[aria-pressed=false]){opacity:.85}"
-    + ":where(.ccs-mix-btn){margin-right:6px}"
     + ".ccs-mix{position:fixed;z-index:2147483000;width:250px;box-sizing:border-box;background:#FFFBF3;color:#1E2226;border:3px solid #1E2226;border-radius:16px;"
     + "box-shadow:5px 5px 0 #1E2226;padding:12px 14px;font-family:Nunito,system-ui,sans-serif;text-align:left}"
     + ".ccs-mix-row{display:block;margin:0 0 10px;cursor:default}"
@@ -346,7 +357,15 @@
     + ".ccs-mix input[type=range]{display:block;width:100%;margin:0;height:28px;accent-color:#E8A800;cursor:pointer;background:transparent}"
     + ".ccs-mix input[type=range]:focus-visible{outline:3px solid #7A4A86;outline-offset:2px;border-radius:8px}"
     + ".ccs-mix-ends{display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:#55606e}"
-    + ".ccs-mix small{display:block;font-size:12px;font-weight:700;color:#55606e;line-height:1.35}";
+    + ".ccs-mix small{display:block;font-size:12px;font-weight:700;color:#55606e;line-height:1.35}"
+    + ".ccs-mix-switch{display:flex;justify-content:space-between;align-items:center;font-weight:900;font-size:15px;margin:0 0 10px;padding-bottom:10px;border-bottom:2px dashed #E3D9C2}"
+    + ".ccs-mix-switch button{display:inline-flex;align-items:center;gap:8px;border:0;background:none;font:inherit;font-weight:900;font-size:14px;color:#1E2226;cursor:pointer;padding:2px;border-radius:999px}"
+    + ".ccs-mix-switch button:focus-visible{outline:3px solid #7A4A86;outline-offset:2px}"
+    + ".ccs-mix-switch i{position:relative;display:block;width:46px;height:26px;box-sizing:border-box;border:3px solid #1E2226;border-radius:999px;background:#E8A800;transition:background .15s ease-out}"
+    + ".ccs-mix-switch i::after{content:'';position:absolute;top:2px;left:21px;width:16px;height:16px;box-sizing:border-box;border:2px solid #1E2226;border-radius:50%;background:#fff;transition:left .15s ease-out}"
+    + ".ccs-mix-switch button[aria-checked=false] i{background:#D5D9DE}.ccs-mix-switch button[aria-checked=false] i::after{left:2px}"
+    + ".ccs-mix.is-off .ccs-mix-row{opacity:.5}"
+    + "@media (prefers-reduced-motion:reduce){.ccs-mix-switch i,.ccs-mix-switch i::after{transition:none}}";
   (document.head || document.documentElement).appendChild(css);
 
   window.CCSSound = { play: play, isOn: function(){ return on; }, setOn: setOn, button: button, names: Object.keys(SOUNDS),

@@ -93,9 +93,11 @@ describe("the volume levels", () => {
     expect(btn).toContain('var rows = (hasMusicFlag ? [["music", "Music"]] : []).concat([["sfx", hasMusicFlag ? "Game sounds" : "Sound volume"]]);');
     expect(src).toContain("if (s.music) hasMusic(true);");
   });
-  it("the volume button appears beside every kit sound button, and the panel's keys never move the game", () => {
-    expect(src).toContain("if (opts.mixer !== false){");
-    expect(src).toContain("b.parentNode.insertBefore(m, b)");
+  it("every game gets ONE Sound button whose panel holds the on/off switch and the sliders, and the panel's keys never move the game", () => {
+    expect(src).toContain("if (opts.mixer !== false) return mixer(");
+    expect(src).not.toContain("b.parentNode.insertBefore(m, b)");
+    expect(src).toContain('role="switch"');
+    expect(src).toContain("if (!isOnFor(b)) setFor(b, true);");
     expect(src).toContain("if (panel.contains(document.activeElement)) e.stopPropagation();");
     expect(src).toContain('note.textContent = "Remembered for every game on this device.";');
   });

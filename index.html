@@ -13361,6 +13361,9 @@ function membersPoster(g, what){
  * and withholds top-level navigation.
  */
 let GAMESTAGE_KEY_HANDLER = null;
+/* games with their own Start over in their toolbar: the site bar leaves its copy out, so there is only one
+   (owner, 2026-11-26: "solar system sandbox has 2 start over buttons") */
+const OWN_RESTART_SLUGS = ["solar-system-sandbox"];
 /** The page a game or book in the player belongs to, so Share sends people there. */
 function stageSharePath(g){
   if (g.sharePath) return g.sharePath;
@@ -13380,7 +13383,7 @@ function gameStage(g){
     + '<span class="brand__mark brand__mark--sm"><img src="assets/brand/logo.webp" alt="Chike&#39;s Creative Space" width="603" height="320"></span></span>'
     + '<span class="gamestage__title">' + ic(g.icon || "dices") + '<span>' + nameHTML(g.title) + '</span></span>'
     + '<button class="btn btn--sm btn--paper gamestage__iconbtn" data-act="share-over" data-url="' + E(location.origin + stageSharePath(g)) + '" data-title="' + E(g.title) + '" aria-label="Share">' + ic("share-2") + '<span class="gamestage__btn-label"> Share</span></button>'
-    + '<button class="btn btn--sm btn--paper gamestage__iconbtn" data-act="game-reload" aria-label="Start over">' + ic("rotate-ccw") + '<span class="gamestage__btn-label"> Start over</span></button>'
+    + (g.ownRestart ? "" : '<button class="btn btn--sm btn--paper gamestage__iconbtn" data-act="game-reload" aria-label="Start over">' + ic("rotate-ccw") + '<span class="gamestage__btn-label"> Start over</span></button>')
     + '<button class="btn btn--sm btn--sun gamestage__iconbtn" data-act="close-game" aria-label="Close">' + ic("x") + '<span class="gamestage__btn-label"> Close</span></button>'
     + '</div>'
     + (g.srcdoc !== undefined
@@ -31745,9 +31748,10 @@ const ACTIONS = {
         if (e && e.privateGameId) html = await loadPortalGameHtml(e.privateGameId) || "";
         else if (e) entry = e;
       }
-      if (html){ openGameStage({ id: "portal", title: title, icon: "dices", hasFile: true, srcdoc: html, sharePath: sharePath }); return; }
+      const ownRestart = OWN_RESTART_SLUGS.indexOf(slug) >= 0 || !!(entry && OWN_RESTART_SLUGS.indexOf(String(entry.privateGameId || "").replace(/^pg-/, "")) >= 0);
+      if (html){ openGameStage({ id: "portal", title: title, icon: "dices", hasFile: true, srcdoc: html, sharePath: sharePath, ownRestart: ownRestart }); return; }
       const path = entry && portalSafeUrl(entry.gamePath);
-      if (path){ openGameStage({ id: "portal", title: title, path: path, icon: "dices", sharePath: sharePath }); return; }
+      if (path){ openGameStage({ id: "portal", title: title, path: path, icon: "dices", sharePath: sharePath, ownRestart: ownRestart }); return; }
       /* anything else (a game that lives on its portal page): go there */
       navigate("#/newsletter/" + encodeURIComponent(slug));
     } finally { el.removeAttribute("aria-busy"); }
@@ -31759,7 +31763,7 @@ const ACTIONS = {
     if (!html && portalIsAdmin()) html = await loadPortalGameHtml(e.privateGameId) || "";
     if (!html){ toast("This game couldn\u2019t be loaded. Try again in a moment.", "bad"); return; }
     openGameStage({ id: "portal", title: el.getAttribute("data-title") || e.title || "Game", icon: "dices", hasFile: true, srcdoc: html,
-      sharePath: "/newsletter/" + encodeURIComponent(e.slug || e.id) });
+      sharePath: "/newsletter/" + encodeURIComponent(e.slug || e.id), ownRestart: OWN_RESTART_SLUGS.indexOf(e.slug) >= 0 || OWN_RESTART_SLUGS.indexOf(String(e.privateGameId || "").replace(/^pg-/, "")) >= 0 });
     /* a game entry counts for the progress report once it is played */
     progressEntryPlayed();
   },
