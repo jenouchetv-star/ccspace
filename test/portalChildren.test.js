@@ -52,7 +52,10 @@ describe("portalWeekSummary", () => {
 describe("the portal page", () => {
   it("shows the section under the page's words, for a signed-in member only", () => {
     const v = body("viewNewsletter");
-    expect(v).toContain("+ '<p class=\"lede\">' + slot(\"system\", \"portalText\") + '</p>'\n    + portalKidsHTML()");
+    /* under the heading; the words that introduce the posts come after it, just above them (owner, 2026-11-25) */
+    expect(v).toContain("+ portalKidsHTML()\n    + '<p class=\"lede\">' + slot(\"system\", \"portalText\") + '</p>'");
+    expect(v.indexOf("portalKidsHTML()")).toBeGreaterThan(v.indexOf('slot("system", "portalHeading")'));
+    expect(v.indexOf('slot("system", "portalText")')).toBeLessThan(v.indexOf("pfilters"));
     const k = body("portalKidsHTML");
     expect(k).toContain("if (!portalSavedSession()) return \"\";");
   });
