@@ -186,7 +186,7 @@ describe("Drop 2048: the board button never costs a game (owner, 2026-11-25)", (
     expect(game).toContain("const gameUnderWay = () => !over && grid.some(row => row.some(Boolean));");
     expect(game).toContain('$("bBack").hidden = !gameUnderWay();');
     expect(game).toContain("pickN = Number(b.dataset.n);");
-    expect(game).not.toContain("N = Number(b.dataset.n);");
+    expect(game).not.toMatch(/[^k]N = Number(b.dataset.n)/);   // only pickN changes as a size is tapped
     expect(game).toContain('$("bPlay").onclick = () => { sfx("start", { volume: 0.5 }); N = pickN; $("sStart").hidden = true; newGame();');
   });
   it("Back to my game, Escape or a tap outside the card close it and carry on", () => {
