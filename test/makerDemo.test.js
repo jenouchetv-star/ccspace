@@ -27,7 +27,8 @@ describe("maker demo v3: where it lives", () => {
     expect(page).toContain('<meta name="robots" content="noindex">');
     expect(page).toContain('<meta name="viewport" content="width=device-width, initial-scale=1">');
     expect(page).not.toMatch(/\bfetch\(|XMLHttpRequest|WebSocket|supabase/i);
-    for (const u of page.match(/https?:\/\/[^"'\s)]+/g) || []) expect(u).toMatch(/^https:\/\/fonts\.(googleapis|gstatic)\.com/);
+    // the SVG namespace inside the dropdown chevron is an identifier, not a request
+    for (const u of page.match(/https?:\/\/[^"'\s)]+/g) || []) if (u !== "http://www.w3.org/2000/svg") expect(u).toMatch(/^https:\/\/fonts\.(googleapis|gstatic)\.com/);
   });
 });
 
@@ -35,7 +36,7 @@ describe("maker demo v3: the single journey", () => {
   it("has six presenter stages and every journey screen, each with a renderer", () => {
     expect(C.STAGES).toEqual(["Discover", "Partner", "Plan the year", "Run a session", "Share and report", "CCS admin"]);
     expect(C.SCREEN_ORDER).toEqual(["home", "schools", "libraries", "how", "pricing", "steps", "plans", "checkout", "agreement", "setup",
-      "phome", "year", "catalog", "unit", "schedule", "team", "fhome", "prep", "run", "done", "portfolio", "builder", "family", "feedback", "report", "admin"]);
+      "phome", "year", "catalog", "unit", "schedule", "team", "fhome", "attend", "prep", "run", "done", "portfolio", "builder", "family", "feedback", "report", "admin"]);
     for (const id of C.SCREEN_ORDER) expect(script).toContain("V." + id + " = ");
     const stages = C.SCREEN_ORDER.map((id) => C.SCREENS[id].stage);
     expect(stages).toEqual([...stages].sort((a, b) => a - b));
@@ -46,7 +47,7 @@ describe("maker demo v3: the single journey", () => {
 
   it("puts the public pages in the site shell, the partner screens in the portal, and the family page in the brand", () => {
     for (const id of ["home", "schools", "libraries", "how", "pricing", "steps", "plans", "checkout", "agreement"]) expect(C.SCREENS[id].shell).toBe("pub");
-    for (const id of ["setup", "phome", "year", "catalog", "unit", "schedule", "team", "fhome", "prep", "run", "done", "portfolio", "builder", "feedback", "report", "admin"]) expect(C.SCREENS[id].shell).toBe("app");
+    for (const id of ["setup", "phome", "year", "catalog", "unit", "schedule", "team", "fhome", "attend", "prep", "run", "done", "portfolio", "builder", "feedback", "report", "admin"]) expect(C.SCREENS[id].shell).toBe("app");
     expect(C.SCREENS.family.shell).toBe("fam");
   });
 
@@ -86,8 +87,11 @@ describe("maker demo v3: the design system", () => {
     expect(rule(".portal")).toContain("background:var(--canvas)");
   });
 
-  it("uses Plus Jakarta Sans only, the type scale, sentence case and no code-style labels", () => {
+  it("uses Plus Jakarta Sans (Caveat only for the signature), the type scale, sentence case and no code-style labels", () => {
     expect(page).toContain("family=Plus+Jakarta+Sans");
+    expect(page).toContain("family=Caveat:wght@600");
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, "").match(/Caveat/g).length).toBe(1);
+    expect(rule(".sig__ink")).toContain('font-family:"Caveat"');
     expect(page).not.toMatch(/Roboto|monospace|text-transform:\s*uppercase/i);
     expect(rule(".t-display")).toContain("font-size:40px; line-height:44px; font-weight:800; letter-spacing:-.02em");
     expect(rule(".t-title")).toContain("font-size:28px; line-height:34px; font-weight:800; letter-spacing:-.015em");
@@ -95,8 +99,17 @@ describe("maker demo v3: the design system", () => {
     expect(css).toMatch(/body\{[^}]*font-size:16px; line-height:26px; font-weight:500/);
   });
 
-  it("keeps portal panels quiet: 1px line, radius 12, no shadow, padding 24; portal buttons radius 10", () => {
-    expect(rule(".panel")).toBe(" background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:24px; min-width:0; ");
+  it("uses one panel per section everywhere: 1px line, radius 20, no shadow, padding 40/44/44; buttons radius 10", () => {
+    expect(rule(".panel")).toBe(" background:var(--surface); border:1px solid var(--panel-line); border-radius:20px; padding:40px 44px 44px; min-width:0; ");
+    expect(css).toContain("--panel-line:#DDE1DC");
+    expect(css).toContain("--panel-line-sky:#D3E2EC");
+    expect(rule(".pub .panel")).toContain("border-color:var(--panel-line-sky)");
+    expect(rule(".panel__title")).toContain("font-size:28px; line-height:34px; font-weight:800");
+    expect(rule(".panel__intro")).toContain("font-size:17px; line-height:28px");
+    expect(rule(".panel__body")).toContain("margin-top:30px");
+    expect(rule(".pub > * + *, .pmain__in > * + *, .pstack > * + *")).toContain("margin-top:28px");
+    expect(rule(".ph h1, .hero h1")).toContain("font-size:44px; line-height:50px");
+    expect(rule(".phead h1")).toContain("font-size:34px; line-height:40px");
     expect(rule(".btn")).toContain("border-radius:10px");
     expect(rule(".btn")).not.toMatch(/box-shadow/);
   });
@@ -400,5 +413,225 @@ describe("maker demo v3: guided tour and reset", () => {
     expect(reset).toContain("S = freshState();");
     expect(reset).toContain("localStorage.removeItem(STORE_KEY)");
     expect(page).not.toContain("localStorage.clear(");
+  });
+});
+
+// ---------- version 4 (owner, 2026-11-26): one content architecture, the blue signature, attendance, notes ----------
+// The page script runs here against a tiny document stand-in, so each screen's HTML can be rendered and checked.
+function boot() {
+  const el = () => ({ innerHTML: "", textContent: "", style: { setProperty() {} }, dataset: {}, classList: { add() {}, remove() {}, toggle() {} }, setAttribute() {}, focus() {}, querySelector() { return null; }, querySelectorAll() { return []; }, contains() { return false; }, remove() {} });
+  const nodes = { "#app": el(), "#drawerRoot": el(), "#tourRoot": el(), "#toast": el(), "#capLive": el() };
+  const doc = { querySelector: (s) => nodes[s] || null, querySelectorAll: () => [], getElementById: () => null, addEventListener() {}, body: { dataset: {}, classList: { toggle() {} }, contains: () => false }, documentElement: { style: { setProperty() {} } }, activeElement: null, title: "" };
+  return new Function("document", "window", "addEventListener", "requestAnimationFrame", "localStorage", "setTimeout", "clearTimeout", "getComputedStyle", "innerHeight",
+    script + "\nreturn { V, ACT, get S() { return S; }, SCREEN_ORDER, NAV, sess, notesList, sigHTML, guideHTML, setupFieldHTML };")(doc, { scrollTo() {} }, () => {}, () => {}, undefined, () => 0, () => {}, () => ({}), 800);
+}
+// walks the tags: counts panels, panels inside panels, h2s outside any panel, and panels with no h2 title
+function scan(html) {
+  const VOID = new Set(["img", "input", "br", "meta", "link", "hr", "source", "path", "circle", "rect", "ellipse", "line"]);
+  const out = { panels: 0, nested: 0, h2Outside: 0, untitled: 0 }, stack = [], re = /<(\/?)([a-zA-Z0-9]+)([^>]*?)(\/?)>/g;
+  let m;
+  while ((m = re.exec(html))) {
+    const [, close, tag, attrs, self] = m, t = tag.toLowerCase();
+    if (close) { while (stack.length) { const top = stack.pop(); if (top.tag === t) { if (top.panel && !top.h2) out.untitled++; break; } } continue; }
+    if (self || VOID.has(t)) continue;
+    const panel = /class="panel[ "]/.test(attrs);
+    if (panel) { out.panels++; if (stack.some((x) => x.panel)) out.nested++; }
+    if (t === "h2") { const p = [...stack].reverse().find((x) => x.panel); if (p) p.h2 = true; else out.h2Outside++; }
+    stack.push({ tag: t, panel: panel, h2: false });
+  }
+  return out;
+}
+const render = (api, mode, id) => { api.S.mode = mode; api.S.screen = id; return api.V[id](); };
+
+describe("maker demo v4: one content architecture on every screen", () => {
+  it("puts every public and portal section in one titled panel, never a panel in a panel, in both settings", () => {
+    const api = boot();
+    for (const mode of ["school", "library"]) for (const id of api.SCREEN_ORDER) {
+      if (id === "family") continue;
+      const r = scan(render(api, mode, id));
+      expect(r.panels, mode + " " + id).toBeGreaterThan(0);
+      expect(r.nested, mode + " " + id + " nested").toBe(0);
+      expect(r.h2Outside, mode + " " + id + " loose heading").toBe(0);
+      expect(r.untitled, mode + " " + id + " untitled panel").toBe(0);
+    }
+  });
+
+  it("keeps the states that only appear later in the flow in panels too", () => {
+    const api = boot();
+    api.S.agree.school.signed = true; api.S.agree.school.name = "Dana Brooks";
+    api.S.order.placed = true; api.S.order.orderNo = "CCS-2026-00417";
+    api.S.setup.step = 5;
+    for (const id of ["agreement", "checkout", "setup"]) { const r = scan(render(api, "school", id)); expect(r.nested + r.h2Outside + r.untitled, id).toBe(0); }
+    api.S.cat = { format: "workshop", grades: "K-2", focus: "Music" };
+    const cat = render(api, "school", "catalog");
+    expect(cat).toContain('class="empty"');
+    expect(scan(cat).nested).toBe(0);
+  });
+
+  it("keeps the family showcase in the kid-facing brand, on the same type scale", () => {
+    expect(view("family")).not.toMatch(/class="(panel|btn|tbl)/);
+    expect(rule(".kid-show__head h1")).toContain("font-size:44px; line-height:50px");
+    expect(rule(".kid-show__head p")).toContain("font-size:20px; line-height:32px");
+  });
+
+  it("puts filters in a toolbar row under the header and shows empty weeks as an empty state", () => {
+    const api = boot();
+    const port = render(api, "school", "portfolio");
+    expect(port).toContain('class="toolbar"');
+    expect(port).toContain("No photos for this week yet");
+    expect(port).toMatch(/\d+ photos from \d+ teams across \d+ weeks/);
+    expect(render(api, "school", "catalog")).toContain('class="toolbar" id="catFilters"');
+    expect(rule(".pmain__in > .toolbar + *")).toContain("margin-top:24px");
+  });
+});
+
+describe("maker demo v4: the blue signature and printed name", () => {
+  it("loads Caveat 600 and draws the signature in blue ink at about 40px", () => {
+    expect(css).toContain("--ink-blue:#1F4E9E");
+    const ink = rule(".sig__ink");
+    for (const s of ['font-family:"Caveat"', "font-weight:600", "font-size:40px", "color:var(--ink-blue)"]) expect(ink).toContain(s);
+  });
+
+  it("shows the typed name as a signature with the printed name, title and date below it", () => {
+    const api = boot();
+    api.S.mode = "school";
+    const html = api.sigHTML("Dana Brooks", { live: true });
+    expect(html).toContain('<span class="sig__x" aria-hidden="true">x</span><span class="sig__ink">Dana Brooks</span>');
+    const ink = html.indexOf('class="sig__ink"'), printed = html.indexOf("Printed name: <b>Dana Brooks</b>");
+    expect(printed).toBeGreaterThan(ink);
+    expect(html).toContain("Afterschool coordinator, Lincoln Elementary");
+    expect(html).toContain("Wednesday, November 25, 2026");
+    expect(api.sigHTML("", {})).toContain("Your signature appears here");
+    expect(api.sigHTML("", {})).not.toContain("sig__ink");
+  });
+
+  it("orders the agreement reading first and signing last, with a live signature that updates as you type", () => {
+    const api = boot();
+    const html = render(api, "school", "agreement");
+    const order = ["Agreement summary", "Who provides what", "Privacy and data", ">Sign<"].map((t) => html.indexOf(t));
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(html).toContain('id="sigBox"');
+    expect(html).toContain("Demo signature");
+    expect(rule(".signwrap")).toContain("max-width:720px");
+    expect(script).toContain('if (el.dataset.field === "agree.name") { const b = $("#sigBox"); if (b) b.outerHTML = sigHTML(agr().name, { live: true }); }');
+  });
+
+  it("locks the signed record with a Signed chip, and shows it on partner home and in setup", () => {
+    const api = boot();
+    api.S.agree.school.signed = true; api.S.agree.school.name = "Dana Brooks"; api.S.agree.school.signedOn = "2026-11-25";
+    const signed = render(api, "school", "agreement");
+    expect(signed).toContain('<span class="sig__chip">');
+    expect(signed).not.toContain('id="ag-name"');
+    expect(render(api, "school", "phome")).toMatch(/id="agreementRec"[\s\S]*class="sig__ink">Dana Brooks</);
+    api.S.setup.step = 5;
+    expect(render(api, "school", "setup")).toContain('id="sigSetup"');
+  });
+
+  it("signs as the library's programming contact in library mode, each setting with its own agreement", () => {
+    const api = boot();
+    api.S.agree.library.name = "Priya Shah";
+    const html = render(api, "library", "agreement");
+    expect(html).toContain("Youth services manager and programming contact, Maple Street Library");
+    expect(html).toContain('class="sig__ink">Priya Shah<');
+    expect(api.S.agree.school.name).toBe("");
+  });
+});
+
+describe("maker demo v4: dropdowns and add rows", () => {
+  it("styles every select with appearance:none and a 16px chevron 16px in from the border", () => {
+    const sel = rule("select");
+    for (const s of ["appearance:none", "-webkit-appearance:none", "background-repeat:no-repeat", "background-size:16px 16px", "background-position:right 16px center", "padding-right:44px", "min-height:44px"]) expect(sel).toContain(s);
+    expect(sel).toMatch(/background-image:url\("data:image\/svg\+xml/);
+    expect(rule(".field input:not([type=checkbox]):not([type=radio]), .field select, .field textarea")).not.toMatch(/background:/);
+  });
+
+  it("makes Add a teammate a full-width dashed add row", () => {
+    const api = boot();
+    api.S.mode = "school";
+    expect(api.setupFieldHTML(["team", "", "team"], api.S.setup.v.school)).toContain('<button type="button" class="addrow" data-act="addInvite">');
+    const r = rule(".addrow");
+    for (const s of ["width:100%", "min-height:52px", "border:2px dashed var(--blue)", "border-radius:12px", "background:#F3F8FC", "font-weight:700"]) expect(r).toContain(s);
+  });
+});
+
+describe("maker demo v4: attendance is easy to find", () => {
+  it("has an Attendance screen in the journey and the facilitator rail, right after Today", () => {
+    const api = boot();
+    expect(C.SCREENS.attend).toMatchObject({ stage: 3, shell: "app", role: "facilitator", t: "Attendance", tl: "Headcount" });
+    expect(api.NAV.facilitator.slice(0, 2).map((n) => n[0])).toEqual(["fhome", "attend"]);
+    expect(C.TOUR.school.some((s) => s.target === "#takeAttBtn")).toBe(true);
+    expect(C.TOUR.library.some((s) => s.target === "#takeAttBtn")).toBe(true);
+  });
+
+  it("links to it from the facilitator home: a header button and a line in today's panel", () => {
+    const api = boot();
+    const home = render(api, "school", "fhome");
+    expect(home).toContain('id="takeAttBtn" data-act="go" data-go="attend"');
+    expect(home).toContain('id="attLink" data-act="go" data-go="attend"');
+    expect(home).toContain("0 of 22 marked");
+  });
+
+  it("lists the roster as first name and last initial only, by team, with save, clear and late", () => {
+    const api = boot();
+    const html = render(api, "school", "attend");
+    for (const k of C.ROSTER) expect(html).toContain(">" + k.display);
+    for (const t of C.TEAMS) expect(html).toContain("<h3>Team " + t + "</h3>");
+    for (const s of ['data-act="attSave"', 'data-act="attClear"', 'data-act="attAllPage"', "Arrived late", 'id="attCount"']) expect(html).toContain(s);
+    api.ACT.attPage({ dataset: { kid: "k1" } });
+    api.ACT.attSave();
+    expect(api.sess().attendance.k1).toBe(true);
+    expect(api.sess().savedAt).toMatch(/^\d{1,2}:\d{2} PM$/);
+  });
+
+  it("counts library visitors by age band with no names", () => {
+    const api = boot();
+    const html = render(api, "library", "attend");
+    for (const b of C.AGE_BANDS) expect(html).toContain(b.label);
+    for (const k of C.ROSTER) expect(html).not.toContain(k.display);
+    expect(html).toContain("No names are recorded.");
+  });
+});
+
+describe("maker demo v4: the facilitator guide beside the video", () => {
+  it("puts attendance and photos as two quick actions on top, and one Now line with no doubled label", () => {
+    const api = boot();
+    api.S.mode = "school";
+    const g = api.guideHTML();
+    expect(g.indexOf('class="qbtn" id="attBtn" data-act="count"')).toBeLessThan(g.indexOf('class="guide__now"'));
+    expect(g).toContain('class="qbtn" id="snapBtn" data-act="capture"');
+    expect(g).toContain("Only you see this. Hidden in projector mode.");
+    expect(g).not.toMatch(/Now: /);
+    expect(g).toContain('<span class="nowchip">');
+    expect(g).toContain('data-field="guideDo"');
+    expect(g).toContain('class="guide__safety"');
+    api.S.mode = "library";
+    expect(api.guideHTML()).toContain("<span>Headcount</span>");
+    expect(rule(".guide")).toContain("position:sticky");
+    expect(rule(".guide > .guide__safety")).toContain("background:var(--sun-soft)");
+    expect(rule(".guide .ask")).toContain("border-left:3px solid var(--blue)");
+  });
+});
+
+describe("maker demo v4: notes for next time", () => {
+  it("seeds two earlier notes per setting, newest first", () => {
+    expect(C.SEED.notes.school.map((n) => n.text)).toEqual(["Team Volt needed extra bands; bring 10 spares.", "Paper cups tore at the bottom; use waxed cups."]);
+    expect(C.SEED.notes.library.length).toBe(2);
+  });
+
+  it("keeps Save note disabled while empty, and saving adds the note to the top of the list", () => {
+    const api = boot();
+    expect(render(api, "school", "done")).toMatch(/id="saveNoteBtn" disabled/);
+    api.sess().notes = "Spark needs a second box.";
+    expect(render(api, "school", "done")).not.toMatch(/id="saveNoteBtn" disabled/);
+    api.ACT.saveNote();
+    expect(api.notesList()[0]).toMatchObject({ text: "Spark needs a second box.", by: "Ms. Rivera" });
+    expect(api.notesList().length).toBe(3);
+    expect(api.sess().notes).toBe("");
+    const done = render(api, "school", "done");
+    expect(done).toMatch(/Note saved, \d{1,2}:\d{2} PM\./);
+    expect(done).toContain('data-act="editNote"');
+    expect(done).toContain('data-act="delNote"');
+    expect(render(api, "school", "prep")).toMatch(/id="fromLast"[\s\S]*Spark needs a second box\./);
   });
 });
