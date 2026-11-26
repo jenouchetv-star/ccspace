@@ -216,7 +216,11 @@
     <p style="margin-top:-6px">Two of the same make double. Three make double again. Corners do not count, only sides.</p>
     <p>Stuck? After every 5 gems, the hammer is ready: tap it, then tap a gem to smash it.</p>
     <div class="sizes" id="sizes"></div>
-    <button class="btn" id="bPlay" type="button">Play</button>
+    <div class="row">
+      <button class="btn" id="bPlay" type="button">Play</button>
+      <!-- a game under way: close this and carry on (owner, 2026-11-25: the board button was hit by mistake) -->
+      <button class="btn btn--paper" id="bBack" type="button" hidden>Back to my game</button>
+    </div>
   </div>
 </div>
 
@@ -635,15 +639,27 @@ function gameOver(){
 
 $("bKeep").onclick = () => { sfx("click", { volume: 0.5 }); $("sWin").hidden = true; };
 
-/* the start: pick a board */
+/* the start: pick a board. The board picked here is only used when Play starts a new game, so "Back to my game"
+   carries on with the game as it was (owner, 2026-11-25) */
+let pickN = N;
+const gameUnderWay = () => !over && grid.some(row => row.some(Boolean));
 function paintSizes(){
-  $("sizes").innerHTML = SIZES.map(n => '<button class="size" type="button" data-n="' + n + '" aria-pressed="' + (n === N) + '"><svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">'
+  $("sizes").innerHTML = SIZES.map(n => '<button class="size" type="button" data-n="' + n + '" aria-pressed="' + (n === pickN) + '"><svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">'
     + Array.from({ length: n * n }, (_, i) => { const s = 40 / n, row = Math.floor(i / n), on = row >= n - 2 && (i % 3); return '<rect x="' + (2 + (i % n) * s + .8) + '" y="' + (2 + row * s + .8) + '" width="' + (s - 1.6) + '" height="' + (s - 1.6) + '" rx="1.6" fill="' + (on ? Object.values(COLORS)[i % 7] : "#DCD5C4") + '"/>'; }).join("")
     + "</svg>" + n + " x " + n + "<small>" + (bestOf(n) ? "Best " + bestOf(n) : n === 5 ? "Quick and tight" : n === 6 ? "Just right" : "Long and roomy") + "</small></button>").join("");
 }
-$("sizes").addEventListener("click", (e) => { const b = e.target.closest("button[data-n]"); if (!b) return; N = Number(b.dataset.n); sfx("click", { volume: 0.5 }); paintSizes(); });
-function openStart(){ busy = false; paintSizes(); $("sStart").hidden = false; setTimeout(() => $("bPlay").focus(), 60); }
-$("bPlay").onclick = () => { sfx("start", { volume: 0.5 }); $("sStart").hidden = true; newGame(); say(SAY.start); };
+$("sizes").addEventListener("click", (e) => { const b = e.target.closest("button[data-n]"); if (!b) return; pickN = Number(b.dataset.n); sfx("click", { volume: 0.5 }); paintSizes(); });
+function openStart(){
+  pickN = N; paintSizes();
+  $("bBack").hidden = !gameUnderWay();
+  $("sStart").hidden = false; setTimeout(() => $("bPlay").focus(), 60);
+}
+function backToGame(){ $("sStart").hidden = true; $("boardChip").focus(); }
+$("bPlay").onclick = () => { sfx("start", { volume: 0.5 }); N = pickN; $("sStart").hidden = true; newGame(); say(SAY.start); };
+$("bBack").onclick = () => { sfx("click", { volume: 0.5 }); backToGame(); };
+/* Escape, or a tap outside the card, also goes back to a game under way */
+$("sStart").addEventListener("click", (e) => { if (e.target === $("sStart") && !$("bBack").hidden) backToGame(); });
+addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("sStart").hidden && !$("bBack").hidden){ e.preventDefault(); backToGame(); } });
 $("boardChip").onclick = () => { sfx("click", { volume: 0.5 }); openStart(); };
 $("bAgain").onclick = () => { sfx("click", { volume: 0.5 }); newGame(); };
 $("bBoards").onclick = () => { $("sOver").hidden = true; openStart(); };

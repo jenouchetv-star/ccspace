@@ -179,3 +179,21 @@ describe("the look, the feel and the voice", () => {
     expect(game).not.toMatch(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
   });
 });
+
+describe("Drop 2048: the board button never costs a game (owner, 2026-11-25)", () => {
+  it("a game under way gets Back to my game; picking a size only counts when Play starts a new game", () => {
+    expect(game).toContain('<button class="btn btn--paper" id="bBack" type="button" hidden>Back to my game</button>');
+    expect(game).toContain("const gameUnderWay = () => !over && grid.some(row => row.some(Boolean));");
+    expect(game).toContain('$("bBack").hidden = !gameUnderWay();');
+    expect(game).toContain("pickN = Number(b.dataset.n);");
+    expect(game).not.toContain("N = Number(b.dataset.n);");
+    expect(game).toContain('$("bPlay").onclick = () => { sfx("start", { volume: 0.5 }); N = pickN; $("sStart").hidden = true; newGame();');
+  });
+  it("Back to my game, Escape or a tap outside the card close it and carry on", () => {
+    expect(game).toContain('$("bBack").onclick = () => { sfx("click", { volume: 0.5 }); backToGame(); };');
+    expect(game).toContain('if (e.target === $("sStart") && !$("bBack").hidden) backToGame();');
+    expect(game).toContain('if (e.key === "Escape" && !$("sStart").hidden && !$("bBack").hidden)');
+    const back = game.split("function backToGame(){")[1].split("}")[0];
+    expect(back).not.toContain("newGame");
+  });
+});
