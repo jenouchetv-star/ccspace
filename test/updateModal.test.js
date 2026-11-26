@@ -34,3 +34,12 @@ describe("the new-version box", () => {
     expect(fn + css).not.toContain("—");
   });
 });
+
+describe("the new-version box, without its icon (owner, 2026-11-25)", () => {
+  it("opens straight on the title", () => {
+    expect(fn).not.toContain("swup__icon");
+    expect(fn).not.toContain('ic("sparkles")');
+    expect(html).not.toContain(".swup__icon");
+    expect(fn).toContain("'<div class=\"who__card swup__card\">'\n    + '<h3 id=\"sw-update-title\">");
+  });
+});
