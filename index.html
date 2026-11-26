@@ -2664,7 +2664,7 @@ body.is-admin .bgsave-wrap{ display:none; }
 .pkids__grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap:16px; }
 .pkids__empty{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px 18px; background:var(--paper-card); border:var(--line); border-radius:20px; box-shadow:var(--hard-sm); padding:14px 16px; }
 .pkids__empty p{ margin:0; font-weight:600; }
-.pkid{ display:grid; grid-template-columns:48px 1fr auto; gap:0 12px; align-items:center; background:var(--paper-card); border:var(--line); border-radius:18px; box-shadow:var(--hard-sm); padding:14px 16px; }
+.pkid{ display:grid; grid-template-columns:48px 1fr auto; grid-template-rows:auto auto auto auto 1fr; gap:0 12px; align-items:center; background:var(--paper-card); border:var(--line); border-radius:18px; box-shadow:var(--hard-sm); padding:14px 16px; }
 .pkid__pic{ grid-row:1 / span 2; width:48px; height:48px; border-radius:50%; border:2px solid var(--ink); overflow:hidden; background:#fff; }
 .pkid__pic svg{ width:100%; height:100%; display:block; }
 .pkid__name{ align-self:end; font-weight:800; font-size:1.05rem; line-height:1.2; margin:0; overflow-wrap:anywhere; }
@@ -2672,12 +2672,16 @@ body.is-admin .bgsave-wrap{ display:none; }
 .pkid__link{ grid-row:1 / span 2; grid-column:3; align-self:start; display:inline-flex; align-items:center; gap:2px; padding:2px 0; border:0; background:none; cursor:pointer;
   font:inherit; font-weight:800; font-size:.85rem; color:var(--cyan-deep, #0E5A8C); text-decoration:underline; text-underline-offset:3px; white-space:nowrap; }
 .pkid__link svg{ width:16px; height:16px; flex:none; }
-.pkid__days{ grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:5px; align-items:center; margin:12px 0 0; font-size:.85rem; font-weight:700; color:var(--ink-soft); }
+.pkid__days{ grid-column:1 / -1; grid-row:3; display:flex; flex-wrap:wrap; gap:5px; align-items:center; margin:12px 0 0; font-size:.85rem; font-weight:700; color:var(--ink-soft); }
 .pkid__day{ width:20px; height:20px; border-radius:50%; border:1.5px solid var(--ink); display:grid; place-items:center; font-size:.62rem; font-weight:800; background:#fff; color:var(--ink-mute); }
 .pkid__day--on{ background:var(--sun); color:var(--ink); }
 .pkid__daysnote{ margin-left:6px; }
 /* the counts: one quiet row, thin lines between, under a dashed rule */
-.pkid__stats{ grid-column:1 / -1; display:grid; grid-template-columns:repeat(4,1fr); margin:12px 0 0; padding:10px 0 0; border-top:1.5px dashed rgba(30,34,38,.25); }
+/* "Learned about" (owner, 2026-11-25) on row 4, the counts at the bottom of the card so cards side by side line up */
+.pkid__learned{ grid-column:1 / -1; grid-row:4; display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; margin:10px 0 0; font-size:.85rem; font-weight:700; color:var(--ink-soft); }
+.pkid__learned .pr-subj{ margin:0; font-size:.85rem; }
+.pkid__learned .pr-subj svg{ width:18px; height:18px; }
+.pkid__stats{ grid-column:1 / -1; grid-row:5; align-self:end; display:grid; grid-template-columns:repeat(4,1fr); margin:12px 0 0; padding:10px 0 0; border-top:1.5px dashed rgba(30,34,38,.25); }
 .pkid__stat{ text-align:center; padding:0 4px; min-width:0; }
 .pkid__stat + .pkid__stat{ border-left:1.5px solid rgba(30,34,38,.15); }
 .pkid__stat b{ display:block; font-size:1.2rem; line-height:1.15; }
@@ -15999,6 +16003,14 @@ function portalEntriesForAdmin(){
     creating, and how many things they made, books, episodes and games. Only what they did, never how well: anyone
     using this browser sees this page, so the ratings stay in the full report behind the grown-up check. Nothing for
     an admin without a member's sign-in. */
+/** The subjects an episode, activity or book counts toward (its questions' subjects), for "Learned about". */
+function portalItemSubjects(kind, id){
+  const rec = (kind === "episode" || kind === "activity" || kind === "book") ? progressContent().find(kind, id) : null;
+  if (!rec) return [];
+  if (kind !== "book"){ const s = itemQuizSubject(rec.quiz); return s ? [s] : []; }
+  const quiz = (rec.learn && rec.learn.quiz) || (rec.data && rec.data.learn && rec.data.learn.quiz);
+  return quiz ? [...new Set(["k1", "g23", "g45"].flatMap(l => (Array.isArray(quiz[l]) ? quiz[l] : []).map(q => q && q.subject)))].filter(Boolean) : [];
+}
 function portalKidsHTML(){
   if (!portalSavedSession()) return "";
   const S = ProgressState;
@@ -16016,13 +16028,17 @@ function portalKidsHTML(){
   const cards = S.children.slice(0, PROGRESS_MAX_CHILDREN).map((c) => {
     const raw = S.reports[c.id];
     if (!raw && !S.reportLoading[c.id]) progressLoadReport(c.id);
-    const sum = raw ? portalWeekSummary(raw, now) : null;
+    const sum = raw ? portalWeekSummary(raw, now, portalItemSubjects) : null;
     const name = E(c.name);
     let week;
     if (sum){
       week = '<div class="pkid__days" role="img" aria-label="' + name + ' was creating on ' + sum.activeDays + ' of the last 7 days">'
         + sum.days.map(d => '<span class="pkid__day' + (d.on ? " pkid__day--on" : "") + '" aria-hidden="true">' + d.letter + '</span>').join("")
         + '<span class="pkid__daysnote" aria-hidden="true">' + sum.activeDays + (sum.activeDays === 1 ? " day" : " days") + ' this week</span></div>'
+        /* "Subjects related to:" the 2 newest subjects of this week (owner, 2026-11-25); left out until there is one */
+        + (sum.learned.length ? '<div class="pkid__learned"><span>Subjects related to:</span>'
+          + sum.learned.map(id => { const sub = REPORT_SUBJECTS.find(x => x.id === id); const label = sub ? sub.label : id;
+              return '<span class="pr-subj">' + (STEAMM_ICONS[label] || "") + E(label) + '</span>'; }).join("") + '</div>' : "")
         + '<div class="pkid__stats">'
         + [["Made", sum.made], ["Books", sum.books], ["Episodes", sum.episodes], ["Games", sum.games]]
             .map(x => '<div class="pkid__stat"><b>' + x[1] + '</b><span>' + x[0] + '</span></div>').join("")

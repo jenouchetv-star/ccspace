@@ -625,9 +625,26 @@ export function quizBubbleAllowed(route) {
     and how many activities made, books read and episodes watched, and games played (a game's answers, or a
     Subscriber's Portal game). Chike's questions after an episode or an activity, and his weekly quiz, aren't games.
     Null when there is no report. */
-export function portalWeekSummary(raw, now) {
+export function portalWeekSummary(raw, now, itemSubjects) {
   if (!raw || raw.ok !== true) return null;
   const r = parentReport({ answerRows: raw.answerRows, days: raw.days, progress: raw.progress, now });
+  const from = r.period.from, to = r.period.to, inWeek = (ms) => ms >= from && ms < to;
+  /* what they learned about (owner, 2026-11-25): the subjects of this week's answers and of what they finished this
+     week (itemSubjects(kind, id) -> subject ids, from the site's records), the 2 newest, never how well */
+  const seenSubj = [];
+  for (const row of cleanRows(raw.answerRows)) if (inWeek(row.ms)) seenSubj.push({ ms: row.ms, s: row.s });
+  for (const p of raw.progress || []) {
+    const ms = p && Date.parse(p.last_at);
+    if (!p || isNaN(ms) || !inWeek(ms) || typeof itemSubjects !== "function") continue;
+    let ids = [];
+    try { ids = itemSubjects(p.kind, p.item_id) || []; } catch (e) { ids = []; }
+    for (const s of ids) seenSubj.push({ ms, s });
+  }
+  const known = new Set(REPORT_SUBJECTS.map((s) => s.id)), learned = [];
+  for (const x of seenSubj.sort((a, b) => b.ms - a.ms)) {
+    if (known.has(x.s) && !learned.includes(x.s)) learned.push(x.s);
+    if (learned.length === 2) break;
+  }
   const week = new Set(r.engagement.week.map((d) => d.key));
   const seen = { activity: new Set(), book: new Set(), episode: new Set(), game: new Set() };
   for (const [day, items] of r.dayLog) {
@@ -640,7 +657,7 @@ export function portalWeekSummary(raw, now) {
     }
   }
   return { days: r.engagement.week, activeDays: r.engagement.activeDays,
-    made: seen.activity.size, books: seen.book.size, episodes: seen.episode.size, games: seen.game.size };
+    made: seen.activity.size, books: seen.book.size, episodes: seen.episode.size, games: seen.game.size, learned };
 }
 
 /* ---- Chike's quick questions after an episode or a "We made it!" activity (owner, 2026-11-24; drafts

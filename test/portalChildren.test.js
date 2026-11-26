@@ -40,7 +40,7 @@ describe("portalWeekSummary", () => {
   });
   it("only what they did, never how well", () => {
     const s = portalWeekSummary(raw, now);
-    expect(Object.keys(s).sort()).toEqual(["activeDays", "books", "days", "episodes", "games", "made"]);
+    expect(Object.keys(s).sort()).toEqual(["activeDays", "books", "days", "episodes", "games", "learned", "made"]);
   });
   it("nothing to show without a report", () => {
     expect(portalWeekSummary(null, now)).toBe(null);
@@ -64,7 +64,7 @@ describe("the portal page", () => {
     const k = body("portalKidsHTML");
     expect(k).toContain("S.children.slice(0, PROGRESS_MAX_CHILDREN)");
     expect(html).toContain("const PROGRESS_MAX_CHILDREN = 3;");
-    expect(k).toContain("portalWeekSummary(raw, now)");
+    expect(k).toContain("portalWeekSummary(raw, now, portalItemSubjects)");
     expect(k).toContain('[["Made", sum.made], ["Books", sum.books], ["Episodes", sum.episodes], ["Games", sum.games]]');
     expect(k).toContain("Your children this week");
     expect(k).toContain('data-act="portal-kid-report"');
@@ -122,5 +122,34 @@ describe("streamlined (owner, 2026-11-25; docs/mockups/portal-children-slim-draf
     expect(html).toContain('{ key:"portalPostsTitle", section:"Subscriber’s Portal", label:"Posts title", fb:"Subscriber exclusives" }');
     const v = body("viewNewsletter");
     expect(v).toContain("+ '<h2 class=\"pposts__title\">' + slot(\"system\", \"portalPostsTitle\") + '</h2>'\n    + '<p class=\"lede\">'");
+  });
+});
+
+describe("Subjects related to (owner, 2026-11-25; draft docs/mockups/portal-children-learned-draft.png)", () => {
+  const raw = {
+    ok: true,
+    answerRows: [
+      { g: "game-spelling", q: "w1", s: "reading", c: true, h: 0, at: ago(1).toISOString() },
+      { g: "pop-quiz", q: "n1", s: "science", c: false, h: 0, at: ago(3).toISOString() },
+      { g: "pop-quiz", q: "n2", s: "math", c: true, h: 0, at: ago(12).toISOString() },        // last week
+    ],
+    progress: [
+      { kind: "activity", item_id: "act-sailcar", last_at: ago(0).toISOString() },
+      { kind: "book", item_id: "book-1", last_at: ago(2).toISOString() },
+    ],
+    days: [],
+  };
+  const subjectsOf = (kind, id) => ({ "activity:act-sailcar": ["engineering"], "book:book-1": ["art"] })[kind + ":" + id] || [];
+  it("the 2 newest subjects this week, from answers and from what was finished", () => {
+    expect(portalWeekSummary(raw, now, subjectsOf).learned).toEqual(["engineering", "reading"]);
+    expect(portalWeekSummary(raw, now).learned).toEqual(["reading", "science"]);                // answers only
+    expect(portalWeekSummary({ ok: true }, now).learned).toEqual([]);
+  });
+  it("the card says Subjects related to:, with each subject's icon, and only when there is one", () => {
+    const k = body("portalKidsHTML");
+    expect(k).toContain("portalWeekSummary(raw, now, portalItemSubjects)");
+    expect(k).toContain("(sum.learned.length ? '<div class=\"pkid__learned\"><span>Subjects related to:</span>'");
+    expect(k).toContain("STEAMM_ICONS[label]");
+    expect(html).toContain(".pkid__stats{ grid-column:1 / -1; grid-row:5; align-self:end;");   // cards line up
   });
 });
