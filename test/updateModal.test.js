@@ -23,6 +23,11 @@ describe("the new-version box", () => {
     expect(fn).toContain('if (ev.key === "Tab")');
     expect(fn).toContain('$("#sw-update-refresh").focus();');
   });
+  it("its buttons, like every CTA, stay round with the keyboard on them (it opens with Refresh now focused)", () => {
+    expect(html).toContain(".btn:focus-visible{ border-radius:var(--r-pill); }");
+    expect(html).toContain(".btn--icon:focus-visible{ border-radius:12px; }");
+    expect(html.indexOf(".btn:focus-visible{ border-radius:var(--r-pill); }")).toBeGreaterThan(html.indexOf(":focus-visible{\n  outline:4px solid var(--cyan);"));
+  });
   it("no bouncy entrance, no em dashes", () => {
     const css = html.split("#sw-update-banner{ z-index:1300; }")[1].split("/* ====")[0];
     expect(css).not.toContain("cubic-bezier");
