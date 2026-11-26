@@ -22,15 +22,9 @@ const act = html.split('A({ id:"act-rubber-band-guitar"')[1].split("\n    A({")[
 const actSteps = act.split("steps:[")[1].split("]")[0].match(/"([^"]+)"/g).map((s) => s.slice(1, -1));
 
 describe("maker demo: where it lives", () => {
-  it("has an Admin nav entry under Partners and renders the app in a full-width frame", () => {
-    const nav = html.split("const ADMIN_NAV = [")[1].split("\n];")[0];
-    const group = nav.split('{ heading:"Partners"')[1].split("{ heading:")[0];
-    expect(group).toContain('{ hash:"#/admin/maker-demo",     label:"Maker program demo", icon:"presentation" }');
-    expect(fn(html, "viewAdmin")).toContain('else if (section === "maker-demo") body = adminMakerDemo();');
-    const view = fn(html, "adminMakerDemo");
-    expect(view).toContain('const src = "assets/apps/maker-demo.html";');
-    expect(view).toMatch(/<iframe class="maker-demo-frame" src="' \+ src \+ '"/);
-    expect(view).toContain("width:100%");
+  it("is opened from Admin > Program partners with Present the demo, in a new tab (not framed)", () => {
+    expect(fn(html, "adminPartners")).toContain('href="assets/apps/maker-demo.html" target="_blank"');
+    expect(html).not.toContain("<iframe class=\"maker-demo-frame\"");
   });
 
   it("is a standalone page that search engines skip, with no network calls besides fonts", () => {
