@@ -5,9 +5,9 @@ const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const fnBody = (name) => html.split("function " + name + "(")[1].split("\nfunction ")[0];
 
 describe("admin: program partners", () => {
-  it("lists Program partners under the Partners group and routes it (the old maker-demo link too)", () => {
+  it("lists Program partners under the Business group and routes it (the old maker-demo link too)", () => {
     const nav = html.split("const ADMIN_NAV = [")[1].split("\n];")[0];
-    const group = nav.split('{ heading:"Partners"')[1].split("{ heading:")[0];
+    const group = nav.split('{ heading:"Business"')[1].split("{ heading:")[0];
     expect(group).toContain('hash:"#/admin/partners"');
     expect(group).toContain('label:"Program partners"');
     expect(group).not.toContain("maker-demo");

@@ -9885,7 +9885,8 @@ const ADMIN_NAV = [
   { hash:"#/admin/launch-readiness", label:"Launch Readiness", icon:"rocket" },
   { hash:"#/admin/test-panel",     label:"Test panel",      icon:"clipboard-check" },
 
-  { heading:"Partners", icon:"handshake" },
+  { heading:"Business", icon:"briefcase" },
+  { hash:"#/admin/revenue",        label:"Revenue", icon:"wallet" },
   { hash:"#/admin/partners",       label:"Program partners", icon:"handshake" },
 
   { heading:"Admin Access", icon:"shield-check" },
@@ -25316,6 +25317,579 @@ function studioLimitsReload(){
   loadStudioUsage(st.days);
   if (st.sound.status !== "idle") loadSoundUsage(st.sound.days);
 }
+/* Admin > Business > Revenue (owner: "build it", 2026-11-26). The look and behavior are the approved mockup,
+   docs/mockups/admin-revenue-draft-3.html: money in by Maker Program, donations and (later) premium memberships,
+   a calendar that picks the dates, donuts, the school year plan, needs attention, and tabs over one table.
+   TEST AND SAMPLE DATA ONLY: every record is generated from the numbers in the Test data panel (sliders); nothing is
+   read from or saved to the database. The numbers are kept per device (localStorage ccsRevenueTest:v1).
+   It is drawn inside a shadow root: its styles never meet the site's, and its state (REV) survives the admin's
+   re-renders, so the chart and the panel don't start over when something else on the page updates. */
+const REV_CSS = "\n/* the site's admin tokens (index.html --admin-*), same as admin-partners-draft.html. No all caps anywhere. */\n:host{ --bg:#EEF1F4; --surf:#fff; --surf2:#F5F7F9; --border:#DBE1E7; --strong:#C5CDD5; --ink:#161B22; --mute:#5B6673; --faint:#8A93A0;\n  --accent:#2A5C99; --accent-h:#1F4A7D; --accent-soft:#DDE7F2; --accent-ink:#1D3F66; --good:#2F7D5A; --good-soft:#DCEEE4; --warn:#B7791F; --warn-soft:#FBF2E3; --warn-ink:#7A5015;\n  --info-soft:#E4E8FB; --teal-soft:#DFF3F1; --neutral-soft:#E7E9EC; --bad:#B23B3B; --bad-soft:#F7E2E0;\n  --rail:#14181F; --rail-ink:#E7EAEE; --rail-mute:#8B94A3; --rail-border:rgba(255,255,255,.1);\n  --in:#2A5C99; --out:#D9822B;\n  --shadow:0 1px 2px rgba(15,20,26,.05), 0 8px 22px -12px rgba(15,20,26,.18); }\n*{ box-sizing:border-box; } \nbutton,input,select{ font:inherit; color:inherit; }\n.shell{ display:flex; min-height:100vh; }\n.rail{ width:248px; flex:none; background:var(--rail); color:var(--rail-ink); }\n.rail__brand{ padding:18px; border-bottom:1px solid var(--rail-border); display:flex; align-items:center; gap:10px; }\n.rail__brand img{ height:32px; } .rail__brand b{ font-size:1rem; display:block; } .rail__brand span{ font-size:.78rem; color:var(--rail-mute); }\n.rail nav{ padding:14px 12px; display:flex; flex-direction:column; gap:2px; }\n.rail nav a{ padding:10px 12px; border-radius:8px; color:var(--rail-mute); font-weight:600; font-size:.88rem; text-decoration:none; }\n.rail nav a:hover{ color:var(--rail-ink); }\n.rail nav a.on{ background:var(--accent); color:#fff; }\n.rail nav .grp{ padding:16px 12px 6px; font-size:.8rem; font-weight:600; color:var(--rail-mute); }\n.main{ flex:1; min-width:0; }\n.top{ background:var(--surf); border-bottom:1px solid var(--border); padding:16px 32px; font-size:.86rem; font-weight:600; color:var(--mute); }\n.top b{ color:var(--ink); }\n.content{ padding:32px; }\n.head{ display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom:24px; }\n.eyebrow{ font-size:.84rem; font-weight:500; color:var(--mute); }\nh1{ margin:2px 0 0; font-size:1.6rem; font-weight:700; }\n.meta{ margin:6px 0 0; color:var(--mute); font-size:.9rem; max-width:70ch; }\n.sample{ display:inline-block; margin-left:8px; padding:2px 8px; border-radius:6px; background:var(--warn-soft); color:var(--warn-ink); font-size:.72rem; font-weight:600; vertical-align:2px; }\n.btn{ display:inline-flex; align-items:center; gap:7px; background:var(--surf); border:1px solid var(--border); border-radius:7px; padding:8px 13px; font-size:.84rem; font-weight:600; cursor:pointer; text-decoration:none; color:var(--ink); }\n.btn:hover{ background:var(--surf2); border-color:var(--strong); }\n.btn--primary{ background:var(--accent); border-color:var(--accent); color:#fff; } .btn--primary:hover{ background:var(--accent-h); }\n.btn--sm{ padding:6px 11px; font-size:.8rem; }\n.btn svg{ width:16px; height:16px; }\n.btn:focus-visible, .stages button:focus-visible, .seg button:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }\n.tools{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }\n\n/* KPI strip */\n.kpis{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:14px; margin-bottom:28px; }\n.kpi{ background:var(--surf); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }\n.kpi span{ display:block; font-weight:600; font-size:.84rem; color:var(--mute); }\n.kpi b{ display:block; margin-top:8px; font-family:'Roboto Mono',monospace; font-weight:600; font-size:1.55rem; line-height:1; font-variant-numeric:tabular-nums; }\n.kpi small{ display:block; margin-top:8px; color:var(--mute); font-size:.8rem; line-height:1.4; }\n.kpi small .bad{ color:var(--bad); font-weight:600; }\n\n/* needs attention, same as Program partners */\n.attn{ background:var(--surf); border:1px solid var(--border); border-radius:10px; padding:18px 20px 8px; margin-bottom:28px; }\n.attn h2{ margin:0 0 6px; font-size:1rem; font-weight:700; }\n.attn ul{ list-style:none; margin:0; padding:0; }\n.attn li{ display:flex; align-items:center; gap:14px; padding:12px 0; border-top:1px solid var(--border); }\n.attn li:first-child{ border-top:0; }\n.attn li div{ flex:1; min-width:0; }\n.attn li b{ display:block; font-weight:600; font-size:.92rem; }\n.attn li small{ display:block; color:var(--mute); font-size:.82rem; margin-top:2px; }\n.dot{ width:9px; height:9px; border-radius:50%; flex:none; }\n.dot--bad{ background:var(--bad); } .dot--warn{ background:var(--warn); }\n\n/* month chart */\n.card{ background:var(--surf); border:1px solid var(--border); border-radius:10px; margin-bottom:28px; }\n.card__head{ display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:12px 24px; padding:18px 20px 0; }\n.card__head h2{ margin:0; font-size:1rem; font-weight:700; }\n.card__head p{ margin:4px 0 0; color:var(--mute); font-size:.84rem; }\n.legend{ display:flex; flex-wrap:wrap; gap:16px; font-size:.82rem; color:var(--mute); align-items:center; }\n.legend i{ display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px; }\n.legend .plan{ background:repeating-linear-gradient(135deg, #C9D3DE 0 2px, #EEF2F6 2px 5px); }\n.chart{ position:relative; padding:12px 20px 8px; }\n.chart svg{ display:block; width:100%; height:auto; overflow:visible; }\n.chart text{ font-family:Roboto,sans-serif; font-size:12px; fill:var(--mute); }\n.chart .grid{ stroke:#E8ECF0; } .chart .base{ stroke:var(--strong); }\n.chart .today{ stroke:var(--ink); stroke-dasharray:3 3; }\n.chart .hit{ fill:transparent; cursor:default; }\n.chart .hit:hover{ fill:rgba(42,92,153,.05); }\n.tip{ position:absolute; pointer-events:none; background:var(--ink); color:#fff; border-radius:8px; padding:10px 12px; font-size:.8rem; line-height:1.5; min-width:170px; box-shadow:var(--shadow); opacity:0; transition:opacity .12s ease-out; }\n.tip b{ display:block; font-size:.84rem; margin-bottom:2px; }\n.tip span{ display:flex; justify-content:space-between; gap:14px; font-variant-numeric:tabular-nums; }\n.tip i{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:6px; }\n.yearline{ display:flex; flex-wrap:wrap; gap:8px 28px; padding:12px 20px 16px; border-top:1px solid var(--border); font-size:.86rem; color:var(--mute); }\n.yearline b{ color:var(--ink); font-variant-numeric:tabular-nums; }\n\n/* tabs that filter one table, same as Program partners */\n.board{ background:var(--surf); border:1px solid var(--border); border-radius:10px; overflow:hidden; }\n.stages{ display:flex; overflow-x:auto; }\n.stages button{ flex:1 0 auto; min-width:150px; text-align:left; border:0; border-right:1px solid var(--border); background:var(--surf2); padding:14px 18px 12px; cursor:pointer; border-top:3px solid transparent; border-bottom:1px solid var(--border); }\n.stages button:last-child{ border-right:0; }\n.stages button b{ display:block; font-size:1.35rem; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.1; }\n.stages button span{ display:block; margin-top:4px; font-size:.86rem; font-weight:600; }\n.stages button small{ display:block; font-size:.78rem; color:var(--mute); margin-top:2px; }\n.stages button[aria-selected=\"true\"]{ background:var(--surf); border-top-color:var(--accent); border-bottom-color:var(--surf); }\n.stages button[aria-selected=\"true\"] span{ color:var(--accent-ink); }\n.stages button:hover{ background:var(--surf); }\n.bar{ display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:14px 20px; border-bottom:1px solid var(--border); }\n.seg{ display:inline-flex; background:var(--surf2); border:1px solid var(--border); border-radius:8px; padding:3px; gap:2px; }\n.seg button{ border:0; background:none; padding:6px 12px; border-radius:6px; font-size:.8rem; font-weight:600; color:var(--mute); cursor:pointer; }\n.seg button.on{ background:var(--surf); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.08); }\n.search{ border:1px solid var(--border); border-radius:7px; padding:7px 11px; font-size:.84rem; width:220px; }\n.totals{ margin:0 0 0 auto; color:var(--mute); font-size:.84rem; }\ntable{ width:100%; border-collapse:collapse; font-size:.86rem; }\nth{ text-align:left; padding:10px 14px; background:var(--surf2); border-bottom:1px solid var(--border); font-size:.78rem; color:var(--mute); font-weight:600; white-space:nowrap; }\ntd{ padding:12px 14px; border-bottom:1px solid var(--border); vertical-align:top; }\ntbody tr:last-child td{ border-bottom:0; }\ntbody tr[data-k]{ cursor:pointer; } tbody tr[data-k]:hover{ background:#FAFBFC; }\ntbody tr:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }\ntfoot td{ background:var(--surf2); border-top:1px solid var(--border); border-bottom:0; font-weight:600; }\ntd b{ font-weight:600; } td small{ display:block; color:var(--mute); margin-top:2px; }\n.num{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }\n.neg{ color:var(--bad); }\n.faint{ color:var(--faint); }\n.mono{ font-family:'Roboto Mono',monospace; font-size:.8rem; color:var(--mute); }\n.chip{ display:inline-block; padding:3px 9px; border-radius:999px; font-size:.74rem; font-weight:600; white-space:nowrap; }\n.s-paid{ background:var(--good-soft); color:#1F5A40; } .s-sent{ background:var(--info-soft); color:#2A43A8; } .s-over{ background:var(--bad-soft); color:#8E2C2C; }\n.s-draft{ background:var(--neutral-soft); color:var(--ink); } .s-sched{ background:var(--teal-soft); color:#13625C; }\n.cat{ background:var(--surf2); border:1px solid var(--border); color:var(--ink); }\n.marg{ display:flex; align-items:center; gap:8px; justify-content:flex-end; }\n.marg em{ font-style:normal; min-width:3ch; text-align:right; }\n.marg i{ display:block; width:64px; height:6px; border-radius:3px; background:var(--neutral-soft); overflow:hidden; }\n.marg i s{ display:block; height:100%; background:var(--in); text-decoration:none; }\n.marg.low i s{ background:var(--warn); }\n.empty{ text-align:center; color:var(--mute); padding:28px; }\n.foot{ padding:14px 20px; border-top:1px solid var(--border); color:var(--mute); font-size:.84rem; display:flex; gap:12px; align-items:flex-start; }\n.foot svg{ width:18px; height:18px; flex:none; color:var(--warn); margin-top:1px; }\n.foot b{ color:var(--ink); }\n\n/* drawer */\n.scrim{ position:fixed; inset:0; background:rgba(15,20,26,.32); display:none; z-index:1000; }\n.drawer{ position:fixed; top:0; right:0; bottom:0; width:min(540px,100%); background:var(--surf); box-shadow:-12px 0 32px rgba(15,20,26,.18); z-index:1001; transform:translateX(100%); transition:transform .22s cubic-bezier(.2,.9,.3,1); display:flex; flex-direction:column; }\n.open .scrim{ display:block; } .open .drawer{ transform:none; }\n.drawer__head{ padding:20px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; gap:12px; }\n.drawer__head h2{ margin:2px 0 0; font-size:1.15rem; }\n.drawer__head span{ font-size:.82rem; color:var(--mute); }\n.drawer__body{ padding:20px 24px 32px; overflow-y:auto; }\n.drawer h3{ font-size:.9rem; font-weight:700; margin:24px 0 10px; }\n.dl{ display:grid; grid-template-columns:130px 1fr; gap:8px 14px; font-size:.86rem; margin:0; }\n.dl dt{ color:var(--mute); } .dl dd{ margin:0; font-weight:500; }\n.lines{ border:1px solid var(--border); border-radius:8px; overflow:hidden; }\n.lines td, .lines th{ padding:9px 12px; }\n.x{ border:0; background:none; cursor:pointer; font-size:1.3rem; color:var(--mute); align-self:flex-start; }\n.hint{ background:var(--surf2); border-radius:8px; padding:10px 12px; font-size:.84rem; color:var(--mute); margin-top:18px; }\n.form{ display:grid; gap:14px; }\n.form label{ display:grid; gap:6px; font-size:.84rem; font-weight:600; }\n.form label small{ font-weight:400; color:var(--mute); }\n.form input, .form select{ border:1px solid var(--border); border-radius:7px; padding:9px 11px; font-size:.9rem; font-weight:400; background:var(--surf); }\n.form select{ appearance:none; -webkit-appearance:none; padding-right:44px; background:var(--surf) url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235B6673' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\") no-repeat right 16px center; }\n.form .two{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }\n.drop{ border:1px dashed var(--strong); border-radius:8px; padding:16px; text-align:center; color:var(--mute); font-size:.84rem; font-weight:400; }\n.toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--ink); color:#fff; padding:10px 16px; border-radius:8px; font-size:.86rem; opacity:0; transition:opacity .15s ease-out; z-index:1002; pointer-events:none; }\n.toast.on{ opacity:1; }\n@media (max-width:1200px){ .kpis{ grid-template-columns:repeat(3,1fr); } }\n@media (max-width:900px){ .rail{ display:none; } .content{ padding:20px 16px; } .kpis{ grid-template-columns:repeat(2,1fr); } .board{ overflow-x:auto; } table{ min-width:760px; } }\n@media (prefers-reduced-motion:reduce){ .drawer, .tip, .toast{ transition:none; } }\n/* draft 2: one Revenue page for every way money comes in */\n:host{ --don:#2FA37F; --mem:#8A63D2; }\n.streams{ background:var(--surf); border:1px solid var(--border); border-radius:10px; margin-bottom:28px; }\n.streams h2{ margin:0; padding:18px 20px 4px; font-size:1rem; font-weight:700; }\n.streams > p{ margin:0; padding:0 20px 10px; color:var(--mute); font-size:.84rem; }\n.stream{ display:grid; grid-template-columns:minmax(220px,1.3fr) 130px minmax(160px,1fr) 112px; gap:20px; align-items:center; padding:16px 20px; border-top:1px solid var(--border); }\n.stream__name{ display:flex; gap:12px; align-items:flex-start; }\n.stream__name i{ width:12px; height:12px; border-radius:3px; flex:none; margin-top:4px; }\n.stream__name b{ display:block; font-size:.95rem; }\n.stream__name small{ display:block; color:var(--mute); font-size:.82rem; margin-top:3px; line-height:1.45; }\n.stream__amt{ text-align:right; }\n.stream__amt b{ display:block; font-family:'Roboto Mono',monospace; font-weight:600; font-size:1.2rem; font-variant-numeric:tabular-nums; }\n.stream__amt small{ display:block; color:var(--mute); font-size:.78rem; margin-top:3px; }\n.share{ display:flex; align-items:center; gap:10px; font-size:.82rem; color:var(--mute); font-variant-numeric:tabular-nums; }\n.share i{ flex:1; height:8px; border-radius:4px; background:var(--neutral-soft); overflow:hidden; display:block; }\n.share i s{ display:block; height:100%; text-decoration:none; }\n.later{ display:inline-block; padding:3px 9px; border-radius:999px; font-size:.74rem; font-weight:600; background:#EEE8F8; color:#55399A; }\n.stream--later .stream__amt b{ color:var(--faint); }\n.legend .off{ color:var(--faint); }\n.s-active{ background:var(--good-soft); color:#1F5A40; } .s-recv{ background:var(--good-soft); color:#1F5A40; } .s-exp{ background:var(--warn-soft); color:var(--warn-ink); }\n/* memberships tab: not launched yet */\n.mem{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr); }\n.mem > div{ padding:24px 28px 28px; }\n.mem > div + div{ border-left:1px solid var(--border); }\n.mem h3{ margin:0 0 6px; font-size:1.05rem; }\n.mem p{ margin:0 0 14px; color:var(--mute); font-size:.88rem; line-height:1.5; max-width:60ch; }\n.mem ul{ margin:0; padding-left:18px; color:var(--ink); font-size:.88rem; line-height:1.8; }\n.mem__icon{ width:40px; height:40px; border-radius:10px; background:#EEE8F8; color:#55399A; display:grid; place-items:center; margin-bottom:14px; }\n.mem__icon svg{ width:20px; height:20px; }\n.whatif{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:8px 0 18px; }\n.whatif label{ display:grid; gap:6px; font-size:.84rem; font-weight:600; }\n.whatif label small{ font-weight:400; color:var(--mute); }\n.whatif input{ border:1px solid var(--border); border-radius:7px; padding:9px 11px; font-size:.95rem; font-variant-numeric:tabular-nums; width:100%; }\n.whatif input:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }\n.result{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-top:1px solid var(--border); padding-top:16px; gap:14px; }\n.result span{ display:block; font-size:.8rem; color:var(--mute); font-weight:600; }\n.result b{ display:block; margin-top:6px; font-family:'Roboto Mono',monospace; font-weight:600; font-size:1.3rem; font-variant-numeric:tabular-nums; }\n.result small{ display:block; margin-top:4px; font-size:.76rem; color:var(--mute); }\n@media (max-width:1100px){ .stream{ grid-template-columns:1fr auto; } .share{ grid-column:1 / -1; } .mem{ grid-template-columns:1fr; } .mem > div + div{ border-left:0; border-top:1px solid var(--border); } }\n.m{ font-family:'Roboto Mono',monospace; font-weight:600; font-size:.94em; font-variant-numeric:tabular-nums; letter-spacing:-.01em; white-space:nowrap; }\n/* money spans sit inside labels whose own span rules would restyle them; keep them inline and in the label's color */\n:is(.kpi, .stages, .tip, .streams, .result, .yearline, .totals) span.m.m{ display:inline; margin:0; font-size:.94em; color:inherit; }\n:is(.kpi, .stream__amt, .result) b span.m.m{ font-size:inherit; }\n/* time period picker, under the page title */\n.period{ display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:-8px 0 24px; }\n.period > span{ font-size:.84rem; font-weight:600; color:var(--mute); }\n.period__custom{ display:inline-flex; align-items:center; gap:8px; font-size:.84rem; color:var(--mute); }\n.period__custom[hidden]{ display:none; }\n.period__custom select{ appearance:none; -webkit-appearance:none; border:1px solid var(--border); border-radius:7px; padding:7px 44px 7px 11px; font-size:.84rem; background:var(--surf) url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235B6673' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\") no-repeat right 16px center; }\n.period__note{ margin:0 0 0 auto; font-size:.86rem; color:var(--mute); }\n.period__note b{ color:var(--ink); font-weight:600; }\n/* draft 3: a revenue card with one chart, a calendar that picks the dates, and donuts for where money comes from and goes */\n:host{ --c-kits:#D9822B; --c-instr:#B5487A; --c-video:#3F8FBF; --c-print:#8C9A3C; }\n.row{ display:grid; gap:20px; margin-bottom:20px; }\n.row--top{ grid-template-columns:minmax(0,2fr) minmax(350px,1fr); }\n.row--mid{ grid-template-columns:repeat(3,minmax(0,1fr)); }\n/* fixed-height cards: one height across the row; spare room sits above the card's last block, never as an empty bottom */\n.panel--fixed{ display:flex; flex-direction:column; overflow:hidden; }\n.row--top > .panel--fixed{ height:600px; }\n.row--mid > .panel--fixed{ height:500px; }\n.fill{ flex:1; display:flex; flex-direction:column; min-height:0; }\n.fill .insight{ margin-top:auto; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }\n/* the chart takes whatever height the card has left, drawn at real pixel size so its text never scales */\n.row--top .chart{ flex:1; min-height:0; }\n.row--top .chart svg{ height:100%; }\n.cal__sel{ margin-top:auto !important; }\n.day--other{ background:none; color:var(--faint); font-weight:500; cursor:default; }\n.day--other:hover{ background:none; }\n.cal__note{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:2.6em; }\n/* the growing list: two columns on wide screens, its height follows its items */\n.up--wide{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:40px; }\n.up--wide li:nth-child(2){ border-top:0; }\n/* school year plan */\n.plan__bar{ display:flex; height:12px; border-radius:6px; overflow:hidden; background:var(--neutral-soft); margin:18px 0 12px; gap:2px; }\n.plan__bar i{ display:block; height:100%; }\n.plan__rows{ list-style:none; margin:0; padding:0; }\n.plan__rows li{ display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:8px; align-items:center; padding:7px 0; font-size:.84rem; }\n.plan__rows li + li{ border-top:1px solid var(--border); }\n.plan__rows i{ width:10px; height:10px; border-radius:3px; }\n.plan__year{ margin-top:auto; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; border-top:1px solid var(--border); padding-top:14px; }\n.plan__year span{ display:block; font-size:.76rem; color:var(--mute); font-weight:600; }\n.plan__year b{ display:block; margin-top:4px; font-size:1.05rem; } .plan__year b .m{ font-size:inherit !important; }\n/* test data panel: one slider per number, value shown in mono as you drag */\n.drawer--test{ width:min(460px,100%); }\n.scrub-group + .scrub-group{ margin-top:8px; }\n.scrub-group h3{ margin:20px 0 4px !important; }\n.scrub{ padding:12px 0 8px; border-top:1px solid var(--border); }\n.scrub-group h3 + .scrub{ border-top:0; }\n.scrub__top{ display:flex; justify-content:space-between; align-items:baseline; gap:12px; font-size:.86rem; font-weight:600; }\n.scrub__top output{ font-family:'Roboto Mono',monospace; font-weight:600; font-size:1rem; font-variant-numeric:tabular-nums; color:var(--accent-ink); }\n.scrub input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:24px; margin:8px 0 0; background:none; cursor:pointer; --p:50%; }\n.scrub input[type=range]::-webkit-slider-runnable-track{ height:6px; border-radius:3px; background:linear-gradient(90deg, var(--accent) var(--p), #DCE2E8 var(--p)); }\n.scrub input[type=range]::-moz-range-track{ height:6px; border-radius:3px; background:linear-gradient(90deg, var(--accent) var(--p), #DCE2E8 var(--p)); }\n.scrub input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:20px; height:20px; margin-top:-7px; border-radius:50%; background:#fff; border:2px solid var(--accent); box-shadow:0 1px 3px rgba(15,20,26,.25); }\n.scrub input[type=range]::-moz-range-thumb{ width:16px; height:16px; border-radius:50%; background:#fff; border:2px solid var(--accent); box-shadow:0 1px 3px rgba(15,20,26,.25); }\n.scrub input[type=range]:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; }\n.scrub__ends{ display:flex; justify-content:space-between; font-size:.72rem; color:var(--faint); font-variant-numeric:tabular-nums; }\n.test-actions{ position:sticky; bottom:-32px; background:var(--surf); display:flex; gap:10px; padding:16px 0 20px; margin-top:16px; border-top:1px solid var(--border); }\n.sample.is-test{ background:#EEE8F8; color:#55399A; }\n/* no dimming behind the test panel, so the page stays readable while it updates */\n.rv-root.open:has(.drawer--test) .scrim{ background:transparent; }\n/* ---------- motion (owner: micro animation when the data loads). Decelerating, never bouncy. ---------- */\n.panel, .board{ position:relative; }\n.rv-root.is-loading .panel > *, .rv-root.is-loading .board > *{ opacity:0; }\n.rv-root.is-loading .panel::after, .rv-root.is-loading .board::after{ content:\"\"; position:absolute; inset:0; border-radius:inherit; pointer-events:none;\n  background:\n    linear-gradient(#EDF1F5,#EDF1F5) 22px 24px / 38% 14px no-repeat,\n    linear-gradient(#EDF1F5,#EDF1F5) 22px 50px / 24% 10px no-repeat,\n    linear-gradient(#F2F5F8,#F2F5F8) 22px 84px / calc(100% - 44px) calc(100% - 108px) no-repeat;\n  animation:skel 1.1s ease-in-out infinite alternate; }\n@keyframes skel{ from{ opacity:1; } to{ opacity:.55; } }\n.rv-root.is-revealing .panel, .rv-root.is-revealing .board{ animation:rise .42s cubic-bezier(.2,.8,.2,1) both; animation-delay:calc(var(--i, 0) * 70ms); }\n@keyframes rise{ from{ opacity:0; transform:translateY(6px); } }\n.chart .grow{ transform-box:fill-box; transform-origin:50% 100%; animation:grow .6s cubic-bezier(.2,.8,.2,1) both; animation-delay:var(--d, 0ms); }\n@keyframes grow{ from{ transform:scaleY(0); } }\n.chart .sel-label.fade{ animation:fadein .3s ease-out both; animation-delay:.45s; }\n@keyframes fadein{ from{ opacity:0; } }\n.donut .arc.sweep{ animation:sweep .7s cubic-bezier(.2,.8,.2,1) both; animation-delay:calc(var(--k, 0) * 90ms + 120ms); }\n@keyframes sweep{ from{ stroke-dasharray:0 400; } }\n@media (prefers-reduced-motion:reduce){ .rv-root.is-revealing .panel, .rv-root.is-revealing .board, .chart .grow, .chart .sel-label.fade, .donut .arc.sweep{ animation:none; } }\n.panel{ background:var(--surf); border:1px solid var(--border); border-radius:12px; padding:20px 22px 22px; min-width:0; }\n.panel > h2, .panel__head h2{ margin:0; font-size:1rem; font-weight:700; }\n.panel__head{ display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px 16px; }\n.panel__sub{ margin:4px 0 0; color:var(--mute); font-size:.84rem; }\n.rev__total{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin:16px 0 0; }\n.rev__total > b{ font-family:'Roboto Mono',monospace; font-weight:600; font-size:2.6rem; line-height:1; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }\n.rev__total > b .m{ font-size:inherit !important; }\n.delta{ display:inline-flex; align-items:center; gap:4px; padding:4px 9px; border-radius:999px; font-size:.8rem; font-weight:600; }\n.delta svg{ width:10px; height:10px; }\n.delta.up{ background:var(--good-soft); color:#1F5A40; } .delta.down{ background:var(--bad-soft); color:#8E2C2C; }\n.rev__vs{ color:var(--mute); font-size:.84rem; }\n.minis{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border-top:1px solid var(--border); border-bottom:1px solid var(--border); margin:18px -22px 4px; }\n.mini{ padding:12px 22px; min-width:0; } .mini + .mini{ border-left:1px solid var(--border); }\n.mini > span{ display:block; font-size:.78rem; color:var(--mute); font-weight:600; }\n.mini > b{ display:block; margin-top:5px; font-size:1.1rem; } .mini > b .m{ font-size:inherit !important; }\n.mini > small{ display:block; font-size:.74rem; color:var(--mute); margin-top:3px; }\n.mini > small .bad{ color:var(--bad); font-weight:600; }\n.panel .chart{ padding:12px 0 0; }\n.panel .chart text{ font-size:12px; }\n.chart .sel-label{ font-family:'Roboto Mono',monospace; font-weight:600; font-size:13px !important; fill:var(--ink); }\n.chart .bucket{ cursor:pointer; } .chart .bucket.future{ cursor:default; }\n.chart .bucket:focus-visible{ outline:none; } .chart .bucket:focus-visible .hitbox{ stroke:var(--accent); stroke-width:2; }\n.chart .hitbox{ fill:transparent; } .chart .bucket:hover .hitbox{ fill:rgba(42,92,153,.05); }\n.chart .dim{ opacity:.32; }\n.chart-legend{ display:flex; flex-wrap:wrap; gap:6px 16px; font-size:.8rem; color:var(--mute); margin-top:8px; }\n.chart-legend i{ display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:6px; vertical-align:-1px; }\n.chart-legend .plan{ background:repeating-linear-gradient(135deg, #C9D3DE 0 2px, #EEF2F6 2px 5px); }\n/* calendar */\n.cal__head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; }\n.cal__head h2{ font-size:1rem; margin:0; }\n.cal__nav{ width:34px; height:34px; border:1px solid var(--border); border-radius:8px; background:var(--surf); display:grid; place-items:center; cursor:pointer; color:var(--ink); }\n.cal__nav:hover{ background:var(--surf2); } .cal__nav:disabled{ opacity:.35; cursor:default; }\n.cal__nav svg{ width:16px; height:16px; }\n.cal__grid{ display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; }\n.cal__dow{ text-align:center; font-size:.74rem; color:var(--mute); font-weight:600; padding:2px 0 4px; }\n.day{ height:44px; border:0; border-radius:8px; background:var(--surf2); font:inherit; font-size:.86rem; font-weight:600; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; color:var(--ink); font-variant-numeric:tabular-nums; padding:0; }\n.day:hover{ background:#E6EBF1; }\n.day:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }\n.day--blank{ visibility:hidden; pointer-events:none; }\n.day--future{ color:var(--faint); background:#F9FAFB; }\n.day--in{ background:var(--accent-soft); color:var(--accent-ink); }\n.day--end{ background:var(--accent); color:#fff; }\n.day--end:hover{ background:var(--accent-h); }\n.day--today{ box-shadow:inset 0 0 0 2px var(--ink); }\n.dots{ display:flex; gap:3px; height:5px; }\n.dots i{ width:5px; height:5px; border-radius:50%; background:var(--c); }\n.dots i.hollow{ background:none; box-shadow:inset 0 0 0 1.5px var(--c); }\n.day--end .dots i{ box-shadow:0 0 0 1px #fff; } .day--end .dots i.hollow{ box-shadow:inset 0 0 0 1.5px #fff; }\n.cal__legend{ display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:12px; font-size:.76rem; color:var(--mute); }\n.cal__legend i{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; vertical-align:1px; }\n.cal__hint{ margin:10px 0 0; font-size:.8rem; color:var(--accent-ink); min-height:1.2em; }\n.cal__sel{ border-top:1px solid var(--border); margin:14px -22px 0; padding:14px 22px 0; }\n.cal__sel h3{ margin:0; font-size:.95rem; }\n.cal__two{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0 6px; }\n.cal__two span{ display:block; font-size:.76rem; color:var(--mute); font-weight:600; } .cal__two b{ display:block; margin-top:3px; font-size:1.05rem; } .cal__two b .m{ font-size:inherit !important; }\n.evs{ list-style:none; margin:4px 0 0; padding:0; }\n.evs li{ display:flex; align-items:center; gap:10px; padding:8px 0; font-size:.84rem; border-top:1px solid var(--border); }\n.evs li > span{ flex:1; min-width:0; } .evs li > i{ width:8px; height:8px; border-radius:50%; flex:none; background:var(--c); }\n.evs li > i.hollow{ background:none; box-shadow:inset 0 0 0 1.5px var(--c); }\n.evs small{ display:block; color:var(--mute); font-size:.76rem; }\n.evs li > .m{ margin-left:auto; }\n.cal__note{ margin:6px 0 0; color:var(--mute); font-size:.82rem; }\n/* donuts */\n.donut{ display:flex; flex-direction:column; gap:14px; align-items:stretch; margin-top:16px; }\n.donut svg{ width:156px; height:156px; flex:none; align-self:center; }\n.donut svg text{ font-family:Roboto,sans-serif; }\n.dleg{ flex:1; min-width:0; list-style:none; margin:0; padding:0; }\n.dleg li{ display:grid; grid-template-columns:10px minmax(0,1fr) auto 40px; gap:8px; align-items:center; padding:6px 0; font-size:.84rem; }\n.dleg li + li{ border-top:1px solid var(--border); }\n.dleg i{ width:10px; height:10px; border-radius:3px; }\n.dleg em{ font-style:normal; color:var(--mute); text-align:right; font-variant-numeric:tabular-nums; font-size:.8rem; }\n.dleg .off{ color:var(--faint); }\n.insight{ margin:16px 0 0; padding:10px 12px; background:var(--surf2); border-radius:8px; font-size:.84rem; color:var(--mute); line-height:1.5; }\n.insight b{ color:var(--ink); font-weight:600; }\n.empty-d{ padding:26px 0 8px; color:var(--mute); font-size:.86rem; }\n/* coming up */\n.up{ list-style:none; margin:10px 0 0; padding:0; }\n.up li{ display:flex; align-items:center; gap:12px; padding:10px 0; border-top:1px solid var(--border); }\n.up li:first-child{ border-top:0; }\n.when{ width:46px; flex:none; text-align:center; border-radius:8px; background:var(--surf2); padding:5px 0; }\n.when b{ display:block; font-size:1.05rem; line-height:1.1; font-variant-numeric:tabular-nums; } .when small{ display:block; font-size:.68rem; color:var(--mute); font-weight:600; }\n.when.bad{ background:var(--bad-soft); color:#8E2C2C; } .when.bad small{ color:#8E2C2C; }\n.up li > div{ flex:1; min-width:0; } .up li > div b{ display:block; font-size:.86rem; font-weight:600; } .up li > div small{ display:block; font-size:.78rem; color:var(--mute); margin-top:2px; }\n@media (max-width:1240px){ .row--top{ grid-template-columns:1fr; } .row--mid{ grid-template-columns:1fr 1fr; } .row--mid > :last-child{ grid-column:1 / -1; } .up--wide{ grid-template-columns:1fr; } .up--wide li:nth-child(2){ border-top:1px solid var(--border); } }\n@media (max-width:760px){ .row--mid{ grid-template-columns:1fr; } .row--top > .panel--fixed, .row--mid > .panel--fixed{ height:auto; } .minis{ grid-template-columns:1fr 1fr; } .mini:nth-child(3){ border-left:0; } .mini:nth-child(n+3){ border-top:1px solid var(--border); } .rev__total > b{ font-size:2rem; } .donut{ flex-direction:column; align-items:stretch; } .donut svg{ align-self:center; } }\n\n/* inside the admin: the admin draws the rail and the page padding */\n:host{ display:block; }\n.rv-root{ font-family:Roboto,system-ui,sans-serif; color:var(--ink); font-size:15px; line-height:1.4; }\n.rv-root .content{ padding:0; }\n.rv-root h1, .rv-root h2, .rv-root h3{ text-transform:none; letter-spacing:normal; }\n";
+const REV_HTML = "<div class=\"rv-root\"><div class=\"content\">\n      <div class=\"head\">\n        <div>\n          <span class=\"eyebrow\">Business</span>\n          <h1>Revenue <span class=\"sample\" id=\"sampleChip\">Sample data</span></h1>\n          <p class=\"meta\">Every way money comes in, and what goes out: the Maker Program, donations and, later, premium memberships.</p>\n        </div>\n        <div class=\"tools\">\n          <button class=\"btn\" id=\"testBtn\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6\"/></svg>Test data</button>\n          <button class=\"btn\" data-toast=\"A CSV for the dates you picked would download (sample).\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 3v12M7 10l5 5 5-5M5 21h14\"/></svg>Export CSV</button>\n          <button class=\"btn\" data-form=\"cost\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 5v14M5 12h14\"/></svg>Add a cost</button>\n          <button class=\"btn btn--primary\" data-form=\"invoice\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z\"/><path d=\"M14 3v5h5M9 13h6M9 17h4\"/></svg>New invoice</button>\n        </div>\n      </div>\n\n      <!-- Cards with a set amount of content share one fixed height across their row. Cards whose content grows\n           (the to-do list, the tables) get full-width rows of their own, so they grow without leaving gaps. -->\n      <div class=\"row row--top\">\n        <section class=\"panel panel--fixed\" aria-labelledby=\"revH\">\n          <div class=\"panel__head\">\n            <div><h2 id=\"revH\">Money in</h2><p class=\"panel__sub\" id=\"revSub\"></p></div>\n            <div class=\"seg\" id=\"mseg\" role=\"group\" aria-label=\"Show by\"><button data-mode=\"week\">Weekly</button><button data-mode=\"month\">Monthly</button><button data-mode=\"year\" class=\"on\">School year</button><button data-mode=\"range\">Pick dates</button></div>\n          </div>\n          <div class=\"rev__total\"><b id=\"revTotal\"></b><span id=\"revDelta\"></span></div>\n          <div class=\"minis\" id=\"minis\"></div>\n          <div class=\"chart\" id=\"chart\"><div class=\"tip\" id=\"tip\" role=\"status\"></div></div>\n          <div class=\"chart-legend\"><span><i style=\"background:var(--in)\"></i>Maker Program</span><span><i style=\"background:var(--don)\"></i>Donations</span><span id=\"memLeg\" hidden><i style=\"background:var(--mem)\"></i>Premium members</span><span><i style=\"background:var(--out)\"></i>Costs</span><span><i class=\"plan\"></i>Planned</span><span id=\"chartHint\"></span></div>\n        </section>\n        <section class=\"panel panel--fixed\" aria-labelledby=\"calH\">\n          <div class=\"cal__head\"><button class=\"cal__nav\" id=\"calPrev\" aria-label=\"Previous month\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m15 18-6-6 6-6\"/></svg></button><h2 id=\"calH\"></h2><button class=\"cal__nav\" id=\"calNext\" aria-label=\"Next month\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 18 6-6-6-6\"/></svg></button></div>\n          <div class=\"cal__grid\" id=\"calGrid\"></div>\n          <div class=\"cal__legend\"><span><i style=\"background:var(--in)\"></i>Program</span><span><i style=\"background:var(--don)\"></i>Donation</span><span><i style=\"background:var(--out)\"></i>Cost</span><span><i style=\"background:var(--bad)\"></i>Due</span><span><i style=\"box-shadow:inset 0 0 0 1.5px var(--mute)\"></i>Coming up</span></div>\n          <p class=\"cal__hint\" id=\"calHint\"></p>\n          <div class=\"cal__sel\" id=\"calSel\"></div>\n        </section>\n      </div>\n      <div class=\"row row--mid\">\n        <section class=\"panel panel--fixed\" aria-labelledby=\"srcH\"><h2 id=\"srcH\">Where it comes from</h2><p class=\"panel__sub\">Money in for the dates you picked.</p><div id=\"srcDonut\" class=\"fill\"></div></section>\n        <section class=\"panel panel--fixed\" aria-labelledby=\"costH\"><h2 id=\"costH\">Where it goes</h2><p class=\"panel__sub\">Costs for the dates you picked.</p><div id=\"costDonut\" class=\"fill\"></div></section>\n        <section class=\"panel panel--fixed\" aria-labelledby=\"planH\"><h2 id=\"planH\">School year plan</h2><p class=\"panel__sub\">August to July, from the signed agreements. It stays the same whatever dates you pick.</p><div id=\"planBody\" class=\"fill\"></div></section>\n      </div>\n      <div class=\"row\">\n        <section class=\"panel\" aria-labelledby=\"upH\"><h2 id=\"upH\">Needs attention and coming up</h2><p class=\"panel__sub\">Overdue first, then the next 30 days.</p><ul class=\"up up--wide\" id=\"upList\"></ul></section>\n      </div>\n\n      <section class=\"board\" aria-label=\"Money in and out\">\n        <div class=\"stages\" id=\"tabs\" role=\"tablist\"></div>\n        <div class=\"bar\" id=\"bar\">\n          <div class=\"seg\" id=\"filt\"></div>\n          <input class=\"search\" id=\"q\" placeholder=\"Search\" aria-label=\"Search\">\n          <p class=\"totals\" id=\"totals\"></p>\n        </div>\n        <div id=\"tableWrap\"></div>\n      </section>\n</div><div class=\"scrim\" id=\"scrim\"></div>\n<aside class=\"drawer\" id=\"drawer\" aria-label=\"Details\"><div class=\"drawer__head\"><div><span id=\"dType\"></span><h2 id=\"dName\"></h2></div><button class=\"x\" id=\"dClose\" aria-label=\"Close\">&times;</button></div><div class=\"drawer__body\" id=\"dBody\"></div></aside>\n<div class=\"toast\" id=\"toast\"></div></div>";
+const REV = { booted:false };
+function adminRevenue(){ return '<div id="rev-host" class="rev-host"></div>'; }
+/** Called after every render: draws the revenue page into its host when the Revenue route is showing. */
+function mountAdminRevenue(){
+  const host = document.getElementById('rev-host');
+  if (!host || host.shadowRoot) return;
+  const sr = host.attachShadow({ mode:'open' });
+  sr.innerHTML = '<style>' + REV_CSS + '</style>' + REV_HTML;
+  revBoot(sr);
+}
+function revBoot(sr){
+  const ROOT = sr.querySelector('.rv-root');
+  const bar = sr.getElementById('bar'), calGrid = sr.getElementById('calGrid'), calH = sr.getElementById('calH'), calHint = sr.getElementById('calHint'), calNext = sr.getElementById('calNext'), calPrev = sr.getElementById('calPrev'), calSel = sr.getElementById('calSel'), chart = sr.getElementById('chart'), chartHint = sr.getElementById('chartHint'), costDonut = sr.getElementById('costDonut'), dBody = sr.getElementById('dBody'), dClose = sr.getElementById('dClose'), dName = sr.getElementById('dName'), dType = sr.getElementById('dType'), drawer = sr.getElementById('drawer'), filt = sr.getElementById('filt'), memLeg = sr.getElementById('memLeg'), minis = sr.getElementById('minis'), mseg = sr.getElementById('mseg'), planBody = sr.getElementById('planBody'), q = sr.getElementById('q'), revDelta = sr.getElementById('revDelta'), revSub = sr.getElementById('revSub'), revTotal = sr.getElementById('revTotal'), sampleChip = sr.getElementById('sampleChip'), scrim = sr.getElementById('scrim'), srcDonut = sr.getElementById('srcDonut'), tableWrap = sr.getElementById('tableWrap'), tabs = sr.getElementById('tabs'), testBtn = sr.getElementById('testBtn'), tip = sr.getElementById('tip'), totals = sr.getElementById('totals'), upList = sr.getElementById('upList');
+  const money = n => '<span class="m">' + (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US') + '</span>';
+  const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
+  const SL = { paid:'Paid', sent:'Sent', over:'Overdue', draft:'Draft', sched:'Scheduled' };
+  /* donations: one-time gifts, monthly donors and a local sponsor. Names are first name and last initial. */
+  const donTotal = d => d.type === 'Monthly' ? d.each * d.months : d.amt;
+  const DSL = { active:'Active', exp:'Card expiring', recv:'Received' };
+  const FULL = { Aug:'August', Sep:'September', Oct:'October', Nov:'November', Dec:'December', Jan:'January', Feb:'February', Mar:'March', Apr:'April', May:'May', Jun:'June', Jul:'July' };
+
+  /* ---------- dates and every money event, by day ---------- */
+  const MIDX = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+  const yearOf = m => (MIDX[m] >= 7 ? 2026 : 2027);
+  const dt = s => { const t = String(s).replace(/^(Send|After)\s+/, '').split(/[ ,]+/); return new Date(yearOf(t[0]), MIDX[t[0]], +t[1]); };
+  const TODAY = dt('Nov 26'), START = dt('Aug 1'), END = new Date(2027, 6, 31);
+  const addD = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  const same = (a, b) => a.getTime() === b.getTime();
+  const minD = (a, b) => (a < b ? a : b), maxD = (a, b) => (a > b ? a : b);
+  const fmt = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  const fmtLong = d => d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+  const monthName = d => d.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+  const weekStart = d => addD(d, -((d.getDay() + 6) % 7));
+  const short = n => n.replace(' (3 sites)', '').replace(' Afterschool Center', '');
+  const isSent = i => ['paid','sent','over'].includes(i.s);
+  const GROUP = { Kits:'kits', Shipping:'kits', Instructor:'instr', Video:'video', Hosting:'video', Printing:'print', Fees:'print' };
+  const GROUPS = [['kits','Kits and shipping','var(--c-kits)'],['instr','Instructor pay','var(--c-instr)'],['video','Video and hosting','var(--c-video)'],['print','Printing and card fees','var(--c-print)']];
+  /* ---------- test data: every record below is generated from a few numbers the owner can scrub ---------- */
+  let PARTNERS = {}, INVOICES = [], DONATIONS = [], COSTS = [], MEMBERS = [], ATTEND = [], PLAN = {}, EV = [];
+  let waiting = 0, overdueAmt = 0, booked = 0, donPerMonth = 0;
+  const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const ds = d => MN[d.getMonth()] + ' ' + d.getDate();
+  const mk = d => MN[d.getMonth()];
+  const YM = Array.from({ length:12 }, (_, i) => new Date(2026, 7 + i, 1));   // Aug 2026 to Jul 2027
+  const lastDay = m => new Date(m.getFullYear(), m.getMonth() + 1, 0);
+  const longMonth = m => m.toLocaleDateString('en-US', { month:'long' });
+  const secondSat = m => { const d = new Date(m.getFullYear(), m.getMonth(), 1); return addD(d, ((6 - d.getDay() + 7) % 7) + 7); };
+  const POOL = {
+    schools:['Lincoln Elementary','Oakwood Elementary','Westgate K-8','Pinecrest Elementary','Sunrise Elementary','Bayview Charter Academy','Maple Grove Elementary','Cedar Hills Elementary','Harbor View Elementary','Northside Elementary'],
+    after:['Riverside Afterschool Center','Eastside Youth Center','Parkview Afterschool Club','Hillcrest Kids Club'],
+    libs:['Maple Street Library','Harbor Lights Library','Cedar Park Library','Riverbend Library','Northgate Library','Lakeside Library'],
+    donors:['Casey M.','Alex R.','Pat O.','Morgan T.','Jamie L.','Drew S.','Sam W.','Lee H.','Taylor B.','Avery N.','Quinn D.','Robin F.','Kai M.','Sky A.','Reese C.','Riley P.','Jordan K.','Blake E.','Rowan G.','Emerson V.'],
+    sponsors:['Harbor Hardware','Main Street Bakery','Valley Credit Union','Green Leaf Market','Summit Dental','Corner Bookshop','Bright Smile Pediatrics','Lakeside Insurance'],
+    contacts:['Dana Brooks','Elena Ortiz','Marcus Hill','Priya Shah','Sam Lee','Jordan Price','Avery Chen','Robin Diaz','Taylor Brooks','Morgan Fields','Chris Young','Jesse Park']
+  };
+  const nm = (pool, i) => pool[i % pool.length] + (i >= pool.length ? ' ' + (Math.floor(i / pool.length) + 1) : '');
+  const TEST_DEFAULT = { starter:3, plus:1, full:1, fullSessions:4, libAnnual:1, libPer:1, wsPerMonth:1, kids:17,
+    donMonthly:6, donMonthlyAvg:15, donOnce:3, donOnceAvg:100, sponsors:1, sponsorAvg:500,
+    memMonthly:0, memMonthlyPrice:6, memYearly:0, memYearlyPrice:50, memStart:1 };
+  const TEST_KEY = 'ccsRevenueTest:v1';
+  let TEST = { ...TEST_DEFAULT };
+  try { const saved = JSON.parse(localStorage.getItem(TEST_KEY) || 'null'); if (saved) TEST = { ...TEST_DEFAULT, ...saved }; } catch (e) {}
+  const memOn = () => !!(TEST.memMonthly || TEST.memYearly);
+
+  function generate(T){
+    PARTNERS = {}; INVOICES = []; DONATIONS = []; COSTS = []; MEMBERS = []; ATTEND = []; PLAN = {};
+    let cn = 1, ci = 0, si = 0, li = 0, di = 0;
+    const plan = (d, k, v) => { const key = mk(d); PLAN[key] = PLAN[key] || {}; PLAN[key][k] = (PLAN[key][k] || 0) + v; };
+    const contact = role => `${POOL.contacts[ci++ % POOL.contacts.length]}, ${role}`;
+    const addInv = (p, forT, amt, issue, lines, payDays) => {
+      const o = { id:'', p, for:forT, amt, lines };
+      if (issue > TODAY){ o.s = (issue - TODAY) / 864e5 <= 7 ? 'draft' : 'sched'; o.issued = 'Send ' + ds(issue); o.due = ds(addD(issue, 30)); plan(issue, 'prog', amt); }
+      else { const due = addD(issue, 30), pd = payDays == null ? null : addD(issue, payDays); o.issued = ds(issue); o.due = ds(due);
+        if (pd && pd <= TODAY){ o.s = 'paid'; o.paid = ds(pd) + ', by ACH'; } else if (due < TODAY){ o.s = 'over'; o.late = Math.round((TODAY - due) / 864e5); } else o.s = 'sent'; }
+      INVOICES.push(o);
+    };
+    const addCost = (d, cat, what, p, amt) => { amt = Math.round(amt); if (!amt) return; if (d > TODAY){ plan(d, 'cost', amt); return; } COSTS.push({ id:'c' + cn++, d:ds(d), cat, what, p, amt }); };
+    // afterschool licenses, billed in two halves; Plus includes a kit for every unit
+    [['Starter', TEST_N(T.starter), 2000], ['Plus', TEST_N(T.plus), 4000]].forEach(([pl, n, price]) => { for (let i = 0; i < n; i++){
+      const name = nm(POOL.schools, si++);
+      PARTNERS[name] = { t:'School', plan:`${pl}, $${price.toLocaleString('en-US')} a year`, booked:price, contact:contact('afterschool coordinator'), billing:'Two invoices a year, August and January' };
+      const late = pl === 'Starter' && i === n - 1 && n >= 2;   // one district is slow to pay, as in real life
+      addInv(name, `${pl} license, fall half`, price / 2, new Date(2026, 7, 14 + (si % 12)), [[`${pl} license, Aug to Dec`, price / 2]], late ? null : 23);
+      addInv(name, `${pl} license, spring half`, price / 2, new Date(2027, 0, 15), [[`${pl} license, Jan to May`, price / 2]], 23);
+      if (pl === 'Plus') [[2026,7,28],[2026,9,20],[2027,0,12],[2027,1,23],[2027,3,6]].forEach(([y, m, d], u) => {
+        const dd = new Date(y, m, d); addCost(dd, 'Kits', `Unit ${u + 1} kits, 25 kids`, name, u ? 340 : 310); addCost(dd, 'Shipping', `Unit ${u + 1} kits`, name, 40); });
+    }});
+    if (T.starter) addCost(new Date(2026, 10, 3), 'Printing', `Facilitator guides, ${T.starter} Starter site${T.starter === 1 ? '' : 's'}`, 'Program-wide', 32 * T.starter);
+    // Full-Service: our instructor runs every session, billed monthly
+    for (let i = 0; i < T.full; i++){ const name = nm(POOL.after, i), n = T.fullSessions;
+      PARTNERS[name] = { t:'School', plan:'Full-Service, $350 a session', booked:n * 350 * 9, contact:contact('program director'), billing:'Monthly, for the sessions held' };
+      YM.slice(1, 10).forEach(m => { addInv(name, `${longMonth(m)}, ${n} sessions`, n * 350, lastDay(m), [[`Instructor-led sessions, ${n} x $350`, n * 350]], 21);
+        addCost(new Date(m.getFullYear(), m.getMonth(), 25), 'Instructor', `${n} sessions x $150, ${longMonth(m)}`, name, n * 150); });
+      addCost(new Date(2026, 8, 2), 'Kits', 'Fall kits, 20 kids', name, 290); addCost(new Date(2027, 0, 5), 'Kits', 'Spring kits, 20 kids', name, 290);
+    }
+    // libraries: workshops on Saturdays from the second one of the month, September to May; attendance drives kit cost
+    [['annual', T.libAnnual], ['per', T.libPer]].forEach(([kind, n]) => { for (let i = 0; i < n; i++){
+      const name = nm(POOL.libs, li++), ws = YM.slice(1, 10).flatMap(m => Array.from({ length:T.wsPerMonth }, (_, k) => addD(secondSat(m), k * 7)));
+      PARTNERS[name] = kind === 'annual'
+        ? { t:'Library', plan:'Annual license, $1,200 a year, plus workshop kits', booked:1200 + 90 * ws.length, contact:contact("children's librarian"), billing:'Yearly in January, kits as used' }
+        : { t:'Library', plan:'Per workshop, $300', booked:300 * ws.length, contact:contact('teen librarian'), billing:'After each workshop' };
+      if (kind === 'annual') addInv(name, 'Annual license, 2027', 1200, new Date(2026, 11, 15), [['Annual library license, Jan to Dec 2027', 1200]], 20);
+      ws.forEach((w, k) => { const kids = Math.max(3, T.kids + [0, 2, -3, 1, -1, 3, -2][(k + li) % 7]);
+        if (w <= TODAY) ATTEND.push({ d:w, lib:name, kids });
+        addCost(addD(w, -10), 'Kits', `Workshop kit, ${kids} kids`, name, 2.4 * kids);
+        if (kind === 'per') addInv(name, `Workshop, ${ds(w)}`, 300, addD(w, 1), [['Workshop, kit included', 300]], 25); });
+      if (kind === 'annual') YM.slice(1, 10).forEach(m => { const c = ws.filter(w => w.getMonth() === m.getMonth()).length;
+        if (c) addInv(name, `Workshop kits, ${longMonth(m)}`, 90 * c, addD(lastDay(m), 2), [[`Workshop kit add-on, ${c} x $90`, 90 * c]], 20); });
+    }});
+    if (Object.keys(PARTNERS).length){ addCost(new Date(2026, 8, 15), 'Video', 'Build a Musical Instrument, editing', 'Program-wide', 450); addCost(new Date(2027, 1, 10), 'Video', 'Next unit, editing', 'Program-wide', 450); }
+    YM.forEach(m => addCost(m, 'Hosting', `Video hosting and storage, ${longMonth(m)}`, 'Program-wide', 40));
+    // donations: monthly donors start over the fall; one-time gifts spread through each month; sponsors in the fall
+    const TO = ["Wherever it's needed", 'New games and videos', 'Maker kits for libraries'], feeBy = {};
+    const fee = (d, amt, r) => { const k = mk(d); feeBy[k] = (feeBy[k] || 0) + amt * r; };
+    for (let i = 0; i < T.donMonthly; i++){
+      const start = YM[Math.min(i % 4, 3)], day = 1 + (i * 4) % 25, since = new Date(start.getFullYear(), start.getMonth(), day), each = Math.max(1, Math.round(T.donMonthlyAvg * [1, .67, 1.33][i % 3]));
+      let months = 0;
+      YM.forEach(m => { const c = new Date(m.getFullYear(), m.getMonth(), day); if (c < since) return; if (c <= TODAY){ months++; fee(c, each, .03); } else { plan(c, 'don', each); plan(c, 'cost', each * .03); } });
+      DONATIONS.push({ id:'d' + ++di, type:'Monthly', who:nm(POOL.donors, i), since:ds(since), each, months, to:TO[i % 3], s:i === 0 ? 'exp' : 'active', note:i === 0 ? 'Card ends in 4412, expires 12/26.' : undefined });
+    }
+    YM.filter(m => m <= TODAY).forEach((m, mi) => { for (let k = 0; k < T.donOnce; k++){
+      const d = new Date(m.getFullYear(), m.getMonth(), Math.min(28, 2 + Math.round((k + .5) * 26 / T.donOnce))); if (d > TODAY) continue;
+      const amt = Math.max(5, Math.round(T.donOnceAvg * [1, .5, 2, .75, 1.25][(k + mi) % 5] / 5) * 5);
+      DONATIONS.push({ id:'d' + ++di, type:'One-time', who:nm(POOL.donors, T.donMonthly + di), date:ds(d), amt, to:TO[(k + mi) % 3], s:'recv' }); fee(d, amt, .03); } });
+    for (let i = 0; i < T.sponsors; i++){ const d = addD(new Date(2026, 8, 14), Math.round(i * 70 / T.sponsors));
+      DONATIONS.push({ id:'d' + ++di, type:'Sponsor', who:nm(POOL.sponsors, i), date:ds(d), amt:T.sponsorAvg, to:'Maker kits for libraries', s:'recv', note:'Local business sponsor.' }); fee(d, T.sponsorAvg, .03); }
+    // premium subscribers (test only: not launched, prices not set)
+    if (T.memMonthly || T.memYearly){ const L = YM[T.memStart];
+      YM.forEach(m => { if (m < L) return;
+        if (T.memMonthly){ const amt = T.memMonthly * T.memMonthlyPrice;
+          if (m <= TODAY){ MEMBERS.push({ id:'m' + MEMBERS.length, d:ds(m), plan:'Monthly', count:T.memMonthly, price:T.memMonthlyPrice, amt }); fee(m, amt, .035); } else { plan(m, 'mem', amt); plan(m, 'cost', amt * .035); } }
+        if (T.memYearly && same(m, L)){ const amt = T.memYearly * T.memYearlyPrice;
+          if (m <= TODAY){ MEMBERS.push({ id:'m' + MEMBERS.length, d:ds(m), plan:'Yearly', count:T.memYearly, price:T.memYearlyPrice, amt }); fee(m, amt, .035); } else { plan(m, 'mem', amt); plan(m, 'cost', amt * .035); } } });
+    }
+    Object.entries(feeBy).forEach(([k, v]) => { const m = YM.find(x => mk(x) === k), d = minD(lastDay(m), addD(TODAY, -1)); addCost(d, 'Fees', `Card fees, ${longMonth(m)}`, 'Donations', v); });
+    // tidy: invoices in date order with fresh numbers, costs by date, planned money rounded
+    INVOICES.sort((a, b) => dt(a.issued) - dt(b.issued)).forEach((o, i) => o.id = 'INV-' + (1001 + i));
+    COSTS.sort((a, b) => dt(a.d) - dt(b.d));
+    Object.values(PLAN).forEach(o => Object.keys(o).forEach(k => o[k] = Math.round(o[k])));
+    buildEvents();
+    waiting = sum(INVOICES.filter(i => i.s === 'sent' || i.s === 'over'), i => i.amt);
+    overdueAmt = sum(INVOICES.filter(i => i.s === 'over'), i => i.amt);
+    booked = sum(Object.values(PARTNERS), p => p.booked);
+    donPerMonth = sum(DONATIONS.filter(d => d.type === 'Monthly'), d => d.each);
+  }
+  function TEST_N(v){ return Math.max(0, Math.round(v || 0)); }
+  function buildEvents(){
+    EV = [];
+    INVOICES.forEach(i => {
+      if (isSent(i)) EV.push({ d:dt(i.issued), kind:'in', src:'prog', amt:i.amt, label:`${i.id} sent to ${short(i.p)}`, k:'inv:' + i.id });
+      if (i.s === 'paid') EV.push({ d:dt(i.paid), kind:'paid', amt:i.amt, label:`${short(i.p)} paid ${i.id}`, k:'inv:' + i.id });
+      if (i.s === 'sent' || i.s === 'over') EV.push({ d:dt(i.due), kind:'due', amt:i.amt, label:`${i.id} due from ${short(i.p)}`, k:'inv:' + i.id });
+      if (i.s === 'draft' || i.s === 'sched') EV.push({ d:dt(i.issued), kind:'send', amt:i.amt, label:`Send ${i.id} to ${short(i.p)}`, k:'inv:' + i.id });
+    });
+    DONATIONS.forEach(d => {
+      if (d.type !== 'Monthly') { EV.push({ d:dt(d.date), kind:'in', src:'don', amt:d.amt, label:`${d.who}, ${d.type === 'Sponsor' ? 'sponsor' : 'one-time gift'}`, k:'don:' + d.id }); return; }
+      const s = dt(d.since);
+      for (let m = 0; m < 13; m++){ const c = new Date(s.getFullYear(), s.getMonth() + m, s.getDate());
+        if (c > TODAY){ EV.push({ d:c, kind:'charge', amt:d.each, label:`${d.who}, monthly gift${d.s === 'exp' ? ' (card expiring)' : ''}`, k:'don:' + d.id }); break; }
+        EV.push({ d:c, kind:'in', src:'don', amt:d.each, label:`${d.who}, monthly gift`, k:'don:' + d.id }); }
+    });
+    MEMBERS.forEach(m => EV.push({ d:dt(m.d), kind:'in', src:'mem', amt:m.amt, label:`${m.count} ${m.plan.toLowerCase()} plan members`, k:'' }));
+    COSTS.forEach(c => EV.push({ d:dt(c.d), kind:'out', g:GROUP[c.cat], p:c.p, amt:c.amt, label:c.what, k:'cost:' + c.id }));
+    EV.sort((a, b) => a.d - b.d);
+  }
+
+  generate(TEST);
+  const inR = (e, a, b) => e.d >= a && e.d <= b;
+  function calc(a, b){
+    const ev = EV.filter(e => inR(e, a, b)), s = f => sum(ev.filter(f), e => e.amt);
+    const prog = s(e => e.kind === 'in' && e.src === 'prog'), don = s(e => e.kind === 'in' && e.src === 'don'), mem = s(e => e.kind === 'in' && e.src === 'mem');
+    const cost = s(e => e.kind === 'out'), paid = s(e => e.kind === 'paid');
+    const byG = Object.fromEntries(GROUPS.map(([g]) => [g, s(e => e.kind === 'out' && e.g === g)]));
+    const progCost = s(e => e.kind === 'out' && e.p !== 'Donations');
+    return { prog, don, mem, in: prog + don + mem, cost, recv: paid + don + mem, net: prog + don + mem - cost, byG, progCost };
+  }
+  const pct = (n, d) => d ? Math.round(n / d * 100) : 0;
+  /* ---------- the selection: one state drives the totals, chart, calendar, donuts and tables ---------- */
+  let S = REV.S || { mode:'year', a:START, b:TODAY }, anchor = null, calM = REV.calM || new Date(2026, 10, 1), peek = null;
+  function bucketsFor(mode){
+    if (mode === 'week' || mode === 'range'){
+      const out = []; for (let w = weekStart(dt('Aug 3')); w <= TODAY; w = addD(w, 7)) out.push({ a:w, b:addD(w, 6), label:fmt(w), name:'Week of ' + fmt(w) });
+      return out;
+    }
+    const out = []; for (let m = 0; m < 12; m++){ const a = new Date(2026, 7 + m, 1); out.push({ a, b:new Date(a.getFullYear(), a.getMonth() + 1, 0), label:a.toLocaleDateString('en-US', { month:'short' }), name:monthName(a) }); }
+    return out;
+  }
+  function setSel(mode, a, b){ if (mode !== S.mode) ANIM = true; S = { mode, a, b:minD(b, TODAY) }; anchor = null; peek = null; calM = new Date(S.b.getFullYear(), S.b.getMonth(), 1); renderAll(); }
+  function periodText(){
+    if (S.mode === 'year') return `School year so far, ${fmt(S.a)} to ${fmt(S.b)}`;
+    if (same(S.a, S.b)) return fmtLong(S.a);
+    if (S.mode === 'month') return monthName(S.a) + (S.b < new Date(S.a.getFullYear(), S.a.getMonth() + 1, 0) ? `, through ${fmt(S.b)}` : '');
+    if (S.mode === 'week') return `Week of ${fmt(S.a)}${same(S.b, TODAY) ? ', through today' : ''}`;
+    return `${fmt(S.a)} to ${fmt(S.b)}`;
+  }
+  function drawRevenue(){
+    const c = calc(S.a, S.b), days = Math.round((S.b - S.a) / 864e5) + 1, pb = addD(S.a, -1), pa = addD(S.a, -days);
+    revSub.textContent = periodText();
+    revTotal.innerHTML = money(c.in); tween(revTotal.querySelector('.m'), LAST.in ?? 0, c.in); LAST.in = c.in;
+    if (pa >= START){ const p = calc(pa, pb), d = p.in ? pct(c.in - p.in, p.in) : null;
+      revDelta.innerHTML = d === null ? `<span class="rev__vs">Nothing came in the ${days === 1 ? 'day' : days + ' days'} before.</span>`
+        : `<span class="delta ${d >= 0 ? 'up' : 'down'}"><svg viewBox="0 0 10 10"><path d="${d >= 0 ? 'M5 1 9 8H1z' : 'M5 9 1 2h8z'}" fill="currentColor"/></svg>${Math.abs(d)}%</span><span class="rev__vs">vs ${money(p.in)} the ${days === 1 ? 'day' : days + ' days'} before</span>`;
+    } else revDelta.innerHTML = `<span class="rev__vs">${S.mode === 'year' ? 'First school year on record, nothing to compare yet.' : 'No earlier days this school year to compare.'}</span>`;
+    minis.innerHTML = [
+      ['Received', money(c.recv), memOn() ? 'Donations, members and paid invoices' : 'Donations and paid invoices'],
+      ['Waiting to be paid', money(waiting), overdueAmt ? `Today. <span class="bad">${money(overdueAmt)} overdue</span>` : 'Today. Nothing overdue'],
+      ['Costs', money(c.cost), `${GROUPS.filter(([g]) => c.byG[g]).length} kinds of cost`],
+      ['Left after costs', money(c.net), c.in ? `${pct(c.net, c.in)}% of money in` : 'Nothing came in']
+    ].map(([l, v, s]) => `<div class="mini"><span>${l}</span><b>${v}</b><small>${s}</small></div>`).join('');
+    const vals = [c.recv, waiting, c.cost, c.net]; minis.querySelectorAll('.mini > b .m').forEach((el, i) => tween(el, LAST.mini ? LAST.mini[i] : 0, vals[i])); LAST.mini = vals;
+  }
+  function niceMax(v){ const steps = [100, 200, 250, 500, 1000, 2000, 2500, 5000]; const st = steps.find(s => v / s <= 5) || 5000; return { max:Math.ceil(v / st) * st || st, step:st }; }
+  function drawChart(anim){
+    chart.querySelector('svg')?.remove();
+    const B = bucketsFor(S.mode), W = Math.max(560, Math.round(chart.clientWidth)), H = Math.max(220, Math.round(chart.clientHeight) - 4), L = 56, R = 6, T = 22, BB = 30, iw = W - L - R, ih = H - T - BB, slot = iw / B.length;
+    B.forEach(k => { const end = minD(k.b, TODAY), c = k.a <= TODAY ? calc(k.a, end) : { prog:0, don:0, mem:0, cost:0 };
+      const pl = (S.mode === 'year' || S.mode === 'month') ? (PLAN[k.label] || {}) : {};
+      Object.assign(k, { prog:c.prog, don:c.don, mem:c.mem, cost:c.cost, pp:pl.prog || 0, pd:pl.don || 0, pm:pl.mem || 0, pc:pl.cost || 0, future:k.a > TODAY, sel:k.a <= S.b && k.b >= S.a }); });
+    const { max, step } = niceMax(Math.max(...B.map(k => k.prog + k.don + k.mem + k.pp + k.pd + k.pm), ...B.map(k => k.cost + k.pc), 1));
+    const y = v => T + ih - v / max * ih, hh = v => v / max * ih, bw = Math.min(30, slot * .44), cw = Math.min(9, slot * .14);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Money in and costs, ${S.mode === 'week' || S.mode === 'range' ? 'by week' : 'by month'}"><defs>
+      <pattern id="hIn" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="#DCE5F0"/><rect width="2" height="5" fill="#2A5C99" opacity=".55"/></pattern>
+      <pattern id="hDon" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="#DDF1E9"/><rect width="2" height="5" fill="#2FA37F" opacity=".6"/></pattern>
+      <pattern id="hMem" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="#ECE5F8"/><rect width="2" height="5" fill="#8A63D2" opacity=".6"/></pattern>
+      <pattern id="hOut" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(135)"><rect width="5" height="5" fill="#F8E7D4"/><rect width="2" height="5" fill="#D9822B" opacity=".6"/></pattern></defs>`;
+    for (let v = 0; v <= max; v += step) s += `<line class="${v ? 'grid' : 'base'}" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 10}" y="${y(v) + 4}" text-anchor="end">${v >= 1000 ? '$' + v / 1000 + 'k' : '$' + v}</text>`;
+    const stack = (x, w, segs) => { let base = y(0), out = ''; const live = segs.filter(g => g[0] > 0);
+      live.forEach((g, i) => { let h = hh(g[0]); if (i) base -= 2; if (h < 2) h = 2; const r = i === live.length - 1 ? Math.min(4, h, w / 2) : 0;
+        out += `<path d="M${x},${base} v${-(h - r)} ${r ? `q0,-${r} ${r},-${r}` : ''} h${w - 2 * r} ${r ? `q${r},0 ${r},${r}` : ''} v${h - r} z" fill="${g[1]}"/>`; base -= h; });
+      return out; };
+    const anySel = B.some(k => k.sel), oneSel = B.filter(k => k.sel).length === 1;
+    B.forEach((k, i) => {
+      const cx = L + slot * i + slot / 2, x1 = cx - (bw + 3 + cw) / 2, x2 = x1 + bw + 3, dim = anySel && !k.sel ? ' dim' : '';
+      s += `<g class="bucket${k.future ? ' future' : ''}" data-i="${i}" tabindex="${k.future ? -1 : 0}" role="button" aria-label="${k.name}: ${'$' + (k.prog + k.don + k.mem).toLocaleString('en-US')} in">`;
+      s += `<rect class="hitbox" x="${L + slot * i + 1}" y="${T - 18}" width="${slot - 2}" height="${ih + 18}" rx="6"/>`;
+      s += `<g class="${dim.trim()}"><g class="${anim ? 'grow' : ''}" style="--d:${i * 35}ms">` + stack(x1, bw, [[k.prog, 'var(--in)'], [k.don, 'var(--don)'], [k.mem, 'var(--mem)'], [k.pp, 'url(#hIn)'], [k.pd, 'url(#hDon)'], [k.pm, 'url(#hMem)']]) + stack(x2, cw, [[k.cost, 'var(--out)'], [k.pc, 'url(#hOut)']]) + '</g></g>';
+      if (B.length <= 12 || k.sel || i % 2 === 0) s += `<text x="${cx}" y="${H - 8}" text-anchor="middle" style="${k.sel ? 'fill:var(--ink);font-weight:700' : ''}">${k.label}</text>`;
+      if (oneSel && k.sel) s += `<text class="sel-label${anim ? ' fade' : ''}" x="${x1 + bw / 2}" y="${y(k.prog + k.don + k.mem + k.pp + k.pd + k.pm) - 8}" text-anchor="middle">${'$' + (k.prog + k.don + k.mem).toLocaleString('en-US')}</text>`;
+      s += '</g>';
+    });
+    const ti = B.findIndex(k => k.a <= TODAY && k.b >= TODAY);
+    if (ti >= 0 && (S.mode === 'year' || S.mode === 'month')){ const tx = L + slot * (ti + 1); s += `<line class="today" x1="${tx}" x2="${tx}" y1="${T - 14}" y2="${T + ih}"/><text x="${tx + 6}" y="${T - 4}" style="fill:var(--ink);font-weight:600">Today</text>`; }
+    chart.insertAdjacentHTML('afterbegin', s + '</svg>');
+    chartHint.textContent = S.mode === 'range' ? 'Pick dates on the calendar.' : 'Click a bar to see that ' + (S.mode === 'week' ? 'week.' : 'month.');
+    chart.querySelectorAll('.bucket').forEach(g => {
+      const k = B[+g.dataset.i];
+      g.addEventListener('mousemove', e => { const box = chart.getBoundingClientRect();
+        tip.innerHTML = `<b>${k.name}${k.future ? ', planned' : ''}</b><span><span><i style="background:var(--in)"></i>Maker Program</span>${money(k.prog + k.pp)}</span>${k.prog && k.pp ? `<span style="opacity:.75"><span>of that, draft</span>${money(k.pp)}</span>` : ''}<span><span><i style="background:var(--don)"></i>Donations</span>${money(k.don + k.pd)}</span>${memOn() ? `<span><span><i style="background:var(--mem)"></i>Premium members</span>${money(k.mem + k.pm)}</span>` : ''}<span><span><i style="background:var(--out)"></i>Costs</span>${money(k.cost + k.pc)}</span>`;
+        let x = e.clientX - box.left + 14; if (x + 210 > box.width) x -= 230; tip.style.left = x + 'px'; tip.style.top = (e.clientY - box.top - 20) + 'px'; tip.style.opacity = 1; });
+      g.addEventListener('mouseleave', () => tip.style.opacity = 0);
+      const pick = () => { if (k.future) return; setSel(S.mode === 'year' ? 'month' : S.mode === 'range' ? 'week' : S.mode, k.a, k.b); };
+      g.addEventListener('click', pick); g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+    });
+  }
+  /* ---------- calendar ---------- */
+  const KC = { prog:'var(--in)', don:'var(--don)', mem:'var(--mem)', out:'var(--out)', due:'var(--bad)' };
+  function dayDots(d){
+    const ev = EV.filter(e => same(e.d, d)), out = [];
+    if (ev.some(e => (e.kind === 'in' && e.src === 'prog') || e.kind === 'paid')) out.push(['prog', false]);
+    if (ev.some(e => e.kind === 'in' && e.src === 'don')) out.push(['don', false]);
+    if (ev.some(e => e.kind === 'in' && e.src === 'mem')) out.push(['mem', false]);
+    if (ev.some(e => e.kind === 'out')) out.push(['out', false]);
+    if (ev.some(e => e.kind === 'due')) out.push(['due', d > TODAY]);
+    if (ev.some(e => e.kind === 'send')) out.push(['prog', true]);
+    if (ev.some(e => e.kind === 'charge')) out.push(['don', true]);
+    return out.slice(0, 4).map(([k, hollow]) => `<i class="${hollow ? 'hollow' : ''}" style="--c:${KC[k]}"></i>`).join('');
+  }
+  function drawCal(){
+    calH.textContent = monthName(calM);
+    calPrev.disabled = calM <= new Date(2026, 7, 1); calNext.disabled = calM >= new Date(2027, 0, 1);
+    const first = calM, lead = (first.getDay() + 6) % 7, n = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    let h = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => `<div class="cal__dow" aria-hidden="true">${d.slice(0, 2)}</div>`).join('');
+    for (let i = lead; i > 0; i--) h += `<span class="day day--other" aria-hidden="true">${new Date(first.getFullYear(), first.getMonth(), 1 - i).getDate()}<span class="dots"></span></span>`;
+    for (let i = 1; i <= n; i++){
+      const d = new Date(first.getFullYear(), first.getMonth(), i), inSel = d >= S.a && d <= S.b, end = same(d, S.a) || same(d, S.b);
+      const cls = ['day', d > TODAY ? 'day--future' : '', inSel ? (end ? 'day--end' : 'day--in') : '', same(d, TODAY) ? 'day--today' : '', peek && same(d, peek) ? 'day--end' : ''].join(' ');
+      h += `<button class="${cls}" data-day="${+d}" aria-label="${fmtLong(d)}${same(d, TODAY) ? ', today' : ''}"${inSel ? ' aria-pressed="true"' : ''}>${i}<span class="dots">${dayDots(d)}</span></button>`;
+    }
+    for (let i = 1; lead + n + i - 1 < 42; i++) h += `<span class="day day--other" aria-hidden="true">${i}<span class="dots"></span></span>`;
+    calGrid.innerHTML = h;
+    calHint.textContent = anchor ? `Started at ${fmt(anchor)}. Pick an end date, or keep this one day.` : 'Pick a day, or two days for a range.';
+    drawCalSel();
+  }
+  function evRow(e){
+    const c = e.kind === 'out' ? KC.out : e.kind === 'due' ? KC.due : (e.src === 'don' || e.kind === 'charge') ? KC.don : KC.prog, hollow = e.d > TODAY;
+    const what = { in:'In', paid:'Paid', out:'Cost', due:e.d < TODAY ? 'Overdue' : 'Due', send:'To send', charge:'Monthly charge' }[e.kind];
+    return `<li data-k="${e.k}" style="cursor:pointer"><i class="${hollow ? 'hollow' : ''}" style="--c:${c}"></i><span>${e.label}<small>${what}${hollow ? ', ' + fmt(e.d) : ''}</small></span>${money(e.kind === 'out' ? -e.amt : e.amt)}</li>`;
+  }
+  function drawCalSel(){
+    if (peek){ const ev = EV.filter(e => same(e.d, peek));
+      calSel.innerHTML = `<h3>${fmtLong(peek)}</h3><div class="cal__two"><div><span>Planned in</span><b>${money(sum(ev.filter(e => e.kind !== 'due'), e => e.amt))}</b></div><div><span>Due to us</span><b>${money(sum(ev.filter(e => e.kind === 'due'), e => e.amt))}</b></div></div><p class="cal__note">${ev.length ? 'Coming up: ' + ev.map(e => e.label).join('; ') + '.' : 'Nothing planned this day.'}</p>`; return; }
+    const c = calc(S.a, S.b), ev = EV.filter(e => inR(e, S.a, S.b) && e.kind !== 'paid'), single = same(S.a, S.b);
+    const nIn = ev.filter(e => e.kind === 'in').length, nOut = ev.filter(e => e.kind === 'out').length;
+    calSel.innerHTML = `<h3>${single ? fmtLong(S.a) : fmt(S.a) + ' to ' + fmt(S.b)}</h3>
+      <div class="cal__two"><div><span>Money in</span><b>${money(c.in)}</b></div><div><span>Costs</span><b>${money(c.cost)}</b></div></div>
+      <p class="cal__note">${nIn || nOut ? `${nIn} payment${nIn === 1 ? '' : 's'} in and ${nOut} cost${nOut === 1 ? '' : 's'}, each one listed in the tables below.` : `Nothing came in or went out${single ? ' this day' : ''}.`}</p>`;
+  }
+  calGrid.addEventListener('click', e => { const b = e.target.closest('[data-day]'); if (!b) return; const d = new Date(+b.dataset.day);
+    if (d > TODAY){ peek = d; anchor = null; drawCal(); return; }
+    peek = null; mseg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.mode === 'range'));
+    if (S.mode !== 'range') ANIM = true;
+    if (anchor){ const a = minD(anchor, d), z = maxD(anchor, d); S = { mode:'range', a, b:z }; anchor = null; }
+    else { S = { mode:'range', a:d, b:d }; anchor = d; }
+    renderAll(true);
+  });
+  calPrev.onclick = () => { calM = new Date(calM.getFullYear(), calM.getMonth() - 1, 1); drawCal(); };
+  calNext.onclick = () => { calM = new Date(calM.getFullYear(), calM.getMonth() + 1, 1); drawCal(); };
+  mseg.addEventListener('click', e => { const b = e.target.closest('[data-mode]'); if (!b) return; const m = b.dataset.mode;
+    if (m === 'year') setSel('year', START, TODAY);
+    else if (m === 'month') setSel('month', new Date(TODAY.getFullYear(), TODAY.getMonth(), 1), TODAY);
+    else if (m === 'week') setSel('week', weekStart(TODAY), TODAY);
+    else { ANIM = S.mode !== 'range'; S = { mode:'range', a:S.a, b:S.b }; anchor = null; renderAll(); calHint.textContent = 'Pick a start day on the calendar, then an end day.'; }
+  });
+  /* ---------- donuts ---------- */
+  function donut(parts, total, centerTop, centerSub, anim){
+    const r = 54, C = 2 * Math.PI * r, live = parts.filter(p => p.v > 0); let off = 0, s = '';
+    s += `<svg viewBox="0 0 150 150" role="img" aria-label="${centerSub}"><circle cx="75" cy="75" r="${r}" fill="none" stroke="var(--neutral-soft)" stroke-width="20"/>`;
+    live.forEach((p, k) => { const len = p.v / total * C, gap = live.length > 1 ? 2 : 0;
+      s += `<circle class="arc${anim ? ' sweep' : ''}" style="--k:${k}" cx="75" cy="75" r="${r}" fill="none" stroke="${p.c}" stroke-width="20" stroke-dasharray="${Math.max(0, len - gap)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 75 75)"><title>${p.n}: $${p.v.toLocaleString('en-US')}</title></circle>`; off += len; });
+    return s + `<text x="75" y="76" text-anchor="middle" style="font-family:'Roboto Mono',monospace;font-weight:600;font-size:17px;fill:var(--ink)">${centerTop}</text><text x="75" y="95" text-anchor="middle" style="font-size:11px;fill:var(--mute)">${centerSub}</text></svg>`;
+  }
+  function drawDonuts(anim){
+    const c = calc(S.a, S.b), d = v => '$' + v.toLocaleString('en-US');
+    const src = [{ n:'Maker Program', v:c.prog, c:'var(--in)' }, { n:'Donations', v:c.don, c:'var(--don)' }].concat(memOn() ? [{ n:'Premium members', v:c.mem, c:'var(--mem)' }] : []);
+    if (!c.in) srcDonut.innerHTML = '<p class="empty-d">Nothing came in for these dates. Pick a longer period.</p>';
+    else { const top = src.slice().sort((a, b) => b.v - a.v)[0];
+      srcDonut.innerHTML = `<div class="donut">${donut(src, c.in, d(c.in), 'money in', anim)}<ul class="dleg">${src.map(p => `<li><i style="background:${p.c}"></i><span>${p.n}</span>${money(p.v)}<em>${pct(p.v, c.in)}%</em></li>`).join('')}${memOn() ? '' : '<li class="off"><i style="background:#D9CFEE"></i><span>Premium memberships</span><span>Later</span><em></em></li>'}</ul></div>
+        <p class="insight"><b>${top.n} brought in ${pct(top.v, c.in)}%.</b> ${top.n === 'Donations' ? 'Program invoices are larger but go out only a few times a semester.' : top.n === 'Premium members' ? 'Members pay every month, so this grows steadily.' : donPerMonth ? `${DONATIONS.filter(x => x.type === 'Monthly').length} monthly donors add a steady ${money(donPerMonth)} a month on top.` : 'No monthly donors yet.'}</p>`; }
+    const parts = GROUPS.map(([g, n, col]) => ({ n, v:c.byG[g], c:col }));
+    if (!c.cost) costDonut.innerHTML = '<p class="empty-d">No costs for these dates.</p>';
+    else { const top = parts.slice().sort((a, b) => b.v - a.v)[0];
+      const why = { 'Instructor pay':"all of it for Full-Service sessions, at $150 each", 'Kits and shipping':'for the units and workshops running now', 'Video and hosting':'shared by every partner', 'Printing and card fees':'guides for partners and fees on donations' }[top.n];
+      costDonut.innerHTML = `<div class="donut">${donut(parts, c.cost, d(c.cost), 'costs', anim)}<ul class="dleg">${parts.map(p => `<li${p.v ? '' : ' class="off"'}><i style="background:${p.c}"></i><span>${p.n}</span>${money(p.v)}<em>${pct(p.v, c.cost)}%</em></li>`).join('')}</ul></div>
+        <p class="insight"><b>${top.n} was the biggest cost, ${pct(top.v, c.cost)}%,</b> ${why}.</p>`; }
+  }
+  /* ---------- needs attention and coming up (fixed to today, not the picked dates) ---------- */
+  function drawUp(){
+    const over = EV.filter(e => e.kind === 'due' && e.d < TODAY), next = EV.filter(e => ['due','send','charge'].includes(e.kind) && e.d >= TODAY && e.d <= addD(TODAY, 30));
+    const charges = next.filter(e => e.kind === 'charge'), rest = next.filter(e => e.kind !== 'charge' || /expiring/.test(e.label));
+    const items = over.map(e => ({ d:e.d, bad:true, t:`${e.label.replace(' due from', ' from')} is ${Math.round((TODAY - e.d) / 864e5)} days overdue`, s:`${money(e.amt)}. Last reminder sent ${fmt(addD(TODAY, -16))}.`, k:e.k, act:'Send reminder' }))
+      .concat(rest.map(e => ({ d:e.d, t: e.kind === 'charge' ? `${e.label.replace(' (card expiring)', '')}: card expires first` : e.label, s: e.kind === 'send' ? `${money(e.amt)} draft, ready to review` : e.kind === 'charge' ? `${money(e.amt)} a month. Ask for a new card before it's charged.` : `${money(e.amt)}, sent and waiting`, k:e.k, act: e.kind === 'send' ? 'Review draft' : e.kind === 'charge' ? 'View donor' : 'View' })));
+    const chargeTotal = sum(charges, e => e.amt);
+    const days = charges.map(e => e.d.getDate()), cm = charges.length ? charges[0].d.toLocaleDateString('en-US', { month:'short' }) : '';
+    upList.innerHTML = (items.map(x => `<li><span class="when${x.bad ? ' bad' : ''}"><small>${x.d.toLocaleDateString('en-US', { month:'short' })}</small><b>${x.d.getDate()}</b></span><div><b>${x.t}</b><small>${x.s}</small></div><button class="btn btn--sm" data-k="${x.k}">${x.act}</button></li>`).join('')
+      + (charges.length ? `<li><span class="when"><small>${cm}</small><b>${Math.min(...days) === Math.max(...days) ? days[0] : Math.min(...days) + '-' + Math.max(...days)}</b></span><div><b>${charges.length} monthly donor charge${charges.length === 1 ? '' : 's'}</b><small>${money(chargeTotal)} expected.</small></div><button class="btn btn--sm" data-tab="don" data-scroll="1">Donations</button></li>` : ''))
+      || '<li><div><b>Nothing overdue or due in the next 30 days.</b></div></li>';
+  }
+  function drawPlan(){
+    const sentAmt = sum(INVOICES.filter(isSent), i => i.amt), queued = sum(INVOICES.filter(i => i.s === 'draft' || i.s === 'sched'), i => i.amt), rest = Math.max(0, booked - sentAmt - queued), bk = booked || 1;
+    const hatch = 'repeating-linear-gradient(135deg, #2A5C99 0 2px, #DCE5F0 2px 5px)';
+    const parts = [['Invoiced', sentAmt, 'var(--in)'], ['Drafts and scheduled', queued, hatch], ['Not invoiced yet', rest, '#C9D1DA']];
+    const now = calc(START, TODAY), pl = Object.values(PLAN), yIn = now.in + sum(pl, o => (o.prog || 0) + (o.don || 0) + (o.mem || 0)), yOut = now.cost + sum(pl, o => o.cost || 0);
+    const kids = sum(ATTEND, a => a.kids);
+    planBody.innerHTML = `<div class="plan__bar" role="img" aria-label="${pct(sentAmt, booked)}% of the ${'$' + booked.toLocaleString('en-US')} booked is invoiced">${parts.filter(x => x[1]).map(([n, a, c]) => `<i style="width:${a / bk * 100}%;background:${c}" title="${n}"></i>`).join('')}</div>
+      <ul class="plan__rows">${parts.map(([n, a, c]) => `<li><i style="background:${c}"></i><span>${n}</span>${money(a)}</li>`).join('')}<li><i style="background:var(--don)"></i><span>Monthly donors</span><span>${money(donPerMonth)} a month</span></li>${ATTEND.length ? `<li><i style="background:#C9D1DA"></i><span>Library workshops so far</span><span>${ATTEND.length} held, ${kids} kids</span></li>` : ''}</ul>
+      <div class="plan__year"><div><span>Year in</span><b>${money(yIn)}</b></div><div><span>Year out</span><b>${money(yOut)}</b></div><div><span>Year left</span><b>${money(yIn - yOut)}</b></div></div>`;
+  }
+  /* motion helpers: bars and rings animate on the first load and when the chart's buckets change; totals count to their new value */
+  const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let ANIM = !REV.booted; const LAST = REV.LAST || (REV.LAST = {});
+  const plainMoney = n => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US');
+  function tween(el, from, to){
+    if (!el) return; if (REDUCE || from === to){ el.textContent = plainMoney(to); return; }
+    const t0 = performance.now(), D = 650;
+    const step = t => { const k = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - k, 3); el.textContent = plainMoney(Math.round(from + (to - from) * e)); if (k < 1) requestAnimationFrame(step); };
+    el.textContent = plainMoney(from); requestAnimationFrame(step);
+  }
+  function renderAll(keepCal){
+    mseg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.mode === S.mode));
+    const anim = ANIM && !REDUCE; drawRevenue(); drawChart(anim); if (!keepCal) calM = new Date(S.b.getFullYear(), S.b.getMonth(), 1); drawCal(); drawDonuts(anim); drawTabs(); drawTable(); ANIM = false;
+  }
+
+  /* ---------- tabs that filter one table, for the picked dates ---------- */
+  let tab = REV.tab || 'inv', filter = REV.filter || 'all';
+  const FILTERS = {
+    inv:[['all','All'],['unpaid','Waiting'],['over','Overdue'],['paid','Paid'],['draft','Drafts and scheduled']],
+    part:[['all','All'],['School','Schools'],['Library','Libraries']],
+    don:[['all','All'],['One-time','One-time'],['Monthly','Monthly'],['Sponsor','Sponsors']],
+    mem:[],
+    cost:[['all','All'],['Kits','Kits'],['Instructor','Instructor pay'],['Shipping','Shipping'],['other','Video, hosting, printing'],['Fees','Card fees']]
+  };
+  const inSel = d => d >= S.a && d <= S.b;
+  const invInPeriod = () => INVOICES.filter(i => isSent(i) ? inSel(dt(i.issued)) : true);
+  const donIn = d => sum(EV.filter(e => e.kind === 'in' && e.k === 'don:' + d.id && inSel(e.d)), e => e.amt);
+  function drawTabs(){
+    const c = calc(S.a, S.b), costsIn = COSTS.filter(x => inSel(dt(x.d))), gifts = DONATIONS.filter(d => donIn(d) > 0);
+    const T = { inv:[invInPeriod().length, 'Program invoices', `${money(waiting)} waiting today`], part:[Object.keys(PARTNERS).length, 'Program by partner', `${money(c.prog - c.progCost)} left after costs`],
+      don:[gifts.length, 'Donations', `${money(c.don)} given`], mem:memOn() ? [MEMBERS.filter(m => inSel(dt(m.d))).length, 'Premium memberships', `${money(c.mem)} in, test`] : ['Later', 'Premium memberships', 'Not launched'], cost:[costsIn.length, 'Costs', `${money(c.cost)} spent`] };
+    tabs.innerHTML = Object.entries(T).map(([k, [n, l, sm]]) => `<button role="tab" aria-selected="${tab === k}" data-tab="${k}"><b>${n}</b><span>${l}</span><small>${sm}</small></button>`).join('');
+    filt.innerHTML = FILTERS[tab].map(([k, l]) => `<button class="${filter === k ? 'on' : ''}" data-f="${k}">${l}</button>`).join('');
+    bar.style.display = tab === 'mem' ? 'none' : '';
+    q.placeholder = { inv:'Search invoices', part:'Search partners', don:'Search donors', cost:'Search costs' }[tab] || 'Search';
+  }
+  const empty = (n, what) => `<tr><td colspan="${n}" class="empty">No ${what} for these dates. Pick other dates, clear the search or change the filter.</td></tr>`;
+  function drawTable(){
+    const s = (q.value || '').toLowerCase(); let html = '';
+    if (tab === 'inv'){
+      const list = invInPeriod().filter(i => (filter === 'all' || (filter === 'unpaid' ? (i.s === 'sent' || i.s === 'over') : filter === 'draft' ? (i.s === 'draft' || i.s === 'sched') : i.s === filter)) && (!s || (i.id + i.p + i.for).toLowerCase().includes(s)));
+      html = `<table><thead><tr><th>Invoice</th><th>Partner</th><th>For</th><th>Sent</th><th>Due</th><th>Status</th><th class="num">Amount</th></tr></thead><tbody>${
+        list.map(i => `<tr data-k="inv:${i.id}" tabindex="0"><td class="mono">${i.id}</td><td><b>${i.p}</b></td><td>${i.for}</td><td>${i.issued}</td><td>${i.due}</td><td><span class="chip s-${i.s}">${SL[i.s]}${i.late ? ', ' + i.late + ' days' : ''}</span></td><td class="num">${money(i.amt)}</td></tr>`).join('') || empty(7, 'invoices')}</tbody></table>`;
+      totals.innerHTML = `${list.length} invoice${list.length === 1 ? '' : 's'}, ${money(sum(list, i => i.amt))}. Drafts show for any dates.`;
+    } else if (tab === 'part'){
+      const rows = Object.entries(PARTNERS).filter(([n, p]) => (filter === 'all' || p.t === filter) && (!s || n.toLowerCase().includes(s))).map(([n, p]) => {
+        const inv = sum(INVOICES.filter(i => i.p === n && isSent(i) && inSel(dt(i.issued))), i => i.amt), paid = sum(INVOICES.filter(i => i.p === n && i.s === 'paid' && inSel(dt(i.paid))), i => i.amt);
+        const c = sum(COSTS.filter(x => x.p === n && inSel(dt(x.d))), x => x.amt); return { n, p, inv, paid, c, net:inv - c, m:inv ? pct(inv - c, inv) : null }; });
+      const wide = sum(COSTS.filter(c => c.p === 'Program-wide' && inSel(dt(c.d))), c => c.amt);
+      const tot = { b:sum(rows, r => r.p.booked), inv:sum(rows, r => r.inv), paid:sum(rows, r => r.paid), c:sum(rows, r => r.c) + (filter === 'all' ? wide : 0) };
+      html = `<table><thead><tr><th>Partner</th><th class="num">Booked for the year</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Costs</th><th class="num">Left after costs</th><th class="num">Margin</th></tr></thead><tbody>${
+        rows.map(r => `<tr data-k="part:${r.n}" tabindex="0"><td><b>${r.n}</b><small>${r.p.t}. ${r.p.plan}</small></td><td class="num">${money(r.p.booked)}</td><td class="num">${r.inv ? money(r.inv) : '<span class="faint">None</span>'}</td><td class="num">${money(r.paid)}</td><td class="num">${money(r.c)}</td><td class="num">${money(r.net)}</td>
+          <td>${r.m === null ? '<span class="faint" style="display:block;text-align:right">No invoice</span>' : `<div class="marg${r.m < 40 ? ' low' : ''}"><i><s style="width:${Math.max(0, r.m)}%"></s></i><em>${r.m}%</em></div>`}</td></tr>`).join('')
+        + (filter === 'all' && rows.length && wide ? `<tr><td><b>Program-wide</b><small>Video editing and hosting, shared by every partner</small></td><td class="num faint">n/a</td><td class="num faint">n/a</td><td class="num faint">n/a</td><td class="num">${money(wide)}</td><td class="num neg">${money(-wide)}</td><td></td></tr>` : '') || empty(7, 'partners')}</tbody>
+        <tfoot><tr><td>Maker Program total</td><td class="num">${money(tot.b)}</td><td class="num">${money(tot.inv)}</td><td class="num">${money(tot.paid)}</td><td class="num">${money(tot.c)}</td><td class="num">${money(tot.inv - tot.c)}</td><td class="num">${tot.inv ? pct(tot.inv - tot.c, tot.inv) + '%' : ''}</td></tr></tfoot></table>
+        <div class="foot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.5"/></svg>
+          <span><b>Price check: Full-Service keeps the least.</b> Each Full-Service session brings in ${money(350)} and costs about ${money(169)} (${money(150)} instructor pay and ${money(19)} in kits), so about ${money(181)} is left (52%). Worth checking before quoting the ${money(350)} price to new partners.</span></div>`;
+      totals.innerHTML = `${periodText()}. Booked is for the whole year.`;
+    } else if (tab === 'don'){
+      const list = DONATIONS.filter(d => donIn(d) > 0 && (filter === 'all' || d.type === filter) && (!s || (d.who + d.to + d.type).toLowerCase().includes(s))).sort((a, b) => (a.type === 'Monthly') === (b.type === 'Monthly') ? 0 : a.type === 'Monthly' ? -1 : 1);
+      html = `<table><thead><tr><th>From</th><th>Type</th><th>When</th><th>Where it goes</th><th>Status</th><th class="num">Amount</th><th class="num">Given in these dates</th></tr></thead><tbody>${
+        list.map(d => `<tr data-k="don:${d.id}" tabindex="0"><td><b>${d.who}</b></td><td>${d.type}</td><td>${d.type === 'Monthly' ? 'Since ' + d.since : d.date}</td><td>${d.to}</td><td><span class="chip s-${d.s}">${DSL[d.s]}</span></td><td class="num">${d.type === 'Monthly' ? money(d.each) + ' a month' : money(d.amt)}</td><td class="num">${money(donIn(d))}</td></tr>`).join('') || empty(7, 'donations')}</tbody></table>`;
+      totals.innerHTML = `${list.length} gift${list.length === 1 ? '' : 's'}, ${money(sum(list, donIn))}`;
+    } else if (tab === 'mem' && memOn()){
+      const list = MEMBERS.filter(m => inSel(dt(m.d)));
+      html = `<table><thead><tr><th>Date</th><th>Plan</th><th class="num">Members</th><th class="num">Price</th><th class="num">Amount</th></tr></thead><tbody>${
+        list.map(m => `<tr><td>${m.d}</td><td>${m.plan}</td><td class="num">${m.count}</td><td class="num">${money(m.price)}${m.plan === 'Monthly' ? ' a month' : ' a year'}</td><td class="num">${money(m.amt)}</td></tr>`).join('') || empty(5, 'member payments')}</tbody></table>
+        <div class="foot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.5"/></svg><span><b>Test numbers.</b> Premium memberships haven't launched and the prices aren't decided. Yearly plans are paid up front in the month they start.</span></div>`;
+      totals.innerHTML = `${list.length} payment${list.length === 1 ? '' : 's'}, ${money(sum(list, m => m.amt))}`;
+    } else if (tab === 'mem'){
+      html = `<div class="mem"><div>
+          <div class="mem__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/></svg></div>
+          <h3>Premium memberships haven't launched</h3>
+          <p>Members join free today. When paid plans start, monthly and yearly payments land here next to the Maker Program and donations, on the chart, the calendar and the donut.</p>
+          <p style="margin-bottom:8px;color:var(--ink);font-weight:600">Once they launch, this tab shows</p>
+          <ul><li>Paying members, monthly and yearly</li><li>Money in each month, with yearly plans spread over 12 months</li><li>New, renewed and cancelled memberships</li><li>Renewals coming up in the next 30 days</li><li>Refunds and failed payments to follow up</li></ul>
+        </div><div>
+          <h3>What could it bring in?</h3>
+          <p>Try prices and member counts. Nothing is saved; the prices aren't decided.</p>
+          <div class="whatif">
+            <label>Monthly price, in dollars<input id="wPm" value="6" inputmode="decimal"><small>Per member, per month</small></label>
+            <label>Yearly price, in dollars<input id="wPy" value="50" inputmode="decimal"><small>Per member, per year</small></label>
+            <label>Paying members<input id="wN" value="50" inputmode="numeric"><small>Example number</small></label>
+            <label>On the yearly plan, percent<input id="wY" value="40" inputmode="numeric"><small>Of paying members</small></label>
+          </div>
+          <div class="result" id="wOut"></div>
+        </div></div>`;
+      totals.innerHTML = '';
+    } else {
+      const list = COSTS.filter(c => inSel(dt(c.d)) && (filter === 'all' || (filter === 'other' ? ['Video','Hosting','Printing'].includes(c.cat) : c.cat === filter)) && (!s || (c.what + c.p + c.cat).toLowerCase().includes(s)));
+      html = `<table><thead><tr><th>Date</th><th>Type</th><th>What</th><th>For</th><th class="num">Amount</th></tr></thead><tbody>${
+        list.map(c => `<tr data-k="cost:${c.id}" tabindex="0"><td>${c.d}</td><td><span class="chip cat">${c.cat}</span></td><td><b>${c.what}</b></td><td>${c.p === 'Program-wide' || c.p === 'Donations' ? `<span class="faint">${c.p}</span>` : c.p}</td><td class="num">${money(c.amt)}</td></tr>`).join('') || empty(5, 'costs')}</tbody></table>`;
+      totals.innerHTML = `${list.length} cost${list.length === 1 ? '' : 's'}, ${money(sum(list, c => c.amt))}`;
+    }
+    tableWrap.innerHTML = html;
+    REV.S = S; REV.tab = tab; REV.filter = filter; REV.calM = calM;
+    if (tab === 'mem') whatIf();
+  }
+  function whatIf(){
+    const n = id => Math.max(0, parseFloat(sr.getElementById(id).value) || 0);
+    const N = Math.round(n('wN')), yearly = Math.round(N * Math.min(100, n('wY')) / 100), mon = N - yearly;
+    const perMonth = mon * n('wPm') + yearly * n('wPy') / 12;
+    sr.getElementById('wOut').innerHTML = `<div><span>A month</span><b>${money(Math.round(perMonth))}</b><small>${mon} monthly, ${yearly} yearly</small></div>
+      <div><span>A year</span><b>${money(Math.round(perMonth * 12))}</b><small>Before card fees</small></div>
+      <div><span>After card fees</span><b>${money(Math.round(perMonth * 12 * 0.965))}</b><small>About 3.5%</small></div>`;
+  }
+  sr.addEventListener('input', e => { if (e.target.closest('.whatif')) whatIf(); });
+
+  /* drawer */
+  function openDrawer(type, name, body){ if (name !== 'Test data') drawer.classList.remove('drawer--test'); dType.textContent = type; dName.textContent = name; dBody.innerHTML = body; ROOT.classList.add('open'); dClose.focus(); }
+  function closeDrawer(){ ROOT.classList.remove('open'); }
+  function openKey(k){
+    const kind = k.slice(0, k.indexOf(':')), id = k.slice(k.indexOf(':') + 1);
+    if (kind === 'inv'){
+      const i = INVOICES.find(x => x.id === id), p = PARTNERS[i.p];
+      const acts = i.s === 'paid' ? '<button class="btn">Download PDF</button>'
+        : i.s === 'draft' || i.s === 'sched' ? '<button class="btn btn--primary" data-toast="Invoice sent (sample, nothing is sent).">Send invoice</button><button class="btn">Edit</button><button class="btn">Download PDF</button>'
+        : '<button class="btn btn--primary" data-toast="Marked as paid (sample).">Mark as paid</button><button class="btn" data-toast="Reminder sent (sample, nothing is sent).">Send reminder</button><button class="btn">Download PDF</button>';
+      openDrawer('Maker Program invoice ' + i.id, i.p, `<dl class="dl"><dt>Status</dt><dd><span class="chip s-${i.s}">${SL[i.s]}${i.late ? ', ' + i.late + ' days' : ''}</span></dd><dt>For</dt><dd>${i.for}</dd><dt>Sent</dt><dd>${i.issued}</dd><dt>Due</dt><dd>${i.due} (30 days)</dd>${i.paid ? `<dt>Paid</dt><dd>${i.paid}</dd>` : ''}<dt>Bill to</dt><dd>${p.contact}</dd><dt>Billing</dt><dd>${p.billing}</dd></dl>
+        <h3>Line items</h3><div class="lines"><table><tbody>${i.lines.map(([d, a]) => `<tr><td>${d}</td><td class="num">${money(a)}</td></tr>`).join('')}</tbody><tfoot><tr><td>Total</td><td class="num">${money(i.amt)}</td></tr></tfoot></table></div>
+        ${i.s === 'over' ? `<p class="hint">Last reminder ${fmt(addD(TODAY, -16))}. Waiting on their business office.</p>` : ''}
+        <div class="tools" style="margin-top:20px">${acts}</div>`);
+    } else if (kind === 'don'){
+      const d = DONATIONS.find(x => x.id === id), m = d.type === 'Monthly';
+      openDrawer(d.type === 'Sponsor' ? 'Sponsor' : m ? 'Monthly donor' : 'One-time gift', d.who, `<dl class="dl"><dt>Status</dt><dd><span class="chip s-${d.s}">${DSL[d.s]}</span></dd><dt>${m ? 'Gives' : 'Gave'}</dt><dd>${m ? money(d.each) + ' a month, since ' + d.since : money(d.amt) + ' on ' + d.date}</dd>${m ? `<dt>Given so far</dt><dd>${money(donTotal(d))} (${d.months} payment${d.months === 1 ? '' : 's'})</dd><dt>Next charge</dt><dd>Dec ${d.since.split(' ')[1]}</dd>` : ''}<dt>Where it goes</dt><dd>${d.to}</dd><dt>From</dt><dd>The Support page${d.type === 'Sponsor' ? ', then a call with the owner' : ''}</dd></dl>
+        ${d.note ? `<p class="hint">${d.note}</p>` : ''}
+        <div class="tools" style="margin-top:20px">${d.s === 'exp' ? '<button class="btn btn--primary" data-toast="Card update link copied (sample).">Copy card update link</button>' : ''}<button class="btn">View receipt</button>${m ? '<button class="btn">Pause or cancel</button>' : ''}</div>`);
+    } else if (kind === 'cost'){
+      const c = COSTS.find(x => x.id === id);
+      openDrawer('Cost, ' + c.cat, c.what, `<dl class="dl"><dt>Date</dt><dd>${c.d}</dd><dt>Type</dt><dd>${c.cat}</dd><dt>For</dt><dd>${c.p}</dd><dt>Amount</dt><dd>${money(c.amt)}</dd><dt>Receipt</dt><dd>receipt-${c.id}.pdf <span class="faint">(sample)</span></dd></dl>
+        <div class="tools" style="margin-top:20px"><button class="btn">Edit</button><button class="btn">Open receipt</button></div>`);
+    } else {
+      const p = PARTNERS[id], inv = INVOICES.filter(i => i.p === id), c = COSTS.filter(x => x.p === id);
+      openDrawer(p.t + ', ' + p.plan, id, `<dl class="dl"><dt>Booked</dt><dd>${money(p.booked)} this school year</dd><dt>Billing</dt><dd>${p.billing}</dd><dt>Contact</dt><dd>${p.contact}</dd></dl>
+        <h3>Invoices</h3><div class="lines"><table><tbody>${inv.map(i => `<tr><td><span class="mono">${i.id}</span> ${i.for}</td><td><span class="chip s-${i.s}">${SL[i.s]}</span></td><td class="num">${money(i.amt)}</td></tr>`).join('')}</tbody></table></div>
+        <h3>Costs</h3>${c.length ? `<div class="lines"><table><tbody>${c.map(x => `<tr><td>${x.d}, ${x.what}</td><td class="num">${money(x.amt)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">No costs yet. Their first kits ship Dec 27.</p>'}
+        <div class="tools" style="margin-top:20px"><a class="btn" href="${Router.href('#/admin/partners')}">Open in Program partners</a></div>`);
+    }
+  }
+  const FORMS = {
+    invoice: ['New invoice', 'Maker Program. A draft until you press Send', `<div class="form">
+        <label>Partner<select><option>Lincoln Elementary</option><option>Oakwood Unified (3 sites)</option><option>Riverside Afterschool Center</option><option>Maple Street Library</option><option>Harbor Lights Library</option></select></label>
+        <label>What it's for<select><option>Plus license, spring half ($2,000)</option><option>Unit kit add-on ($450)</option><option>Something else</option></select></label>
+        <div class="two"><label>Amount<input value="$2,000"></label><label>Due<select><option>30 days after sending</option><option>15 days</option><option>On a date</option></select></label></div>
+        <label>Send to<input value="dbrooks@maplevalley.example"><small>The partner's billing contact. Sample address.</small></label>
+        <div class="tools"><button class="btn btn--primary" data-toast="Invoice sent (sample, nothing is sent).">Send invoice</button><button class="btn" data-toast="Saved as a draft (sample).">Save draft</button></div></div>`],
+    cost: ['Add a cost', 'Kits, instructor pay, fees or anything else', `<div class="form">
+        <div class="two"><label>Date<input value="Nov 26, 2026"></label><label>Amount<input placeholder="$0"></label></div>
+        <label>Type<select><option>Kits</option><option>Instructor pay</option><option>Shipping</option><option>Video</option><option>Hosting</option><option>Printing</option><option>Card fees</option><option>Other</option></select></label>
+        <label>For<select><option>Program-wide</option><option>Lincoln Elementary</option><option>Oakwood Unified (3 sites)</option><option>Riverside Afterschool Center</option><option>Maple Street Library</option><option>Harbor Lights Library</option><option>Donations</option><option>Premium memberships</option><option>The whole site</option></select><small>Pick a partner when the cost is only for them, so their margin stays right.</small></label>
+        <label>What<input placeholder="For example, Unit 3 kits, 25 kids"></label>
+        <label>Receipt<span class="drop">Drop a photo or PDF here, or choose a file</span></label>
+        <div class="tools"><button class="btn btn--primary" data-toast="Cost added (sample).">Add cost</button></div></div>`]
+  };
+  const toastEl = sr.getElementById('toast'); let toastT;
+  function toast(msg){ toastEl.textContent = msg; toastEl.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('on'), 2200); }
+  sr.addEventListener('click', e => {
+    const t = e.target.closest('[data-toast]'); if (t){ toast(t.dataset.toast); return; }
+    const f = e.target.closest('[data-form]'); if (f){ const [n, sub, body] = FORMS[f.dataset.form]; openDrawer(sub, n, body); return; }
+    const tb = e.target.closest('[data-tab]'); if (tb){ tab = tb.dataset.tab; filter = 'all'; q.value = ''; drawTabs(); drawTable(); if (tb.dataset.scroll) sr.querySelector('.board').scrollIntoView({ behavior:'smooth', block:'start' }); return; }
+    const fb = e.target.closest('#filt [data-f]'); if (fb){ filter = fb.dataset.f; drawTabs(); drawTable(); return; }
+    const k = e.target.closest('[data-k]'); if (k) openKey(k.dataset.k);
+  });
+  sr.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); if (e.key === 'Enter' && e.target.matches('tr[data-k]')) openKey(e.target.dataset.k); });
+  scrim.onclick = dClose.onclick = closeDrawer;
+  q.oninput = drawTable;
+  /* ---------- test data panel ---------- */
+  const FIELDS = [
+    ['Partner schools', [['starter','Starter sites, $2,000 a year',0,20,1], ['plus','Plus sites, $4,000 a year',0,20,1], ['full','Full-Service sites, $350 a session',0,10,1], ['fullSessions','Full-Service sessions a month',1,12,1]]],
+    ['Libraries and workshop attendance', [['libAnnual','Libraries on the annual license, $1,200',0,15,1], ['libPer','Libraries paying per workshop, $300',0,15,1], ['wsPerMonth','Workshops a month, per library',1,4,1], ['kids','Average kids per workshop',3,30,1]]],
+    ['Donations', [['donMonthly','Monthly donors',0,100,1], ['donMonthlyAvg','Average monthly gift',5,100,5,'$'], ['donOnce','One-time gifts a month',0,40,1], ['donOnceAvg','Average one-time gift',10,500,10,'$'], ['sponsors','Local sponsors so far',0,8,1], ['sponsorAvg','Average sponsor gift',100,5000,100,'$']]],
+    ['Premium subscribers (not launched, test only)', [['memMonthly','Monthly plan subscribers',0,500,5], ['memMonthlyPrice','Monthly price',1,20,1,'$'], ['memYearly','Yearly plan subscribers',0,500,5], ['memYearlyPrice','Yearly price',10,200,5,'$'], ['memStart','Started in',0,11,1,'month']]]
+  ];
+  const showVal = (v, kind) => kind === '$' ? '$' + Number(v).toLocaleString('en-US') : kind === 'month' ? longMonth(YM[v]) + ' ' + YM[v].getFullYear() : String(v);
+  const fill = el => el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min) * 100) + '%');
+  function isDefault(){ return Object.keys(TEST_DEFAULT).every(k => TEST[k] === TEST_DEFAULT[k]); }
+  function markChip(){ sampleChip.textContent = isDefault() ? 'Sample data' : 'Your test data'; sampleChip.classList.toggle('is-test', !isDefault()); memLeg.hidden = !memOn(); }
+  let liveQ = 0;
+  function refresh(){ cancelAnimationFrame(liveQ); liveQ = requestAnimationFrame(() => { generate(TEST); drawUp(); drawPlan(); renderAll(true); markChip(); try { localStorage.setItem(TEST_KEY, JSON.stringify(TEST)); } catch (e) {} }); }
+  function openTest(){
+    drawer.classList.add('drawer--test');
+    openDrawer('Change the numbers and the page updates as you drag', 'Test data', FIELDS.map(([g, fs]) => `<div class="scrub-group"><h3>${g}</h3>${fs.map(([k, l, mn, mx, st, kind]) => `<div class="scrub">
+        <div class="scrub__top"><label for="t-${k}">${l}</label><output id="o-${k}" for="t-${k}">${showVal(TEST[k], kind)}</output></div>
+        <input type="range" id="t-${k}" data-key="${k}" data-kind="${kind || ''}" min="${mn}" max="${mx}" step="${st}" value="${TEST[k]}">
+        <div class="scrub__ends" aria-hidden="true"><span>${showVal(mn, kind)}</span><span>${showVal(mx, kind)}</span></div></div>`).join('')}</div>`).join('')
+      + `<div class="test-actions"><button class="btn btn--primary" id="testDone">Done</button><button class="btn" id="testReset">Back to the sample numbers</button></div>`);
+    dBody.querySelectorAll('input[type=range]').forEach(fill);
+  }
+  testBtn.addEventListener('click', openTest);
+  sr.addEventListener('input', e => { const r = e.target.closest('.scrub input[type=range]'); if (!r) return;
+    TEST[r.dataset.key] = +r.value; fill(r); sr.getElementById('o-' + r.dataset.key).textContent = showVal(r.value, r.dataset.kind); refresh(); });
+  sr.addEventListener('click', e => {
+    if (e.target.closest('#testDone')) { closeDrawer(); toast(isDefault() ? 'Showing the sample numbers.' : 'Showing your test numbers. They stay on this device.'); }
+    if (e.target.closest('#testReset')) { TEST = { ...TEST_DEFAULT }; dBody.querySelectorAll('.scrub input[type=range]').forEach(r => { r.value = TEST[r.dataset.key]; fill(r); sr.getElementById('o-' + r.dataset.key).textContent = showVal(r.value, r.dataset.kind); }); refresh(); }
+  });
+  let rT; REV.redraw = () => { clearTimeout(rT); rT = setTimeout(() => { if (chart.isConnected) drawChart(false); }, 150); };
+  if (!REV.resizeBound){ REV.resizeBound = true; window.addEventListener('resize', () => REV.redraw && REV.redraw()); }
+  if (REV.booted){ drawUp(); drawPlan(); markChip(); renderAll(true); }
+  else {
+    REV.booted = true;
+    // first load: a short skeleton, then the cards come in one after another
+    sr.querySelectorAll('.panel, .board').forEach((el, i) => el.style.setProperty('--i', i));
+    ROOT.classList.add('is-loading');
+    setTimeout(() => { drawUp(); drawPlan(); markChip(); ROOT.classList.remove('is-loading'); ROOT.classList.add('is-revealing'); renderAll();
+      setTimeout(() => ROOT.classList.remove('is-revealing'), 1200); }, REDUCE ? 0 : 650);
+  }
+}
 /* Admin > Program partners (owner, 2026-11-26; the look is docs/mockups/admin-partners-draft.html, draft 2): the
    schools and libraries in the STEAMM Maker Program, from first inquiry to renewal. SAMPLE DATA ONLY for now, nothing
    is saved ("mockup only for now"). Needs attention first, stage tabs that filter one table, a partner's detail in a
@@ -26150,6 +26724,7 @@ function viewAdmin(section, id, sub){
   else if (section === "analytics") body = adminAnalytics();
   else if (section === "launch-readiness") body = adminLaunchReadiness();
   else if (section === "partners" || section === "maker-demo") body = adminPartners();
+  else if (section === "revenue") body = adminRevenue();
   else if (section === "admins") body = adminAdmins();
   else if (section === "send-newsletter") body = id ? adminNewsletterCompose(id) : adminNewsletterList();
   else if (section === "notifications") body = adminNotifications();
@@ -30887,6 +31462,7 @@ function render(){
   mountStoryBuilderCanvasDrag();
   mountTurnstileWidgets();
   mountAdminRailHover();
+  mountAdminRevenue();
 
   /* html has scroll-behavior:smooth for in-page anchors, which Chrome also
      applies to a plain scrollTop assignment - without behavior:"instant"
