@@ -2385,7 +2385,17 @@ function laserTrace(){
   for (const b of BOULDERS){ if (b.broken) continue; const t = raySphere(o, d, { x: b.x, y: b.y, z: b.z }, b.r * 0.95); if (t >= 0 && t < LASER.range && (!best || t < best.t)) best = { t, b }; }
   for (const q of parts){ if (q.type !== "heat" || (q.state !== "free" && q.state !== "bed")) continue; const t = raySphere(o, d, { x: q.x, y: q.y, z: q.z }, 0.5); if (t >= 0 && t < LASER.range && (!best || t < best.t)) best = { t, part: q }; }
   const lim = best ? best.t : LASER.range;
-  for (let t = 0.6; t < lim; t += 0.2){ const x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t; if (y <= solidTopAt(x, z, null, true, true)) { best = { t }; break; } }
+  for (let t = 0.6; t < lim; t += 0.2){
+    const x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t;
+    if (y <= solidTopAt(x, z, null, true, true)){
+      /* the beam stopped on a Glacia heat block's corner, which pokes out past the hit sphere: that still heats the
+         block (owner, 2026-11-26: "make sure that the metal blocks are being heated"). Before, the corner ended the
+         beam with no part, so a block aimed at straight on could stay cold. */
+      const hp = parts.find(q => q.type === "heat" && (q.state === "free" || q.state === "bed") && Math.hypot(q.x - x, q.z - z) < 0.85 && y <= q.y + q.half + 0.05);
+      best = hp ? { t, part: hp } : { t };
+      break;
+    }
+  }
   if (!best) best = { t: LASER.range };
   best.p = new THREE.Vector3(o.x + d.x * best.t, o.y + d.y * best.t, o.z + d.z * best.t);
   best.o = new THREE.Vector3(o.x, o.y, o.z);
@@ -4220,12 +4230,13 @@ function rmMsg(p){
   } else if (p.t === "mode"){ noteDevice("phone"); setMode(p.m); sendPhoneState(); }
   else if (p.t === "notes"){ noteDevice("phone"); toggleNotes(); }
   else if (p.t === "launch"){ noteDevice("phone"); launchRocket(); }
+  else if (p.t === "quiz"){ noteDevice("phone"); quizFromPhone(p); }
   else if (p.t === "bye"){ RM.phoneId = null; paintPhone(); radio("The phone left. Keys and touch still work."); }
 }
 function sendPhoneState(){
   if (!RM.ch) return;
   if (CT.on) return cSendState();
-  rmSend({ t: "st", tools: modesNow(), launch: !!G.canLaunch, m: G.mode, held: G.held.length > 0, test: testReady(), firing: laser.firing || !!G.drilling || hose.spraying, mag: G.magOn, paused: G.paused, done: G.done, started: G.started, r: (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin), step: G.step < MISSIONS[G.mission].steps.length ? MISSIONS[G.mission].steps[G.step].text : "Mission complete" });
+  rmSend({ t: "st", tools: modesNow(), launch: !!G.canLaunch, m: G.mode, held: G.held.length > 0, test: testReady(), firing: laser.firing || !!G.drilling || hose.spraying, mag: G.magOn, paused: G.paused, done: G.done, started: G.started, r: (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin), quiz: phoneQuiz(), step: G.step < MISSIONS[G.mission].steps.length ? MISSIONS[G.mission].steps[G.step].text : "Mission complete" });
 }
 addEventListener("pagehide", () => { if (RM.ch) rmSend({ t: "gone" }); });
 
@@ -5531,11 +5542,11 @@ $("bSpeak").hidden = false;
 $("bSpeak").addEventListener("click", (e) => { e.stopPropagation(); speak($("stepWhat").textContent); });
 
 /* ---------- Chike's three questions ---------- */
-const QZ = { list: null, i: 0, right: 0, answered: false, forBoard: false };
+const QZ = { list: null, i: 0, right: 0, answered: false, forBoard: false, open: false, pick: -1 };
 function kidName(){ const c = G.world.corner; return c.charAt(0).toUpperCase() + c.slice(1); }
 function openQuiz(retake){
   const bank = QUIZ_BANKS[G.world.id] || QUIZ_BANKS.pumice;
-  Object.assign(QZ, { list: bank[gradeBand(curGrade())], i: 0, right: 0, answered: false, forBoard: !retake });
+  Object.assign(QZ, { list: bank[gradeBand(curGrade())], i: 0, right: 0, answered: false, forBoard: !retake, open: true, pick: -1 });
   if (G.started && !G.done && !G.paused){ G.paused = true; QZ.paused = true; keys.clear(); }
   openOv("ovQuiz"); paintQuiz();
 }
@@ -5557,10 +5568,11 @@ function paintQuiz(){
     writeSave();
     $("qDone").onclick = closeQuiz; $("qDone").focus();
     sfx(all ? "win" : "good");
+    sendPhoneState();
     return;
   }
   const q = L[QZ.i], band = gradeBand(curGrade()), pics = band === "g1";
-  QZ.answered = false;
+  QZ.answered = false; QZ.pick = -1;
   box.innerHTML = '<div class="qtop"><span class="kicker">' + kidName() + '\'s question ' + (QZ.i + 1) + " of " + L.length + "</span>"
     + (CAN_SPEAK ? '<button class="speak" id="qSay" aria-label="Read it to me"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button>' : "") + "</div>"
     + '<div class="qpic" id="qPic">' + quizPic(q, false) + "</div>"
@@ -5578,10 +5590,11 @@ function paintQuiz(){
   if ($("qSay")) $("qSay").onclick = () => speak(q.q + " " + q.opts.map(o => o.t).join(", or "));
   if (pics) setTimeout(() => speak(q.q + " " + q.opts.map(o => o.t).join(", or ")), 250);
   $("qNext").onclick = () => { QZ.i++; paintQuiz(); };
+  sendPhoneState();
 }
 function answerQuiz(k){
   if (QZ.answered) return;
-  QZ.answered = true;
+  QZ.answered = true; QZ.pick = k;
   const q = QZ.list[QZ.i], ok = k === q.a;
   if (ok) QZ.right++;
   [...$("qOpts").children].forEach((el, j) => { if (j === q.a) el.classList.add("right"); else if (j === k) el.classList.add("wrong"); });
@@ -5590,8 +5603,29 @@ function answerQuiz(k){
   if (gradeBand(curGrade()) === "g1") speak((ok ? "Right! " : "Not quite. ") + q.why);
   $("qNextRow").hidden = false; $("qNext").textContent = QZ.i < QZ.list.length - 1 ? "Next" : "See how you did"; $("qNext").focus();
   sfx(ok ? "good" : "bad");
+  sendPhoneState();
+}
+/* the question on the big screen, for the phone (owner, 2026-11-26: "when a player is playing on the mobile phone allow
+   them to answer the question with their phone as well"). The youngest grade's answers are pictures. */
+function phoneQuiz(){
+  if (!QZ.open || !QZ.list) return null;
+  const L = QZ.list, kid = kidName();
+  if (QZ.i >= L.length) return { kid, done: true, right: QZ.right, of: L.length, back: QZ.forBoard ? "Back to the rover" : "Back to the mission" };
+  const q = L[QZ.i], pics = gradeBand(curGrade()) === "g1";
+  return { kid, n: QZ.i + 1, of: L.length, q: q.q, two: pics, opts: q.opts.map(o => ({ t: o.t, pic: pics && o.pic ? QUIZ_PICS[o.pic] : "" })),
+    answered: QZ.answered, pick: QZ.pick, a: QZ.answered ? q.a : -1, ok: QZ.answered && QZ.pick === q.a, why: QZ.answered ? q.why : "", last: QZ.i >= L.length - 1 };
+}
+/* an answer, Next, Read it, or Back from the phone: the same as tapping them on the big screen */
+function quizFromPhone(p){
+  if (!QZ.open || !QZ.list) return;
+  const L = QZ.list;
+  if (typeof p.a === "number" && QZ.i < L.length && !QZ.answered){ const k = Math.floor(p.a); if (k >= 0 && k < L[QZ.i].opts.length) answerQuiz(k); }
+  else if (p.next && QZ.answered && QZ.i < L.length){ QZ.i++; paintQuiz(); }
+  else if (p.done && QZ.i >= L.length) closeQuiz();
+  else if (p.say && QZ.i < L.length){ const q = L[QZ.i]; speak(q.q + " " + q.opts.map(o => o.t).join(", or ")); }
 }
 function closeQuiz(){
+  QZ.open = false;
   closeOv("ovQuiz");
   stopSpeaking();
   if (QZ.paused){ QZ.paused = false; G.paused = false; }
@@ -5837,10 +5871,16 @@ function updateHeatStep(){
     sendPhoneState();
   }
 }
-const HEAT_GLOW = [[0, 0x000000], [0.25, 0x5a0d05], [0.55, 0xc2340c], [0.8, 0xff7a1a], [1, 0xffd78a]];
+/* red hot to orange hot (owner, 2026-11-26: "make sure that the metal blocks are being heated"): the old top end was a
+   pale yellow-white that washed out on the shiny steel, so a hot block looked cold. The steel also darkens as it heats
+   (HEAT_STEEL), so the glow is what you see. */
+const HEAT_GLOW = [[0, 0x000000], [0.25, 0x7a1005], [0.55, 0xd8320a], [0.8, 0xff5a12], [1, 0xff8a24]];
+/* set every frame, so they skip fixColors: these colors are turned into the renderer's linear space here, or the
+   glow comes out pale and washed out (that was the real bug: a hot block looked almost white) */
+const HEAT_STEEL = [new THREE.Color(0x8e96a3).convertSRGBToLinear(), new THREE.Color(0x3a2622).convertSRGBToLinear()];
 function heatColor(h){
-  for (let i = 1; i < HEAT_GLOW.length; i++){ if (h <= HEAT_GLOW[i][0]){ const a = HEAT_GLOW[i - 1], b = HEAT_GLOW[i], k = (h - a[0]) / (b[0] - a[0]); return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]), k); } }
-  return new THREE.Color(0xffd78a);
+  for (let i = 1; i < HEAT_GLOW.length; i++){ if (h <= HEAT_GLOW[i][0]){ const a = HEAT_GLOW[i - 1], b = HEAT_GLOW[i], k = (h - a[0]) / (b[0] - a[0]); return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]), k).convertSRGBToLinear(); } }
+  return new THREE.Color(0xff8a24).convertSRGBToLinear();
 }
 function stepGlacia(dt){
   if (G.world.id !== "glacia") return;
@@ -5849,7 +5889,8 @@ function stepGlacia(dt){
     if (p.type !== "heat") continue;
     if (p.state === "fixed"){ p.heat = 1; }
     else p.heat = heatStep(p.heat || 0, !!(tr && tr.part === p), dt);
-    const m = p.g.userData.heatMat; m.emissive.copy(heatColor(p.heat)); m.emissiveIntensity = 0.4 + p.heat * 1.4;
+    const m = p.g.userData.heatMat; m.emissive.copy(heatColor(p.heat)); m.emissiveIntensity = 0.4 + p.heat * 1.1;
+    m.color.copy(HEAT_STEEL[0]).lerp(HEAT_STEEL[1], Math.min(1, p.heat * 1.4)); m.metalness = 0.7 - p.heat * 0.45;
     if (p.heat >= HEAT.glow && !p.wasHot){ p.wasHot = true; if (!SAVE.notes.includes("heatStore")) learn("heatStore", [{ text: "Steel holds heat", tone: "yes" }, { text: "Glows when hot", tone: "yes" }]); }
     if (p.heat < HEAT.curie) p.tooHotSaid = false;
     if (p.wasHot && p.state !== "fixed" && p.heat < 0.2 && !SAVE.notes.includes("heatFlow")){ learn("heatFlow", [{ text: "Hot to cold", tone: "yes" }, { text: "It cooled down", tone: "warn" }]); }

@@ -76,6 +76,27 @@
   .slider .tl{top:4px} .slider .bl{bottom:4px}
   .bottom{display:flex;gap:8px;margin-top:10px}
   .bottom .b{flex:1;min-height:46px;font-size:14px;border-radius:14px;background:#0e1730;border:2px solid var(--line);box-shadow:none;font-weight:700}
+  /* the quiz, while a question is open on the big screen (owner, 2026-11-26) */
+  #sQuiz{gap:14px;overflow:auto;touch-action:pan-y}
+  .qtop{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .kicker{font-size:14px;font-weight:800;color:#ffd23f}
+  .say{all:unset;cursor:pointer;flex:none;width:46px;height:46px;border-radius:50%;background:#24305a;border:2px solid var(--line);display:grid;place-items:center}
+  .say svg{width:22px;height:22px;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  .qq{font-size:22px;font-weight:800;line-height:1.3;color:#fff}
+  .qopts{display:flex;flex-direction:column;gap:10px}
+  .qopts.two{display:grid;grid-template-columns:1fr 1fr}
+  .qopt{all:unset;cursor:pointer;box-sizing:border-box;border-radius:16px;border:2px solid rgba(255,255,255,.25);background:#121a30;padding:16px;min-height:58px;font-size:18px;font-weight:800;line-height:1.3;color:#fff;touch-action:manipulation}
+  .qopt.p{background:#fdfcf7;color:#1d3a8f;border-color:transparent;padding:8px;text-align:center;box-shadow:0 0 0 2px rgba(255,255,255,.22)}
+  .qopt.p img{display:block;width:100%;height:auto}
+  .qopt.p span{display:block;font-size:18px}
+  .qopt.press{transform:translateY(2px)}
+  .qopt.right{border-color:#4fc3f7;background:rgba(79,195,247,.18)}
+  .qopt.p.right{box-shadow:0 0 0 4px #4fc3f7;background:#fdfcf7}
+  .qopt.wrong{opacity:.55;text-decoration:line-through}
+  .qwhy{font-size:16px;line-height:1.5;color:var(--soft);max-width:none}
+  .qwhy b{color:#fff}
+  .qbig{font-size:34px;font-weight:900;color:#fff;margin:0}
+  #sQuiz .cta{width:100%;touch-action:manipulation}
   @media (orientation: portrait){
     .pad{grid-template-columns:1fr;grid-template-rows:1fr auto}
   }
@@ -132,6 +153,12 @@
   </div>
 </section>
 
+<!-- 4: the quiz, while a question is open on the big screen -->
+<section class="screen" id="sQuiz" hidden>
+  <div class="qtop"><span class="kicker" id="qKick"></span><button class="say" id="qSay" aria-label="Read it to me"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button></div>
+  <div id="qBody"></div>
+</section>
+
 <script>
 "use strict";
 /* BEGIN pure */
@@ -163,7 +190,7 @@ function readCode(s){ const d = String(s || "").replace(/\D/g, ""); return /^[1-
 const $ = (id) => document.getElementById(id);
 /* a long press must never open the phone's menu: it would cancel a held GO, MAGNET or FIRE */
 addEventListener("contextmenu", (e) => { if (!e.target.closest("input")) e.preventDefault(); });
-const show = (id) => ["sJoin", "sCal", "sPad"].forEach(s => $(s).hidden = s !== id);
+const show = (id) => ["sJoin", "sCal", "sPad", "sQuiz"].forEach(s => $(s).hidden = s !== id);
 const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (_e) {} };
 
 /* ---------- connection: the same Supabase Realtime room the game opened ---------- */
@@ -222,8 +249,63 @@ function onMsg(p){
     if (modeChanged && typeof p.r === "number") S.r = clampN(p.r, 0, 1);
     /* only a new tool rebuilds the buttons: rebuilding while a finger holds MAGNET would let go of the part */
     paintPad(modeChanged);
+    quizState(p.quiz || null);
   }
 }
+
+/* ---------- the quiz: the big screen sends its question; a tap here answers it there ---------- */
+let quizKey = "";
+/* an answer picture, drawn as an image: a picture can't run anything on this page, whoever sent it */
+function quizImg(svg){
+  if (typeof svg !== "string" || svg.indexOf("<svg") !== 0) return null;
+  const im = document.createElement("img");
+  im.alt = "";
+  im.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#1d3a8f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" color="#1d3a8f"'));
+  return im;
+}
+function quizState(z){
+  if (!z || typeof z !== "object"){ quizKey = ""; if (!$("sQuiz").hidden) show("sPad"); return; }
+  if ($("sPad").hidden && $("sQuiz").hidden) return;   /* still joining or setting up tilt */
+  const key = JSON.stringify(z);
+  if (key === quizKey && !$("sQuiz").hidden) return;
+  quizKey = key;
+  paintQuiz(z);
+  if ($("sQuiz").hidden){ show("sQuiz"); buzz([20, 40, 20]); }
+}
+function quizButton(text, act){ const b = document.createElement("button"); b.className = "cta blue"; b.textContent = text; b.onclick = act; return b; }
+function paintQuiz(z){
+  const body = $("qBody"); body.textContent = "";
+  $("qSay").hidden = !!z.done;
+  if (z.done){
+    $("qKick").textContent = String(z.kid || "") + "'s questions";
+    const h = document.createElement("p"); h.className = "qbig"; h.textContent = (+z.right || 0) + " of " + (+z.of || 0) + " right";
+    const t = document.createElement("p"); t.className = "qwhy"; t.textContent = z.right === z.of ? "You think like a space engineer. That's a star!" : "Good try. You can take them again any time from Pause.";
+    body.append(h, t, quizButton(String(z.back || "Back to the rover"), () => { send({ t: "quiz", done: 1 }); buzz(20); }));
+    return;
+  }
+  $("qKick").textContent = String(z.kid || "") + "'s question " + (+z.n || 1) + " of " + (+z.of || 3);
+  const q = document.createElement("p"); q.className = "qq"; q.textContent = String(z.q || "");
+  const opts = document.createElement("div"); opts.className = "qopts" + (z.two ? " two" : "");
+  (Array.isArray(z.opts) ? z.opts : []).slice(0, 6).forEach((o, k) => {
+    const b = document.createElement("button");
+    const im = o && o.pic ? quizImg(o.pic) : null;
+    b.className = "qopt" + (im ? " p" : "");
+    if (im){ const s = document.createElement("span"); s.textContent = String(o.t || ""); b.append(im, s); b.setAttribute("aria-label", String(o.t || "")); }
+    else b.textContent = String((o && o.t) || "");
+    if (z.answered){ if (k === z.a) b.classList.add("right"); else if (k === z.pick) b.classList.add("wrong"); b.disabled = true; }
+    else b.onclick = () => { opts.querySelectorAll("button").forEach(x => x.disabled = true); b.classList.add("press"); send({ t: "quiz", a: k }); buzz(25); };
+    opts.append(b);
+  });
+  body.append(q, opts);
+  if (z.answered){
+    const w = document.createElement("p"); w.className = "qwhy";
+    const strong = document.createElement("b"); strong.textContent = z.ok ? "Right! " : "Not quite. ";
+    w.append(strong, String(z.why || ""));
+    body.append(w, quizButton(z.last ? "See how you did" : "Next", () => { send({ t: "quiz", next: 1 }); buzz(20); }));
+    buzz(z.ok ? [30, 50, 30] : 120);
+  }
+}
+$("qSay").onclick = () => { send({ t: "quiz", say: 1 }); buzz(15); };
 addEventListener("pagehide", () => send({ t: "bye" }));
 
 /* ---------- join ---------- */
