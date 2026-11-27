@@ -4231,12 +4231,14 @@ function rmMsg(p){
   else if (p.t === "notes"){ noteDevice("phone"); toggleNotes(); }
   else if (p.t === "launch"){ noteDevice("phone"); launchRocket(); }
   else if (p.t === "quiz"){ noteDevice("phone"); quizFromPhone(p); }
+  /* Next (or Land) on the rocket's messages, from the phone: the same as pressing it on the big screen */
+  else if (p.t === "brief"){ noteDevice("phone"); if (FL.on && FL.briefShown && !FL.briefed) $("flNext").click(); }
   else if (p.t === "bye"){ RM.phoneId = null; paintPhone(); radio("The phone left. Keys and touch still work."); }
 }
 function sendPhoneState(){
   if (!RM.ch) return;
   if (CT.on) return cSendState();
-  rmSend({ t: "st", tools: modesNow(), launch: !!G.canLaunch, m: G.mode, held: G.held.length > 0, test: testReady(), firing: laser.firing || !!G.drilling || hose.spraying, mag: G.magOn, paused: G.paused, done: G.done, started: G.started, r: (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin), quiz: phoneQuiz(), step: G.step < MISSIONS[G.mission].steps.length ? MISSIONS[G.mission].steps[G.step].text : "Mission complete" });
+  rmSend({ t: "st", tools: modesNow(), launch: !!G.canLaunch, m: G.mode, held: G.held.length > 0, test: testReady(), firing: laser.firing || !!G.drilling || hose.spraying, mag: G.magOn, paused: G.paused, done: G.done, started: G.started, r: (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin), quiz: phoneQuiz(), brief: phoneBrief(), step: G.step < MISSIONS[G.mission].steps.length ? MISSIONS[G.mission].steps[G.step].text : "Mission complete" });
 }
 addEventListener("pagehide", () => { if (RM.ch) rmSend({ t: "gone" }); });
 
@@ -5388,6 +5390,7 @@ function stepRocketShow(dt){
       /* land on the next world if it's built; if not, it's coming in an update */
       FL.on = false; FL.briefShown = false;
       flameOn(false);
+      sendPhoneState();
       const next = nextWorldId(G.world.id);
       if (G.world.id === "gusto") showHomeEnd();
       else if (next && worldById(next).missions.length) arriveAt(next); else showComingSoon();
@@ -5472,7 +5475,16 @@ $("flNext").onclick = () => {
   if (FL.line < n - 1){ FL.line++; sfx("click"); showBriefLine(); return; }
   /* the last line is read: on to the landing */
   FL.briefed = true; FL.t = FLIGHT.count + FLIGHT.lift + FLIGHT.space;
+  sendPhoneState();
 };
+/* the rocket's message on the big screen, for the phone (owner, 2026-11-27: on a phone a kid couldn't read the next
+   instructions or press Next between stages): who is talking, the line, the mission brief, and Next or Land */
+function phoneBrief(){
+  if (!FL.on || !FL.briefShown || FL.briefed || !FL.brief || QZ.open) return null;
+  const b = FL.brief, n = b.lines.length, line = b.lines[FL.line], text = typeof line === "string" ? line : line.text, who = (line && line.who) || b.name;
+  return { who: String(who || ""), text: String(text || ""), i: FL.line + 1, n, last: FL.line >= n - 1,
+    loc: $("flLocName").textContent, goal: $("flGoal").textContent, steps: [...$("flSteps").children].map(li => li.textContent.replace(/^\d+\s*/, "")).slice(0, 8) };   /* the screen's own 01, 02 numbers off: the phone numbers the list itself */
+}
 $("bLaunch").onclick = () => launchRocket();
 
 /* a world's stars, kept in the save: missions done, every note found, all of the questions right */

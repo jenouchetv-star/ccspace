@@ -78,6 +78,14 @@
   .bottom .b{flex:1;min-height:46px;font-size:14px;border-radius:14px;background:#0e1730;border:2px solid var(--line);box-shadow:none;font-weight:700}
   /* the quiz, while a question is open on the big screen (owner, 2026-11-26) */
   #sQuiz{gap:14px;overflow:auto;touch-action:pan-y}
+  /* the rocket's messages between stages (owner, 2026-11-27) */
+  #sBrief{gap:14px;overflow:auto;touch-action:pan-y}
+  .bcount{font-size:13px;font-weight:800;color:var(--soft)}
+  .bmis{background:#121a30;border:2px solid rgba(255,255,255,.18);border-radius:14px;padding:12px 14px;font-size:15px;line-height:1.45;color:#fff}
+  .bmis:empty{display:none}
+  .bmis b{display:block;font-size:12px;letter-spacing:.06em;color:#ffd23f;margin-bottom:4px}
+  .bmis ol{margin:6px 0 0;padding-left:20px}
+  #sBrief .cta{width:100%;touch-action:manipulation}
   .qtop{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .kicker{font-size:14px;font-weight:800;color:#ffd23f}
   .say{all:unset;cursor:pointer;flex:none;width:46px;height:46px;border-radius:50%;background:#24305a;border:2px solid var(--line);display:grid;place-items:center}
@@ -153,6 +161,14 @@
   </div>
 </section>
 
+<!-- 5: the rocket's messages between stages, while they are on the big screen -->
+<section class="screen" id="sBrief" hidden>
+  <div class="qtop"><span class="kicker" id="bKick"></span><span class="bcount" id="bCount"></span></div>
+  <p class="qq" id="bLine"></p>
+  <div class="bmis" id="bMis"></div>
+  <button class="cta blue" id="bBriefNext" type="button">Next</button>
+</section>
+
 <!-- 4: the quiz, while a question is open on the big screen -->
 <section class="screen" id="sQuiz" hidden>
   <div class="qtop"><span class="kicker" id="qKick"></span><button class="say" id="qSay" aria-label="Read it to me"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button></div>
@@ -190,7 +206,7 @@ function readCode(s){ const d = String(s || "").replace(/\D/g, ""); return /^[1-
 const $ = (id) => document.getElementById(id);
 /* a long press must never open the phone's menu: it would cancel a held GO, MAGNET or FIRE */
 addEventListener("contextmenu", (e) => { if (!e.target.closest("input")) e.preventDefault(); });
-const show = (id) => ["sJoin", "sCal", "sPad", "sQuiz"].forEach(s => $(s).hidden = s !== id);
+const show = (id) => ["sJoin", "sCal", "sPad", "sQuiz", "sBrief"].forEach(s => $(s).hidden = s !== id);
 const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (_e) {} };
 
 /* ---------- connection: the same Supabase Realtime room the game opened ---------- */
@@ -250,8 +266,36 @@ function onMsg(p){
     /* only a new tool rebuilds the buttons: rebuilding while a finger holds MAGNET would let go of the part */
     paintPad(modeChanged);
     quizState(p.quiz || null);
+    briefState(p.quiz ? null : (p.brief || null));
   }
 }
+
+/* ---------- the rocket's messages between stages: read them here, and Next (or Land) moves them on there ---------- */
+let briefKey = "";
+function briefState(z){
+  if (!z || typeof z !== "object"){ briefKey = ""; if (!$("sBrief").hidden) show("sPad"); return; }
+  if ($("sPad").hidden && $("sBrief").hidden) return;   /* still joining, setting up tilt, or on a question */
+  const key = JSON.stringify(z);
+  if (key === briefKey && !$("sBrief").hidden) return;
+  briefKey = key;
+  $("bKick").textContent = "Message from " + String(z.who || "Mission Control");
+  $("bCount").textContent = (+z.i || 1) + " of " + (+z.n || 1);
+  $("bLine").textContent = String(z.text || "");
+  const mis = $("bMis"); mis.textContent = "";
+  if (z.goal){
+    const h = document.createElement("b"); h.textContent = z.loc ? "Next stop: " + String(z.loc) : "Mission brief";
+    const g = document.createElement("div"); g.textContent = String(z.goal);
+    mis.append(h, g);
+    if (Array.isArray(z.steps) && z.steps.length){
+      const ol = document.createElement("ol");
+      z.steps.slice(0, 8).forEach(t => { const li = document.createElement("li"); li.textContent = String(t); ol.append(li); });
+      mis.append(ol);
+    }
+  }
+  const btn = $("bBriefNext"); btn.textContent = z.last ? "Land" : "Next"; btn.disabled = false;
+  if ($("sBrief").hidden){ show("sBrief"); buzz([20, 40, 20]); }
+}
+$("bBriefNext").onclick = () => { $("bBriefNext").disabled = true; send({ t: "brief", next: 1 }); buzz(20); };
 
 /* ---------- the quiz: the big screen sends its question; a tap here answers it there ---------- */
 let quizKey = "";
