@@ -777,7 +777,7 @@ describe("the footer for a subscriber signed in on this device", () => {
   });
   it("has no Join buttons in the top bar, only the way back into the portal, with Sign out right after it", () => {
     const nav = html.split("function navBar(")[1].split("\nfunction ")[0];
-    expect(nav).toMatch(/> Family Portal<\/span><\/a>'\r?\n\s+\+ '<button class="btn btn--sm btn--paper" type="button" data-act="portal-signout"/);
+    expect(nav).toMatch(/> Family Portal<\/span><\/a>'[\s\S]{0,300}?\+ '<button class="btn btn--sm btn--paper" type="button" data-act="portal-signout"/);
     expect(html).toContain('"portal-signout": () => {');
     // icon only at every width (owner, 2026-11-24), named by its label and hover tip
     expect(nav).toContain(`aria-label="Sign out of the Family Portal" title="Sign out">' + ic("log-out") + '</button>'`);

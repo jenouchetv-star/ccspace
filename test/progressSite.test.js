@@ -112,13 +112,13 @@ describe("the progress report page", () => {
   it("the member bar links to the report", () => {
     const m = body("portalMemberBar");
     expect(m).toContain("portalReportLink()");
-    const link = fn("portalReportLink", "AppState", "ic", "ProgressState")({ route: { name: "newsletter", params: {} } }, () => "", { children: null });
+    const link = fn("portalReportLink", "AppState", "ic", "ProgressState", "progressChipHTML")({ route: { name: "newsletter", params: {} } }, () => "", { children: null }, () => "");
     expect(link()).toContain('href="#/newsletter/progress"');
     expect(link()).toContain("My Child’s Progress");
   });
 
   it("the button reads Add a child until a child is added, then My Child's Progress (owner, 2026-11-21)", () => {
-    const link = (children) => fn("portalReportLink", "AppState", "ic", "ProgressState")({ route: { name: "newsletter", params: {} } }, () => "", { children })();
+    const link = (children) => fn("portalReportLink", "AppState", "ic", "ProgressState", "progressChipHTML")({ route: { name: "newsletter", params: {} } }, () => "", { children }, () => "")();
     expect(link([])).toContain("Add a child");
     expect(link([])).not.toContain("Progress");
     expect(link([{ id: "c1", name: "Maya", grade: 2 }])).toContain("My Child’s Progress");
@@ -128,7 +128,7 @@ describe("the progress report page", () => {
 
   it("the admin's portal bar links to the report too; on the report itself neither bar has a portal link", () => {
     expect(body("portalAdminBar")).toContain("portalReportLink()");
-    const link = (name) => fn("portalReportLink", "AppState", "ic", "ProgressState")({ route: { name, params: {} } }, () => "", { children: null })();
+    const link = (name) => fn("portalReportLink", "AppState", "ic", "ProgressState", "progressChipHTML")({ route: { name, params: {} } }, () => "", { children: null }, () => "")();
     expect(link("newsletter")).toContain('href="#/newsletter/progress"');
     expect(link("newsletter-detail")).toContain("My Child’s Progress");
     // owner, 2026-11-21: the header's Subscriber's Portal button and the breadcrumb already lead back
@@ -410,8 +410,17 @@ describe("who's playing, and recording what a child finishes", () => {
     expect(h).not.toContain("<Maya>");
   });
 
-  it("the playing chip sits next to the avatar", () => {
-    expect(body("renderTourRoot")).toContain("progressChipHTML(");
+  // owner, 2026-11-27: under the header's Family Portal button, under My Child's Progress in the portal, and under the
+  // menu's Family Portal button on a phone; no longer in Chike's corner
+  it("the playing chip sits under the Family Portal button and under My Child's Progress", () => {
+    expect(body("renderTourRoot")).toContain("paintWhoSlots();");
+    expect(body("renderTourRoot")).not.toContain("progressChipHTML(");
+    expect(body("paintWhoSlots")).toContain("const tag = progressChipHTML();");
+    const nav = html.split("function navBar(")[1].split("\nfunction ")[0];
+    expect(nav).toContain(`'<span class="who-slot who-slot--nav">' + progressChipHTML() + '</span></span>'`);
+    expect(nav).toContain(`'<span class="who-slot">' + progressChipHTML() + '</span></span>'`);
+    expect(body("portalReportLink")).toContain(`'<span class="who-slot">' + progressChipHTML() + '</span></span>'`);
+    expect(html).toContain("@media (max-width:767px){ .who-slot--nav{ display:none; } }");
     const chip = (session, playing, kids) => fn("progressChipHTML", "portalSavedSession", "ProgressState", "progressPlaying", "E")(
       () => session, { children: kids }, () => playing, esc)();
     expect(chip("", "c1", KIDS)).toBe("");
@@ -795,8 +804,8 @@ describe("Chike's pop quiz", () => {
   /* renderTourRoot built with a pretend corner: the tour state and whether the quiz bubble shows */
   const corner = (status, quizOn) => {
     const root = { innerHTML: "" };
-    fn("renderTourRoot", "$", "tourState", "progressQuizBubble", "AppState", "progressChipHTML", "teardownTourStep", "TOUR_STOPS", "tourStopMatchesRoute", "mountTourStep")(
-      () => root, () => ({ status, hidden: false, stepIndex: 0 }), () => quizOn, { route: { name: "home", params: {} } }, () => "", () => {}, [], () => false, () => {})();
+    fn("renderTourRoot", "$", "tourState", "progressQuizBubble", "AppState", "progressChipHTML", "teardownTourStep", "TOUR_STOPS", "tourStopMatchesRoute", "mountTourStep", "paintWhoSlots")(
+      () => root, () => ({ status, hidden: false, stepIndex: 0 }), () => quizOn, { route: { name: "home", params: {} } }, () => "", () => {}, [], () => false, () => {}, () => {})();
     return root.innerHTML;
   };
 

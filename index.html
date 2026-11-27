@@ -2672,14 +2672,26 @@ body.has-bottom-nav .tour-bubble{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 7
    viewport's own content is the tradeoff this skips. */
 /* Only a new visitor who has never done the tour sees the welcome (owner, 2026-11-27); no animation, it just appears. */
 @media (max-width:767px){ .tour-bubble{ display:none; } }
-/* The name tag of the child who's playing, just left of Chike (docs/mockups/progress-report-draft-5.html). No
-   animation at all: the corner is drawn again on every page, and the tag must never replay anything. */
+/* The name tag of the child who's playing ("Who's creating?" until one is picked). It used to sit beside Chike in the
+   corner; it now hangs just under the header's Family Portal button, and in the Family Portal just under My Child's
+   Progress (owner, 2026-11-27). No animation at all: it is drawn again on every page and must never replay anything. */
 .tour-tag{
-  position:fixed; right:calc(18px + 72px + 6px); bottom:12px; z-index:960;
-  max-width:min(180px, calc(100vw - 132px)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  display:block; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   font:inherit; font-size:.85rem; font-weight:800; line-height:1.4; color:var(--ink);
   background:var(--paper-card); border:2px solid var(--ink); border-radius:999px; padding:4px 12px; cursor:pointer;
 }
+.who-slot:empty{ display:none; }
+.nav__portal{ position:relative; display:inline-flex; }
+/* hangs just below the header's bottom edge, its right side lined up with the button's */
+.who-slot--nav{ position:absolute; right:0; top:calc(50% + var(--nav-h) / 2 + 6px); z-index:5; }
+.who-slot--nav .tour-tag{ box-shadow:var(--hard-xs); }
+.pbar__kid{ display:inline-flex; flex-direction:column; align-items:center; gap:6px; }
+/* in the Family Portal it sits under My Child's Progress, so the header's copy steps aside there */
+body:has(.pbar .who-slot .tour-tag) .who-slot--nav{ display:none; }
+.nav__drawer-portal{ flex:1; display:flex; flex-direction:column; align-items:center; gap:8px; }
+.nav__drawer-portal .btn{ width:100%; }
+/* on a phone the bar under the header (the page menu) fills the width, so the tag lives in the menu instead */
+@media (max-width:767px){ .who-slot--nav{ display:none; } }
 .tour-tag__pop{ width:14px; height:14px; margin-left:6px; vertical-align:-2px; flex:none; }
 /* A save to the account still on its way after Art Space or Sound Space closed (owner, 2026-11-25; draft
    docs/mockups/background-save-draft-*.png): small dark cards in the apps' own look, bottom-left, clear of Chike's
@@ -2755,25 +2767,19 @@ body.is-admin .bgsave-wrap{ display:none; }
 .pkid__note{ grid-column:1 / -1; margin:12px 0; font-weight:600; color:var(--ink-soft); }
 .pkid__retry{ font:inherit; font-weight:800; color:var(--ink); background:none; border:0; padding:0; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
 @media (max-width:420px){ .pkid__daysnote{ flex-basis:100%; margin:2px 0 0; } }
-.tour-tag--alone{ right:18px; }
 .tour-tag--quiet{ font-weight:700; color:var(--ink-mute); }
-body.has-bottom-nav .tour-tag{ bottom:calc(12px + var(--bottom-nav-h, 0px)); }
 /* On a phone the corner keeps out of the way (usability test, 2026-11-27): Chike is smaller and tucked into the
    corner, so he no longer sits on the home page's Watch button, and back to top moves from the middle of the screen
    to the opposite corner. Everything that lines up with Chike follows his new size. */
 @media (max-width:767px){
   .tour-avatar{ width:56px; height:56px; right:12px; }
-  .tour-tag{ right:calc(12px + 56px + 6px); bottom:8px; max-width:min(180px, calc(100vw - 104px)); }
-  .tour-tag--alone{ right:12px; }
-  body.has-bottom-nav .tour-tag{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 14px); }
   html .quiz-bubble{ right:12px; }   /* "html" outweighs the bubble's own rules further down */
   html body.has-bottom-nav .quiz-bubble{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 56px + 10px); }
   .bgsave-wrap{ width:calc(100vw - 12px - 12px - 56px - 10px); }
   .back-to-top{ left:12px; width:42px; height:42px; transform:translateY(10px); }
   .back-to-top.is-visible, .back-to-top.is-visible:hover, .back-to-top:hover{ transform:none; }
 }
-body:has(.tour-card) .tour-tag:not(.tour-tag--alone), body.is-admin .tour-tag,
-body.qu-panel-open .tour-tag, body.cp-panel-open .tour-tag{ display:none; }
+body.is-admin .who-slot{ display:none; }
 /* "Who's creating today?": its own layer, over the page or over a book or game that is open */
 .who{
   position:fixed; inset:0; z-index:1250; display:grid; place-items:center; padding:16px; overflow-y:auto;
@@ -10867,7 +10873,9 @@ function navBar(isAdmin){
     + (cartCount() ? '<button class="btn btn--sm btn--paper" type="button" data-act="cart-open">' + ic("shopping-cart") + ' Cart (' + cartCount() + ')</button>' : '')
     + (DONATE_LINKS_ENABLED ? '<a class="btn btn--sm btn--teal" href="#/donate">' + ic("heart-handshake") + ' Support</a>' : '')
     /* a subscriber has joined already: the way back into the portal takes Join's place */
-    + (portalIsSubscriber() ? '<a class="btn btn--sm btn--cyan" href="#/newsletter">' + ic("mail-open") + ' Family Portal</a>'
+    + (portalIsSubscriber() ? '<span class="nav__drawer-portal"><a class="btn btn--sm btn--cyan" href="#/newsletter">' + ic("mail-open") + ' Family Portal</a>'
+        /* on a phone who's creating sits here, under the menu's Family Portal button (owner, 2026-11-27) */
+        + '<span class="who-slot">' + progressChipHTML() + '</span></span>'
       : '<button class="btn btn--sm btn--cyan" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join free</button>'
         /* someone who already joined signs in right here, not inside the Join box (owner, 2026-11-24) */
         + navSignInHTML(" nav__drawer-signin"))
@@ -10887,7 +10895,9 @@ function navBar(isAdmin){
     /* A subscriber (signed in to the portal on this device) has joined already: the way back in takes Join's place. */
     + (portalIsSubscriber() ? "" : '<button class="btn btn--sm btn--cyan nav__hide-sm" type="button" data-act="open-mailing-list" aria-label="Create a free family account">' + ic("mail") + ' Join free</button>')
     /* ...and the way out of it sits right beside it */
-    + (portalIsSubscriber() ?'<a class="btn btn--sm btn--cyan" href="#/newsletter" aria-label="Family Portal">' + ic("mail-open") + '<span class="nav__hide-sm"> Family Portal</span></a>'
+    + (portalIsSubscriber() ?'<span class="nav__portal"><a class="btn btn--sm btn--cyan" href="#/newsletter" aria-label="Family Portal">' + ic("mail-open") + '<span class="nav__hide-sm"> Family Portal</span></a>'
+        /* who's creating, just under the button (owner, 2026-11-27) */
+        + '<span class="who-slot who-slot--nav">' + progressChipHTML() + '</span></span>'
         + '<button class="btn btn--sm btn--paper" type="button" data-act="portal-signout" aria-label="Sign out of the Family Portal" title="Sign out">' + ic("log-out") + '</button>' : "")   /* icon only (owner, 2026-11-24) */
     + (DONATE_LINKS_ENABLED ? '<a class="btn btn--sm btn--teal nav__hide-sm" href="#/donate">' + ic("heart-handshake") + ' Support</a>' : '')
     /* A signed-in admin browsing the public site gets a way back to the portal (the nav is only
@@ -11361,7 +11371,14 @@ function tourCompleteDialogHTML(){
     at the tail of every render() - see the call next to
     renderQuickUpdatePanel(). Never shown on /admin: a route check, not
     an auth check, matching renderQuickUpdatePanel()'s own guard. */
+/* The who's-creating tag lives in the header and in the Family Portal's bar now (owner, 2026-11-27); every place that
+   used to redraw Chike's corner after a pick or a sign-in redraws these too. Only a changed tag is rewritten. */
+function paintWhoSlots(){
+  const tag = progressChipHTML();
+  $$(".who-slot").forEach(s => { if (s.innerHTML !== tag) s.innerHTML = tag; });
+}
 function renderTourRoot(){
+  paintWhoSlots();
   const root = $("#tour-root");
   if (!root) return;
   const state = tourState();
@@ -11369,7 +11386,7 @@ function renderTourRoot(){
   const quizOn = progressQuizBubble();
   if (AppState.route.name === "admin" || state.hidden){
     /* with the tour put away for good, who's creating still shows in the corner on its own */
-    root.innerHTML = AppState.route.name === "admin" ? "" : progressChipHTML(true);
+    root.innerHTML = "";
     teardownTourStep();
     return;
   }
@@ -11379,8 +11396,6 @@ function renderTourRoot(){
        gets the still picture */
     + '<picture><source media="(prefers-reduced-motion: reduce)" srcset="assets/characters/chike-avatar.webp">'
     + '<img src="assets/characters/chike-avatar-moving.webp" width="140" height="140" decoding="async" alt="" role="presentation"></picture></button>'
-    /* the name tag of the child who's creating, beside Chike (never animated, so a redraw doesn't replay anything) */
-    + progressChipHTML(false)
     /* the tour's welcome waits while Chike offers his quiz in the same spot. Only for a new visitor who has never done
        the tour (owner, 2026-11-27: "only show this for new visitor who has never done the tour"); once they have opened
        it, or clicked past the welcome, it never comes back, not even on hover */
@@ -16289,8 +16304,10 @@ function portalReportLink(){
   /* owner, 2026-11-21: "My Child's Progress"; with no child added yet it invites the parent to add one (same page) */
   const kids = ProgressState.children;
   const none = Array.isArray(kids) && kids.length === 0;
-  return '<a class="btn btn--sm btn--paper" href="#/newsletter/progress">'
-    + (none ? ic("user-plus") + ' Add a child' : ic("sprout") + ' My Child’s Progress') + '</a>';
+  return '<span class="pbar__kid"><a class="btn btn--sm btn--paper" href="#/newsletter/progress">'
+    + (none ? ic("user-plus") + ' Add a child' : ic("sprout") + ' My Child’s Progress') + '</a>'
+    /* who's creating, just under the button (owner, 2026-11-27) */
+    + '<span class="who-slot">' + progressChipHTML() + '</span></span>';
 }
 function portalMemberBar(){
   return '<div class="pbar no-print"><span>' + ic("circle-check") + ' Signed in' + (PortalState.email ? ' as <b>' + E(PortalState.email) + '</b>' : "") + '</span>'
@@ -17392,7 +17409,7 @@ async function openWhoIsPlaying(after){
     watching or making, so not "playing"). Pressing it asks again. */
 function progressChipHTML(alone){
   if (!portalSavedSession() || !Array.isArray(ProgressState.children) || !ProgressState.children.length) return "";
-  const cls = "tour-tag" + (alone ? " tour-tag--alone" : "");
+  const cls = "tour-tag";
   const kid = ProgressState.children.find(c => c.id === progressPlaying());
   /* a small window: tapping the tag opens "Who's creating today?" (owner, 2026-11-25). Drawn inline, so a redraw of
      the corner never waits on the icon set */

@@ -8,8 +8,8 @@ const body = (name) => html.split("function " + name + "(")[1].split("\nfunction
 const fn = (name, ...deps) => (...vals) => new Function(...deps, "return function " + name + "(" + body(name))(...vals);
 const corner = (state, quizOn = false, chip = "") => {
   const root = { innerHTML: "" };
-  fn("renderTourRoot", "$", "tourState", "progressQuizBubble", "AppState", "progressChipHTML", "teardownTourStep", "TOUR_STOPS", "tourStopMatchesRoute", "mountTourStep")(
-    () => root, () => Object.assign({ hidden: false, stepIndex: 0 }, state), () => quizOn, { route: { name: "home", params: {} } }, () => chip, () => {}, [], () => false, () => {})();
+  fn("renderTourRoot", "$", "tourState", "progressQuizBubble", "AppState", "progressChipHTML", "teardownTourStep", "TOUR_STOPS", "tourStopMatchesRoute", "mountTourStep", "paintWhoSlots")(
+    () => root, () => Object.assign({ hidden: false, stepIndex: 0 }, state), () => quizOn, { route: { name: "home", params: {} } }, () => chip, () => {}, [], () => false, () => {}, () => {})();
   return root.innerHTML;
 };
 const BIG = '<div class="tour-bubble" role="status">';
