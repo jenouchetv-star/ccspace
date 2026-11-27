@@ -387,7 +387,29 @@ scene.background = new THREE.Color("#1a0b3a");
 scene.fog = new THREE.Fog("#1a0b3a", 16, 34);
 const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 100);
 const LOOK = new THREE.Vector3(0, 1, 0.5);
-function fitCamera(){ const narrow = innerWidth / innerHeight < 1.2; camera.fov = narrow ? 58 : 42; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+/* framing (owner, 2026-11-26: "fix the Stack 'Em Up! lobby overlap on TV screens"): while the join panel sits on the
+   right, the table is framed in the space left of it, shifted over and zoomed out only as far as it needs, so no seat
+   hides under the panel on a 1280x720 TV browser. A wide screen with room to spare looks the same as before, and once
+   the game starts the panel is gone and the view is the full width again. */
+function fitCamera(){
+  const narrow = innerWidth / innerHeight < 1.2, base = narrow ? 58 : 42;
+  camera.aspect = innerWidth / innerHeight; camera.fov = base; camera.clearViewOffset();
+  let side = 0;
+  try {
+    const lob = G.phase === "lobby" && innerWidth > 760 ? $("lobby") : null;
+    if (lob && !lob.hidden) side = Math.max(0, innerWidth - lob.getBoundingClientRect().left + 20);
+  } catch (_e) { side = 0; }   /* still loading: G and the panel aren't there yet */
+  if (!side){ camera.updateProjectionMatrix(); return; }
+  camera.position.set(0, 8.2, 8.6); camera.lookAt(LOOK); camera.updateMatrixWorld();
+  const pts = [[-TW, 0], [TW, 0], [0, -TD], [0, TD]].concat(SEAT_SPOTS[4].map(s => [s[0], s[1]])).map(([x, z]) => new THREE.Vector3(x, TY + .5, z));
+  const pad = 80, right = innerWidth - side - pad, v = new THREE.Vector3();
+  for (let fov = base; fov <= base + 30; fov += 1){
+    camera.fov = fov; camera.setViewOffset(innerWidth, innerHeight, side / 2, 0, innerWidth, innerHeight);
+    let lo = 1e9, hi = -1e9;
+    for (const p of pts){ v.copy(p).project(camera); const x = (v.x + 1) / 2 * innerWidth; lo = Math.min(lo, x); hi = Math.max(hi, x); }
+    if (lo >= pad && hi <= right) break;
+  }
+}
 fitCamera();
 addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); fitCamera(); });
 
@@ -807,6 +829,7 @@ function tellAll(){ G.seats.forEach((_, i) => tell(i)); }
 /* --- the lobby --- */
 function lobbyChanged(){
   paintSeats();
+  fitCamera();
   const n = G.seats.length;
   $("bStart").disabled = n < 2;
   $("bBot").disabled = n >= 4;
@@ -916,7 +939,7 @@ function startRound(by){
   sfx("start");
   G.state = startGame(G.seats.map(s => ({ id: s.id, name: s.name, bot: s.bot })), secureRandom);
   G.phase = "race"; G.revealed = {}; G.chosen = {}; G.redealing = {}; G.busy = false; G.raceWinner = -1; HERE.heart = null;
-  $("lobby").hidden = true; $("podium").hidden = true; $("again").hidden = true; $("confetti").innerHTML = "";
+  $("lobby").hidden = true; $("podium").hidden = true; $("again").hidden = true; $("confetti").innerHTML = ""; fitCamera();
   buildTable(); paintCounts(); paintSeats();
   banner("The Heart Race: who goes first?");
   const where = hereSeat() < 0 ? " on your device" : phonesHere() ? " on your phone or in the tray below" : " in the tray below";
