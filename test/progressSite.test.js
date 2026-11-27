@@ -918,6 +918,17 @@ describe("Your children: edit and remove as icons (owner, 2026-11-21)", () => {
     expect((h.match(/class="pr-confirm"/g) || []).length).toBe(1);
   });
 
+  // owner, 2026-11-27: "don't change the height", and on a phone the round buttons go to the right
+  it("keeps the child's own row underneath, hidden, so the row's height stays the same; phones put the buttons on the right", () => {
+    const h = kids({ removing: "c1" });
+    const row = h.split('<li class="pr-kidlist__confirm">')[1].split("</li>")[0];
+    expect(row).toContain('<div class="pr-kidlist__keep" aria-hidden="true"><div class="pr-who"><b>&lt;Maya&gt;</b>');
+    expect(row).toContain('<span class="pr-acts"><span class="pr-iconbtn"></span><span class="pr-iconbtn"></span></span>');
+    expect(html).toContain(".pr-kidlist li > .pr-confirm{ position:absolute; top:0; bottom:0;");
+    expect(kids({})).toContain('<span class="pr-acts"><button type="button" class="btn btn--ghost btn--sm pr-iconbtn" data-act="progress-edit"');
+    expect(html).toContain("  .pr-acts{ flex-direction:column; gap:10px; }");
+  });
+
   it("each child shows their avatar; the edit form offers all 20 with theirs picked (owner, 2026-11-22)", () => {
     const list = kids({});
     expect(list).toContain('<span class="kid-av">' + avatarSVG("guitar") + "</span>");

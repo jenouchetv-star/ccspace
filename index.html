@@ -4843,6 +4843,13 @@ body.portal-locked{ overflow:hidden; }
 .pr-iconbtn{ width:44px; height:44px; min-height:44px; padding:0; border-radius:50%; justify-content:center; flex:none; }
 .pr-iconbtn svg{ width:20px; height:20px; }
 .pr-iconbtn--remove svg{ color:var(--berry); }
+.pr-acts{ display:flex; gap:14px; flex:none; }
+/* on a phone the two round buttons stand on the right of the row, one over the other (owner, 2026-11-27) */
+@media (max-width:640px){
+  .pr-kidlist li:not(:has(> .pr-form)){ flex-wrap:nowrap; }
+  .pr-kidlist .pr-who{ flex:1 1 0; min-width:0; }
+  .pr-acts{ flex-direction:column; gap:10px; }
+}
 .pr-form{ display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; width:100%; }
 .pr-kidlist li > .pr-form--edit{ flex:1 1 0; min-width:0; display:grid; gap:16px; }
 .pr-kidlist li > [data-av-preview]{ align-self:flex-start; }
@@ -4865,7 +4872,13 @@ body.portal-locked{ overflow:hidden; }
 .pr-confirm{ margin-top:22px; padding-top:18px; border-top:2px dashed rgba(30,34,38,.16); display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; }
 .pr-confirm p{ font-weight:700; flex:1 1 300px; margin:0; }
 /* in the child's own row, in place of the name and the two round buttons */
-.pr-kidlist li > .pr-confirm{ margin:0; padding:0; border:0; flex:1 1 0; min-width:0; }
+/* the row keeps a child row's height while it asks (owner, 2026-11-27: "maintain the height"): the child's own name,
+   grade and round buttons stay in the row, invisible, and the question sits over them */
+.pr-kidlist li.pr-kidlist__confirm{ position:relative; }
+.pr-kidlist__keep{ display:contents; visibility:hidden; }
+.pr-kidlist__keep > *{ visibility:hidden; }
+.pr-kidlist li > .pr-confirm{ position:absolute; top:0; bottom:0; left:calc(56px + 14px); right:0; margin:0; padding:0; border:0; min-width:0; flex-wrap:nowrap; }
+@media (max-width:640px){ .pr-kidlist li > .pr-confirm{ flex-wrap:wrap; align-content:center; } }
 .pr-kidlist li > .pr-confirm p{ font-size:1rem; line-height:1.4; flex-basis:240px; }
 .prog .pr-check{ max-width:540px; margin:clamp(20px,5vw,60px) auto; }
 .pr-check h1{ font-size:clamp(1.8rem,4vw,2.4rem); margin:4px 0 8px; }
@@ -17133,8 +17146,13 @@ function progressChildrenHTML(){
     + AVATAR_IDS.map(id => '<label title="' + E(avatarName(id)) + '"><input type="radio" name="avatar" value="' + id + '"' + (id === picked ? " checked" : "") + '>'
       + '<span class="kid-av">' + avatarSVG(id, avatarName(id)) + '</span></label>').join("")
     + '</div></fieldset>';
-  /* removing a child asks right in that child's row, not under the list (owner, 2026-11-27) */
+  /* a child's row: the avatar, the name and grade, then two round icons, edit (the name box and the grade together)
+     then a red trash can (owner, 2026-11-21) */
+  const whoParts = (c) => '<div class="pr-who"><b>' + E(c.name) + '</b><span>' + E(gradeLabel(c.grade)) + '. ' + level(c.grade) + '</span></div>';
+  /* removing a child asks right in that child's row, not under the list, and the row keeps its height: the child's
+     own row stays underneath, hidden, and the question sits over it (owner, 2026-11-27) */
   const confirmRow = (c) => '<li class="pr-kidlist__confirm"><span class="kid-av">' + avatarSVG(avatarFor(c)) + '</span>'
+    + '<div class="pr-kidlist__keep" aria-hidden="true">' + whoParts(c) + '<span class="pr-acts"><span class="pr-iconbtn"></span><span class="pr-iconbtn"></span></span></div>'
     + '<div class="pr-confirm" role="group" aria-label="Remove ' + E(c.name) + '"><p>Remove ' + E(c.name) + '? Everything recorded for ' + E(c.name) + ' goes too. This can’t be undone.</p>'
     + '<button type="button" class="btn btn--ghost btn--sm" id="pr-keep" data-act="progress-remove-no">Keep ' + E(c.name) + '</button>'
     + '<button type="button" class="btn btn--sm" data-act="progress-remove-yes" data-id="' + E(c.id) + '"' + busy + '>Remove ' + E(c.name) + '</button></div></li>';
@@ -17150,12 +17168,11 @@ function progressChildrenHTML(){
         + '<div class="pr-form__row"><button class="btn btn--cyan btn--sm" type="submit"' + busy + '>Save</button>'
         + '<button class="btn btn--ghost btn--sm" type="button" data-act="progress-edit-cancel">Cancel</button></div></form></li>';
     }
-    return '<li><span class="kid-av">' + avatarSVG(avatarFor(c)) + '</span><div class="pr-who"><b>' + E(c.name) + '</b><span>' + E(gradeLabel(c.grade)) + '. ' + level(c.grade) + '</span></div>'
-      /* owner, 2026-11-21: two round icons, edit (the name box and the grade together) then a red trash can */
-      + '<button type="button" class="btn btn--ghost btn--sm pr-iconbtn" data-act="progress-edit" data-id="' + E(c.id) + '" data-focus="name"'
+    return '<li><span class="kid-av">' + avatarSVG(avatarFor(c)) + '</span>' + whoParts(c)
+      + '<span class="pr-acts"><button type="button" class="btn btn--ghost btn--sm pr-iconbtn" data-act="progress-edit" data-id="' + E(c.id) + '" data-focus="name"'
       + ' aria-label="Edit ' + E(c.name) + '" title="Edit ' + E(c.name) + '">' + ic("pencil") + '</button>'
       + '<button type="button" class="btn btn--ghost btn--sm pr-iconbtn pr-iconbtn--remove" data-act="progress-remove" data-id="' + E(c.id) + '"'
-      + ' aria-label="Remove ' + E(c.name) + '" title="Remove ' + E(c.name) + '">' + ic("trash-2") + '</button></li>';
+      + ' aria-label="Remove ' + E(c.name) + '" title="Remove ' + E(c.name) + '">' + ic("trash-2") + '</button></span></li>';
   }).join("");
   const d = draft("");
   const add = kids.length >= PROGRESS_MAX_CHILDREN
