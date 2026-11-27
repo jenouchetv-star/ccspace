@@ -582,7 +582,9 @@ describe("the table holds still (owner, 2026-11-21: the slow spin made people di
   it("never moves the camera with time", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(new URL("../supabase/private-games/matching-suits.html", import.meta.url), "utf8");
-    expect(src).toContain("camera.position.set(0, 8.2, 8.6);");
+    /* the camera sits at (0, 8.2, 8.6), or straight back along that line when a phone's lobby needs the whole table (CAM_K) */
+    expect(src).toContain("camera.position.set(LOOK.x * (1 - CAM_K), LOOK.y + (8.2 - LOOK.y) * CAM_K, LOOK.z + (8.6 - LOOK.z) * CAM_K);");
+    expect(src).not.toMatch(/CAM_K\s*=[^=][^;]*t/);
     expect(src).not.toMatch(/camera\.position\.set\([^)]*Math\.sin\(t/);
   });
 });

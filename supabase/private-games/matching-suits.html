@@ -169,7 +169,22 @@
     .ui.tray-on .feed{bottom:14px;right:max(16px, calc((100vw - 1166px) / 2));box-sizing:border-box;min-height:152px;max-height:170px;overflow:auto}
   }
   @media (prefers-reduced-motion: reduce){ .marq i,.confetti i{animation:none} .race .who{transition:none} .tc,.tray{transition:none} }
-  @media (max-width: 760px){ .lobby{left:50%;right:auto;transform:translateX(-50%);top:70px;width:min(310px,92vw)} .chike img{width:80px} .chike .say{font-size:13px;margin-bottom:34px} .feed{display:none} .race{gap:12px} .hc{width:64px;height:92px;font-size:20px} .hc svg{width:28px;height:28px}
+  /* phones (owner, 2026-11-27): the whole title fits, and the join panel is a compact card along the bottom, the code and
+     its words beside the QR, so the table and its seats show above it; Chike's tip waits while it is up */
+  @media (max-width: 760px){
+    .top{padding:10px 12px;gap:8px} .marq{font-size:19px;padding:0 10px;white-space:nowrap;border-width:2px} .pill{padding:4px 9px;font-size:12px;gap:5px} .pill b{font-size:15px}
+    .lobby{left:10px;right:10px;top:auto;bottom:10px;width:auto;transform:none;padding:12px;display:grid;grid-template-columns:104px 1fr;column-gap:12px;row-gap:8px;text-align:left;align-items:center;max-height:calc(100% - 140px);overflow:auto}
+    .lobby h3{grid-column:2;font-size:18px;margin:0}
+    .lobby .code{grid-column:2;font-size:32px;letter-spacing:.14em}
+    .lobby .qr{grid-column:1;grid-row:1 / span 3;width:104px;height:104px;margin:0;padding:4px;box-sizing:border-box}
+    .lobby p{grid-column:2;margin:0;font-size:12px}
+    .lobby #bHere,.lobby .here,.lobby .row{grid-column:1 / -1;margin:0}
+    .lobby .btn{font-size:15px;padding:8px 14px}
+    .lobby .row{display:grid;grid-template-columns:3fr 2fr;gap:8px}
+    .lobby .row .btn{padding:8px 6px;font-size:14px;white-space:nowrap}
+    body:has(#lobby:not([hidden])) .chike, body:has(#lobby:not([hidden])) .chikeback{display:none}
+  }
+  @media (max-width: 760px){ .chike img{width:80px} .chike .say{font-size:13px;margin-bottom:34px} .feed{display:none} .race{gap:12px} .hc{width:64px;height:92px;font-size:20px} .hc svg{width:28px;height:28px}
     .tc{width:44px;height:64px}.tc .r{font-size:15px}.tc svg{width:18px;height:18px} .tacts{width:128px} .tb{font-size:13px;padding:6px} .tb.dash{font-size:11px} .twrap{min-height:76px} }
 </style>
 </head>
@@ -391,23 +406,42 @@ const LOOK = new THREE.Vector3(0, 1, 0.5);
    right, the table is framed in the space left of it, shifted over and zoomed out only as far as it needs, so no seat
    hides under the panel on a 1280x720 TV browser. A wide screen with room to spare looks the same as before, and once
    the game starts the panel is gone and the view is the full width again. */
+/* how far back the camera sits (1 = as designed); a phone's lobby moves it back so the whole table fits */
+let CAM_K = 1;
+function placeCamera(){ camera.position.set(LOOK.x * (1 - CAM_K), LOOK.y + (8.2 - LOOK.y) * CAM_K, LOOK.z + (8.6 - LOOK.z) * CAM_K); camera.lookAt(LOOK); scene.fog.near = 16 * CAM_K; scene.fog.far = 34 * CAM_K; }
 function fitCamera(){
+  CAM_K = 1;
   const narrow = innerWidth / innerHeight < 1.2, base = narrow ? 58 : 42;
   camera.aspect = innerWidth / innerHeight; camera.fov = base; camera.clearViewOffset();
-  let side = 0;
+  /* on a phone (owner, 2026-11-27: "fix the Stack 'Em Up! lobby on phones") the join panel is a card along the bottom,
+     so the table is framed in the space above it, under the title bar, the same way */
+  let side = 0, below = 0;
   try {
-    const lob = G.phase === "lobby" && innerWidth > 760 ? $("lobby") : null;
-    if (lob && !lob.hidden) side = Math.max(0, innerWidth - lob.getBoundingClientRect().left + 20);
-  } catch (_e) { side = 0; }   /* still loading: G and the panel aren't there yet */
-  if (!side){ camera.updateProjectionMatrix(); return; }
-  camera.position.set(0, 8.2, 8.6); camera.lookAt(LOOK); camera.updateMatrixWorld();
+    const lob = G.phase === "lobby" ? $("lobby") : null;
+    if (lob && !lob.hidden){
+      const r = lob.getBoundingClientRect();
+      if (innerWidth > 760) side = Math.max(0, innerWidth - r.left + 20);
+      else below = Math.max(0, innerHeight - r.top + 12);
+    }
+  } catch (_e) { side = below = 0; }   /* still loading: G and the panel aren't there yet */
+  if (!side && !below){ camera.updateProjectionMatrix(); return; }
+  placeCamera(); camera.updateMatrixWorld();
   const pts = [[-TW, 0], [TW, 0], [0, -TD], [0, TD]].concat(SEAT_SPOTS[4].map(s => [s[0], s[1]])).map(([x, z]) => new THREE.Vector3(x, TY + .5, z));
-  const pad = 80, right = innerWidth - side - pad, v = new THREE.Vector3();
-  for (let fov = base; fov <= base + 30; fov += 1){
-    camera.fov = fov; camera.setViewOffset(innerWidth, innerHeight, side / 2, 0, innerWidth, innerHeight);
-    let lo = 1e9, hi = -1e9;
-    for (const p of pts){ v.copy(p).project(camera); const x = (v.x + 1) / 2 * innerWidth; lo = Math.min(lo, x); hi = Math.max(hi, x); }
-    if (lo >= pad && hi <= right) break;
+  const top = below ? 60 : 0, padX = below ? 46 : 80, padY = 28;
+  const right = innerWidth - side - padX, bottom = innerHeight - below - padY, v = new THREE.Vector3();
+  /* beside the panel the view widens a little; above the phone's card the camera moves back instead (a tall, narrow
+     screen would need a fisheye-wide view to fit the table side to side) */
+  for (let step = 0; step <= 60; step++){
+    if (below){ CAM_K = 1 + step * .05; placeCamera(); camera.updateMatrixWorld(); }
+    else camera.fov = base + step;
+    camera.setViewOffset(innerWidth, innerHeight, side / 2, below ? (below - top) / 2 : 0, innerWidth, innerHeight);
+    let lo = 1e9, hi = -1e9, up = 1e9, dn = -1e9;
+    for (const p of pts){
+      v.copy(p).project(camera);
+      const x = (v.x + 1) / 2 * innerWidth, y = (1 - v.y) / 2 * innerHeight;
+      lo = Math.min(lo, x); hi = Math.max(hi, x); up = Math.min(up, y); dn = Math.max(dn, y);
+    }
+    if (lo >= padX && hi <= right && (!below || (up >= top + padY && dn <= bottom))) break;
   }
 }
 fitCamera();
@@ -827,6 +861,8 @@ async function sealTo(s, view){ const key = await keyFor(s.pk); if (key) send({ 
 function tellAll(){ G.seats.forEach((_, i) => tell(i)); }
 
 /* --- the lobby --- */
+/* the join panel grows and shrinks (the name box, fonts arriving): the table is framed again each time */
+if (window.ResizeObserver) new ResizeObserver(() => { try { fitCamera(); } catch (_e) {} }).observe($("lobby"));
 function lobbyChanged(){
   paintSeats();
   fitCamera();
@@ -1186,7 +1222,7 @@ function frame(){
   BULBS.forEach((m, i) => { m.emissiveIntensity = REDUCED ? .9 : ((i + Math.floor(t * 10)) % 4 === 0) ? 2.4 : .35; });
   if (!REDUCED) SWEEP.forEach((s, i) => s.target.position.set(Math.sin(t * .35 + i * 2.1) * 9, 0, Math.cos(t * .3 + i * 1.7) * 6 + 2));
   /* the camera holds still: the slow side-to-side drift made players dizzy (owner, 2026-11-21) */
-  camera.position.set(0, 8.2, 8.6); camera.lookAt(LOOK);
+  placeCamera();
   renderer.render(scene, camera);
   placeTags();
   requestAnimationFrame(frame);
