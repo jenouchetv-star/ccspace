@@ -841,6 +841,18 @@ img.skel.is-loaded, video.skel.is-loaded{ animation:none; background-image:none;
 }
 .card__share:hover .card__share-label, .card__share:focus-visible .card__share-label{ display:block; }
 .card__share--end{ margin-left:auto; }
+/* an icon-only Share button's count is words beside it ("3 shares"), not a corner bubble that read like a
+   notification (usability test, 2026-11-27) */
+.sharecount--note{ font-size:.8rem; font-weight:700; color:var(--ink-mute); white-space:nowrap; font-variant-numeric:tabular-nums; }
+.card__foot .sharecount--note{ margin-left:auto; }
+.sharecount--note + .card__share--end{ margin-left:0; }
+/* A game card is a real link (usability test, 2026-11-27): the title is the link, stretched over the whole card, so
+   a click anywhere opens the game, it can open in a new tab, and Tab reaches it; Share sits above it. */
+.card__link{ color:inherit; text-decoration:none; }
+.card__link::after{ content:""; position:absolute; inset:0; z-index:1; border-radius:inherit; }
+.card__link:focus-visible{ outline:none; }
+.card:has(.card__link:focus-visible){ transform:translate(-3px,-4px); box-shadow:var(--hard-lift); background:#FFFFFF; outline:3px solid var(--ink); outline-offset:3px; }
+.card:has(.card__link) .card__share, .card:has(.card__link) .sharecount--note{ position:relative; z-index:2; }
 /* Play page game cards: compact, so more of them fit on a smaller monitor. A wider, shorter picture, tighter
    spacing, and four to a row on a laptop-sized screen (the cards stay at least 232px wide). */
 .grid--games{ grid-template-columns:repeat(auto-fill,minmax(232px,1fr)); gap:clamp(14px,1.8vw,22px); }
@@ -2742,6 +2754,20 @@ body.is-admin .bgsave-wrap{ display:none; }
 .tour-tag--alone{ right:18px; }
 .tour-tag--quiet{ font-weight:700; color:var(--ink-mute); }
 body.has-bottom-nav .tour-tag{ bottom:calc(12px + var(--bottom-nav-h, 0px)); }
+/* On a phone the corner keeps out of the way (usability test, 2026-11-27): Chike is smaller and tucked into the
+   corner, so he no longer sits on the home page's Watch button, and back to top moves from the middle of the screen
+   to the opposite corner. Everything that lines up with Chike follows his new size. */
+@media (max-width:767px){
+  .tour-avatar{ width:56px; height:56px; right:12px; }
+  .tour-tag{ right:calc(12px + 56px + 6px); bottom:8px; max-width:min(180px, calc(100vw - 104px)); }
+  .tour-tag--alone{ right:12px; }
+  body.has-bottom-nav .tour-tag{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 14px); }
+  html .quiz-bubble{ right:12px; }   /* "html" outweighs the bubble's own rules further down */
+  html body.has-bottom-nav .quiz-bubble{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 56px + 10px); }
+  .bgsave-wrap{ width:calc(100vw - 12px - 12px - 56px - 10px); }
+  .back-to-top{ left:12px; width:42px; height:42px; transform:translateY(10px); }
+  .back-to-top.is-visible, .back-to-top.is-visible:hover, .back-to-top:hover{ transform:none; }
+}
 body:has(.tour-card) .tour-tag:not(.tour-tag--alone), body.is-admin .tour-tag,
 body.qu-panel-open .tour-tag, body.cp-panel-open .tour-tag{ display:none; }
 /* "Who's creating today?": its own layer, over the page or over a book or game that is open */
@@ -4378,6 +4404,9 @@ details.more > .more__body{ padding:4px 20px 22px; display:flex; flex-direction:
   /* So an in-page anchor (e.g. #finder) lands below both sticky bars
      instead of underneath them. */
   html{ scroll-padding-top:calc(var(--nav-h) + 54px); }
+  /* that already clears the bars, so the Finder's matches don't add their own room on top: it stopped the scroll
+     224px short and left the matches half out of sight on a phone (usability test, 2026-11-27) */
+  .findresults{ scroll-margin-top:0; }
 }
 /* Whichever nav is showing - the mobile ctxbar or the desktop tab row -
    it already names the section, so the eyebrow repeating it in the page
@@ -8491,10 +8520,18 @@ function decorateShareCounts(){
   const counts = AppState.shareCounts || {};
   $$('[data-act="share"][data-url]').forEach(btn => {
     const n = counts[shareCountPath(btn.getAttribute("data-url"))] || 0;
-    let badge = btn.querySelector(".sharecount");
+    /* an icon-only button gets the count as words just before it; a button with the word Share keeps it inside */
+    const icon = btn.classList.contains("btn--icon");
+    const prev = btn.previousElementSibling;
+    let badge = icon ? (prev && prev.classList.contains("sharecount--note") ? prev : null) : btn.querySelector(".sharecount");
     if (!n){ if (badge) badge.remove(); return; }
-    if (!badge){ badge = document.createElement("span"); badge.className = "sharecount"; btn.appendChild(badge); }
-    badge.textContent = n >= 1000 ? (Math.floor(n / 100) / 10) + "k" : String(n);
+    if (!badge){
+      badge = document.createElement("span");
+      badge.className = icon ? "sharecount--note" : "sharecount";
+      if (icon) btn.before(badge); else btn.appendChild(badge);
+    }
+    const k = n >= 1000 ? (Math.floor(n / 100) / 10) + "k" : String(n);
+    badge.textContent = icon ? k + (n === 1 ? " share" : " shares") : k;
     badge.title = n === 1 ? "Shared once" : "Shared " + n + " times";
   });
 }
@@ -11354,6 +11391,15 @@ function renderTourRoot(){
     teardownTourStep();
   }
 }
+/* The welcome bubble is said once: the visitor's first click anywhere else (a link, a button, the page) counts as
+   having seen it, and from then on it shows only while the pointer is on Chike, the same as after opening the tour.
+   It used to stay up on every page until the tour was opened (usability test, 2026-11-27). */
+document.addEventListener("click", (ev) => {
+  const b = document.querySelector("#tour-root .tour-bubble:not(.tour-bubble--hover)");
+  if (!b || (ev.target.closest && ev.target.closest("#tour-root"))) return;
+  saveTourState({ seen: true });
+  b.classList.add("tour-bubble--hover"); b.removeAttribute("role"); b.setAttribute("aria-hidden", "true");
+}, true);
 
 /* ============================================================
    9. THE ACTIVITY FINDER
@@ -13307,12 +13353,12 @@ function gamePlate(g){
 }
 
 function gameCard(g){
-  return '<article class="card card--game" data-act="go" data-hash="#/play/' + E(g.id) + '" tabindex="0" role="link">'
+  return '<article class="card card--game">'
     + '<div class="card__media">' + gamePlate(g)
     + (g.kind === "members" ? '<span class="card__badge chip chip--members">' + ic("lock") + ' Subscribers only</span>'
         : g.badge ? '<span class="card__badge chip chip--new">' + E(g.badge) + '</span>' : "")
     + '</div>'
-    + '<div class="card__body"><h3 class="card__title">' + nameHTML(g.title) + '</h3>'
+    + '<div class="card__body"><h3 class="card__title"><a class="card__link" href="#/play/' + E(g.id) + '">' + nameHTML(g.title) + '</a></h3>'
     /* a subscribers-only game tells a visitor what joining gets them */
     /* a visitor is told what joining opens; a subscriber reads what the game is */
     + '<p class="tiny mute" style="margin:0">' + (g.kind === "members" && !portalHasAccess() ? '<b class="card__join">Join our mailing list to play this game and other educational content.</b>' : E(g.summary)) + '</p>'
@@ -35675,8 +35721,12 @@ else boot();
    ============================================================ */
 /** "A new version is ready": a box in the middle of the page (owner, 2026-11-25), in the same look as "Who's creating
     today?". Refresh now, or Later (also Escape, or a tap outside the box), which just closes it. */
+/* "Later" is remembered until the tab closes: it used to come back on every page load, so a visitor who said Later
+   met it again on the next page (usability test, 2026-11-27) */
+const SWUP_LATER_KEY = "ccs-update-later";
 function showUpdateBanner(onRefresh){
   if ($("#sw-update-banner")) return;
+  try { if (sessionStorage.getItem(SWUP_LATER_KEY)) return; } catch(_e){ /* no storage: ask every time */ }
   const back = document.activeElement;
   const box = document.createElement("div");
   box.id = "sw-update-banner";
@@ -35694,6 +35744,7 @@ function showUpdateBanner(onRefresh){
   document.body.appendChild(box);
   drawIcons();
   const close = () => {
+    try { sessionStorage.setItem(SWUP_LATER_KEY, "1"); } catch(_e){}
     box.remove();
     if (back && document.contains(back) && back.focus) back.focus();
   };
