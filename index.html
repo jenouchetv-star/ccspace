@@ -2670,11 +2670,8 @@ body.has-bottom-nav .tour-bubble{ bottom:calc(8px + var(--bottom-nav-h, 0px) + 7
 /* Desktop-only invitation - on a phone the avatar alone (already visible,
    already tappable) is enough; the bubble competing with a narrow
    viewport's own content is the tradeoff this skips. */
-/* Someone who has opened the tour before: the welcome only while the pointer is on Chike, or Chike has the keyboard
-   (owner, 2026-11-25). No animation: it just appears. */
-.tour-bubble--hover{ display:none; pointer-events:none; }
-.tour-avatar:hover ~ .tour-bubble--hover, .tour-avatar:focus-visible ~ .tour-bubble--hover{ display:block; }
-@media (max-width:767px){ .tour-bubble, .tour-avatar:hover ~ .tour-bubble--hover{ display:none; } }
+/* Only a new visitor who has never done the tour sees the welcome (owner, 2026-11-27); no animation, it just appears. */
+@media (max-width:767px){ .tour-bubble{ display:none; } }
 /* The name tag of the child who's playing, just left of Chike (docs/mockups/progress-report-draft-5.html). No
    animation at all: the corner is drawn again on every page, and the tag must never replay anything. */
 .tour-tag{
@@ -11384,12 +11381,12 @@ function renderTourRoot(){
     + '<img src="assets/characters/chike-avatar-moving.webp" width="140" height="140" decoding="async" alt="" role="presentation"></picture></button>'
     /* the name tag of the child who's creating, beside Chike (never animated, so a redraw doesn't replay anything) */
     + progressChipHTML(false)
-    /* the tour's welcome waits while Chike offers his quiz in the same spot. Shown to someone who has never opened the
-       tour; once they have (seen, or any step past not started), only while the pointer is on Chike (owner, 2026-11-25) */
-    + (quizOn || state.status === "in_progress" ? ""
-        : state.status === "not_started" && !state.seen
-          ? '<div class="tour-bubble" role="status">Welcome! I would love to give you a tour of our new site.</div>'
-          : '<div class="tour-bubble tour-bubble--hover" aria-hidden="true">Welcome! I would love to give you a tour of our new site.</div>');
+    /* the tour's welcome waits while Chike offers his quiz in the same spot. Only for a new visitor who has never done
+       the tour (owner, 2026-11-27: "only show this for new visitor who has never done the tour"); once they have opened
+       it, or clicked past the welcome, it never comes back, not even on hover */
+    + (!quizOn && state.status === "not_started" && !state.seen
+        ? '<div class="tour-bubble" role="status">Welcome! I would love to give you a tour of our new site.</div>'
+        : "");
 
   if (state.status === "in_progress"){
     const stop = TOUR_STOPS[state.stepIndex];
@@ -11400,13 +11397,13 @@ function renderTourRoot(){
   }
 }
 /* The welcome bubble is said once: the visitor's first click anywhere else (a link, a button, the page) counts as
-   having seen it, and from then on it shows only while the pointer is on Chike, the same as after opening the tour.
-   It used to stay up on every page until the tour was opened (usability test, 2026-11-27). */
+   having seen it, and it goes for good. It used to stay up on every page until the tour was opened (usability test,
+   2026-11-27). */
 document.addEventListener("click", (ev) => {
-  const b = document.querySelector("#tour-root .tour-bubble:not(.tour-bubble--hover)");
+  const b = document.querySelector("#tour-root .tour-bubble");
   if (!b || (ev.target.closest && ev.target.closest("#tour-root"))) return;
   saveTourState({ seen: true });
-  b.classList.add("tour-bubble--hover"); b.removeAttribute("role"); b.setAttribute("aria-hidden", "true");
+  b.remove();
 }, true);
 
 /* ============================================================
@@ -32149,12 +32146,12 @@ const ACTIONS = {
   },
 
   /* ---- site tour ---- */
-  /* opening the tour once counts as having seen it: the welcome bubble then only shows on hover (owner, 2026-11-25) */
+  /* opening the tour once counts as having done it: the welcome bubble never shows again (owner, 2026-11-27) */
   "tour-open": (el) => {
     saveTourState({ seen: true });
-    /* the bubble already on screen turns hover-only now (the corner isn't redrawn: Chike gets the focus back) */
-    const b = document.querySelector("#tour-root .tour-bubble:not(.tour-bubble--hover)");
-    if (b){ b.classList.add("tour-bubble--hover"); b.removeAttribute("role"); b.setAttribute("aria-hidden", "true"); }
+    /* the bubble already on screen goes now (the corner isn't redrawn: Chike gets the focus back) */
+    const b = document.querySelector("#tour-root .tour-bubble");
+    if (b) b.remove();
     teardownTourStep(); openModal(tourWelcomeDialogHTML(), null, "tour-modal", el);
   },
   "tour-start": () => {

@@ -13,7 +13,7 @@ describe("usability quick wins", () => {
     expect(banner).toContain('sessionStorage.setItem(SWUP_LATER_KEY, "1")');
   });
 
-  it("2. the tour welcome turns hover-only after the first click anywhere else", () => {
+  it("2. the tour welcome goes for good after the first click anywhere else", () => {
     const after = html.split("function renderTourRoot(){")[1];
     expect(after).toContain('document.addEventListener("click", (ev) => {');
     expect(after).toContain('ev.target.closest("#tour-root"))) return;');

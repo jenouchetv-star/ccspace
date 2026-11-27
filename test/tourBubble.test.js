@@ -1,5 +1,5 @@
-// Chike's corner (owner, 2026-11-25): the tour's welcome bubble shows to someone who has never opened the tour; once
-// they have, only while the pointer is on Chike. The "Who's creating?" tag carries a small window icon.
+// Chike's corner: the tour's welcome bubble shows only to a new visitor who has never done the tour (owner, 2026-11-27).
+// The "Who's creating?" tag carries a small window icon.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 
@@ -13,35 +13,27 @@ const corner = (state, quizOn = false, chip = "") => {
   return root.innerHTML;
 };
 const BIG = '<div class="tour-bubble" role="status">';
-const HOVER = '<div class="tour-bubble tour-bubble--hover" aria-hidden="true">';
 
+// owner, 2026-11-27: "only show this for new visitor who has never done the tour"
 describe("the tour's welcome bubble", () => {
-  it("shows to someone who has never opened the tour", () => {
+  it("shows to a new visitor who has never done the tour", () => {
     expect(corner({ status: "not_started" })).toContain(BIG);
   });
-  it("after the tour was opened, dismissed or finished, it waits for the pointer on Chike", () => {
+  it("never again once the tour was opened, dismissed or finished, or the visitor clicked past it, not even on hover", () => {
     for (const s of [{ status: "not_started", seen: true }, { status: "dismissed" }, { status: "completed" }]) {
-      const c = corner(s);
-      expect(c, JSON.stringify(s)).toContain(HOVER);
-      expect(c, JSON.stringify(s)).not.toContain(BIG);
+      expect(corner(s), JSON.stringify(s)).not.toContain("tour-bubble");
     }
+    expect(html).not.toContain("tour-bubble--hover");
   });
   it("never during the tour itself, nor while Chike offers his quiz", () => {
     expect(corner({ status: "in_progress" })).not.toContain("tour-bubble");
     expect(corner({ status: "not_started" }, true)).not.toContain("tour-bubble");
     expect(corner({ status: "completed" }, true)).not.toContain("tour-bubble");
   });
-  it("the hover one comes after Chike in the corner, so hovering or focusing Chike shows it", () => {
-    const c = corner({ status: "completed" }, false, '<button class="tour-tag">x</button>');
-    expect(c.indexOf('class="tour-avatar"')).toBeLessThan(c.indexOf(HOVER));
-    expect(html).toContain(".tour-bubble--hover{ display:none; pointer-events:none; }");
-    expect(html).toContain(".tour-avatar:hover ~ .tour-bubble--hover, .tour-avatar:focus-visible ~ .tour-bubble--hover{ display:block; }");
-    expect(html).toContain("@media (max-width:767px){ .tour-bubble, .tour-avatar:hover ~ .tour-bubble--hover{ display:none; } }");
-  });
-  it("opening the tour counts as having seen it, and the bubble on screen turns hover-only at once", () => {
+  it("opening the tour counts as having done it, and the bubble on screen goes at once", () => {
     const open = html.split('"tour-open": (el) => {')[1].split("\n  },")[0];
     expect(open).toContain("saveTourState({ seen: true });");
-    expect(open).toContain('b.classList.add("tour-bubble--hover")');
+    expect(open).toContain("if (b) b.remove();");
     expect(open.indexOf("saveTourState({ seen: true })")).toBeLessThan(open.indexOf("openModal("));
   });
 });
