@@ -106,7 +106,7 @@ describe("the progress report page", () => {
   it("with no children yet, shows only Your children and the sign-in note", () => {
     const v = body("progressReportOrEmpty");
     expect(v).toContain("if (!kids.length) return progressChildrenHTML()");
-    expect(body("progressChildrenHTML")).toContain("stay signed in to the Subscriber’s Portal");
+    expect(body("progressChildrenHTML")).toContain("stay signed in to your family account");
   });
 
   it("the member bar links to the report", () => {

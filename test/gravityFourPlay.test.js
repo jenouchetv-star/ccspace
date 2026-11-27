@@ -20,8 +20,8 @@ describe("Gravity 4 on the Play page", () => {
     const statements = sql.split("\n").filter((l) => !l.startsWith("--")).join("\n");
     expect(statements).not.toMatch(/portal_game_files|gameHtml|<html/i); // the code stays in the locked table
   });
-  it("shows a Subscribers only lock on its card", () => {
-    expect(fn("gameCard")).toContain('g.kind === "members" ? \'<span class="card__badge chip chip--members">\' + ic("lock") + \' Subscribers only</span>\'');
+  it("shows a Free account lock on its card", () => {
+    expect(fn("gameCard")).toContain('g.kind === "members" ? \'<span class="card__badge chip chip--members">\' + ic("lock") + \' Free account</span>\'');
     expect(index).toContain(".chip--members{");
   });
   it("never plays the game on its own page: a subscriber goes to the portal entry", () => {
@@ -40,18 +40,18 @@ describe("Gravity 4 on the Play page", () => {
   it("has Join free to play for someone new, and its own button for someone already subscribed", () => {
     const p = fn("membersPoster");
     expect(p).toContain('data-act="open-mailing-list" data-next="/newsletter/\' + E(slug) + \'" data-game="\' + E(g.title) + \'"\' + w + \'>\' + ic("lock") + (act ? \' Join free to try it\' : \' Join free to play\') + \'</button>');
-    expect(p).toContain('data-act="open-mailing-list" data-member data-next="/newsletter/\' + E(slug) + \'" data-game="\' + E(g.title) + \'"\' + w + \'>\' + ic("log-in") + \' Already joined? Sign in</button>');
+    expect(p).toContain('data-act="open-mailing-list" data-member data-next="/newsletter/\' + E(slug) + \'" data-game="\' + E(g.title) + \'"\' + w + \'>\' + ic("log-in") + \' Have an account? Sign in</button>');
   });
   it("opens the Join modal in the matching words: Play Chike's Gravity 4 to join, Welcome back! to get a code", () => {
     const modal = fn("mailingListModal");
     expect(modal).toContain("const play = back && game ? String(game) : \"\";");
     expect(modal).toContain("const back2 = !!member;");
-    expect(modal).toContain("? '<h3 style=\"margin:.2em 0 .3em;font-size:1.6rem\">' + (book ? 'This book is for subscribers' : lesson ? 'This AI lesson is for subscribers' : 'Join our mailing list') + '</h3>'");
+    expect(modal).toContain("? '<h3 style=\"margin:.2em 0 .3em;font-size:1.6rem\">' + (book ? 'This book comes with a free family account' : lesson ? 'This AI lesson comes with a free family account' : 'Create a free family account') + '</h3>'");
     expect(modal).not.toContain(">Play ' + nameHTML(play)");
-    expect(modal).toContain("(book ? 'Join our free mailing list to read it, along with every AI lesson.' : lesson ? 'Join our free mailing list to see it, and every AI lesson.' : activity ? 'Join our free mailing list to try it.' : 'Join our free mailing list to play.') + ' We’ll email you a 6-digit code to confirm. '");
+    expect(modal).toContain("(book ? 'Create a free family account to read it, along with every AI lesson.' : lesson ? 'Create a free family account to see it, and every AI lesson.' : activity ? 'Create a free family account to try it.' : 'Create a free family account to play.') + ' We’ll email you a 6-digit code to confirm. '");
     expect(modal).toContain(">Welcome back!</h3>");
     expect(modal).toContain("Enter the email you subscribed with and we’ll send you a 6-digit code to ");
-    expect(modal).toContain("(play ? (lesson ? 'open ' : activity ? 'try ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Subscriber’s Portal.')");
+    expect(modal).toContain("(play ? (lesson ? 'open ' : activity ? 'try ' : 'play ') + nameHTML(play) + '.' : 'sign in to the Family Portal.')");
     // an AI lesson from the Create page is opened, not played
     expect(modal).toContain("const lesson = !!play && (what === \"lesson\" || book || /^AI Lesson\\b/i.test(play));");
     expect(modal).toContain("(back2 ? ' Send my code' : ' Join free')");
@@ -128,11 +128,11 @@ describe("Welcome back (Already joined? Sign in)", () => {
     // in the Join box: the Join free button first, then "Already joined? Sign in" as a plain text link, and no Cancel (the ✕ closes it)
     const modal = fn("mailingListModal");
     expect(modal).toContain(`+ '<div class="modal__foot modal__foot--join">'\n    + '<button type="submit" class="btn btn--cyan joinbox__submit">' + ic("mail") + (back2 ? ' Send my code' : ' Join free') + '</button>'`);
-    expect(modal).toContain(`'<p class="join-signin"><b>Already joined?</b> <button type="button" class="join-signin__link" data-act="open-mailing-list" data-member'`);
+    expect(modal).toContain(`'<p class="join-signin"><b>Already have an account?</b> <button type="button" class="join-signin__link" data-act="open-mailing-list" data-member'`);
     expect(modal).not.toContain(">Cancel</button>");
     expect(index).toContain(".join-signin__link{ font:inherit; font-weight:800; color:var(--cyan); background:none; border:0;");
     expect(index.split('signInLinkHTML("", ""').length - 1).toBe(2);   // the footer, and the Articles box (laid out beside its form)
-    expect(fn("signInLinkHTML")).toContain("Already joined?</b>");
+    expect(fn("signInLinkHTML")).toContain("Already have an account?</b>");
   });
   const send = index.split('if (act === "newsletter-submit"){')[1].split("\n  }\n")[0];
   it("does not ask a subscriber to tick the grown-up box again", () => {
@@ -144,7 +144,7 @@ describe("Welcome back (Already joined? Sign in)", () => {
   it("turns into the Join version, email filled in, for an address that is not on the list", () => {
     expect(send).toContain('if (member && sent.status === "needs_consent"){');
     expect(send).toContain('openModal(mailingListModal(back, game, false), null, "modal--narrow");');
-    expect(send).toContain("That email is not on our mailing list yet.");
+    expect(send).toContain("There’s no family account with that email yet.");
   });
 });
 
@@ -155,7 +155,7 @@ describe("the AI lessons on the Create page", () => {
     expect(sql).toContain("'kind', 'members', 'portalSlug', 'how-to-build-your-own-3d-computer'");
     expect(sql).toContain("'type', 'ai', 'access', 'members'");
     expect(index).toContain('{ id:"ai",        label:"AI Lesson",  icon:"bot"');
-    expect(index).toContain('{id:"members",label:"Subscribers only"}');
+    expect(index).toContain('{id:"members",label:"Free account"}');
   });
   it("show only on the Create page: the finder, home page, related activities and collections leave them out", () => {
     expect(fn("publishedActivities")).toContain('a.status === "published" && a.kind !== "members"');
@@ -166,7 +166,7 @@ describe("the AI lessons on the Create page", () => {
   it("have a lock on the card, and a click opens the join notice (or the lesson, for a subscriber), never an activity page", () => {
     expect(fn("activityCard")).toContain('if (a.kind === "members") return membersActivityCard(a);');
     const card = fn("membersActivityCard");
-    expect(card).toContain("' Subscribers only</span>'");
+    expect(card).toContain("' Free account</span>'");
     expect(card).toContain(`'data-act="open-mailing-list" data-next="/newsletter/' + E(slug) + '" data-game="' + E(a.title) + '"' + (game ? ' data-what="activity"' : ' data-what="lesson"')`);
     expect(card).toContain(`'data-act="go" data-hash="#/newsletter/' + E(slug) + '"'`);
     expect(card).not.toContain("#/activity/");

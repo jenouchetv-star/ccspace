@@ -151,7 +151,7 @@ describe("the game page", () => {
     for (const name of ["Chike is thinking.", "Chike wins!", "Chike · Sunny", 'id="n2">Chike<']) expect(html).toContain(name);
     expect(existsSync(new URL("../assets/characters/chike-wave.webp", import.meta.url))).toBe(true);
     /* the pill above the title: purple with white words, and says who it is for */
-    expect(html).toContain('<span class="chip">Subscribers only content</span>');
+    expect(html).toContain('<span class="chip">Free with a family account</span>');
     expect(html).toMatch(/\.chip\{[^}]*background:var\(--plum\);color:#fff;/);
     expect(html).not.toContain("Members only");
     /* the Chike button is the site's blue with white words */

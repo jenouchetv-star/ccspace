@@ -118,8 +118,8 @@ describe("streamlined (owner, 2026-11-25; docs/mockups/portal-children-slim-draf
     expect(html).toContain(".pkid__stat + .pkid__stat{ border-left:1.5px solid rgba(30,34,38,.15); }");
     expect(html).not.toMatch(/\.pkid__stat\{[^}]*border:2px solid/);
   });
-  it("the posts get their own editable title, Subscriber exclusives, over the words that introduce them", () => {
-    expect(html).toContain('{ key:"portalPostsTitle", section:"Subscriber’s Portal", label:"Posts title", fb:"Subscriber exclusives" }');
+  it("the posts get their own editable title, New for families, over the words that introduce them", () => {
+    expect(html).toContain('{ key:"portalPostsTitle", section:"Subscriber’s Portal", label:"Posts title", fb:"New for families" }');
     const v = body("viewNewsletter");
     expect(v).toContain("+ '<h2 class=\"pposts__title\">' + slot(\"system\", \"portalPostsTitle\") + '</h2>'\n    + '<p class=\"lede\">'");
   });

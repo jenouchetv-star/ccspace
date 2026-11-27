@@ -73,17 +73,17 @@ describe("Pic-a-Puzzle", () => {
     expect(view).toContain('(g.kind === "members" && !portalHasAccess() ? membersValueHTML(g)');
     const card = index.split("function membersValueHTML(")[1].split("\nfunction ")[0];
     expect(card).toContain('slot("templates/game", "membersTitle")');
-    expect(index).toContain('fb:"Why join our free mailing list?"');
-    for (const perk of ["Members-only games", "Kid-friendly AI lessons", "First looks", "Creative tips", "Free, with no spam"]) expect(card).toContain(perk);
+    expect(index).toContain('fb:"What a free family account adds"');
+    for (const perk of ["More games", "Kid-friendly AI lessons", "First looks", "Creative tips", "Free, with no spam"]) expect(card).toContain(perk);
     expect(card).toContain('data-act="open-mailing-list" data-next="/newsletter/');
-    expect(card).toContain("Already joined? Sign in");
+    expect(card).toContain("Have an account? Sign in");
   });
 
   it("tells a visitor on a subscribers-only card what joining gets them", () => {
     const lesson = index.split("function membersActivityCard(")[1].split("\nfunction ")[0];
-    expect(lesson).toContain(`(game ? 'Join our mailing list to try this activity and other exclusive content.' : 'Join our mailing list to view this lesson and other exclusive content.')`);
+    expect(lesson).toContain(`(game ? 'Create a free family account to try this activity.' : 'Create a free family account to see this lesson.')`);
     const game = index.split("function gameCard(")[1].split("\nfunction ")[0];
-    expect(game).toContain(`(g.kind === "members" && !portalHasAccess() ? '<b class="card__join">Join our mailing list to play this game and other educational content.</b>' : E(g.summary))`);
+    expect(game).toContain(`(g.kind === "members" && !portalHasAccess() ? '<b class="card__join">Create a free family account to play.</b>' : E(g.summary))`);
   });
 
   it("is AI Lesson 04's example, with the kid-friendly prompt and the same Word to know", () => {

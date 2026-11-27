@@ -207,23 +207,23 @@ export function portalGateMessage(state, email) {
   const who = email ? " " + email : "";
   switch (state) {
     case "loading": return { tone: "polite", title: "Checking…", text: "One moment while we look that up." };
-    case "verifying": return { tone: "polite", title: "Opening the Subscriber’s Portal…", text: "Checking your link." };
+    case "verifying": return { tone: "polite", title: "Opening the Family Portal…", text: "Checking your link." };
     case "sent": return { tone: "polite", title: "Check your inbox", text: "We sent a 6-digit code to" + who + ". Type it below to sign in. It works for 15 minutes." };
-    case "consent_sent": return { tone: "polite", title: "One more step to join", text: "We sent a 6-digit code to" + who + ". Type it below to join the mailing list and unlock the Subscriber’s Portal. It works for 15 minutes." };
+    case "consent_sent": return { tone: "polite", title: "One more step to join", text: "We sent a 6-digit code to" + who + ". Type it below to create your free family account and open the Family Portal. It works for 15 minutes." };
     case "wrong_code": return { tone: "assertive", title: "That code isn’t right", text: "Check the email and type the 6 numbers again." };
     case "too_many_tries": return { tone: "assertive", title: "Too many tries", text: "That code is locked. Press Send a new code." };
     case "code_expired": return { tone: "assertive", title: "That code has run out", text: "Codes work for 15 minutes. Press Send a new code." };
-    case "needs_consent": return { tone: "polite", title: "You’re not on the list yet", text: "Join our mailing list to unlock the Subscriber’s Portal. We’ll email a link to confirm it’s really you." };
+    case "needs_consent": return { tone: "polite", title: "No family account yet", text: "Create a free family account to open the Family Portal. We’ll email a link to confirm it’s really you." };
     case "invalid_email": return { tone: "assertive", title: "That email doesn’t look right", text: "Check it for typos – it should look like name@example.com." };
     case "expired": return { tone: "assertive", title: "That link has expired", text: "Links last 30 minutes and work once. Enter your email and we’ll send a fresh one." };
     case "used": return { tone: "assertive", title: "That link was already used", text: "Each link works once. Enter your email and we’ll send a new one." };
     case "invalid": return { tone: "assertive", title: "That link isn’t valid", text: "It may have been cut off when it was copied. Enter your email and we’ll send a new one." };
-    case "not_subscribed": return { tone: "assertive", title: "That email isn’t subscribed", text: "Join the mailing list below and we’ll send a confirmation link." };
+    case "not_subscribed": return { tone: "assertive", title: "No family account with that email", text: "Create a free family account below and we’ll send a confirmation link." };
     case "ended": return { tone: "polite", title: "Welcome back", text: "It’s been a while, so we signed you out. Enter your email and we’ll send a fresh link." };
-    case "consent_required": return { tone: "assertive", title: "Please tick the box to join", text: "We need your OK before we add you to the mailing list." };
+    case "consent_required": return { tone: "assertive", title: "Please tick the box to join", text: "We need your OK before we create your family account." };
     case "rate_limited": return { tone: "assertive", title: "Too many tries", text: "Please wait a little while before asking for another link." };
     case "send_failed": return { tone: "assertive", title: "We couldn’t send the email", text: "Please try again in a moment." };
-    case "error": return { tone: "assertive", title: "Something went wrong", text: "We couldn’t reach the Subscriber’s Portal. Check your connection and try again." };
+    case "error": return { tone: "assertive", title: "Something went wrong", text: "We couldn’t reach the Family Portal. Check your connection and try again." };
     default: return { tone: "polite", title: "", text: "" };
   }
 }

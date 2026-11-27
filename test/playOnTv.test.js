@@ -54,7 +54,7 @@ describe("part 2: a TV-ready game runs on the TV itself", () => {
     const body = fn("tvHelpBody");
     expect(body).toContain("Connect your TV");
     expect(body).toContain('data-act="tv-pair-help"');
-    expect(body).toContain("Subscribers only.");
+    expect(body).toContain("This needs a free family account.");
   });
   it("the TV page is unlisted, never signs in, and runs the game sealed like the site's player", () => {
     expect(tv).toContain('<meta name="robots" content="noindex">');

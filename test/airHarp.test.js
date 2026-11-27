@@ -169,7 +169,7 @@ describe("on the Digital Activities page (owner, 2026-11-20: moved there from th
   it("a subscribers-only Computer activity opens from the portal, and is an activity: its card says Try it (owner, 2026-11-22)", () => {
     const card = fn("membersActivityCard");
     expect(card).toContain('const game = a.type === "computer";');
-    expect(card).toContain("Join our mailing list to try this activity and other exclusive content.");
+    expect(card).toContain("Create a free family account to try this activity.");
     expect(card).toContain(`'<button type="button" class="btn btn--sm btn--cyan" ' + open + '>' + ic("wand-sparkles") + ' Try it</button>'`);
     expect(card).toContain("(game ? ' Join free to try it' : ' Join free to see it')");
     expect(card).not.toContain("Play the game");
@@ -177,7 +177,7 @@ describe("on the Digital Activities page (owner, 2026-11-20: moved there from th
     expect(card).toContain(`'" data-game="' + E(a.title) + '"' + (game ? ' data-what="activity"' : ' data-what="lesson"')`);
     const join = fn("mailingListModal");
     expect(join).toContain('const activity = !!play && what === "activity";');
-    expect(join).toContain("activity ? 'Join our free mailing list to try it.'");
+    expect(join).toContain("activity ? 'Create a free family account to try it.'");
     expect(join).toContain("(lesson ? 'open ' : activity ? 'try ' : 'play ')");
   });
   it("a shared link to it shows the poster in an activity's words, where a subscriber tries it right there", () => {

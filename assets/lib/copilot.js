@@ -533,7 +533,7 @@ export function newsletterMessages(ctx) {
     { role: "system", content: copilotSystem(ctx.brand, ctx.items, ctx.where, ctx.request, ctx.who) },
     { role: "user", content: "Write a newsletter email for our mailing list.\nThe owner asks: " + ctx.request
       + "\nFACTS YOU MAY USE (from the site itself):\n" + (facts || "(none found; use only what the owner wrote and leave a [placeholder] for anything else)")
-      + "\nThis email goes to people who are already on the mailing list: never ask them to sign up, join or subscribe; invite them to open the Subscriber’s Portal or the page instead."
+      + "\nThis email goes to people who are already on the mailing list: never ask them to sign up, join or subscribe; invite them to open the Family Portal or the page instead."
       + "\nMention only the things in that list, by their exact titles; never add a lesson, game, book, episode or activity that is not in it, and never change what one is about. If the list has several of one kind, you may mention each of them."
       + "\nSay only what those facts and the owner's words support. Do not say who guides it, how it was made, whether it is new or back, how long it takes or that there is a timer or a prize unless a fact says so. A game is played, never watched; an episode is watched, never played. You cannot open links, so rely on the facts above."
       + "\nFor the button, use the page address of the thing the email is about, from the facts list (for several, the newest one or the first). Use / only if the facts list is empty."

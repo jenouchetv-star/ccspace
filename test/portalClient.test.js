@@ -269,7 +269,7 @@ describe("how the site wires the portal in", () => {
   it("builds the gate as a dialog that cannot be dismissed, with a way back to the public site", () => {
     const gate = body("portalGateHTML");
     expect(gate).toContain('role="dialog" aria-modal="true"');
-    expect(gate).toContain("Join our mailing list");
+    expect(gate).toContain("Create a free family account");
     expect(gate).toContain("Back to the public website");
     expect(gate).toContain('type="email"');
     expect(gate).toContain('for="pg-email"');
@@ -558,9 +558,9 @@ describe("how the site wires the portal in", () => {
 });
 
 describe("what the portal calls its readers", () => {
-  it("labels the archive and the sign-in screen 'Subscribers only', not 'Members only'", () => {
+  it("labels the sign-in screen 'Free account', not 'Members only'", () => {
     expect(html).not.toContain("Members only");
-    expect(body("portalGateHTML")).toContain(`'<span class="chip chip--members pgate__badge">' + ic("lock") + ' Subscribers only</span>'`);
+    expect(body("portalGateHTML")).toContain(`'<span class="chip chip--members pgate__badge">' + ic("lock") + ' Free account</span>'`);
     /* the archive has no "Subscribers only" label above its heading any more (owner, 2026-11-25) */
     expect(html).not.toContain("portalEyebrow");
     expect(body("viewNewsletter")).not.toContain('class="eyebrow"');
@@ -579,7 +579,7 @@ describe("the new games band on the home page", () => {
     expect(promo).toContain("Play the new games");
     expect(promo).toContain('data-act="open-mailing-list" data-next="/newsletter/arcade-makeover"');   /* the same sign-up as the nav and footer */
     expect(promo).toContain("Join for exclusive games");
-    expect(promo).toContain("Subscribers also get Chike’s Gravity 4, a game made just for them.");
+    expect(promo).toContain("A family account opens Chike’s Gravity 4 and more games.");
     expect(promo).toContain(`copyPara("home-arcade-note", homeId, note, { cls:"tiny mute g4promo__fine" })`);                      /* Quick Update can change the small print */
     expect(html).not.toContain("function gravityFourPromoHTML(");
   });
@@ -632,7 +632,7 @@ describe("the portal's own sign-in box uses the 6-digit code", () => {
     const gate = page.split("function portalGateHTML(){")[1].split("\nfunction ")[0];
     expect(gate).toContain('data-act="portal-code"');
     expect(gate).toContain('autocomplete="one-time-code"');
-    expect(gate).toContain("Already joined?</b> Enter your email to sign in.");
+    expect(gate).toContain("Already have an account?</b> Enter your email to sign in.");
   });
   it("says what went wrong with a code in plain words", () => {
     for (const s of ["wrong_code", "too_many_tries", "code_expired"]) {
@@ -777,13 +777,13 @@ describe("the footer for a subscriber signed in on this device", () => {
   });
   it("has no Join buttons in the top bar, only the way back into the portal, with Sign out right after it", () => {
     const nav = html.split("function navBar(")[1].split("\nfunction ")[0];
-    expect(nav).toMatch(/> Subscriber’s Portal<\/span><\/a>'\r?\n\s+\+ '<button class="btn btn--sm btn--paper" type="button" data-act="portal-signout"/);
+    expect(nav).toMatch(/> Family Portal<\/span><\/a>'\r?\n\s+\+ '<button class="btn btn--sm btn--paper" type="button" data-act="portal-signout"/);
     expect(html).toContain('"portal-signout": () => {');
     // icon only at every width (owner, 2026-11-24), named by its label and hover tip
-    expect(nav).toContain(`aria-label="Sign out of the Subscriber’s Portal" title="Sign out">' + ic("log-out") + '</button>'`);
+    expect(nav).toContain(`aria-label="Sign out of the Family Portal" title="Sign out">' + ic("log-out") + '</button>'`);
     expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--icon btn--cyan nav__only-xs" type="button" data-act="open-mailing-list"`);
     expect(nav).toContain(`(portalIsSubscriber() ? "" : '<button class="btn btn--sm btn--cyan nav__hide-sm" type="button" data-act="open-mailing-list"`);
-    expect(nav).toContain(`: '<button class="btn btn--sm btn--cyan" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join our mailing list</button>'`);
+    expect(nav).toContain(`: '<button class="btn btn--sm btn--cyan" type="button" data-act="open-mailing-list">' + ic("mail") + ' Join free</button>'`);
     expect(nav).toContain('(portalIsSubscriber() ? "" : navSignInHTML(" nav__signin"))');     /* Sign in goes too */
   });
   it("leaves out Already joined? Sign in", () => {

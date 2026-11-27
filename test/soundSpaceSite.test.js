@@ -220,7 +220,7 @@ describe("the Sound Space row on the Studio page", () => {
     for (const k of ["artText", "soundText"]) expect(SLOT_FB[k].length).toBeGreaterThan(300);
     expect(sound).toMatch(/<span class="chip chip--ink"[^>]*>Beta<\/span>/);
     expect(sound).toMatch(/class="btn btn--sm btn--cyan" data-act="open-studio-app" data-id="sound" aria-label="Launch Sound Space"/);
-    expect(sound).toContain("Subscribers only");
+    expect(sound).toContain("Free account");
     expect(sound).not.toContain('data-act="art-install"');
     expect(sound).toContain("Inside Sound Space");
     // Inside Sound Space is built like Inside Art Space: a description, then six features with a title and a line each

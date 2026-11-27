@@ -9,8 +9,8 @@ const nav = index.split("function navBar(isAdmin){")[1].split("\n}\n")[0];
 
 describe("the Subscriber’s Portal link in the top bar", () => {
   it("sits right after Join, and points at the portal", () => {
-    const join = nav.indexOf("' Join</button>'");
-    const link = nav.indexOf('href="#/newsletter" aria-label="Subscriber’s Portal"');
+    const join = nav.indexOf("aria-label=\"Create a free family account\">' + ic(\"mail\") + ' Join free</button>'");
+    const link = nav.indexOf('href="#/newsletter" aria-label="Family Portal"');
     expect(join).toBeGreaterThan(-1);
     expect(link).toBeGreaterThan(join);
     expect(nav.slice(join, link)).not.toContain("DONATE_LINKS_ENABLED");   // nothing comes between Join and the link
@@ -20,9 +20,9 @@ describe("the Subscriber’s Portal link in the top bar", () => {
     expect(nav).toContain("portalIsSubscriber() ?");
   });
   it("keeps the words on wide screens, shows just the icon on a phone, and is in the phone menu too", () => {
-    expect(nav).toContain('<span class="nav__hide-sm"> Subscriber’s Portal</span>');
+    expect(nav).toContain('<span class="nav__hide-sm"> Family Portal</span>');
     const drawer = nav.split('class="nav__drawer-cta nav__only-sm"')[1].split("'</nav>'")[0];
-    expect(drawer).toContain("Subscriber’s Portal</a>");
+    expect(drawer).toContain("Family Portal</a>");
   });
 });
 
@@ -35,9 +35,9 @@ describe("Sign in in the top bar (owner, 2026-11-24: people could not find a log
   it("is in the bar at every width, before Join, and in the phone menu beside Join, only for someone not signed in", () => {
     const bar = nav.indexOf('(portalIsSubscriber() ? "" : navSignInHTML(" nav__signin"))');
     expect(bar).toBeGreaterThan(-1);
-    expect(bar).toBeLessThan(nav.indexOf("' Join</button>'"));
+    expect(bar).toBeLessThan(nav.indexOf("aria-label=\"Create a free family account\">' + ic(\"mail\") + ' Join free</button>'"));
     const drawer = nav.split('class="nav__drawer-cta nav__only-sm"')[1].split("'</nav>'")[0];
-    expect(drawer.indexOf('navSignInHTML(" nav__drawer-signin")')).toBeGreaterThan(drawer.indexOf("Join our mailing list"));
+    expect(drawer.indexOf('navSignInHTML(" nav__drawer-signin")')).toBeGreaterThan(drawer.indexOf("' Join free</button>'"));
   });
   it("opens the portal once the code is right", () => {
     const send = index.split('if (act === "newsletter-submit"){')[1].split("\n  }\n")[0];

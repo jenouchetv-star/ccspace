@@ -183,11 +183,11 @@ export function siteItems(data, opts) {
   const live = (opts && opts.drafts) ? ((r) => r && r.status !== "archived") : liveOnly;   // drafts too, when finding a page to edit
   const out = [];
   const add = (kind, col, rows, map) => (rows || []).filter(live).forEach((r) => { const it = map(r); if (it && it.title) out.push(Object.assign({ kind, col, id: r.id, draft: r.status === "draft" }, it)); });
-  add("Game", "games", d.games, (r) => ({ title: r.title, text: [r.summary, r.kind === "embed" ? "playable in the browser" : "", r.kind === "members" ? "subscribers only (it opens in the Subscriber’s Portal)" : "", r.players ? "players: " + r.players : ""].filter(Boolean).join("; "), facts: (r.rules || []).join(" "), path: "/play/" + r.id }));
+  add("Game", "games", d.games, (r) => ({ title: r.title, text: [r.summary, r.kind === "embed" ? "playable in the browser" : "", r.kind === "members" ? "free with a family account (it opens in the Family Portal)" : "", r.players ? "players: " + r.players : ""].filter(Boolean).join("; "), facts: (r.rules || []).join(" "), path: "/play/" + r.id }));
   add("Episode", "videos", d.videos, (r) => ({ title: r.title, text: "Episode " + (r.episode || "") + ". " + (r.description || ""), path: "/watch/" + r.id }));
   /* a subscribers-only book lives in its AI lesson, so that's where its link goes */
   add("Book or story", "stories", d.stories, (r) => r.kind === "members"
-    ? { title: r.title, text: [r.blurb, "a subscribers-only book on the Read page; it opens in its AI lesson in the Subscriber’s Portal"].filter(Boolean).join(" "), path: "/newsletter/" + (r.portalSlug || "") }
+    ? { title: r.title, text: [r.blurb, "a book for family accounts on the Read page; it opens in its AI lesson in the Family Portal"].filter(Boolean).join(" "), path: "/newsletter/" + (r.portalSlug || "") }
     : { title: r.title, text: [r.blurb, (r.pages || []).length ? (r.pages.length + "-page picture book read on the site") : "", r.learning].filter(Boolean).join(" "), path: "/stories/" + r.id });
   /* a subscribers-only AI lesson's card on the Create page has no page of its own: the lesson itself is listed below */
   add("Activity", "activities", (d.activities || []).filter((r) => r.kind !== "members"), (r) => ({ title: r.title, text: [r.summary, r.ageMin ? "ages " + r.ageMin + "-" + r.ageMax : "", r.timeMinutes ? r.timeMinutes + " minutes" : ""].filter(Boolean).join("; "), path: "/activity/" + r.id }));
@@ -201,7 +201,7 @@ export function siteItems(data, opts) {
   (d.portalEntries || []).filter(live).forEach((r) => {
     if (!r.title) return;
     const kind = PORTAL_KIND[r.layout] || "Subscriber news";
-    const text = [r.description, "in the Subscriber’s Portal, free for mailing-list subscribers",
+    const text = [r.description, "in the Family Portal, free with a family account",
       r.vocabWord ? "word to know: " + r.vocabWord : "", r.publishedAt ? "published " + r.publishedAt : ""].filter(Boolean).join("; ");
     out.push({ kind, col: "portalEntries", id: r.id, draft: r.status === "draft", title: r.title, text, path: "/newsletter/" + (r.slug || r.id) });
   });
@@ -261,7 +261,7 @@ export function systemPrompt(brand, digest, detail, who) {
     "Tone: gentle invitations, never pressure. Do not use urgent or pushy phrases like \"now\", \"hurry\", \"don't miss out\", \"act fast\" or \"limited time\". Say things like \"come and see\" or \"take a look\".",
     "Rules: Only mention games, books, episodes or activities that appear in the site list below, and only use page addresses from that list. Never invent facts, dates, prices, quotes or links. If you do not know something, leave a clear [placeholder] for the writer to fill. Write plain text with no markdown, no asterisks and no headings.",
     "Some pages are drafts or unpublished and are not in the list below. If the owner names a page that is not listed, say it may be a draft you cannot see here, rather than saying it does not exist.",
-    "HOW THE SITE IS ORGANIZED: Create has hands-on activities to do away from the screen (and cards for the AI lessons). Read has picture books kids read in the site's own page-turning reader. Watch has short animated episodes. Play has games played in the browser or with no screen at all. Meet Chike introduces the characters. Grown-Ups has guides, news and articles, help and contact. The Subscriber's Portal is free for anyone who joins the mailing list: it has the AI lessons (step by step, kids use AI to build something, with an example to try), subscribers-only games, a subscribers-only book, and videos and news. Anything marked subscribers only opens in the Subscriber's Portal.",
+    "HOW THE SITE IS ORGANIZED: Create has hands-on activities to do away from the screen (and cards for the AI lessons). Read has picture books kids read in the site's own page-turning reader. Watch has short animated episodes. Play has games played in the browser or with no screen at all. Meet Chike introduces the characters. Grown-Ups has guides, news and articles, help and contact. The Family Portal opens with a free family account (a grown-up's email; it also brings our newsletter): it has the AI lessons (step by step, kids use AI to build something, with an example to try), more games, a book you turn with your hand, and videos and news. Anything marked Free account opens in the Family Portal. Call it a free family account and the Family Portal, never a subscription, the mailing list, members or the Subscriber's Portal.",
     "WHAT IS ON THE SITE RIGHT NOW:",
     digest || "(nothing yet)",
     detail && detail.length ? "MOST RELEVANT DETAILS:\n" + detail.map((d) => "- " + d.kind + ": " + d.title + (d.path ? " [" + d.path + "]" : "") + (d.text ? " - " + clip(d.text, 220) : "")).join("\n") : "",
