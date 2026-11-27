@@ -410,17 +410,20 @@ describe("who's playing, and recording what a child finishes", () => {
     expect(h).not.toContain("<Maya>");
   });
 
-  // owner, 2026-11-27: under the header's Family Portal button, under My Child's Progress in the portal, and under the
-  // menu's Family Portal button on a phone; no longer in Chike's corner
-  it("the playing chip sits under the Family Portal button and under My Child's Progress", () => {
+  // owner, 2026-11-27: "Who's creating?" sits just above Chike's bubble; once a child is picked, the child's avatar
+  // replaces Chike's bubble. In the Family Portal it also sits under My Child's Progress. Nothing hangs off the header.
+  it("the playing chip sits above Chike, and a picked child's avatar takes Chike's place", () => {
     expect(body("renderTourRoot")).toContain("paintWhoSlots();");
-    expect(body("renderTourRoot")).not.toContain("progressChipHTML(");
-    expect(body("paintWhoSlots")).toContain("const tag = progressChipHTML();");
+    expect(body("renderTourRoot")).toContain("root.innerHTML = cornerWhoHTML(kid);");
+    expect(body("renderTourRoot")).toContain("root.innerHTML = cornerWhoHTML(null)");
+    const who = body("cornerWhoHTML");
+    expect(who).toContain('class="tour-avatar tour-avatar--kid" data-act="who-open"');
+    expect(who).toContain("avatarSVG(avatarFor(kid))");
+    expect(who).toContain(`'<span class="who-slot--corner">' + tag + '</span>'`);
     const nav = html.split("function navBar(")[1].split("\nfunction ")[0];
-    expect(nav).toContain(`'<span class="who-slot who-slot--nav">' + progressChipHTML() + '</span></span>'`);
-    expect(nav).toContain(`'<span class="who-slot">' + progressChipHTML() + '</span></span>'`);
+    expect(nav).not.toContain("who-slot");
     expect(body("portalReportLink")).toContain(`'<span class="who-slot">' + progressChipHTML() + '</span></span>'`);
-    expect(html).toContain("@media (max-width:767px){ .who-slot--nav{ display:none; } }");
+    expect(html).toContain("body:has(.pbar .who-slot .tour-tag) .who-slot--corner{ display:none; }");
     const chip = (session, playing, kids) => fn("progressChipHTML", "portalSavedSession", "ProgressState", "progressPlaying", "E")(
       () => session, { children: kids }, () => playing, esc)();
     expect(chip("", "c1", KIDS)).toBe("");
@@ -804,8 +807,8 @@ describe("Chike's pop quiz", () => {
   /* renderTourRoot built with a pretend corner: the tour state and whether the quiz bubble shows */
   const corner = (status, quizOn) => {
     const root = { innerHTML: "" };
-    fn("renderTourRoot", "$", "tourState", "progressQuizBubble", "AppState", "progressChipHTML", "teardownTourStep", "TOUR_STOPS", "tourStopMatchesRoute", "mountTourStep", "paintWhoSlots")(
-      () => root, () => ({ status, hidden: false, stepIndex: 0 }), () => quizOn, { route: { name: "home", params: {} } }, () => "", () => {}, [], () => false, () => {}, () => {})();
+    fn("renderTourRoot", "$", "tourState", "progressQuizBubble", "AppState", "progressChipHTML", "teardownTourStep", "TOUR_STOPS", "tourStopMatchesRoute", "mountTourStep", "paintWhoSlots", "cornerKid", "cornerWhoHTML")(
+      () => root, () => ({ status, hidden: false, stepIndex: 0 }), () => quizOn, { route: { name: "home", params: {} } }, () => "", () => {}, [], () => false, () => {}, () => {}, () => null, () => "")();
     return root.innerHTML;
   };
 
