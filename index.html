@@ -550,6 +550,27 @@ p:last-child{ margin-bottom:0; }
 .guide__photo--fit{ align-self:start; aspect-ratio:1037 / 1353; height:auto; }
 /* the short card to Member benefits on the Guide */
 /* Member benefits: a title over each paragraph in the story column (owner, 2026-11-24) */
+/* Family account: open to everyone vs a free family account, two cards of one height (owner, 2026-11-27) */
+.famcmp{ margin-bottom:clamp(44px,6vw,72px); }
+.famcmp .section-head{ margin-bottom:24px; }
+.famcmp h2{ font-size:clamp(1.7rem, 3vw, 2.3rem); }
+.famcmp .lede{ margin:8px 0 0; }
+.famcmp__grid{ display:grid; grid-template-columns:1fr 1fr; gap:28px; align-items:stretch; }
+.famcmp__col{ box-sizing:border-box; display:flex; flex-direction:column; padding:28px 30px; border-radius:var(--r-lg); border:var(--line); box-shadow:var(--hard-sm); background:var(--paper-card); }
+.famcmp__col--fam{ background:#EAF4F8; }
+.famcmp__col h3{ margin:0; font-size:1.5rem; letter-spacing:-.02em; }
+.famcmp__sub{ margin:4px 0 18px; font-weight:700; color:var(--ink-mute); font-size:.95rem; }
+.famcmp__plus{ margin:0 0 10px; font-weight:800; font-size:.95rem; }
+.famcmp ul{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:14px; }
+.famcmp li{ display:grid; grid-template-columns:38px 1fr; gap:12px; align-items:start; line-height:1.4; }
+.famcmp li > span:first-child{ width:38px; height:38px; border-radius:10px; display:grid; place-items:center; background:rgba(30,40,46,.07); }
+.famcmp li svg{ width:20px; height:20px; }
+.famcmp li b{ display:block; }
+.famcmp li small{ display:block; color:var(--ink-mute); font-weight:600; font-size:.9rem; }
+.famcmp__beta{ display:inline-block; margin-left:4px; padding:1px 9px; border-radius:999px; background:var(--sun); color:var(--ink); font-size:.75rem; font-weight:800; vertical-align:2px; }
+.famcmp__foot{ margin-top:auto; padding-top:22px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.famcmp__foot p{ margin:0; font-weight:700; font-size:.92rem; color:var(--ink-mute); }
+@media (max-width:820px){ .famcmp__grid{ grid-template-columns:1fr; } .famcmp__col{ padding:22px 20px; } }
 .aboutstory .member__h{ font-size:1.25rem; margin:0 0 6px; }
 .aboutstory .member__h:not(:first-child){ margin-top:22px; }
 .guide__members{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px 24px; margin:0 0 var(--guide-gap); }
@@ -15003,7 +15024,40 @@ function viewGrownUps(sub){
     const lvl = (k) => '<li>' + ic("circle-check") + '<span>' + slot(M, k) + '</span></li>';
     const step = (k, bg, n) => '<div class="panel panel--flat" style="background:' + bg + '"><div class="chip chip--ink" style="margin-bottom:12px">' + n + '</div>'
       + '<h3 class="guide__steptitle">' + slot(M, k + "Title") + '</h3><p class="mute" style="margin:0">' + slot(M, k + "Text") + '</p></div>';
-    body = '<section class="aboutstory"><div class="aboutstory__left"><h2>' + slot(M, "storyHeading") + '</h2>'
+    /* open to everyone vs a free family account (owner, 2026-11-27; docs/mockups/family-account-compare-draft.png): the
+       numbers come from what is published, so they stay true as games, activities and books are added */
+    const pub = (t) => db.list(t).filter(r => r.status === "published");
+    const acts = pub("activities"), gms = pub("games"), books = pub("stories"), vids = pub("videos");
+    const nOpenActs = acts.filter(a => a.kind !== "members").length;
+    const nOnline = gms.filter(g => g.kind !== "members" && g.kind !== "card").length, nOffline = gms.filter(g => g.kind === "card").length;
+    const memGames = gms.filter(g => g.kind === "members").sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.title).localeCompare(String(b.title)));
+    const nLessons = acts.filter(a => a.kind === "members" && a.type === "ai").length;
+    const handThings = books.filter(b => b.kind === "members").concat(acts.filter(a => a.kind === "members" && a.type !== "ai")).map(x => E(x.title));
+    const cmpLi = (icon, title, note, tag) => '<li><span aria-hidden="true">' + ic(icon) + '</span><span><b>' + title
+      + (tag ? ' <span class="famcmp__beta">' + tag + '</span>' : "") + '</b>' + (note ? '<small>' + note + '</small>' : "") + '</span></li>';
+    const compare = '<section class="famcmp" aria-labelledby="famcmp-h">'
+      + '<div class="section-head"><div><h2 id="famcmp-h">' + slot(M, "cmpHeading") + '</h2><p class="lede">' + slot(M, "cmpLede") + '</p></div></div>'
+      + '<div class="famcmp__grid">'
+      + '<div class="famcmp__col"><h3>' + slot(M, "openTitle") + '</h3><p class="famcmp__sub">' + slot(M, "openSub") + '</p><ul>'
+      + cmpLi("scissors", plural(nOpenActs, "activity", "activities") + " to make", slot(M, "openActs"))
+      + cmpLi("wand-sparkles", "The Activity Finder", slot(M, "openFinder"))
+      + cmpLi("gamepad-2", plural(nOnline + nOffline, "game"), nOnline + " to play online and " + nOffline + " to play offline")
+      + cmpLi("book-open", plural(books.length - books.filter(b => b.kind === "members").length, "picture book"), slot(M, "openBooks"))
+      + (vids.length ? cmpLi("clapperboard", plural(vids.length, "episode") + " of Chike &amp; Friends", "") : "")
+      + cmpLi("lightbulb", "The Parent &amp; Teacher Guide", slot(M, "openGuide"))
+      + '</ul><div class="famcmp__foot"><a class="btn btn--paper" href="#/create">' + ic("wand-sparkles") + ' ' + slot(M, "openButton") + '</a><p>' + slot(M, "openFoot") + '</p></div></div>'
+      + '<div class="famcmp__col famcmp__col--fam"><h3>' + slot(M, "famTitle") + '</h3><p class="famcmp__sub">' + slot(M, "famSub") + '</p>'
+      + '<p class="famcmp__plus">' + slot(M, "famPlus") + '</p><ul>'
+      + (memGames.length ? cmpLi("gamepad-2", plural(memGames.length, "more game", "more games"), memGames.slice(0, 3).map(g => E(g.title)).join(", ") + (memGames.length > 3 ? " and more" : "")) : "")
+      + (nLessons ? cmpLi("bot", plural(nLessons, "AI lesson"), slot(M, "famLessons")) : "")
+      + (handThings.length ? cmpLi("hand", progressAnd(handThings), slot(M, "famHands")) : "")
+      + cmpLi("palette", "Creative Space Studio", slot(M, "famStudio"), slot(M, "famBeta"))
+      + cmpLi("chart-no-axes-column", "A progress report for each child", slot(M, "famReport"))
+      + cmpLi("mail", "Our newsletter", slot(M, "famNews"))
+      + '</ul><div class="famcmp__foot">' + (member ? '<a class="btn btn--cyan" href="#/newsletter">' + ic("door-open") + ' ' + slot(M, "portalButton") + '</a>' : join)
+      + '<p>' + slot(M, "famFoot") + '</p></div></div>'
+      + '</div></section>';
+    body = compare + '<section class="aboutstory"><div class="aboutstory__left"><h2>' + slot(M, "storyHeading") + '</h2>'
       + '<blockquote class="aboutstory__quote"><p>' + slot(M, "storyQuote") + '</p></blockquote>'
       + '<div class="taped aboutstory__photo">' + slotImgHTML(M, "storyPhoto") + '</div></div>'
       + '<div class="aboutstory__right"><div class="copy">'
@@ -27886,6 +27940,28 @@ const PAGE_SLOTS = {
     { key:"reportButton", section:"Top of the page", label:"Report button (members)", fb:"See the progress report" },
     { key:"headPhoto", section:"Top of the page", label:"Photo", type:"image",
       fb:{ src:"assets/grownups/members-together.jpg", alt:"A mother and her young son smile together at a laptop on the kitchen table, her arm around the boy's shoulders" } },
+    /* open to everyone vs a free family account (owner, 2026-11-27; docs/mockups/family-account-compare-draft.png). The
+       numbers in each line come from what is published; these are the words around them. */
+    { key:"cmpHeading", section:"Open to everyone vs family account", label:"Heading", fb:"Open to everyone, and more with a free family account" },
+    { key:"cmpLede", section:"Open to everyone vs family account", label:"Text under the heading", type:"para", fb:"Most of the site needs no sign-up at all. A grown-up’s free family account opens the rest." },
+    { key:"openTitle", section:"Open to everyone vs family account", label:"Left card: title", fb:"Open to everyone" },
+    { key:"openSub", section:"Open to everyone vs family account", label:"Left card: under the title", fb:"No sign-up needed" },
+    { key:"openActs", section:"Open to everyone vs family account", label:"Left: activities, the small print", fb:"Art & craft projects with things at home, plus digital activities" },
+    { key:"openFinder", section:"Open to everyone vs family account", label:"Left: the Finder, the small print", fb:"Three ideas that fit your supplies and your time" },
+    { key:"openBooks", section:"Open to everyone vs family account", label:"Left: books, the small print", fb:"With Read to me for early readers" },
+    { key:"openGuide", section:"Open to everyone vs family account", label:"Left: the Guide, the small print", fb:"Tips and articles for home and class" },
+    { key:"openButton", section:"Open to everyone vs family account", label:"Left card: button", fb:"Find an activity" },
+    { key:"openFoot", section:"Open to everyone vs family account", label:"Left card: beside the button", fb:"Open now, no sign-up." },
+    { key:"famTitle", section:"Open to everyone vs family account", label:"Right card: title", fb:"With a free family account" },
+    { key:"famSub", section:"Open to everyone vs family account", label:"Right card: under the title", fb:"Free, and it stays free" },
+    { key:"famPlus", section:"Open to everyone vs family account", label:"Right card: over the list", fb:"Everything on the left, plus:" },
+    { key:"famLessons", section:"Open to everyone vs family account", label:"Right: AI lessons, the small print", fb:"Kids build their own games with AI, with a grown-up" },
+    { key:"famHands", section:"Open to everyone vs family account", label:"Right: the book and the harp, the small print", fb:"A book and a harp you play with your hands" },
+    { key:"famStudio", section:"Open to everyone vs family account", label:"Right: the Studio, the small print", fb:"Art Space and Sound Space" },
+    { key:"famBeta", section:"Open to everyone vs family account", label:"Right: the Studio's tag", fb:"Free during beta" },
+    { key:"famReport", section:"Open to everyone vs family account", label:"Right: the progress report, the small print", fb:"Up to 3 children, with games and quizzes matched to their grade" },
+    { key:"famNews", section:"Open to everyone vs family account", label:"Right: the newsletter, the small print", fb:"First looks at new games and episodes" },
+    { key:"famFoot", section:"Open to everyone vs family account", label:"Right card: beside the button", fb:"A grown-up’s email. No child accounts." },
     { key:"storyHeading", section:"What members get", label:"Heading", fb:"More to make and explore." },
     { key:"storyQuote", section:"What members get", label:"Quote", type:"para",
       fb:"A family account is free, and it stays free. It opens more to make and explore, and a clearer view of what your child is learning. Creative Space Studio is free while it’s in beta." },
