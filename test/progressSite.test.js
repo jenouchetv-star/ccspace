@@ -907,6 +907,17 @@ describe("Your children: edit and remove as icons (owner, 2026-11-21)", () => {
     expect(h).toContain('data-act="progress-remove-yes"');
   });
 
+  // owner, 2026-11-27: the question sits in that child's own row, not under the list
+  it("asks in the child's own row, in place of the name and the round buttons", () => {
+    const h = kids({ removing: "c1" });
+    const row = h.split('<li class="pr-kidlist__confirm">')[1].split("</li>")[0];
+    expect(row).toContain('<div class="pr-confirm" role="group" aria-label="Remove &lt;Maya&gt;">');
+    expect(row).toContain('data-act="progress-remove-no">Keep &lt;Maya&gt;</button>');
+    expect(row).not.toContain('data-act="progress-remove" ');
+    expect(h.indexOf("pr-confirm")).toBeLessThan(h.indexOf("</ul>"));
+    expect((h.match(/class="pr-confirm"/g) || []).length).toBe(1);
+  });
+
   it("each child shows their avatar; the edit form offers all 20 with theirs picked (owner, 2026-11-22)", () => {
     const list = kids({});
     expect(list).toContain('<span class="kid-av">' + avatarSVG("guitar") + "</span>");

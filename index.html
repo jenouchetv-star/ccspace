@@ -4864,6 +4864,9 @@ body.portal-locked{ overflow:hidden; }
 .pr-msg{ margin:14px 0 0; padding:8px 12px; border-radius:var(--r); background:var(--paper-2); font-weight:700; color:var(--ink); }
 .pr-confirm{ margin-top:22px; padding-top:18px; border-top:2px dashed rgba(30,34,38,.16); display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; }
 .pr-confirm p{ font-weight:700; flex:1 1 300px; margin:0; }
+/* in the child's own row, in place of the name and the two round buttons */
+.pr-kidlist li > .pr-confirm{ margin:0; padding:0; border:0; flex:1 1 0; min-width:0; }
+.pr-kidlist li > .pr-confirm p{ font-size:1rem; line-height:1.4; flex-basis:240px; }
 .prog .pr-check{ max-width:540px; margin:clamp(20px,5vw,60px) auto; }
 .pr-check h1{ font-size:clamp(1.8rem,4vw,2.4rem); margin:4px 0 8px; }
 .pr-check > p{ color:var(--ink-soft); margin:0 0 18px; }
@@ -17130,7 +17133,13 @@ function progressChildrenHTML(){
     + AVATAR_IDS.map(id => '<label title="' + E(avatarName(id)) + '"><input type="radio" name="avatar" value="' + id + '"' + (id === picked ? " checked" : "") + '>'
       + '<span class="kid-av">' + avatarSVG(id, avatarName(id)) + '</span></label>').join("")
     + '</div></fieldset>';
+  /* removing a child asks right in that child's row, not under the list (owner, 2026-11-27) */
+  const confirmRow = (c) => '<li class="pr-kidlist__confirm"><span class="kid-av">' + avatarSVG(avatarFor(c)) + '</span>'
+    + '<div class="pr-confirm" role="group" aria-label="Remove ' + E(c.name) + '"><p>Remove ' + E(c.name) + '? Everything recorded for ' + E(c.name) + ' goes too. This can’t be undone.</p>'
+    + '<button type="button" class="btn btn--ghost btn--sm" id="pr-keep" data-act="progress-remove-no">Keep ' + E(c.name) + '</button>'
+    + '<button type="button" class="btn btn--sm" data-act="progress-remove-yes" data-id="' + E(c.id) + '"' + busy + '>Remove ' + E(c.name) + '</button></div></li>';
   const rows = kids.map(c => {
+    if (S.removing === c.id) return confirmRow(c);
     if (S.editing === c.id){
       const d = draft(c.id);
       const av = d && d.avatar ? d.avatar : avatarFor(c);
@@ -17154,18 +17163,11 @@ function progressChildrenHTML(){
     : '<li><form class="pr-form" data-act="progress-save" data-id="" novalidate>'
       + nameBox(d ? d.name : "", false) + grades(d && d.grade !== "" ? Number(d.grade) : null)
       + '<button class="btn btn--cyan btn--sm" type="submit"' + busy + '>' + ic("plus") + ' Add a child</button></form></li>';
-  const gone = kids.find(c => c.id === S.removing);
-  const confirm = gone
-    ? '<div class="pr-confirm" role="group" aria-label="Remove ' + E(gone.name) + '"><p>Remove ' + E(gone.name) + '? Everything recorded for ' + E(gone.name) + ' goes too. This can’t be undone.</p>'
-      + '<button type="button" class="btn btn--ghost btn--sm" id="pr-keep" data-act="progress-remove-no">Keep ' + E(gone.name) + '</button>'
-      + '<button type="button" class="btn btn--sm" data-act="progress-remove-yes" data-id="' + E(gone.id) + '"' + busy + '>Remove ' + E(gone.name) + '</button></div>'
-    : "";
   return '<section class="pr-part box" id="your-children" aria-labelledby="pr-kids-title">'
     + '<h2 id="pr-kids-title">Your children<small>Up to 3 children. Just a first name or a nickname, their school grade and an avatar (change it with the pencil). Grades move up on their own each August.</small></h2><div>'
     + (kids.length ? "" : '<p class="pr-intro">Add a child to start. Then, on the device your child uses, Chike asks who’s playing and keeps track of what they finish.</p>')
     + '<ul class="pr-kidlist">' + rows + add + '</ul>'
     + (S.formMsg ? '<p class="pr-msg" role="alert">' + E(S.formMsg) + '</p>' : "")
-    + confirm
     + '<p class="pr-small" style="margin-top:18px">To record what your children do, stay signed in to your family account on the device each child uses. Nothing is recorded for anyone who isn’t signed in.</p>'
     + '</div></section>';
 }
