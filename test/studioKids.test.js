@@ -107,3 +107,32 @@ describe("faster loading (owner, 2026-11-28)", () => {
     expect(k.ghostCardsHTML(3).match(/sk-ghost/g)).toHaveLength(3);
   });
 });
+
+describe("sharing a copy with a brother or sister (owner, 2026-11-28)", () => {
+  const sound = readFileSync(new URL("../assets/apps/sound-space.html", import.meta.url), "utf8");
+  const art = readFileSync(new URL("../assets/apps/art-studio.html", import.meta.url), "utf8");
+  it("a shared copy is a new file in the sibling's space, marked shared and new; the original is untouched", () => {
+    const orig = { id: "s1", title: "Maya's beat", child: "kid-maya", updatedMs: 5, owner: "a@b.c", tracks: [{ id: "t" }] };
+    const copy = K.sharedCopy(orig, "kid-leo", "kid-maya", "s9", "updatedMs", 1000);
+    expect(copy).toMatchObject({ id: "s9", title: "Maya's beat", child: "kid-leo", sharedFrom: "kid-maya", sharedNew: true, updatedMs: 1000 });
+    expect(copy.owner).toBeUndefined();
+    expect(orig).toEqual({ id: "s1", title: "Maya's beat", child: "kid-maya", updatedMs: 5, owner: "a@b.c", tracks: [{ id: "t" }] });
+    copy.tracks[0].id = "changed";
+    expect(orig.tracks[0].id).toBe("t");
+    expect(K.isShared(copy)).toBe(true);
+    expect(K.isShared(orig)).toBe(false);
+  });
+  it("Share shows only on a child's own files when they have a brother or sister", () => {
+    const one = K.create({ doc: { addEventListener() {} }, host: () => null, one: "song", many: "songs", Many: "Songs", own: "songs" });
+    expect(one.canShare).toBe(false);
+  });
+  it("both apps share, show Shared with you, and clear New when the copy is first opened", () => {
+    expect(sound).toContain("async function shareSong(btn)");
+    expect(sound).toContain('sec.id = "shared-shelf"');
+    expect(sound).toContain("if (rec && !rec.deleted && rec.sharedNew){");
+    expect(art).toContain("async function sharePicture(btn)");
+    expect(art).toContain('sec.id = "shared-shelf"');
+    expect(art).toContain("if (p.sharedNew){ delete p.sharedNew;");
+    expect(art).toContain("if (StudioKids.cleanChild(g.project.sharedFrom)){ p.sharedFrom = g.project.sharedFrom;");
+  });
+});

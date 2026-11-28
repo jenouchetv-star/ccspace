@@ -27,7 +27,8 @@
 // Each child has their own space (owner, 2026-11-28; assets/lib/studioKids.js): a song may carry `child`, the id of
 // the child it belongs to ("" or none: the Family shelf). It is kept in the song and in child_id
 // (supabase/studio-per-child.sql), listed with each song, and usage adds byChild ([{ child, items, bytes }]) for the
-// family space bar. The limits stay the family's, shared by everyone.
+// family space bar. The limits stay the family's, shared by everyone. A copy a sibling shared also carries
+// `sharedFrom` (the sharer's id) and `sharedNew` (until first opened); it is an ordinary song in the receiver's space.
 //
 // The sound_projects table is service-role only under RLS; nothing in it is reachable with the public key.
 // Ordinary outcomes come back as HTTP 200 with { ok:false, error }; only a malformed call or a fault is non-200.
@@ -76,7 +77,7 @@ const LOCK_SECONDS = 75;               // a song's lock runs out this long after
 /** A browser tab's lock id, as the app makes it: 8 to 64 letters, digits, - or _. Anything else: none. */
 const cleanHolder = (v: unknown) => { const s = typeof v === "string" ? v : ""; return /^[A-Za-z0-9_-]{8,64}$/.test(s) ? s : ""; };
 /* the fields a song has (model.js SONG_KEYS); anything else is not a song */
-const SONG_KEYS = new Set(["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs", "loopStart", "loopCounts", "child"]);
+const SONG_KEYS = new Set(["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs", "loopStart", "loopCounts", "child", "sharedFrom", "sharedNew"]);
 /** A child id as a song keeps it: letters, digits and dashes, at most 64 ("" is the Family shelf). Anything else: null. */
 const cleanChild = (v: unknown) => v === undefined || v === "" ? "" : typeof v === "string" && /^[A-Za-z0-9-]{1,64}$/.test(v) ? v : null;
 
@@ -237,6 +238,8 @@ Deno.serve(async (req) => {
       if (Object.keys(rest).some((k) => !SONG_KEYS.has(k))) return fail("invalid");
       const child = cleanChild(rest.child);
       if (child === null) return fail("invalid");
+      // a copy a sibling shared (owner, 2026-11-28): who shared it, and whether it is still new
+      if (cleanChild(rest.sharedFrom) === null || (rest.sharedNew !== undefined && typeof rest.sharedNew !== "boolean")) return fail("invalid");
       const lim = await limitsFor(who.id);
       // a steady stream of saves is fine; a flood from one account is not
       const { data: allowed, error: rateError } = await db.rpc("rate_take", { p_bucket: "sound_put", p_key: who.id, p_max: lim.savesPerHour, p_window_seconds: 3600 });

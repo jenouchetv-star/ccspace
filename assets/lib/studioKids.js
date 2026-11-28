@@ -12,6 +12,11 @@
    "Who's creating today?". A family with no children, a visitor who isn't signed in, and the app opened on its own
    work as before: one shelf, no chip.
 
+   Sharing (owner, 2026-11-28: "build the share"; draft docs/mockups/studio-share-draft.html): a child can share a copy
+   of their own song or picture with a sibling. The copy is a new file in the sibling's space carrying `sharedFrom`
+   (the sharer's id) and `sharedNew` (until the sibling first opens it); it shows in their "Shared with you" section
+   with a "From <name>" badge. The copy is theirs to change or delete; the original is untouched.
+
    Classic script: sets window.StudioKids. The pure helpers are tested in test/studioKids.test.js. */
 (function (root) {
   const COLORS = ["#8B5CF6", "#F59E0B", "#10B981", "#EC4899", "#3B82F6", "#EF4444"];
@@ -55,6 +60,16 @@
     if (!kids.length) return null;
     if (fam.picked === "grownup") return "";
     return kids.some((k) => k.id === fam.picked) ? fam.picked : undefined;
+  }
+  /** Is this file a copy a sibling shared? */
+  function isShared(item) { return !!(item && cleanChild(item.sharedFrom)); }
+  /** A shared copy of `item` for `to`, from `from`: a new id, the same work, marked as shared and new. */
+  function sharedCopy(item, to, from, newId, stampKey, now) {
+    const c = JSON.parse(JSON.stringify(item));
+    delete c.owner; delete c.deleted; delete c.pending; delete c.locked;
+    c.id = newId; c.child = to; c.sharedFrom = from; c.sharedNew = true;
+    c[stampKey || "updatedMs"] = now || Date.now();
+    return c;
   }
   /** "1 song", "4 songs", "1 picture" */
   function countText(n, one, many) { return n + " " + (n === 1 ? one : many); }
@@ -108,6 +123,13 @@
   .sk-arrive{ animation:skIn .5s cubic-bezier(.2,.7,.3,1) both; }
   .sk-note{ display:inline-flex; align-items:center; gap:8px; margin-left:12px; font-size:12.5px; font-weight:500; color:var(--mute, #A1A1AB); vertical-align:middle; }
   .sk-note i{ width:12px; height:12px; border-radius:50%; border:2px solid currentColor; border-right-color:transparent; animation:skSpin .9s linear infinite; }
+  .sk-share svg{ width:16px; height:16px; }
+  .sk-menu .sk-sub{ margin:-4px 8px 8px; font-size:12px; color:var(--mute, #A1A1AB); }
+  .sk-menu .sk-go{ margin-left:auto; font-weight:700; font-size:12px; color:var(--accent-text, #C4B5FD); }
+  .sk-shared .art__open{ position:relative; }
+  .sk-from{ position:absolute; left:8px; top:8px; display:inline-flex; align-items:center; gap:6px; padding:3px 9px 3px 3px; border-radius:999px; background:rgba(14,14,18,.82); color:#fff; font-size:12px; font-weight:700; pointer-events:none; }
+  .sk-from .sk-av{ width:20px !important; height:20px !important; font-size:10px !important; }
+  .sk-newtag{ position:absolute; right:8px; top:8px; padding:2px 8px; border-radius:999px; background:#8B5CF6; color:#fff; font-size:11px; font-weight:800; pointer-events:none; }
   @keyframes skShimmer{ from{ background-position:120% 0; } to{ background-position:-20% 0; } }
   @keyframes skIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
   @keyframes skSpin{ to{ transform:rotate(360deg); } }
@@ -116,6 +138,7 @@
   const ICON = {
     chev: '<svg class="sk-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
     users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"/></svg>',
+    share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>',
     move: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 21a8 8 0 0 1 13.29-6"/><circle cx="10" cy="8" r="5"/><path d="M19 16v6M22 19h-6"/></svg>'
   };
   /** A child's picture: their avatar, or their first letter on their color. */
@@ -222,10 +245,33 @@
         const first = menu.querySelector("button"); if (first) first.focus();
       });
     }
+    /** The sharing menu beside a Share button: the picked child's brothers and sisters. Resolves to the sibling's id,
+        or null when closed. */
+    function shareMenu(anchor, title) {
+      closeMenu();
+      const sibs = state.kids.filter((k) => k.id !== state.shelf);
+      return new Promise((done) => {
+        menu = doc.createElement("div"); menu.className = "sk-menu"; menu.setAttribute("role", "menu"); menu.setAttribute("aria-label", "Share a copy");
+        menu.innerHTML = '<h4>Share a copy of \u201c' + esc(title) + '\u201d</h4><p class="sk-sub">With someone in your family</p>'
+          + sibs.map((k) => '<button type="button" role="menuitem" data-sk-share-to="' + esc(k.id) + '">' + avatarHTML(k, 36, state.kids)
+            + '<span><b>' + esc(k.name) + '</b><small>' + esc(k.grade || "") + '</small></span><span class="sk-go">Share</span></button>').join("")
+          + '<p>' + esc(sibs.length === 1 ? sibs[0].name + " gets their own copy" : "They get their own copy") + ' to play with and change. Yours stays just the way it is.</p>';
+        doc.body.appendChild(menu);
+        const r = anchor.getBoundingClientRect(), h = menu.offsetHeight, vh = doc.documentElement.clientHeight;
+        menu.style.top = Math.round(r.bottom + 6 + h > vh ? Math.max(12, r.top - 6 - h) : r.bottom + 6) + "px";
+        menu.style.left = Math.round(Math.min(Math.max(12, r.right - menu.offsetWidth), doc.documentElement.clientWidth - menu.offsetWidth - 12)) + "px";
+        let settled = false;
+        const finish = (v) => { if (settled) return; settled = true; closeMenu(); doc.removeEventListener("click", away, true); done(v); };
+        const away = (e) => { if (!menu || !menu.contains(e.target)) finish(null); };
+        menu.addEventListener("click", (e) => { const b = e.target.closest("[data-sk-share-to]"); if (b) finish(b.getAttribute("data-sk-share-to")); });
+        setTimeout(() => doc.addEventListener("click", away, true), 0);
+        const first = menu.querySelector("button"); if (first) first.focus();
+      });
+    }
     doc.addEventListener("click", (e) => { if (menu && !menu.contains(e.target) && e.target !== chip && !(chip && chip.contains(e.target))) closeMenu(); });
     doc.addEventListener("keydown", (e) => { if (e.key === "Escape" && menu) { closeMenu(); if (chip) chip.focus(); } });
     return {
-      load, pick, askIfNeeded, moveMenu, paintChip,
+      load, pick, askIfNeeded, moveMenu, shareMenu, paintChip,
       get on() { return state.kids.length > 0; },
       /** the family has been asked at least once (until then the shelves aren't known) */
       get loaded() { return state.loaded; },
@@ -235,6 +281,20 @@
       /** the child new files belong to: the picked child, else "" */
       get child() { return state.kids.length && state.shelf ? state.shelf : ""; },
       kid: kidOf,
+      /** a Share button goes on a child's own files when they have a brother or sister in the family */
+      get canShare() { return !!state.shelf && state.kids.some((k) => k.id !== state.shelf); },
+      shareButtonHTML(id, title) { return '<button type="button" class="btn btn--ghost icon iconbtn sk-share" data-sk-share="' + esc(id) + '" aria-label="Share a copy of ' + esc(title) + '" title="Share a copy">' + ICON.share + '</button>'; },
+      /** the "From Maya" badge (and "New" until it's first opened) on a shared copy's picture */
+      sharedBadgesHTML(item) {
+        const k = kidOf(item.sharedFrom);
+        return '<span class="sk-from">' + (k ? avatarHTML(k, 20, state.kids) : "") + 'From ' + esc(k ? k.name : "your family") + '</span>' + (item.sharedNew ? '<span class="sk-newtag">New</span>' : "");
+      },
+      sharedFromName(item) { const k = kidOf(item.sharedFrom); return k ? k.name : "your family"; },
+      /** the "Shared with you" section under the child's own shelf */
+      sharedShelfHTML(cards, verb) {
+        return '<section class="sk-famshelf sk-shared" aria-labelledby="sk-shared-t"><h2 id="sk-shared-t">Shared with you</h2><p>Copies your family shared with you. They\u2019re yours to ' + esc(verb || "change") + '; the original stays with whoever shared it.</p>'
+          + cards + '</section>';
+      },
       /** the line under New */
       lede(start) {
         const k = kidOf(state.shelf);
@@ -273,5 +333,5 @@
     };
   }
 
-  root.StudioKids = { cleanChild, shelfOf, onShelf, counts, colorOf, segments, possessive, joinNames, pickedShelf, countText, create, FAMILY_COLOR, COLORS };
+  root.StudioKids = { cleanChild, shelfOf, onShelf, counts, colorOf, segments, possessive, joinNames, pickedShelf, countText, isShared, sharedCopy, create, FAMILY_COLOR, COLORS };
 })(typeof window !== "undefined" ? window : globalThis);

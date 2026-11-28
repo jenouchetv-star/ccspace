@@ -1408,6 +1408,7 @@ function cloudSync(){
         if (p.layers) p.layers.forEach(l => { if (l.type === "text") fitText(l); });
         Object.assign(p, { id:it.id, updated:it.updated, created:g.project.created || p.created, owner:cloud.email });
         if (StudioKids.cleanChild(g.project.child)) p.child = g.project.child;
+        if (StudioKids.cleanChild(g.project.sharedFrom)){ p.sharedFrom = g.project.sharedFrom; if (g.project.sharedNew === true) p.sharedNew = true; }
         if (mine && mine.trace) p.trace = mine.trace;
         p.thumb = it.thumb || thumbOf(p);
         await store.put(p); here.set(p.id, p); changedHere = true;
@@ -2080,16 +2081,18 @@ const pendingArt = new Map();   // id -> the account's list entry, while that pi
 const arrivedArt = new Set();   // ids that just landed: their card eases in once
 let kidsAsking = null, pendingPaint = 0;
 function repaintSoon(){ clearTimeout(pendingPaint); pendingPaint = setTimeout(() => { if (!cur) renderGallery(); }, 120); }
-function artCard(p, move){
+/** A picture's card. move: a Move to button (Family shelf). mode "own": a Share button (a child's own picture, when
+    they have a brother or sister); "shared": the From badge (a copy a sibling shared). */
+function artCard(p, move, mode){
   if (p.pending) return '<article class="art sk-pending" aria-busy="true" data-pending="' + esc(p.id) + '">'
     + '<span class="art__open">' + (/^data:image\/png;base64,/.test(p.thumb || "") ? '<img src="' + esc(p.thumb) + '" alt=""' + (p.kind === "pixel" ? ' class="px"' : "") + '>' : "") + '</span>'
     + '<div class="art__body"><span class="art__name">' + esc(p.title) + '<span class="art__when">Getting it from your account\u2026</span></span></div></article>';
   const arrive = arrivedArt.delete(p.id);
   return '<article class="art' + (arrive ? " sk-arrive" : "") + '" data-id="' + esc(p.id) + '" data-title="' + esc(p.title) + '">'
-    + '<button type="button" class="art__open" data-open="' + esc(p.id) + '" aria-label="Open ' + esc(p.title) + '">'
-    + (p.thumb ? '<img src="' + esc(p.thumb) + '" alt=""' + (p.kind === "pixel" ? ' class="px"' : "") + '>' : "") + '</button>'
-    + '<div class="art__body"><span class="art__name">' + esc(p.title) + '<span class="art__when">' + esc([when(p.updated), fileSize(p)].filter(Boolean).join(" · ")) + '</span></span>'
-    + (move ? kids.moveButtonHTML(p.id, p.title) : "") + artCardFoot(p, false) + '</div>'
+    + '<button type="button" class="art__open" data-open="' + esc(p.id) + '" aria-label="Open ' + esc(p.title) + (mode === "shared" ? ", shared by " + esc(kids.sharedFromName(p)) : "") + '">'
+    + (p.thumb ? '<img src="' + esc(p.thumb) + '" alt=""' + (p.kind === "pixel" ? ' class="px"' : "") + '>' : "") + (mode === "shared" ? kids.sharedBadgesHTML(p) : "") + '</button>'
+    + '<div class="art__body"><span class="art__name">' + esc(p.title) + '<span class="art__when">' + esc(mode === "shared" && p.sharedNew ? "Shared by " + kids.sharedFromName(p) : [when(p.updated), fileSize(p)].filter(Boolean).join(" · ")) + '</span></span>'
+    + (move ? kids.moveButtonHTML(p.id, p.title) : "") + (mode === "own" && kids.canShare ? kids.shareButtonHTML(p.id, p.title) : "") + artCardFoot(p, false) + '</div>'
     + '</article>';
 }
 async function renderGallery(){
@@ -2119,15 +2122,24 @@ async function renderGallery(){
   if (head) head.textContent = per ? (shelf === undefined ? "Family shelf" : kids.heading()) : "Recent";
   const here = per ? StudioKids.onShelf(list, shelf || "", kids.kids, p => p.child) : list;
   const family = per && shelf ? StudioKids.onShelf(list, "", kids.kids, p => p.child) : [];
+  /* a child's shelf: their own art, then the copies a brother or sister shared with them (owner, 2026-11-28) */
+  const mine = per && shelf ? here.filter(p => !StudioKids.isShared(p)) : here;
+  const sharedHere = per && shelf ? here.filter(p => StudioKids.isShared(p)) : [];
   const g = $("#gallery");
   g.innerHTML = asking ? kids.ghostCardsHTML(3)
-    : here.length ? here.map(p => artCard(p, per && !shelf)).join("") : '<p class="empty">Nothing yet. Pick a page above to start.</p>';
+    : mine.length ? mine.map(p => artCard(p, per && !shelf, per && shelf ? "own" : "")).join("") : '<p class="empty">Nothing yet. Pick a page above to start.</p>';
+  const oldShared = $("#shared-shelf"); if (oldShared) oldShared.remove();
+  if (sharedHere.length && !asking){
+    const sec = document.createElement("div"); sec.id = "shared-shelf";
+    sec.innerHTML = kids.sharedShelfHTML('<div class="gallery">' + sharedHere.map(p => artCard(p, false, "shared")).join("") + '</div>', "color in and change");
+    g.after(sec);
+  }
   if (head){ const n = head.parentNode.querySelector(".sk-note"); if (n) n.remove(); if (pendingArt.size) head.insertAdjacentHTML("afterend", kids.noteHTML(pendingArt.size)); }
   const old = $("#family-shelf"); if (old) old.remove();
   if (family.length && !asking){
     const sec = document.createElement("div"); sec.id = "family-shelf";
     sec.innerHTML = kids.familyShelfHTML('<div class="gallery">' + family.map(p => artCard(p, true)).join("") + '</div>');
-    g.after(sec);
+    ($("#shared-shelf") || g).after(sec);
   }
   icons();
   paintLocks();
@@ -2151,6 +2163,23 @@ async function movePicture(btn){
   cloudSync().then(changed => { if (changed && !cur) renderGallery(); if (!cur) paintSpace(); });
 }
 $("#home").addEventListener("click", e => { const b = e.target.closest("[data-sk-move]"); if (b){ e.stopPropagation(); movePicture(b); } }, true);
+/* Share: a copy of a child's own picture goes to a brother or sister's "Shared with you" (owner, 2026-11-28). The copy
+   is a new picture in their space; the original is untouched. */
+async function sharePicture(btn){
+  const p = (await store.all().catch(() => [])).find(x => x.id === btn.dataset.skShare);
+  if (!p) return renderGallery();
+  const to = await kids.shareMenu(btn, p.title);
+  if (!to) return;
+  const copy = StudioKids.sharedCopy(p, to, kids.shelf, uid(), "updated");
+  copy.created = copy.updated;
+  if (p.owner) copy.owner = p.owner;
+  try { await store.put(copy); } catch(e){ toast("That picture couldn\u2019t be shared just now. Try again."); return; }
+  const k = kids.kid(to);
+  toast("Shared a copy of \u201c" + p.title + "\u201d with " + (k ? k.name : "your family") + ".");
+  await renderGallery();
+  cloudSync().then(changed => { if (changed && !cur) renderGallery(); if (!cur) paintSpace(); });
+}
+$("#home").addEventListener("click", e => { const b = e.target.closest("[data-sk-share]"); if (b){ e.stopPropagation(); sharePicture(b); } }, true);
 /* A picture open right now in another browser tab or device (owner, 2026-11-18): its card is greyed out and a lock
    sits where the trash can was. Picking it still says where it's open (openStored). */
 function artCardFoot(p, locked){
@@ -2163,7 +2192,7 @@ function paintLocks(){
   paintingLocks = (async () => {
     const ids = cloud.on() ? await artLockedElsewhere((a, x) => cloud.call(a, x), artLock.holder) : new Set();
     let changed = false;
-    document.querySelectorAll("#gallery .art[data-id], #family-shelf .art[data-id]").forEach(el => {
+    document.querySelectorAll("#gallery .art[data-id], #shared-shelf .art[data-id], #family-shelf .art[data-id]").forEach(el => {
       const locked = ids.has(el.dataset.id);
       if (el.classList.contains("art--locked") === locked) return;
       el.classList.toggle("art--locked", locked);
@@ -2183,6 +2212,8 @@ setInterval(() => { if (!cur && !document.hidden) paintLocks(); }, 20000);
 async function openStored(id){
   const p = (await store.all().catch(() => [])).find(x => x.id === id);
   if (!p) return;
+  /* a shared copy opened for the first time is no longer new (a change like any other: the account follows) */
+  if (p.sharedNew){ delete p.sharedNew; p.updated = Math.max(Date.now(), (p.updated || 0) + 1); try { await store.put(p); } catch(e){} }
   if (cloud.on() && (await artLock.take(id)) === "locked"){
     paintLocks();
     const m = artLockedMessage(p.title);

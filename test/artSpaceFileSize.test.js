@@ -18,6 +18,6 @@ describe("Art Space: file sizes in the picture gallery", () => {
     expect(fileSize(withThumb)).toBe(fileSize(p));
   });
   it("shows the size next to the date under each picture's name", () => {
-    expect(html).toContain("esc([when(p.updated), fileSize(p)].filter(Boolean).join(\" · \"))");
+    expect(html).toContain("[when(p.updated), fileSize(p)].filter(Boolean).join(\" · \")");   // a shared copy still new says who shared it instead (owner, 2026-11-28)
   });
 });

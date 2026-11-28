@@ -4432,16 +4432,19 @@ const pendingSongs = new Map();   // id -> the account's list entry, while that 
 const arrivedSongs = new Set();   // ids that just landed: their card eases in once
 let kidsAsking = null, pendingPaint = 0;
 function repaintSoon(){ clearTimeout(pendingPaint); pendingPaint = setTimeout(() => { if ($("#editor").hidden) paintHome(); }, 120); }
-function songCard(s, move){
+/** A song's card. move: a Move to button (Family shelf). mode "own": a Share button (a child's own song, when they
+    have a brother or sister); "shared": the From badge (a copy a sibling shared). */
+function songCard(s, move, mode){
   const title = s.title || "My song";
   if (s.pending) return '<article class="art sk-pending" aria-busy="true" data-pending="' + esc(s.id) + '">'
     + '<span class="art__open">' + (/^data:image\/(svg\+xml|png);base64,/.test(s.thumb || "") ? '<img src="' + esc(s.thumb) + '" alt="">' : "") + '</span>'
     + '<div class="art__body"><span class="art__name">' + esc(title) + '<span class="art__when">Getting it from your account\u2026</span></span></div></article>';
   const arrive = arrivedSongs.delete(s.id);
   return '<article class="art' + (arrive ? " sk-arrive" : "") + '" data-id="' + esc(s.id) + '" data-title="' + esc(title) + '">'
-    + '<button type="button" class="art__open" data-open="' + esc(s.id) + '" aria-label="Open ' + esc(title) + '">' + miniPicture(s) + '</button>'
-    + '<div class="art__body"><span class="art__name">' + esc(title) + '<span class="art__when">' + esc([when(s.updatedMs), fileSize(s)].filter(Boolean).join(" · ")) + '</span></span>'
-    + (move ? kids.moveButtonHTML(s.id, title) : "") + songCardFoot(s, false) + '</div>'
+    + '<button type="button" class="art__open" data-open="' + esc(s.id) + '" aria-label="Open ' + esc(title) + (mode === "shared" ? ", shared by " + esc(kids.sharedFromName(s)) : "") + '">' + miniPicture(s)
+    + (mode === "shared" ? kids.sharedBadgesHTML(s) : "") + '</button>'
+    + '<div class="art__body"><span class="art__name">' + esc(title) + '<span class="art__when">' + esc(mode === "shared" && s.sharedNew ? "Shared by " + kids.sharedFromName(s) : [when(s.updatedMs), fileSize(s)].filter(Boolean).join(" · ")) + '</span></span>'
+    + (move ? kids.moveButtonHTML(s.id, title) : "") + (mode === "own" && kids.canShare ? kids.shareButtonHTML(s.id, title) : "") + songCardFoot(s, false) + '</div>'
     + '</article>';
 }
 async function paintHome(){
@@ -4474,15 +4477,24 @@ async function paintHome(){
   if (head) head.textContent = per ? (shelf === undefined ? "Family shelf" : kids.heading()) : "Recent";
   const here = per ? StudioKids.onShelf(list, shelf || "", kids.kids, s => s.child) : list;
   const family = per && shelf ? StudioKids.onShelf(list, "", kids.kids, s => s.child) : [];
+  /* a child's shelf: their own songs, then the copies a brother or sister shared with them (owner, 2026-11-28) */
+  const mine = per && shelf ? here.filter(s => !StudioKids.isShared(s)) : here;
+  const sharedHere = per && shelf ? here.filter(s => StudioKids.isShared(s)) : [];
   const g = $("#gallery");
   g.innerHTML = asking ? kids.ghostCardsHTML(3)
-    : here.length ? here.map(s => songCard(s, per && !shelf)).join("") : '<p class="empty">Nothing yet. Pick a way to start above.</p>';
+    : mine.length ? mine.map(s => songCard(s, per && !shelf, per && shelf ? "own" : "")).join("") : '<p class="empty">Nothing yet. Pick a way to start above.</p>';
+  const oldShared = $("#shared-shelf"); if (oldShared) oldShared.remove();
+  if (sharedHere.length && !asking){
+    const sec = document.createElement("div"); sec.id = "shared-shelf";
+    sec.innerHTML = kids.sharedShelfHTML('<div class="gallery">' + sharedHere.map(s => songCard(s, false, "shared")).join("") + '</div>', "play and change");
+    g.after(sec);
+  }
   if (head){ const n = head.parentNode.querySelector(".sk-note"); if (n) n.remove(); if (pendingSongs.size) head.insertAdjacentHTML("afterend", kids.noteHTML(pendingSongs.size)); }
   const old = $("#family-shelf"); if (old) old.remove();
   if (family.length && !asking){
     const sec = document.createElement("div"); sec.id = "family-shelf";
     sec.innerHTML = kids.familyShelfHTML('<div class="gallery">' + family.map(s => songCard(s, true)).join("") + '</div>');
-    g.after(sec);
+    ($("#shared-shelf") || g).after(sec);
   }
   icons();
   if (!dbOk && !blockedToastShown){ blockedToastShown = true; toast("This browser can’t keep songs between visits."); }
@@ -4501,7 +4513,7 @@ function paintLocks(){
   paintingLocks = (async () => {
     const ids = cloud.on() && songLock ? await C.lockedElsewhere((a, x) => cloud.call(a, x), songLock.holder) : new Set();
     let changed = false;
-    $$("#gallery .art[data-id], #family-shelf .art[data-id]").forEach(el => {
+    $$("#gallery .art[data-id], #shared-shelf .art[data-id], #family-shelf .art[data-id]").forEach(el => {
       const locked = ids.has(el.dataset.id);
       if (el.classList.contains("art--locked") === locked) return;
       el.classList.toggle("art--locked", locked);
@@ -4520,6 +4532,11 @@ setInterval(() => { if ($("#editor").hidden && !document.hidden) paintLocks(); }
 async function openStored(id){
   let rec = null;
   try { rec = await loadRecord(id); } catch(e){ toast("That song couldn’t be opened just now. Try again."); return; }
+  /* a shared copy opened for the first time is no longer new (a change like any other: the account follows) */
+  if (rec && !rec.deleted && rec.sharedNew){
+    delete rec.sharedNew; rec.updatedMs = Math.max(Date.now(), (rec.updatedMs || 0) + 1);
+    try { await (await openDb()).put(rec); } catch(e){}
+  }
   const raw = C.songOf(rec);
   if (!raw){ toast("That song couldn’t be opened."); return paintHome(); }
   const v = M.validateSong(raw, CATALOG_IDS);
@@ -4550,9 +4567,26 @@ async function moveSong(btn){
 }
 /* the Move to buttons on Home (the Family shelf under a child's songs is outside #gallery) */
 $("#home").addEventListener("click", e => { const b = e.target.closest("[data-sk-move]"); if (b){ e.stopPropagation(); moveSong(b); } }, true);
+/* Share: a copy of a child's own song goes to a brother or sister's "Shared with you" (owner, 2026-11-28). The copy is
+   a new song in their space; the original is untouched. */
+async function shareSong(btn){
+  const st = await openDb(), rec = await st.get(btn.dataset.skShare);
+  if (!rec || rec.deleted) return paintHome();
+  const title = rec.title || "My song";
+  const to = await kids.shareMenu(btn, title);
+  if (!to) return;
+  const copy = StudioKids.sharedCopy(rec, to, kids.shelf, M.newSong().id, "updatedMs");
+  if (rec.owner) copy.owner = rec.owner;
+  try { await st.put(copy); } catch(e){ toast("That song couldn’t be shared just now. Try again."); return; }
+  const k = kids.kid(to);
+  toast("Shared a copy of “" + title + "” with " + (k ? k.name : "your family") + ".");
+  await paintHome();
+  syncHome();
+}
+$("#home").addEventListener("click", e => { const b = e.target.closest("[data-sk-share]"); if (b){ e.stopPropagation(); shareSong(b); } }, true);
 /* the songs on Home: the shelf shown and the Family shelf under it */
 $("#home").addEventListener("click", async e => {
-  if (!e.target.closest("#gallery, #family-shelf") || e.target.closest(".sk-pending")) return;
+  if (!e.target.closest("#gallery, #shared-shelf, #family-shelf") || e.target.closest(".sk-pending")) return;
   const o = e.target.closest("[data-open]"); if (o){ audio(); return openStored(o.dataset.open); }
   const d = e.target.closest("[data-del]");
   if (d){
