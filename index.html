@@ -12033,6 +12033,7 @@ function finderFromActivity(a){
   return {
     id: a.id, source: "library", href: "#/activity/" + a.id,
     title: a.title, character: a.character || "", themes: themes, materials: mats.length ? mats : ["basics"],
+    materialsDetail: Array.isArray(a.materialsDetail) ? a.materialsDetail : [],
     mins: a.timeMinutes || 20, plus: false, ageMin: a.ageMin || 4, ageMax: a.ageMax || 10,
     place: a.setting === "indoor" ? "indoors" : a.setting === "outdoor" ? "outdoors" : "either",
     support: a.adultSupport === "none" ? "kid" : (a.adultSupport || "nearby"),
@@ -12205,6 +12206,14 @@ function findResults(results){
 }
 
 /** One recommendation, in the standard card shape. */
+/** What a finder card says you need: the first few exact items when the activity lists them, else the kinds. */
+function findNeedLine(a){
+  const exact = Array.isArray(a.materialsDetail) ? a.materialsDetail.filter(Boolean) : [];
+  /* one line: "Aluminum foil, a sink, tub, or large bowl of water, ..." */
+  if (exact.length) return exact.slice(0, 4).map((x, i) => i && /^(A|An|The) /.test(x) ? x.charAt(0).toLowerCase() + x.slice(1) : x).join(", ")
+    + (exact.length > 4 ? ", and more" : "");
+  return a.materials.map(m => findMaterial(m).label).join(", ");
+}
 function findCard(r){
   const a = r.activity;
   const time = a.mins + (a.plus ? "+ min" : " min");
@@ -12223,7 +12232,8 @@ function findCard(r){
     + '<h4 style="margin:0 0 .3em;font-size:1.25rem">' + E(a.title) + '</h4>'
     + '<p style="margin:0 0 16px">' + E(findChallengeLine(a)) + '</p>'
     + '<dl class="findcard__facts">'
-    + '<dt>You need</dt><dd>' + E(a.materials.map(m => findMaterial(m).label).join(", ")) + '</dd>'
+    /* the exact things to gather when the activity lists them (owner, 2026-11-27), not just the kinds of material */
+    + '<dt>You need</dt><dd>' + E(findNeedLine(a)) + '</dd>'
     + '</dl>'
     + (r.why.length || r.gaps.length
         ? '<ul class="match__why" style="margin:14px 0 0">'
@@ -12328,6 +12338,11 @@ function viewFindActivity(id){
           + '<a href="#/characters/' + E(who.slug) + '" style="font-weight:800;text-decoration:none;border-bottom:2px solid var(--sun)">'
           + E(who.name) + '</a></div></div>'
         : "")
+    /* a sheet for the table: Print, the same as a library activity's (owner, 2026-11-27) */
+    + '<div class="row no-print" style="margin-top:22px">'
+    + '<button class="btn btn--paper" data-act="print">' + ic("printer") + ' Print</button>'
+    + '<button class="btn btn--paper" data-act="share" data-url="' + E(location.origin + "/find/" + a.id) + '" data-title="' + E(a.title) + '">' + ic("share-2") + ' Share</button>'
+    + '</div>'
 
     + (a.steps.length
         ? '<div class="section section--tight" style="margin-top:26px"><h2>' + slot("templates/activity", "stepsTitle") + '</h2>'
@@ -12344,9 +12359,13 @@ function viewFindActivity(id){
     + '<div class="grid" style="grid-template-columns:1fr;gap:16px;margin-top:16px">'
     + '<div class="panel panel--flat"><h3 style="margin-bottom:.4em">' + ic("package","i-lg") + ' ' + slot("templates/activity", "needTitle") + '</h3>'
     + '<ul class="checklist checklist--ruled" style="margin:0">'
-    + a.materials.map(m => '<li>' + ic("check") + '<span>' + E(findMaterial(m).label)
-        + (findMaterial(m).eg ? '<span class="tiny mute" style="display:block">' + E(findMaterial(m).eg) + '</span>' : "")
-        + '</span></li>').join("")
+    /* the exact list to gather (owner, 2026-11-27: "foil, water, pennies", not "Kitchen science"); the kinds of
+       material only when an activity has no list yet */
+    + (Array.isArray(a.materialsDetail) && a.materialsDetail.length
+        ? a.materialsDetail.map(m => '<li>' + ic("check") + '<span>' + E(m) + '</span></li>').join("")
+        : a.materials.map(m => '<li>' + ic("check") + '<span>' + E(findMaterial(m).label)
+            + (findMaterial(m).eg ? '<span class="tiny mute" style="display:block">' + E(findMaterial(m).eg) + '</span>' : "")
+            + '</span></li>').join(""))
     + '</ul></div>'
     + (a.safety.length
         ? '<div class="panel panel--flat" style="border-left:8px solid var(--berry)"><h3 style="margin-bottom:.4em">' + ic("shield-alert","i-lg") + ' ' + slot("templates/activity", "safetyTitle") + '</h3>'
@@ -20629,7 +20648,9 @@ const FIELDS = {
     { key:"title", label:"Title", type:"text", wide:true },
     { key:"character", label:"Character", type:"select", options:characterOptions },
     { key:"themes", label:"Themes", type:"chips", options:() => FIND_THEMES.map(t => ({ value:t.id, label:t.label })), wide:true, help:"The first one decides the page's crumb and pattern." },
-    { key:"materials", label:"What you need", type:"chips", options:() => FIND_MATERIALS.map(m => ({ value:m.id, label:m.label })), wide:true },
+    { key:"materials", label:"Kinds of material (for the Finder's matching)", type:"chips", options:() => FIND_MATERIALS.map(m => ({ value:m.id, label:m.label })), wide:true },
+    /* the exact things to gather, shown under What you need and on the Finder's cards (owner, 2026-11-27) */
+    { key:"materialsDetail", label:"What you need", type:"lines", wide:true, help:"One item per line, exactly what to gather: foil, a bowl of water, 20 pennies." },
     { key:"mins", label:"Minutes", type:"number" },
     { key:"plus", label:"Or more (“20+ min”)", type:"bool" },
     { key:"ageMin", label:"Age from", type:"number" },
