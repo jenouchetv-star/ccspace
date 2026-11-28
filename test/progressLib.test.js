@@ -24,7 +24,7 @@ describe("subjects and grades", () => {
     expect(subjectFromTopic(undefined)).toBe("");
   });
   it("gradeLabel", () => {
-    expect(GRADE_LABELS).toHaveLength(7);
+    expect(GRADE_LABELS).toHaveLength(6);   // Kindergarten to 5th grade (owner, 2026-11-27)
     expect(gradeLabel(0)).toBe("Kindergarten");
     expect(gradeLabel(3)).toBe("3rd grade");
     expect(gradeLabel(9)).toBe("");
@@ -327,7 +327,7 @@ describe("drafting quiz questions with Copilot", () => {
     expect(questionDraftMessages(fact, "k1")[0].content).toMatch(/exactly 2 choices/);
     expect(questionDraftMessages(fact, "k1")[0].content).toMatch(/Kindergarten and 1st grade/);
     expect(questionDraftMessages(fact, "g23")[0].content).toMatch(/exactly 3 choices/);
-    expect(questionDraftMessages(fact, "g46")[0].content).toMatch(/4th to 6th grade/);
+    expect(questionDraftMessages(fact, "g46")[0].content).toMatch(/4th and 5th grade/);
   });
 });
 
@@ -338,7 +338,7 @@ describe("grade adjust: the shared rule", () => {
     }
     expect(childGradeFrom(0)).toBe(0);
     expect(childGradeFrom("0")).toBe(0);
-    expect(childGradeFrom("6")).toBe(6);
+    expect(childGradeFrom("6")).toBe(5);   // 6th counts as 5th: the site stops at 5th grade
     expect(childGradeFrom(3)).toBe(3);
   });
 
@@ -408,7 +408,7 @@ describe("grade adjust: the shared rule", () => {
     // a <head> with attributes, any case; <header> is not a head
     expect(withChildGrade("<HEAD lang=\"en\"><script>go()</script>", 0)).toBe("<HEAD lang=\"en\"><script>window.CCS_GRADE=0;</script><script>go()</script>");
     // no <head>: at the very start, before the game's code
-    expect(withChildGrade("<header>x</header><script>go()</script>", 6)).toBe("<script>window.CCS_GRADE=6;</script><header>x</header><script>go()</script>");
+    expect(withChildGrade("<header>x</header><script>go()</script>", 5)).toBe("<script>window.CCS_GRADE=5;</script><header>x</header><script>go()</script>");
     // ... except it never goes in front of a <!doctype>, which would put the game in quirks mode
     expect(withChildGrade("<!DOCTYPE html>\n<body><script>go()</script>", 1)).toBe("<!DOCTYPE html>\n<script>window.CCS_GRADE=1;</script><body><script>go()</script>");
     // a bad grade changes nothing

@@ -11,7 +11,7 @@ describe("grade pick helpers", () => {
   it("reads what the device kept: any, a grade, or nothing", () => {
     expect(gradePickFrom("any")).toBe("any");
     expect(gradePickFrom("0")).toBe(0);
-    expect(gradePickFrom("6")).toBe(6);
+    expect(gradePickFrom("6")).toBe(5);   // the site stops at 5th grade
     expect(gradePickFrom("7")).toBe(null);
     expect(gradePickFrom(null)).toBe(null);
     expect(gradePickFrom("")).toBe(null);
@@ -29,8 +29,8 @@ describe("grade pick helpers", () => {
   it("short labels for a phone", () => {
     expect(gradeShortLabel(0)).toBe("K");
     expect(gradeShortLabel(2)).toBe("2nd");
-    expect(gradeShortLabel(6)).toBe("6th");
-    expect(gradeShortLabel(9)).toBe("");
+    expect(gradeShortLabel(5)).toBe("5th");
+    expect(gradeShortLabel(6)).toBe("");
   });
 });
 
@@ -49,7 +49,7 @@ describe("grade picker on the site", () => {
     expect(books).toContain('gradeNoteHTML("books")');
   });
 
-  it("the picker lists Any grade, then Kindergarten to 6th grade, and is labelled", () => {
+  it("the picker lists Any grade, then Kindergarten to 5th grade, and is labelled", () => {
     const pick = fn(html, "gradePickHTML");
     expect(pick).toContain('[["any", "Any grade"]].concat(GRADE_LABELS');
     expect(pick).toContain('data-act="grade-pick" aria-label="Your child’s grade"');

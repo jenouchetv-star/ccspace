@@ -25,7 +25,7 @@ describe("the Newest game section", () => {
     expect(html).toContain(`quEditable("home-arcade-heading", homeId, E(heading))`);
     expect(html).toContain(`copyPara("home-arcade-text", homeId, text, { cls:"lede" })`);
     expect(html).toContain('"home-arcade-heading": { label:"New games band heading", col:"pages",   fieldKey:"arcadeHeading"');
-    expect(html).toContain('pageVal("home", "arcadeHeading", "8 games, one big arcade makeover!")');
+    expect(html).toContain('pageVal("home", "arcadeHeading", "23 games, one big arcade!")');
   });
 
   it("lets Quick Update change the text under the Create page's heading", () => {

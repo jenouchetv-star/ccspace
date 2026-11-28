@@ -9481,7 +9481,7 @@ const AppState = {
   createFilterDraft: null,
   storyFilter: { character:"", q:"" },
   storyFilterDraft: null,
-  gameFilter: { access:"", players:"", age:"", q:"" },
+  gameFilter: { access:"", players:"", q:"" },
   gameFilterDraft: null,
   watchPage: 1,
   /* Which contact forms just sent successfully, in this page view - each
@@ -12340,7 +12340,8 @@ function viewFindActivity(id){
     + '<p class="lede" style="font-weight:500">' + E(findChallengeLine(a)) + '</p>'
     + '<p class="tiny mute" style="margin-top:10px">'
     + E(a.place === "either" ? "Indoors or outdoors" : titleCase(a.place)) + ' &middot; '
-    + E(findLabel(FIND_SUPPORT, a.support)) + ' &middot; Ages ' + a.ageMin + ' to ' + a.ageMax + '</p>'
+    /* said as grades inside K to 5th, like the rest of the site (owner, 2026-11-27); the ages stay on the record */
+    + E(findLabel(FIND_SUPPORT, a.support)) + ' &middot; ' + E(gradeSpanFromAges(a.ageMin, a.ageMax)) + '</p>'
 
     + (who
         ? '<div class="row" style="margin-top:22px">'
@@ -12448,7 +12449,7 @@ function findChallengeLine(a){
   const theme = findTheme(a.themes[0]).label;
   const time = a.mins + (a.plus ? " minutes or more" : " minutes");
   const who = findLabel(FIND_SUPPORT, a.support).toLowerCase();
-  return "A " + theme + " challenge for ages " + a.ageMin + " to " + a.ageMax
+  return "A " + theme + " challenge for " + gradeSpanFromAges(a.ageMin, a.ageMax, true)
     + ", about " + time + ", with a grown-up " + (a.support === "kid" ? "free to sit this one out" : who.replace("grown-up ", "")) + ".";
 }
 
@@ -12500,7 +12501,9 @@ function pwaInstallCard(){
 function newGamesPromoHTML(){
   /* its heading and text live on the home page's record, so Quick Update can change them */
   const homeRec = pageRec("home"), homeId = homeRec ? homeRec.id : null;
-  const heading = pageVal("home", "arcadeHeading", "8 games, one big arcade makeover!");
+  /* the number of games is counted, so it always matches the Play page (owner, 2026-11-27: it said 8 while Play
+     listed 23); a heading saved in Quick Update keeps its words, and a number of games at its start is counted too */
+  const heading = withGameCount(pageVal("home", "arcadeHeading", "23 games, one big arcade!"), onlineGames().length);
   const text = pageVal("home", "arcadeText", "Match juicy fruit in Fruit Drop, race a friend through Maze Quest, spell with Spelling Detective, and more. Every game has a learning twist for kids from Kindergarten to 5th grade.");
   const note = pageVal("home", "arcadeNote", "It’s free to join! A family account opens Chike’s Gravity 4 and more games.");
   if (homeId){
@@ -12906,7 +12909,6 @@ function listToolsHTML(o){
 }
 
 /* ---- Games: search and filter, from what each game already records ---- */
-const GAME_AGES = { "4-6":[4,6], "7-9":[7,9], "10-12":[10,12] };
 function gamePlaysAlone(g){ return /(^|[^0-9])1([^0-9]|$)/.test(String(g.players || "")); }
 function gamePlaysTogether(g){ return /\b[2-9]\b|or more|share a code|online/i.test(String(g.players || "")); }
 function gameMatches(g, f, skip){
@@ -12914,17 +12916,14 @@ function gameMatches(g, f, skip){
   if (skip !== "access" && f.access === "members" && g.kind !== "members") return false;
   if (skip !== "players" && f.players === "alone" && !gamePlaysAlone(g)) return false;
   if (skip !== "players" && f.players === "together" && !gamePlaysTogether(g)) return false;
-  if (skip !== "age" && f.age && GAME_AGES[f.age]){
-    const r = GAME_AGES[f.age], lo = Number(g.ageMin) || 0, hi = Number(g.ageMax) || 99;
-    if (lo > r[1] || hi < r[0]) return false;
-  }
   if (skip !== "q" && f.q){
     const q = f.q.toLowerCase();
     if ((g.title + " " + (g.summary || "") + " " + (g.vocabWord || "")).toLowerCase().indexOf(q) < 0) return false;
   }
   return true;
 }
-function gameFilterActive(f){ return (f.q ? 1 : 0) + (f.access ? 1 : 0) + (f.players ? 1 : 0) + (f.age ? 1 : 0); }
+/* no age choice: nearly every game fit every age band, and the grade picker beside search does that job (owner, 2026-11-27) */
+function gameFilterActive(f){ return (f.q ? 1 : 0) + (f.access ? 1 : 0) + (f.players ? 1 : 0); }
 function gameFilterFieldsHTML(state, prefix, pool, offline){
   const chip = (key, value, label) => {
     const n = pool.filter(g => gameMatches(g, Object.assign({}, state, { [key]: value }), "")).length;
@@ -12936,15 +12935,17 @@ function gameFilterFieldsHTML(state, prefix, pool, offline){
     + (offline ? "" : '<div class="field"><span class="flabel">Who can play</span><div class="opts">'
       + chip("access", "", "Everyone") + chip("access", "free", "Free") + chip("access", "members", "Free account") + '</div></div>')
     + '<div class="field"><span class="flabel">Players</span><div class="opts">'
-    + chip("players", "", "Any") + chip("players", "alone", "Play alone") + chip("players", "together", "With others") + '</div></div>'
-    + '<div class="field"><span class="flabel">Ages</span><div class="opts">'
-    + chip("age", "", "Any age") + chip("age", "4-6", "4 to 6") + chip("age", "7-9", "7 to 9") + chip("age", "10-12", "10 to 12") + '</div></div>';
+    + chip("players", "", "Any") + chip("players", "alone", "Play alone") + chip("players", "together", "With others") + '</div></div>';
 }
 let GAME_POOL = "";
 function gamePool(){
   const offline = GAME_POOL === "offline";
   return db.list("games").filter(g => g.status === "published" && (offline ? !g.interactive : g.interactive));
 }
+/** The Online Games list: what the Play page's heading counts. */
+function onlineGames(){ return db.list("games").filter(g => g.status === "published" && g.interactive); }
+/** "8 games, ..." with the real number: a number of games at the start of the text becomes the count. */
+function withGameCount(text, n){ return String(text || "").replace(/^\s*\d+\s+games?\b/i, plural(n, "game")); }
 function gameFilterModalHTML(){
   const draft = AppState.gameFilterDraft;
   return '<div class="modal__head"><div>'
@@ -13446,7 +13447,7 @@ function viewPlay(sub){
   const offline = sub === "offline";
   /* Online and Offline are two lists: moving between them starts the search and filters again */
   const poolKey = offline ? "offline" : "online";
-  if (GAME_POOL !== poolKey){ GAME_POOL = poolKey; AppState.gameFilter = { access:"", players:"", age:"", q:"" }; }
+  if (GAME_POOL !== poolKey){ GAME_POOL = poolKey; AppState.gameFilter = { access:"", players:"", q:"" }; }
   const gf = AppState.gameFilter;
   const pool    = gamePool();
   const list    = pool.filter(g => gameMatches(g, gf, "")).sort(playOrder);
@@ -17273,12 +17274,12 @@ window.addEventListener("resize", () => { clearTimeout(RP_RESIZE); RP_RESIZE = s
 function progressChildrenHTML(){
   const S = ProgressState, kids = S.children || [];
   const level = g => (g <= 1 ? "Chike’s quizzes for Kindergarten and 1st grade, read aloud."
-    : g <= 3 ? "Chike’s quizzes for 2nd and 3rd grade." : "Chike’s quizzes for 4th to 6th grade.");
+    : g <= 3 ? "Chike’s quizzes for 2nd and 3rd grade." : "Chike’s quizzes for 4th and 5th grade.");
   const draft = (id) => (S.draft && S.draft.id === id ? S.draft : null);
-  const grades = (picked) => '<select class="sel pr-field" name="grade" aria-label="School grade" required>'
+  const grades = (raw) => { const picked = raw === null ? null : childGradeFrom(raw); return '<select class="sel pr-field" name="grade" aria-label="School grade" required>'
     + (picked === null ? '<option value="" selected disabled>School grade</option>' : "")
     + GRADE_LABELS.map((l, i) => '<option value="' + i + '"' + (i === picked ? " selected" : "") + '>' + E(l) + '</option>').join("")
-    + '</select>';
+    + '</select>'; };
   const nameBox = (value, focus) => '<input class="inp pr-field pr-field--name" name="name" type="text" maxlength="24" autocomplete="off" spellcheck="false"'
     + ' placeholder="First name or nickname" aria-label="First name or nickname" required value="' + E(value) + '"' + (focus ? ' data-autofocus' : "") + '>';
   const busy = S.busy ? " disabled" : "";
@@ -17351,7 +17352,7 @@ async function progressSaveChild(form){
     S.formMsg = "Type a first name or a nickname: up to 24 letters.";
     return rerender();
   }
-  if (!/^[0-6]$/.test(grade)){ S.formMsg = "Pick a school grade."; return rerender(); }
+  if (!/^[0-5]$/.test(grade)){ S.formMsg = "Pick a school grade."; return rerender(); }
   const child = { name: name, grade: Number(grade) };
   if (id) child.id = id;
   if (AVATAR_IDS.includes(avatar)) child.avatar = avatar;
@@ -21032,7 +21033,7 @@ async function portalApplyPrivateGame(c){
    the record itself saves, and approved when the record is published. Only approved questions are ever asked.
    ============================================================ */
 const QUIZ_KINDS = { videos: "episode", stories: "book", activities: "activity", portalEntries: "entry" };
-const QUIZ_LEVELS = [{ id: "k1", label: "K to 1st", n: 2 }, { id: "g23", label: "2nd to 3rd", n: 3 }, { id: "g46", label: "4th to 6th", n: 3 }];
+const QUIZ_LEVELS = [{ id: "k1", label: "K to 1st", n: 2 }, { id: "g23", label: "2nd to 3rd", n: 3 }, { id: "g46", label: "4th and 5th", n: 3 }];
 const QUIZ_NO_COPILOT = "Copilot isn't running. Type the questions, or leave them empty for now.";
 /* what the open panel loaded but doesn't show (a second variant, a fact no longer on the record), so a save keeps it */
 const QuizEdit = { prefix: "", keep: [], keepSubjects: {}, busy: false };
@@ -32941,7 +32942,7 @@ const ACTIONS = {
     rerender();
   },
   "gf-clear": () => {
-    AppState.gameFilter = { access:"", players:"", age:"", q:"" };
+    AppState.gameFilter = { access:"", players:"", q:"" };
     rerender();
   },
   "gf-modal-open": () => {
@@ -32954,7 +32955,7 @@ const ACTIONS = {
     reopenGameFilterModal();
   },
   "gfd-clear": () => {
-    AppState.gameFilterDraft = { access:"", players:"", age:"", q:"" };
+    AppState.gameFilterDraft = { access:"", players:"", q:"" };
     reopenGameFilterModal();
   },
   "gf-modal-apply": () => {

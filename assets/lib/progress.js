@@ -36,18 +36,21 @@ export function subjectFromTopic(topic) {
   return TOPIC_SUBJECT[String(topic || "").trim().toLowerCase()] || "";
 }
 
-export const GRADE_LABELS = ["Kindergarten", "1st grade", "2nd grade", "3rd grade", "4th grade", "5th grade", "6th grade"];
+/* Kindergarten to 5th grade, the site's one promise (owner, 2026-11-27: 6th grade removed) */
+export const GRADE_LABELS = ["Kindergarten", "1st grade", "2nd grade", "3rd grade", "4th grade", "5th grade"];
 
 export function gradeLabel(n) {
-  return GRADE_LABELS[n] || "";
+  const g = childGradeFrom(n);
+  return g === null ? "" : GRADE_LABELS[g];
 }
 
 /* ---- grade adjust: games and activities fit the picked child's grade ---- */
 
-/** A grade, 0 (Kindergarten) to 6, from a number or a string of one digit; anything else is null. */
+/** A grade, 0 (Kindergarten) to 5, from a number or a string of one digit; anything else is null. A 6 (a child saved
+    in 6th grade, or moved up past 5th by the school year) counts as 5th: the site stops at 5th grade. */
 export function childGradeFrom(raw) {
   const n = typeof raw === "number" ? raw : typeof raw === "string" && /^[0-6]$/.test(raw) ? Number(raw) : NaN;
-  return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null;
+  return Number.isInteger(n) && n >= 0 && n <= 6 ? Math.min(n, 5) : null;
 }
 
 /* ---- the grade picker on Play and Books (owner, 2026-11-27; docs/mockups/grade-picker-draft-2.png) ---- */
@@ -65,9 +68,24 @@ export function siteGradeFrom(pick, childGrade) {
   return childGradeFrom(childGrade);
 }
 
-/** The picker's short label on a phone: "K", "1st" to "6th". */
+/** The picker's short label on a phone: "K", "1st" to "5th". */
 export function gradeShortLabel(n) {
-  return ["K", "1st", "2nd", "3rd", "4th", "5th", "6th"][n] || "";
+  return ["K", "1st", "2nd", "3rd", "4th", "5th"][n] || "";
+}
+
+/** An age range said as grades inside K to 5th (owner, 2026-11-27: one promise everywhere, Kindergarten to 5th grade).
+    A child of age A is in about grade A-6; younger fits kindergarten, older fits 5th. long: "kindergarten and 1st
+    grade" for a sentence; otherwise "K and 1st grade". */
+export function gradeSpanFromAges(ageMin, ageMax, long) {
+  const clamp = (a, fallback) => {
+    const n = Number(a);
+    return Number.isFinite(n) ? Math.min(5, Math.max(0, Math.round(n) - 6)) : fallback;
+  };
+  let lo = clamp(ageMin, 0), hi = clamp(ageMax, 5);
+  if (hi < lo) [lo, hi] = [hi, lo];
+  const name = (g, first) => g === 0 ? (long ? "kindergarten" : first ? "K" : "kindergarten") : gradeShortLabel(g);
+  if (lo === hi) return lo === 0 ? (long ? "kindergarten" : "Kindergarten") : gradeShortLabel(lo) + " grade";
+  return name(lo, true) + (hi - lo === 1 ? " and " : " to ") + name(hi, false) + " grade";
 }
 
 /** The ages a grade fits: grade G is ages G+5 to G+6. */
@@ -585,7 +603,7 @@ export function buildReport({ progress, nuggets, lessons, subjects, quizzes, ans
 const DRAFT_LEVELS = {
   k1: { who: "children in Kindergarten and 1st grade (ages 5 to 7). It is read aloud to them, so keep it very short", n: 2 },
   g23: { who: "children in 2nd and 3rd grade (ages 7 to 9)", n: 3 },
-  g46: { who: "children in 4th to 6th grade (ages 9 to 12). Make the other choices believable, so picking the right one takes knowing why", n: 3 },
+  g46: { who: "children in 4th and 5th grade (ages 9 to 11). Make the other choices believable, so picking the right one takes knowing why", n: 3 },
 };
 
 /** The messages that ask the admin's own Copilot (Ollama) for one quiz question about one fact, at one level. */

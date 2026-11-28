@@ -4,7 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
-  recordTarget, quizBubbleAllowed, GRADE_LABELS, gradeLabel, STEAMM_SUBJECTS, nuggetsFor, parseNuggetId, subjectFromTopic,
+  recordTarget, quizBubbleAllowed, GRADE_LABELS, gradeLabel, childGradeFrom, STEAMM_SUBJECTS, nuggetsFor, parseNuggetId, subjectFromTopic,
   answerFromMessage, buildReport, READING_SUBJECT, playingFromStored, playingToStore,
   parentReport, REPORT_WEEKS, STATUS_LABELS, MIN_EVIDENCE, REPORT_SUBJECTS, dayKey, overallRating, OVERALL_RATINGS,
   quizPopEndLine,
@@ -878,9 +878,9 @@ describe("Chike's pop quiz", () => {
 describe("Your children: edit and remove as icons (owner, 2026-11-21)", () => {
   const ICON = (n) => '<svg data-i="' + n + '"></svg>';
   const kids = (S) => fn("progressChildrenHTML", "ProgressState", "GRADE_LABELS", "gradeLabel", "E", "ic", "PROGRESS_MAX_CHILDREN",
-    "AVATAR_IDS", "avatarName", "avatarFor", "avatarSVG")(
+    "AVATAR_IDS", "avatarName", "avatarFor", "avatarSVG", "childGradeFrom")(
     Object.assign({ children: [{ id: "c1", name: "<Maya>", grade: 2, avatar: "guitar" }], editing: "", removing: "", formMsg: "", draft: null, busy: false }, S),
-    GRADE_LABELS, gradeLabel, esc, ICON, 6, AVATAR_IDS, avatarName, avatarFor, avatarSVG)();
+    GRADE_LABELS, gradeLabel, esc, ICON, 6, AVATAR_IDS, avatarName, avatarFor, avatarSVG, childGradeFrom)();
 
   it("each child has two round icons: edit, then a red trash can", () => {
     const h = kids({});
@@ -1030,7 +1030,7 @@ describe("Quiz questions in the admin editor", () => {
     expect(h).not.toContain("<bridges>");
     expect(h).toContain('<option value="">None</option>');
     for (const s of STEAMM_SUBJECTS) expect(h).toContain('<option value="' + s.id + '">' + s.label + "</option>");
-    for (const l of ["K to 1st", "2nd to 3rd", "4th to 6th"]) expect(h).toContain(l);
+    for (const l of ["K to 1st", "2nd to 3rd", "4th and 5th"]) expect(h).toContain(l);
     expect((h.match(/data-qz="choice"/g) || []).length).toBe(2 + 3 + 3);
     expect((h.match(/type="radio"/g) || []).length).toBe(2 + 3 + 3);
     expect((h.match(/data-qz="why"/g) || []).length).toBe(3);
