@@ -2541,6 +2541,13 @@ function learn(id, chips){
   noteT = isNew ? 16 : 9;
   paintNotesCount();
   if (isNew) sfx("coin");
+  sendPhoneState();
+}
+/* the field note on the big screen, for the phone (owner, 2026-11-27: a kid on a phone couldn't close it) */
+function phoneNote(){
+  const el = $("note");
+  if (!el.classList.contains("on") || el.classList.contains("flyaway")) return null;
+  return { kick: $("noteKick").textContent, title: $("noteTitle").textContent, text: $("noteText").textContent };
 }
 let noteT = 0;
 /* the page slides into the little notepad, so kids see where their notes go */
@@ -2548,12 +2555,13 @@ function hideNote(){
   const el = $("note");
   if (!el.classList.contains("on")) return;
   noteT = 0;
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches){ el.classList.remove("on"); return; }
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches){ el.classList.remove("on"); sendPhoneState(); return; }
   const a = el.getBoundingClientRect(), b = $("bNotes").getBoundingClientRect();
   const dx = (b.left + b.width / 2) - (a.left + a.width / 2), dy = (b.top + b.height / 2) - (a.top + a.height / 2);
   el.style.transform = "translate(" + dx + "px," + dy + "px) scale(.18) rotate(3deg)";
   el.classList.add("flyaway");
   setTimeout(() => { el.classList.remove("on", "flyaway"); el.style.transform = ""; }, 460);
+  sendPhoneState();
 }
 $("noteOk").onclick = () => hideNote();
 function renderNotes(){
@@ -4232,13 +4240,14 @@ function rmMsg(p){
   else if (p.t === "launch"){ noteDevice("phone"); launchRocket(); }
   else if (p.t === "quiz"){ noteDevice("phone"); quizFromPhone(p); }
   /* Next (or Land) on the rocket's messages, from the phone: the same as pressing it on the big screen */
+  else if (p.t === "note"){ noteDevice("phone"); hideNote(); }
   else if (p.t === "brief"){ noteDevice("phone"); if (FL.on && FL.briefShown && !FL.briefed) $("flNext").click(); }
   else if (p.t === "bye"){ RM.phoneId = null; paintPhone(); radio("The phone left. Keys and touch still work."); }
 }
 function sendPhoneState(){
   if (!RM.ch) return;
   if (CT.on) return cSendState();
-  rmSend({ t: "st", tools: modesNow(), launch: !!G.canLaunch, m: G.mode, held: G.held.length > 0, test: testReady(), firing: laser.firing || !!G.drilling || hose.spraying, mag: G.magOn, paused: G.paused, done: G.done, started: G.started, r: (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin), quiz: phoneQuiz(), brief: phoneBrief(), step: G.step < MISSIONS[G.mission].steps.length ? MISSIONS[G.mission].steps[G.step].text : "Mission complete" });
+  rmSend({ t: "st", tools: modesNow(), launch: !!G.canLaunch, m: G.mode, held: G.held.length > 0, test: testReady(), firing: laser.firing || !!G.drilling || hose.spraying, mag: G.magOn, paused: G.paused, done: G.done, started: G.started, r: (arm.reach - ARM.reachMin) / (ARM.reachMax - ARM.reachMin), quiz: phoneQuiz(), brief: phoneBrief(), note: phoneNote(), step: G.step < MISSIONS[G.mission].steps.length ? MISSIONS[G.mission].steps[G.step].text : "Mission complete" });
 }
 addEventListener("pagehide", () => { if (RM.ch) rmSend({ t: "gone" }); });
 
