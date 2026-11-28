@@ -83,6 +83,10 @@
   .sk-famshelf{ margin-top:28px; padding-top:18px; border-top:1px dashed var(--btn-edge, var(--border, #3A3A44)); }
   .sk-famshelf h2{ margin:0 0 4px; } .sk-famshelf > p{ margin:0 0 14px; color:var(--mute, #A1A1AB); }
   .sk-move{ height:28px; padding:0 9px; font-size:12px; gap:5px; display:inline-flex; align-items:center; flex:none; }
+  /* Move to on its own line under the name, so the name isn't cut short on a narrow card */
+  .art__body:has(.sk-move){ flex-wrap:wrap; row-gap:6px; }
+  .art__body:has(.sk-move) .art__name{ flex:1 1 calc(100% - 44px); }
+  .art__body .sk-move{ order:3; flex:1 1 100%; justify-content:center; margin-right:6px; }
   .sk-move svg{ width:14px; height:14px; }
   .sk-ask{ position:fixed; inset:0; z-index:90; display:grid; place-items:center; padding:16px; background:rgba(10,10,14,.72); }
   .sk-ask .sk-box{ width:min(560px,100%); padding:26px; border-radius:20px; background:var(--card-a, var(--surface, #26262C)); color:var(--text, inherit); border:1px solid var(--btn-edge, var(--border, #3A3A44)); text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.5); }
