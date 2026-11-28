@@ -13932,8 +13932,21 @@ function closeGameStage(){
   return true;
 }
 
+/* an address made from a game's name or its file (game-spelling-detective for Spelling Detective, whose id is
+   game-spelling) still finds the game, and the address is put right (owner, 2026-11-27) */
+function gameByOtherName(id){
+  const want = String(id || "").toLowerCase().replace(/^game-/, "");
+  if (!want) return null;
+  const slug = (t) => String(t || "").toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return db.list("games").find(g => g.status !== "archived"
+    && (slug(g.title) === want || (g.path && slug(String(g.path).split("/").pop().replace(/\.html?$/i, "")) === want))) || null;
+}
 function viewGame(id){
-  const g = db.find("games", id);
+  let g = db.find("games", id);
+  if (!g){
+    const other = gameByOtherName(id);
+    if (other){ try { history.replaceState(history.state, "", Router.href("#/play/" + other.id)); } catch (_e) {} g = other; }
+  }
   if (!g || (g.status === "archived" && !adminSeesAll())) return notFound("game");
   noteView(g.id, "games");
 
