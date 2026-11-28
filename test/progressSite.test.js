@@ -2,7 +2,7 @@
 // "Your children", and how the page is reached. The rules it uses (buildReport, grownUpQuestion, GRADE_LABELS, ...)
 // live in assets/lib/progress.js and are tested in test/progressLib.test.js; this reads the page's own code.
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import {
   recordTarget, quizBubbleAllowed, GRADE_LABELS, gradeLabel, childGradeFrom, STEAMM_SUBJECTS, nuggetsFor, parseNuggetId, subjectFromTopic,
   answerFromMessage, buildReport, READING_SUBJECT, playingFromStored, playingToStore,
@@ -942,7 +942,7 @@ describe("Your children: edit and remove as icons (owner, 2026-11-21)", () => {
     expect(h).toContain('value="guitar" checked>');
     expect((h.match(/ checked>/g) || []).length).toBe(1);
     expect(h).toContain("Pick the one that fits &lt;Maya&gt; best.");
-    expect(h).toContain('aria-label="Race car"');
+    expect(h).toContain('alt="Race car"');
     expect(h).toContain("<span class=\"kid-av\" data-av-preview>" + avatarSVG("guitar") + "</span>");
     // a pick that didn't save yet (a name error) is kept on the next draw
     const again = kids({ editing: "c1", draft: { id: "c1", name: "", grade: "2", avatar: "drum" } });
@@ -988,14 +988,15 @@ describe("the avatars (assets/lib/avatars.js)", () => {
     expect(AVATAR_IDS).toContain(avatarFor(null));
   });
 
-  it("draws decoration by default and a named image with a label, escaped", () => {
+  it("shows each avatar's cartoon picture: decoration by default, a named image with a label, escaped (owner, 2026-11-28)", () => {
     const d = avatarSVG("robot");
-    expect(d).toMatch(/^<svg class="av-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false">/);
-    expect(avatarSVG("robot", 'A "<b>" & c')).toContain('role="img" aria-label="A &quot;&lt;b>&quot; &amp; c"');
+    expect(d).toBe('<img class="av-svg" src="/assets/avatars/robot.webp" width="256" height="256" decoding="async" alt="" aria-hidden="true" style="background:#C6E1F2">');
+    expect(avatarSVG("robot", 'A "<b>" & c')).toContain('alt="A &quot;&lt;b>&quot; &amp; c"');
     expect(avatarSVG("unicorn")).toBe(d);
     for (const id of AVATAR_IDS) {
       const s = avatarSVG(id);
-      expect(s.endsWith("</svg>")).toBe(true);
+      expect(s).toContain('src="/assets/avatars/' + id + '.webp"');
+      expect(existsSync(new URL("../assets/avatars/" + id + ".webp", import.meta.url))).toBe(true);
       expect(s).not.toMatch(/<script|on\w+=|href/i);
     }
   });
