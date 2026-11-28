@@ -443,6 +443,17 @@ p:last-child{ margin-bottom:0; }
 /* our own clear button only, not the browser's as well */
 .create-tools input[type="search"]::-webkit-search-cancel-button{ -webkit-appearance:none; appearance:none; display:none; }
 @media (max-width:560px){ .create-tools{ flex-basis:100%; } .create-tools .arttools__search{ flex:1 1 auto; } }
+/* the grade picker beside search on Play and Books (owner, 2026-11-27): one pill, the native list underneath */
+.gradepick{ position:relative; flex:0 0 auto; display:inline-flex; align-items:center; gap:8px; height:52px; padding:0 14px 0 16px; border:var(--line); border-radius:999px; background:var(--paper-card); box-shadow:var(--hard-xs); font-weight:800; font-size:.95rem; color:var(--ink); cursor:pointer; white-space:nowrap; }
+.gradepick svg{ width:18px; height:18px; flex:0 0 auto; }
+.gradepick select{ position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; font-size:16px; }
+.gradepick:focus-within{ outline:3px solid var(--cyan, #1273B0); outline-offset:3px; }
+.gradepick__short{ display:none; }
+@media (max-width:600px){ .gradepick{ padding:0 10px 0 12px; gap:6px; } .gradepick__long{ display:none; } .gradepick__short{ display:inline; } }
+.gradenote{ max-width:none; margin:-12px 0 22px; font-size:.92rem; font-weight:600; color:var(--ink-mute); }
+.gradenote a{ font-weight:800; color:var(--ink); }
+.gradetag{ display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:999px; background:#DFF3F8; font-size:.76rem; font-weight:800; color:var(--ink); white-space:nowrap; }
+.gradetag svg{ width:13px; height:13px; }
 .studio-grid{ grid-template-columns:repeat(3,minmax(0,1fr)); }
 @media (max-width:900px){ .studio-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:560px){ .studio-grid{ grid-template-columns:1fr; } }
@@ -12885,6 +12896,7 @@ function storyFilterFieldsHTML(state, prefix, opts){
 /** The search box with the filter button beside it, as on Create: typing filters the list at once. */
 function listToolsHTML(o){
   return '<div class="create-tools">'
+    + (o.grade ? gradePickHTML() : "")
     + '<label class="arttools__search"><span class="sr-only">' + E(o.label) + '</span>' + ic("search")
     + '<input class="inp" id="' + o.id + '" type="search" data-act="' + o.id + '" value="' + E(o.q || "") + '" placeholder="' + E(o.label) + '" autocomplete="off">'
     + (o.q ? '<button type="button" class="arttools__clear" data-act="' + o.setAct + '" data-key="q" data-value="" aria-label="Clear the search">' + ic("x") + '</button>' : "")
@@ -13448,8 +13460,9 @@ function viewPlay(sub){
     + '<section class="section"><div class="shell">'
     + cmsBody(key)
     + '<div class="listhead"><h2>' + E(plural(list.length, "game")) + '</h2>'
-    + listToolsHTML({ id:"gfq-search", label:"Search games", q: gf.q, setAct:"gf-set", openAct:"gf-modal-open", activeCount: gameFilterActive(gf) })
+    + listToolsHTML({ id:"gfq-search", label:"Search games", q: gf.q, setAct:"gf-set", openAct:"gf-modal-open", activeCount: gameFilterActive(gf), grade: !offline })
     + '</div>'
+    + (offline ? "" : gradeNoteHTML("games"))
     + (list.length
         ? '<div class="grid grid--games">' + list.map(g => gameCard(g)).join("") + '</div>'
         : pool.length
@@ -13477,7 +13490,9 @@ function gameCard(g){
     /* a visitor is told what joining opens; a subscriber reads what the game is */
     + '<p class="tiny mute" style="margin:0">' + (g.kind === "members" && !portalHasAccess() ? '<b class="card__join">Create a free family account to play.</b>' : E(g.summary)) + '</p>'
     + (g.note ? '<p class="tiny game__note">' + ic("monitor") + ' ' + E(g.note) + '</p>' : "")
-    + '<div class="card__foot"><span>' + ic("users") + " " + E(playersShort(g.players)) + '</span>' + cardShareBtn("/play/" + g.id, g.title, true) + '</div>'
+    + '<div class="card__foot"><span>' + ic("users") + " " + E(playersShort(g.players)) + '</span>'
+    + (gameAdaptsToGrade(g) ? gradeGameTagHTML() : "")
+    + cardShareBtn("/play/" + g.id, g.title, true) + '</div>'
     + '</div></article>';
 }
 
@@ -13747,10 +13762,10 @@ async function openGameStage(idOrRecord){
     if (html === null){ toast("This game\u2019s file could not be loaded.", "bad"); return; }
     g = Object.assign({}, g, { srcdoc: html });
   }
-  /* a picked child's grade goes to a game (never a studio app), so it can start at that grade: a public game gets
+  /* the grade (the grade picker's, or a picked child's: siteGrade) goes to a game (never a studio app), so it can start at that grade: a public game gets
      ?grade=N, a private game's sealed code sets window.CCS_GRADE first (kept on Start over); a book gets ?grade=N too,
      for its questions at the end (owner, 2026-11-23: Let's find out what you learned!) */
-  const grade = progressPickedGrade();
+  const grade = siteGrade();
   if (grade !== null && !g.bare){
     if (g.srcdoc !== undefined) g = Object.assign({}, g, { srcdoc: withChildGrade(g.srcdoc, grade) });
     else if (/^\/?(games|books)\/[^?#]+\.html/.test(g.path)){
@@ -14163,8 +14178,9 @@ function viewStories(){
     + '<div class="create-layout__results">'
     + '<div class="listhead">'
     + '<h2>' + E(plural(list.length,"book")) + '</h2>'
-    + listToolsHTML({ id:"sfq-search", label:"Search books", q: f.q, setAct:"sf-set", openAct:"sf-modal-open", activeCount: activeCount })
+    + listToolsHTML({ id:"sfq-search", label:"Search books", q: f.q, setAct:"sf-set", openAct:"sf-modal-open", activeCount: activeCount, grade: true })
     + '</div>'
+    + gradeNoteHTML("books")
     + (list.length ? '<div class="grid g-3 grid--compact grid--books">' + list.map(s => storyCard(s)).join("") + '</div>'
         : '<div class="empty">' + ic("search-x","i-lg")
           + '<p style="margin-top:12px">' + slot("stories", "emptyList") + '</p>'
@@ -16670,6 +16686,7 @@ async function progressLoadChildren(){
       S.error = (r && r.error) || "network";
     }
     if (progressShownHere()) rerender();
+    else gradePickPaint();
   })();
   S.pending = run;
   run.finally(() => { if (S.pending === run) S.pending = null; }).catch(() => {});
@@ -17444,6 +17461,69 @@ function finderFillAge(){
   AppState.finderAgeAuto = true;
   if (!AppState.finder.age) AppState.finder.age = findAgeForGrade(g);
 }
+/* ---- The grade picker beside search on Play and Books (owner, 2026-11-27; docs/mockups/grade-picker-draft-2.png):
+   a grown-up picks a grade, and the games that adapt (and a book's questions at the end) open at it. Kept on this
+   device: nothing kept follows the picked child's grade (a family account), "any" is no grade, "0" to "6" a grade.
+   Picking who's creating starts it following that child again (gradePickFrom, siteGradeFrom: assets/lib/progress.js). */
+const GRADE_PICK_KEY = "ccs_grade_pick";
+let GRADE_PICK_MEM = null;        /* a private window that can't keep it */
+/* the games that read the grade (?grade=N or window.CCS_GRADE): their file, or a private game's portal slug */
+const GRADE_GAMES = ["balloon-pop-math", "chrono-billiards", "echo-matrix", "maze-quest", "spelling-detective", "word-quest",
+  "math-runner", "remote-lunar-salvage", "solar-system-sandbox", "how-to-build-your-own-math-robot"];
+function gradePickStored(){
+  let raw = GRADE_PICK_MEM;
+  try { raw = localStorage.getItem(GRADE_PICK_KEY); } catch(_e){ /* private window */ }
+  return gradePickFrom(raw);
+}
+function gradePickKeep(v){
+  GRADE_PICK_MEM = v || null;
+  try { if (v) localStorage.setItem(GRADE_PICK_KEY, v); else localStorage.removeItem(GRADE_PICK_KEY); } catch(_e){ /* private window */ }
+}
+/** The grade a game or book opens at (0 to 6), or null. */
+function siteGrade(){ return siteGradeFrom(gradePickStored(), progressPickedGrade()); }
+function gameAdaptsToGrade(g){
+  const file = String((g && g.path) || "").split(/[?#]/)[0].split("/").pop().replace(/\.html$/, "");
+  return GRADE_GAMES.indexOf(file) >= 0 || GRADE_GAMES.indexOf(String((g && g.portalSlug) || "")) >= 0;
+}
+function gradePickHTML(){
+  const g = siteGrade(), now = g === null ? "any" : String(g);
+  const opts = [["any", "Any grade"]].concat(GRADE_LABELS.map((l, i) => [String(i), l]));
+  return '<label class="gradepick">' + ic("graduation-cap")
+    + '<span class="gradepick__long" aria-hidden="true">' + E(g === null ? "Any grade" : gradeLabel(g)) + '</span>'
+    + '<span class="gradepick__short" aria-hidden="true">' + E(g === null ? "Any" : gradeShortLabel(g)) + '</span>' + ic("chevron-down")
+    + '<select data-act="grade-pick" aria-label="Your child’s grade">'
+    + opts.map(([v, l]) => '<option value="' + v + '"' + (v === now ? " selected" : "") + '>' + E(l) + '</option>').join("")
+    + '</select></label>';
+}
+/** The chip on a game that plays at the picked grade. */
+function gradeGameTagHTML(){
+  const g = siteGrade();
+  return '<span class="gradetag">' + ic("graduation-cap") + ' ' + E(g === null ? "Any grade" : gradeLabel(g)) + '</span>';
+}
+/** One line under the list's heading. */
+function gradeNoteHTML(what){
+  const join = portalSavedSession() ? "" : ' A family account remembers it. <a href="#/grown-ups/members">See how</a>';
+  const none = siteGrade() === null;
+  return '<p class="gradenote" data-what="' + (what === "books" ? "books" : "games") + '">' + (what === "books"
+      ? (none ? 'Pick a grade, and a book’s questions at the end match it.' : 'A book’s questions at the end match your child’s grade.')
+      : (none ? 'Pick a grade, and games marked ' + gradeGameTagHTML() + ' play at it.' : 'Games marked ' + gradeGameTagHTML() + ' play at your child’s grade.'))
+    + join + '</p>';
+}
+/** The picker, the note's chip and each game's chip, redrawn in place (a grade picked, or the children loaded). */
+function gradePickPaint(){
+  const pick = document.querySelector(".gradepick");
+  if (!pick) return;
+  /* in place, so the dropdown keeps its focus */
+  const g = siteGrade(), sel = pick.querySelector("select"), long = pick.querySelector(".gradepick__long"), short = pick.querySelector(".gradepick__short");
+  if (sel) sel.value = g === null ? "any" : String(g);
+  if (long) long.textContent = g === null ? "Any grade" : gradeLabel(g);
+  if (short) short.textContent = g === null ? "Any" : gradeShortLabel(g);
+  const note = document.querySelector(".gradenote");
+  if (note) note.outerHTML = gradeNoteHTML(note.getAttribute("data-what"));
+  const tag = gradeGameTagHTML();
+  document.querySelectorAll(".card__foot .gradetag").forEach(t => { t.outerHTML = tag; });
+  drawIcons();
+}
 function progressSetPlaying(v){
   const kept = playingToStore(v || "", progressToday());
   PLAYING_MEM = kept;
@@ -17528,7 +17608,10 @@ async function openWhoIsPlaying(after){
     const b = ev.target.closest("[data-who]");
     if (b){
       progressSetPlaying(b.getAttribute("data-who"));
+      /* games and books open at the child's own grade again */
+      gradePickKeep("");
       done();
+      gradePickPaint();
       renderTourRoot();
       progressPaintMade();
       if (after) after();
@@ -35394,6 +35477,8 @@ document.addEventListener("change", (ev) => {
     if (pv && AVATAR_IDS.includes(el.value)) pv.innerHTML = avatarSVG(el.value);
     return;
   }
+  /* the grade picker on Play and Books: kept on this device, the chips follow */
+  if (pact === "grade-pick"){ gradePickKeep(el.value === "any" ? "any" : String(childGradeFrom(el.value) ?? "")); gradePickPaint(); return; }
   if (pact === "nl-audience"){ AppState.admin.newsletterCompose.audience = el.value; nlPaintAudience(); return; }
   if (pact === "nl-audience-since"){
     const iso = el.value ? localDatetimeToISO(el.value) : "";

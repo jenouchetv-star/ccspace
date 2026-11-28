@@ -181,7 +181,7 @@ describe("the progress report page", () => {
     const ended = fn("progressSessionEnded", "progressForget", "portalSavedSession", "PortalState", "artCloudForget", "progressOnRoute", "rerender")(
       forget, () => "", { phase: "ready" }, () => { signedOut++; }, () => true, () => {});
     const noSession = async () => ({ ok: false, error: "no_session" });
-    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressShownHere", "rerender", "async ")(S, noSession, ended, () => true, () => {});
+    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressShownHere", "rerender", "gradePickPaint", "async ")(S, noSession, ended, () => true, () => {}, () => {});
     await load();
     expect(S.error).toBe("");
     expect(S.children).toBe(null);
@@ -349,8 +349,8 @@ describe("who's playing, and recording what a child finishes", () => {
     const S = { children: null, loading: false, error: "", reportFor: "" };
     let calls = 0, release;
     const kidCall = (action) => { calls++; return new Promise((res) => { release = () => res({ ok: true, children: KIDS }); }); };
-    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressShownHere", "rerender", "async ")(
-      S, kidCall, () => false, () => false, () => {});
+    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressShownHere", "rerender", "gradePickPaint", "async ")(
+      S, kidCall, () => false, () => false, () => {}, () => {});
     const kids = fn("progressKids", "ProgressState", "portalSavedSession", "progressLoadChildren")(S, () => "tok", load);
     const first = load();                                       // the report page (or Remove) started a load
     expect(S.loading).toBe(true);
@@ -369,8 +369,8 @@ describe("who's playing, and recording what a child finishes", () => {
   it("a load the family signed out of meanwhile keeps nothing", async () => {
     const S = { children: null, loading: false, error: "", reportFor: "" };
     let release;
-    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressShownHere", "rerender", "async ")(
-      S, () => new Promise((res) => { release = () => res({ ok: true, children: KIDS }); }), () => false, () => false, () => {});
+    const load = fn("progressLoadChildren", "ProgressState", "kidCall", "progressSessionEnded", "progressShownHere", "rerender", "gradePickPaint", "async ")(
+      S, () => new Promise((res) => { release = () => res({ ok: true, children: KIDS }); }), () => false, () => false, () => {}, () => {});
     const p = load();
     S.pending = null; S.loading = false;                        // progressForget() ran: another member, or signed out
     release();

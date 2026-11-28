@@ -50,6 +50,26 @@ export function childGradeFrom(raw) {
   return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null;
 }
 
+/* ---- the grade picker on Play and Books (owner, 2026-11-27; docs/mockups/grade-picker-draft-2.png) ---- */
+
+/** What the device keeps from the grade picker: "any" (no grade), a grade 0 to 6, or null (nothing picked: follow
+    the picked child's grade). */
+export function gradePickFrom(raw) {
+  return raw === "any" ? "any" : childGradeFrom(raw);
+}
+
+/** The grade a game or book opens at: the picker's choice wins ("any" is no grade); without one, the picked child's. */
+export function siteGradeFrom(pick, childGrade) {
+  if (pick === "any") return null;
+  if (pick !== null && pick !== undefined) return pick;
+  return childGradeFrom(childGrade);
+}
+
+/** The picker's short label on a phone: "K", "1st" to "6th". */
+export function gradeShortLabel(n) {
+  return ["K", "1st", "2nd", "3rd", "4th", "5th", "6th"][n] || "";
+}
+
 /** The ages a grade fits: grade G is ages G+5 to G+6. */
 export function gradeAges(g) {
   return { min: g + 5, max: g + 6 };

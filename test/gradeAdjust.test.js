@@ -57,7 +57,7 @@ describe("openGameStage", () => {
     const modal = { innerHTML: "" };
     const open = new Function(
       "db", "loadGameHtml", "toast", "$", "gameStage", "rootAssetPaths", "document", "drawIcons",
-      "progressPickedGrade", "withChildGrade", "closeGameStage", "progressPickedName", "withChildName",
+      "siteGrade", "withChildGrade", "closeGameStage", "progressPickedName", "withChildName",
       fn("openGameStage") + "; return openGameStage;",
     )(
       { find: (_t, id) => games[id] || null }, async () => HTML, () => {},
