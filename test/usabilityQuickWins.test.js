@@ -7,10 +7,9 @@ const spell = readFileSync(new URL("../games/spelling-detective.html", import.me
 const fn = (src, name) => src.split("function " + name + "(")[1].split("\nfunction ")[0];
 
 describe("usability quick wins", () => {
-  it("1. the update box remembers Later until the tab closes", () => {
-    const banner = fn(html, "showUpdateBanner");
-    expect(banner).toContain("sessionStorage.getItem(SWUP_LATER_KEY)) return;");
-    expect(banner).toContain('sessionStorage.setItem(SWUP_LATER_KEY, "1")');
+  it("1. no update box to dismiss: new versions arrive at the next page change (owner, 2026-11-28)", () => {
+    expect(html).not.toContain("showUpdateBanner");
+    expect(html).toContain("function swUpdateOnNextPage(url){");
   });
 
   it("2. the tour welcome goes for good after the first click anywhere else", () => {

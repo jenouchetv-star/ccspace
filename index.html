@@ -3910,11 +3910,6 @@ h1.admin-page-title{ font-size:1.7rem; }
 
 /* "A new version is ready": a box in the middle of the page (owner, 2026-11-25), the "Who's creating today?" layer
    (.who: dimmed page, fades in) above everything, even an open game or app. */
-#sw-update-banner{ z-index:1300; }
-.swup__card{ width:min(420px,100%); text-align:center; }
-.swup__card p{ color:var(--ink-soft); font-size:1rem; line-height:1.5; margin:8px 0 18px; }
-.swup__acts{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
-.swup__acts .btn svg{ width:18px; height:18px; }
 
 /* ============================================================ TEST PANEL */
 .test-row{
@@ -10096,6 +10091,7 @@ const Router = {
     AppState.scrollMemory[Router.current()] = scroller.scrollTop;
     if (this.mode === "path"){
       if (location.pathname + location.search === url){ render(); return; }
+      if (swUpdateOnNextPage(url)) return;     /* a new version is waiting: this page loads whole, on it */
       history.pushState({}, "", url);
       render();
     } else {
@@ -35714,7 +35710,10 @@ document.addEventListener("error", (ev) => {
 }, true);
 
 window.addEventListener("hashchange", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); closePopQuiz(); render(); });
-window.addEventListener("popstate", () => { AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); closePopQuiz(); AppState.restoringScroll = true; render(); });
+window.addEventListener("popstate", () => {
+  /* Back or Forward with a new version waiting: that page loads whole, on it */
+  if (swUpdateOnNextPage(location.pathname + location.search + location.hash)) return;
+  AppState.navOpen = false; AppState.admin.notifOpen = false; closeGameStage(); closeSheet(); closePopQuiz(); AppState.restoringScroll = true; render(); });
 window.addEventListener("scroll", () => Parallax.onScroll(), { passive:true });
 window.addEventListener("scroll", () => BackToTop.onScroll(), { passive:true });
 window.addEventListener("resize", () => Parallax.refresh());
@@ -35996,47 +35995,25 @@ else boot();
    file:// has no service-worker support at all, and registering one
    against a bare filesystem origin throws - only run this over http(s).
    ============================================================ */
-/** "A new version is ready": a box in the middle of the page (owner, 2026-11-25), in the same look as "Who's creating
-    today?". Refresh now, or Later (also Escape, or a tap outside the box), which just closes it. */
-/* "Later" is remembered until the tab closes: it used to come back on every page load, so a visitor who said Later
-   met it again on the next page (usability test, 2026-11-27) */
-const SWUP_LATER_KEY = "ccs-update-later";
-function showUpdateBanner(onRefresh){
-  if ($("#sw-update-banner")) return;
-  try { if (sessionStorage.getItem(SWUP_LATER_KEY)) return; } catch(_e){ /* no storage: ask every time */ }
-  const back = document.activeElement;
-  const box = document.createElement("div");
-  box.id = "sw-update-banner";
-  box.className = "who swup";
-  box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true");
-  box.setAttribute("aria-labelledby", "sw-update-title"); box.setAttribute("aria-describedby", "sw-update-text");
-  /* no icon above the title (owner, 2026-11-25) */
-  box.innerHTML = '<div class="who__card swup__card">'
-    + '<h3 id="sw-update-title">A new version is ready</h3>'
-    + '<p id="sw-update-text">This change may include a new game, book, and site update.</p>'
-    + '<div class="swup__acts">'
-    + '<button type="button" class="btn btn--cyan" id="sw-update-refresh">' + ic("refresh-cw") + ' Refresh now</button>'
-    + '<button type="button" class="btn btn--paper" id="sw-update-dismiss">Later</button>'
-    + '</div></div>';
-  document.body.appendChild(box);
-  drawIcons();
-  const close = () => {
-    try { sessionStorage.setItem(SWUP_LATER_KEY, "1"); } catch(_e){}
-    box.remove();
-    if (back && document.contains(back) && back.focus) back.focus();
-  };
-  $("#sw-update-refresh").addEventListener("click", onRefresh);
-  $("#sw-update-dismiss").addEventListener("click", close);
-  box.addEventListener("click", (ev) => { if (ev.target === box) close(); });
-  box.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape"){ ev.stopPropagation(); close(); return; }
-    if (ev.key === "Tab"){
-      const all = Array.from(box.querySelectorAll("button")), first = all[0], last = all[all.length - 1];
-      if (ev.shiftKey && document.activeElement === first){ ev.preventDefault(); last.focus(); }
-      else if (!ev.shiftKey && document.activeElement === last){ ev.preventDefault(); first.focus(); }
-    }
-  });
-  $("#sw-update-refresh").focus();
+/* ---- A new version, without asking (owner, 2026-11-28: no "A new version is ready" box; the site refreshes itself).
+   A new build waits for a safe moment: the next page the visitor opens, or Back and Forward. That page then loads whole,
+   on the new build, which looks like any page change. Never on the admin or in the Studio (unsaved work lives in the
+   page there), and never in the middle of a page someone is reading or a game they are playing. ---- */
+var SW_WAITING = null;       /* the new build's worker, ready and waiting */
+var SW_SWITCHING = null;     /* what to do once it has taken over: load the next page */
+/** The admin or the Studio: places where unsaved work lives in the page, so the update waits for a fresh visit. */
+function swHoldUpdateOn(path){ return /^\/?(admin|create\/studio)(\/|$|\?)/.test(String(path || "").replace(SITE_BASE, "/")); }
+/** On the way to the next page: when a new build is waiting, switch to it and load that page whole. True when it did. */
+function swUpdateOnNextPage(url){
+  const w = SW_WAITING;
+  if (!w || swHoldUpdateOn(location.pathname) || swHoldUpdateOn(url)) return false;
+  SW_WAITING = null;
+  let done = false;
+  const go = () => { if (done) return; done = true; SW_SWITCHING = null; location.assign(url); };
+  SW_SWITCHING = go;
+  try { w.postMessage("SKIP_WAITING"); } catch(_e){ go(); return true; }
+  setTimeout(go, 2500);      /* a worker that never takes over still lets the visitor go on */
+  return true;
 }
 
 /* PWA install prompt - Chrome/Edge/Android fire beforeinstallprompt and
@@ -36126,32 +36103,23 @@ function artInstallHelpHTML(){
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
   window.addEventListener("load", () => {
-    /* Set when this tab presses Refresh on the update banner: only then does the new worker taking over reload the
-       page. A first visit's brand-new worker also takes control (clients.claim), and reloading on that drew every
-       first visit twice: the page appeared, then flashed and appeared again (owner, 2026-11-16). */
-    let refreshAsked = false;
     navigator.serviceWorker.register("/sw.js").then((reg) => {
-      /* A worker already waiting from a previous visit that never refreshed. */
-      if (reg.waiting) showUpdateBanner(() => { refreshAsked = true; reg.waiting.postMessage("SKIP_WAITING"); });
-
+      /* a new build already waiting from an earlier visit, or one that finishes installing now: it takes over at the next
+         page change (swUpdateOnNextPage). A first visit's worker has nothing to replace, so it never waits. */
+      if (reg.waiting && navigator.serviceWorker.controller) SW_WAITING = reg.waiting;
       reg.addEventListener("updatefound", () => {
         const fresh = reg.installing;
         if (!fresh) return;
         fresh.addEventListener("statechange", () => {
-          if (fresh.state === "installed" && navigator.serviceWorker.controller){
-            showUpdateBanner(() => { refreshAsked = true; fresh.postMessage("SKIP_WAITING"); });
-          }
+          if (fresh.state === "installed" && navigator.serviceWorker.controller) SW_WAITING = fresh;
         });
       });
     }).catch(() => {});
 
-    /* The new worker has taken over after this tab pressed Refresh - reload once, so "Refresh" reliably lands on
-       the new build. Never on a first visit, and never because another tab refreshed. */
-    let reloaded = false;
+    /* The new build has taken over because this tab switched to it: load the next page on it. Never on a first visit
+       (its worker taking control drew the page twice, owner 2026-11-16), and never because another tab switched. */
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (reloaded || !refreshAsked) return;
-      reloaded = true;
-      location.reload();
+      if (SW_SWITCHING) SW_SWITCHING();
     });
   });
 }

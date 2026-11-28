@@ -843,8 +843,8 @@ describe("Chike's pop quiz", () => {
     const listener = (event) => {
       let closed = 0, rendered = 0;
       const src = html.split('window.addEventListener("' + event + '", ')[1].split(");\n")[0];
-      const run = new Function("AppState", "closeGameStage", "closeSheet", "closePopQuiz", "render", "return " + src)(
-        { admin: {} }, () => {}, () => {}, () => { closed++; }, () => { rendered++; });
+      const run = new Function("AppState", "closeGameStage", "closeSheet", "closePopQuiz", "render", "swUpdateOnNextPage", "location", "return " + src)(
+        { admin: {} }, () => {}, () => {}, () => { closed++; }, () => { rendered++; }, () => false, { pathname: "/", search: "", hash: "" });
       run();
       return { closed, rendered };
     };
