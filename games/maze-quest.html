@@ -2858,6 +2858,33 @@
             if (tile) openQuiz(tile);
         }
 
+        // Each wizard question counts on the grown-up's progress report (owner, 2026-11-28: games send their answers):
+        // math questions toward Math, spelling clues toward Reading and Writing. The site keeps it only for the child
+        // picked in "Who's creating today?", while signed in; opened on its own, nothing is sent. K and 1st are k1, 2nd
+        // and 3rd g23, 4th and 5th g45.
+        let quizPicked = null;
+        function mazeSkill(p) {
+            if (p.kind === 'spell') return 'Choosing the right spelling';
+            const t = p.q;
+            return /missing/.test(t) ? 'Number patterns' : /digit|place/.test(t) ? 'Place value' : /×/.test(t) ? 'Multiplying'
+                : /÷/.test(t) ? 'Dividing' : /−/.test(t) ? 'Taking away' : /\+/.test(t) ? 'Adding' : 'Number sense';
+        }
+        function sendQuizAnswer(p, chosen) {
+            try {
+                if (!(window.parent && window.parent !== window && p)) return;
+                const g = GRADE_LIST[gradeIndex], right = p.options[p.answer], spell = p.kind === 'spell';
+                let h = 0; for (let i = 0; i < p.q.length; i++) h = (h * 31 + p.q.charCodeAt(i)) >>> 0;
+                const a = { game: 'maze-quest', qid: (spell ? 'mqs-' : 'mqm-') + h.toString(36), subject: spell ? 'reading' : 'math',
+                    level: g.id === 'k' || g.id === '1' ? 'k1' : g.id === '2' || g.id === '3' ? 'g23' : 'g45',
+                    correct: chosen === p.answer, question: p.q, answer: String(right),
+                    why: spell ? String(right).charAt(0).toUpperCase() + String(right).slice(1) + ' is spelled ' + String(right).toUpperCase().split('').join('-') + '.'
+                        : 'The answer is ' + right + '.',
+                    skill: mazeSkill(p) };
+                if (chosen !== p.answer && p.options[chosen] !== undefined) a.given = String(p.options[chosen]);
+                window.parent.postMessage({ ccsAnswer: a }, '*');
+            } catch (_e) { /* opened on its own */ }
+        }
+
         // Pauses the maze and asks one multiple-choice question.
         function openQuiz(tile) {
             quizActive = true;
@@ -2867,6 +2894,7 @@
 
             // a math or spelling question for the player's grade
             const picked = gradeQuestion(gradeIndex, Math.random);
+            quizPicked = picked;
             const young = gradeIndex <= 1; // Kindergarten and 1st: a short hello and big buttons
             const g = GRADE_LIST[gradeIndex];
             document.getElementById('quizWizardImg').src = '../assets/games/wizard-question.png';
@@ -2903,6 +2931,7 @@
         function answerQuiz(chosenIndex, correctIndex, tile, container) {
             const buttons = container.querySelectorAll('.quiz-option');
             buttons.forEach(b => b.disabled = true);
+            sendQuizAnswer(quizPicked, chosenIndex);
             const feedback = document.getElementById('quizFeedback');
             let lineWords;
 

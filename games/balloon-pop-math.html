@@ -641,6 +641,31 @@ const COLORS = [["#F2C230", "#DD7A22"], ["#17B3CE", "#0A5280"], ["#BC3229", "#F8
 const sky = $("balloons"), qEl = $("question"), input = $("answer-input");
 let grade = null, cur = null, qNum = 0, score = 0, streak = 0, bestStreak = 0, firstTries = 0, misses = 0, busy = false, recent = [];
 let balloons = [], raf = 0, sayTimer = 0;
+let firstWrong = "", workShown = false;      /* for the grown-up's report: the child's first wrong answer, and Show me how */
+
+/* Each question counts toward Math on the grown-up's progress report (owner, 2026-11-28: games send their answers).
+   The site keeps it only for the child picked in "Who's creating today?", while signed in; opened on its own, nothing is
+   sent. Right on the first try is correct; the tries it took, Show me how (a hint) and the first wrong answer go too.
+   K and 1st are k1, 2nd and 3rd g23, 4th and 5th g45. */
+function mathSkill(t){
+  return /missing|__/.test(t) ? "Number patterns" : /\b(has|have|gets|buys|gives|left|each|shares|more|fewer|altogether|in all)\b/i.test(t) ? "Word problems" : /How many/.test(t) ? "Counting" : /comes (after|before)/.test(t) ? "Number order" : /bigger|smaller|greatest|least/i.test(t) ? "Comparing numbers"
+    : /place|digit/i.test(t) ? "Place value" : /[Rr]ound/.test(t) ? "Rounding" : /\(|order/.test(t) ? "Order of operations"
+    : /×/.test(t) ? "Multiplying" : /÷/.test(t) ? "Dividing" : /−/.test(t) ? "Taking away" : /\+/.test(t) ? "Adding" : "Number sense";
+}
+function sendAnswer(){
+  try {
+    if (!(window.parent && window.parent !== window && grade && cur)) return;
+    const text = String(cur.q).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    const question = /\?\s*$|\?\s/.test(text) || /^(How|What|Which)/.test(text) ? text : "What is " + text + "?";
+    let h = 0; for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) >>> 0;
+    const level = grade.id === "k" || grade.id === "1" ? "k1" : grade.id === "2" || grade.id === "3" ? "g23" : "g45";
+    const a = { game: "balloon-pop-math", qid: "bpm-" + h.toString(36), subject: "math", level, correct: misses === 0 && !workShown,
+      question, answer: fmt(cur.a), why: String(cur.say || ""), skill: mathSkill(text), tries: Math.min(50, misses + 1) };
+    if (firstWrong) a.given = firstWrong;
+    if (workShown) a.hints = 1;
+    window.parent.postMessage({ ccsAnswer: a }, "*");
+  } catch (_e) { /* opened on its own */ }
+}
 
 function bestKey(){ return "bpm-best-" + grade.id; }
 function getBest(g){ try { return Number(localStorage.getItem("bpm-best-" + g.id)) || 0; } catch (e) { return 0; } }
@@ -700,7 +725,7 @@ function startRound(saved){
 function nextQuestion(){
   qNum++;
   if (qNum > TOTAL) return finish();
-  misses = 0; busy = false; hideWork();
+  misses = 0; busy = false; firstWrong = ""; workShown = false; hideWork();
   let q, tries = 0;
   do { q = pick(grade.makers)(); } while (recent.includes(q.q) && ++tries < 20);
   recent.push(q.q); if (recent.length > 8) recent.shift();
@@ -776,6 +801,7 @@ function right(el){
   const b = balloons.find((x) => x.el === el); if (b) b.gone = true;
   el.classList.add("popped"); play("pop");
   const pts = (misses ? 5 : 10) + Math.min(streak, 5) * 2;
+  sendAnswer();
   if (!misses){ firstTries++; streak++; bestStreak = Math.max(bestStreak, streak); } else streak = 0;
   score += pts;
   $("score").textContent = score; $("streak").textContent = streak;
@@ -789,6 +815,7 @@ function right(el){
   setTimeout(nextQuestion, 1500);
 }
 function wrong(el){
+  if (!firstWrong) firstWrong = fmt(Number(el.dataset.n));
   misses++; streak = 0; $("streak").textContent = "0";
   play("wrong");
   el.classList.remove("wobble"); void el.offsetWidth; el.classList.add("wobble");
@@ -807,6 +834,7 @@ function showWork(){
   if (!cur || busy) return;
   const w = cur.work || { steps: [cur.hint, cur.say + "."] };
   if (!misses) misses = 1;
+  workShown = true;
   streak = 0; $("streak").textContent = "0";
   if (cur.html) $("boardQ").innerHTML = cur.q; else $("boardQ").textContent = cur.q;
   $("boardVis").innerHTML = w.vis || "";
@@ -844,7 +872,7 @@ $("answer-form").addEventListener("submit", (e) => {
   const n = Number(raw); if (!Number.isFinite(n)) return;
   const hit = balloons.find((b) => b.n === n && !b.gone);
   if (hit) tryAnswer(hit.el);
-  else { misses++; streak = 0; $("streak").textContent = "0"; play("wrong"); chike("wave", `${fmt(n)} isn't on a balloon. Look again!`, "", 1800); }
+  else { if (!firstWrong) firstWrong = fmt(n); misses++; streak = 0; $("streak").textContent = "0"; play("wrong"); chike("wave", `${fmt(n)} isn't on a balloon. Look again!`, "", 1800); }
 });
 /* Enter anywhere jumps into the answer box */
 document.addEventListener("keydown", (e) => {
