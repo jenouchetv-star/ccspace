@@ -5613,10 +5613,25 @@ function paintQuiz(){
   $("qNext").onclick = () => { QZ.i++; paintQuiz(); };
   sendPhoneState();
 }
+/* Each of Chike's questions counts on the grown-up's progress report (owner, 2026-11-28: games send their answers):
+   building questions (shapes, bridges, wheels, ramps) toward Engineering, the rest toward Science. The site keeps it only
+   for the child picked in "Who's creating today?", while signed in; opened on its own, nothing is sent. */
+function sendQuizAnswer(q, k){
+  try {
+    if (window.parent === window || !q) return;
+    const band = gradeBand(curGrade()), eng = /bridge|shape|strong|build|wheel|ramp|lever|design|tower|frame/i.test(q.q + " " + q.why);
+    const a = { game: "remote-lunar", qid: "rl-" + String(G.world.id).replace(/[^a-z0-9]/g, "") + "-" + band + "-" + QZ.i, subject: eng ? "engineering" : "science",
+      level: band === "g1" ? "k1" : band === "g23" ? "g23" : "g45", correct: k === q.a, question: q.q, answer: q.opts[q.a].t, why: q.why,
+      skill: eng ? "Building and design" : "Space and earth science" };
+    if (k !== q.a && q.opts[k]) a.given = q.opts[k].t;
+    window.parent.postMessage({ ccsAnswer: a }, "*");
+  } catch (_e) { /* no site around it */ }
+}
 function answerQuiz(k){
   if (QZ.answered) return;
   QZ.answered = true; QZ.pick = k;
   const q = QZ.list[QZ.i], ok = k === q.a;
+  sendQuizAnswer(q, k);
   if (ok) QZ.right++;
   [...$("qOpts").children].forEach((el, j) => { if (j === q.a) el.classList.add("right"); else if (j === k) el.classList.add("wrong"); });
   if (!ok) $("qPic").innerHTML = quizPic(q, true);

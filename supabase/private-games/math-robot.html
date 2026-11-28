@@ -696,6 +696,22 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
     }
     return q;
   }
+  /* Each of the robot's quiz questions counts toward Math on the grown-up's progress report (owner, 2026-11-28: games
+     send their answers). A child's own homework problems don't. The site keeps it only for the child picked in "Who's
+     creating today?", while signed in; opened on its own, nothing is sent. K and 1st are k1, 2nd and 3rd g23, 4th and
+     5th g45. */
+  function sendQuizAnswer(q, right, heard){
+    try {
+      if (window.parent === window || !q) return;
+      var g = mem.grade === null ? 1 : mem.grade, t = String(q.text);
+      var h = 0; for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
+      var a = { game: "robo-math-buddy", qid: "rmb-" + h.toString(36), subject: "math", level: g <= 1 ? "k1" : g <= 3 ? "g23" : "g45",
+        correct: !!right, question: "What is " + t + "?", answer: answerText(q), why: String((q.steps || []).slice(-1)[0] || ""),
+        skill: /\//.test(t) ? "Fractions" : /\./.test(t) ? "Decimals" : /÷/.test(t) ? "Dividing" : /×/.test(t) ? "Multiplying" : /−/.test(t) ? "Taking away" : "Adding" };
+      if (!right && heard !== null && heard !== undefined) a.given = fmt(heard);
+      window.parent.postMessage({ ccsAnswer: a }, "*");
+    } catch (_e) { /* opened on its own */ }
+  }
   function askQuestion(prefix){
     state.q = makeQuestion();
     showOnBoard("Question", [state.q.text + " = ?"]);
@@ -1054,6 +1070,7 @@ body{background:radial-gradient(120% 90% at 30% 0%,var(--bg1) 0%,var(--bg2) 100%
       var n = readNumber(text);
       if (n !== null){
         var right = Math.abs(n - state.q.answer) < 0.011;
+        sendQuizAnswer(state.q, right, n);
         if (right){
           mem.right++; state.streak++; save(); scores();
           showOnBoard("Correct!", state.q.steps);

@@ -1069,9 +1069,28 @@ function update(dt){
   if (Math.abs(camera.fov - fov) > 0.05){ camera.fov += (fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
 }
 
+/* Each door counts toward Math on the grown-up's progress report (owner, 2026-11-28: games send their answers): the
+   best door is the right answer. The site keeps it only for the child picked in "Who's creating today?", while signed
+   in; opened on its own, nothing is sent. K and 1st are k1, 2nd and 3rd g23, 4th grade and up g45. */
+function sendDoorAnswer(before, doors, lane, best){
+  try {
+    if (parent === window) return;
+    const L = Game.level, level = L === "k" || L === "g1" ? "k1" : L === "g2" || L === "g3" ? "g23" : "g45";
+    const labels = doors.map(doorLabel), ops = doors.map(d => d.op).join("");
+    const coinsAfter = (i) => formatCoins(applyDoor(BigInt(before), doors[i])) + " coins";
+    const question = "You have " + formatCoins(before) + " coins. Which door gives you the most: " + labels.join(", ") + "?";
+    let h = 0; for (let i = 0; i < question.length; i++) h = (h * 31 + question.charCodeAt(i)) >>> 0;
+    const a = { game: "math-runner", qid: "mr-" + h.toString(36), subject: "math", level, correct: best.includes(lane),
+      question, answer: labels[best[0]], why: "Through " + labels[best[0]] + " you have " + coinsAfter(best[0]) + ", the most.",
+      skill: /÷/.test(ops) ? "Dividing" : /×/.test(ops) ? "Multiplying" : "Adding and taking away" };
+    if (!best.includes(lane)) a.given = labels[lane] + " (" + coinsAfter(lane) + ")";
+    parent.postMessage({ ccsAnswer: a }, "*");
+  } catch (_e) { /* no site around it */ }
+}
 function onGate(t, lane){
   const doors = t.doors, door = doors[lane], before = Game.coins;
   const after = applyDoor(before, door), best = bestDoors(before, doors);
+  sendDoorAnswer(before, doors, lane, best);
   Game.asked++; Game.coins = after; noteBest();
   const panels = t.mesh.userData.panels, at = new THREE.Vector3(LANES[lane], 1.6, 0);
   for (const i of best){ panels[i].curtain.material.color.set(0x3dff9a); panels[i].curtain.material.opacity = 0.5; }

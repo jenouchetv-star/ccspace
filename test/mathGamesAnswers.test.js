@@ -90,6 +90,53 @@ describe("Maze Quest sends each wizard answer", () => {
 
 describe("their pages say what they count toward", () => {
   it("Balloon Pop Math counts toward Math; Maze Quest toward Math and Reading", () => {
-    expect(site).toContain('"game-balloon-math": ["math"], "game-maze": ["math", "reading"] };');
+    expect(site).toContain('"game-balloon-math": ["math"], "game-maze": ["math", "reading"],');
+  });
+});
+
+describe("the family account games send their answers too (owner, 2026-11-28: step 2)", () => {
+  const post = () => { const sent = []; return { sent, win: { postMessage: (m) => sent.push(m) } }; };
+
+  it("Math Runner: the best door is the right answer", () => {
+    const src = read("supabase/private-games/number-dash.html");
+    const fns = ["doorLabel", "applyDoor", "formatCoins"].map((n) => "function " + n + "(" + src.split("function " + n + "(")[1].split("\n}")[0] + "\n}").join("\n");
+    const { sent, win } = post();
+    const send = new Function("parent", "window", "Game", fns + "\nreturn function sendDoorAnswer(" + body(src, "sendDoorAnswer"))(win, {}, { level: "g3" });
+    const doors = [{ op: "+", n: 8 }, { op: "×", n: 3 }, { op: "−", n: 5 }];
+    send(10n, doors, 0, [1]);
+    const a = answerFromMessage(sent[0]);
+    expect(a).toMatchObject({ game: "math-runner", subject: "math", level: "g23", correct: false, answer: "×3", given: "+8 (18 coins)", skill: "Multiplying" });
+    expect(a.question).toBe("You have 10 coins. Which door gives you the most: +8, ×3, −5?");
+    expect(a.why).toBe("Through ×3 you have 30 coins, the most.");
+    expect(src).toContain("  sendDoorAnswer(before, doors, lane, best);");
+  });
+
+  it("Robo Math Buddy: its quiz questions, not the child's own homework", () => {
+    const src = read("supabase/private-games/math-robot.html");
+    const fn = src.split("  function sendQuizAnswer(")[1].split("\n  }\n")[0];
+    const { sent, win } = post();
+    win.parent = { postMessage: win.postMessage };
+    const send = new Function("window", "mem", "answerText", "fmt", "return function sendQuizAnswer(" + fn + "\n}")(
+      win, { grade: 4 }, (q) => String(q.answer), (n) => String(n));
+    send({ text: "6 × 7", answer: 42, steps: ["6 × 7 = ?", "6 × 7 = 42"] }, false, 48);
+    expect(answerFromMessage(sent[0])).toMatchObject({ game: "robo-math-buddy", level: "g45", correct: false, question: "What is 6 × 7?", answer: "42", given: "48", why: "6 × 7 = 42", skill: "Multiplying" });
+    expect(src).toContain("        sendQuizAnswer(state.q, right, n);");
+  });
+
+  it("Remote Lunar: building questions count toward Engineering, the rest Science", () => {
+    const src = read("supabase/private-games/remote-lunar-salvage.html");
+    const { sent, win } = post();
+    win.parent = { postMessage: win.postMessage };
+    const send = new Function("window", "G", "QZ", "gradeBand", "curGrade", "return function sendQuizAnswer(" + body(src, "sendQuizAnswer"))(
+      win, { world: { id: "pumice" } }, { i: 2 }, () => "g1", () => 1);
+    send({ q: "Which shape keeps the bridge strong?", opts: [{ t: "triangle" }, { t: "square" }], a: 0, why: "The triangle." }, 1);
+    send({ q: "Where does a ball fall more slowly?", opts: [{ t: "Pumice Moon" }, { t: "Earth" }], a: 0, why: "On Pumice Moon." }, 0);
+    expect(answerFromMessage(sent[0])).toMatchObject({ game: "remote-lunar", qid: "rl-pumice-g1-2", subject: "engineering", level: "k1", correct: false, given: "square" });
+    expect(answerFromMessage(sent[1])).toMatchObject({ subject: "science", correct: true, answer: "Pumice Moon" });
+    expect(src).toContain("  sendQuizAnswer(q, k);");
+  });
+
+  it("their pages say what they count toward", () => {
+    expect(site).toContain('"game-math-runner": ["math"], "game-robo-math-buddy": ["math"], "game-remote-lunar-salvage": ["science", "engineering"] };');
   });
 });
