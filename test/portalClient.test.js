@@ -372,7 +372,7 @@ describe("how the site wires the portal in", () => {
   it("shows a game entry's cover in the same 16:9 shape as the picture on a game's Play page", () => {
     expect(body("portalGameHTML")).toContain("pmedia pmedia--cover pmedia--wide");
     expect(html).toContain(".pmedia--wide{ aspect-ratio:16/9; }");
-    expect(html).toContain(".gameposter{\n  position:relative; overflow:hidden;\n  border:var(--line); border-radius:var(--r-lg); box-shadow:var(--hard);\n  aspect-ratio:16/9;");
+    expect(html).toContain(".gameposter{\n  position:relative; overflow:hidden;\n  border:var(--line); border-radius:var(--r-lg);\n  aspect-ratio:16/9;");   // no drop shadow on a still picture (owner, 2026-11-28)
     expect(html).toContain(".pprompt__note{ margin:14px 0 0; font-size:.95rem; font-weight:800;");
   });
 

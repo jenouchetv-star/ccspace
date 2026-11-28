@@ -24,6 +24,11 @@
 //   locks    the songs open right now in another browser tab or device (`holder` is this tab), so Home can show them
 //            as locked (owner, 2026-11-18): { ok:true, ids:[...] }.
 //
+// Each child has their own space (owner, 2026-11-28; assets/lib/studioKids.js): a song may carry `child`, the id of
+// the child it belongs to ("" or none: the Family shelf). It is kept in the song and in child_id
+// (supabase/studio-per-child.sql), listed with each song, and usage adds byChild ([{ child, items, bytes }]) for the
+// family space bar. The limits stay the family's, shared by everyone.
+//
 // The sound_projects table is service-role only under RLS; nothing in it is reachable with the public key.
 // Ordinary outcomes come back as HTTP 200 with { ok:false, error }; only a malformed call or a fault is non-200.
 //
@@ -71,7 +76,9 @@ const LOCK_SECONDS = 75;               // a song's lock runs out this long after
 /** A browser tab's lock id, as the app makes it: 8 to 64 letters, digits, - or _. Anything else: none. */
 const cleanHolder = (v: unknown) => { const s = typeof v === "string" ? v : ""; return /^[A-Za-z0-9_-]{8,64}$/.test(s) ? s : ""; };
 /* the fields a song has (model.js SONG_KEYS); anything else is not a song */
-const SONG_KEYS = new Set(["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs", "loopStart", "loopCounts"]);
+const SONG_KEYS = new Set(["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs", "loopStart", "loopCounts", "child"]);
+/** A child id as a song keeps it: letters, digits and dashes, at most 64 ("" is the Family shelf). Anything else: null. */
+const cleanChild = (v: unknown) => v === undefined || v === "" ? "" : typeof v === "string" && /^[A-Za-z0-9-]{1,64}$/.test(v) ? v : null;
 
 async function sha256Hex(s: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -163,19 +170,25 @@ Deno.serve(async (req) => {
     if (!who) return fail("no_session");
 
     if (action === "list") {
-      const { data, error } = await db.from("sound_projects").select("project_id, title, thumb, updated_ms, deleted").eq("subscriber_id", who.id);
+      const { data, error } = await db.from("sound_projects").select("project_id, title, thumb, updated_ms, deleted, child_id").eq("subscriber_id", who.id);
       if (error) throw new Error(error.message);
       return json({ ok: true, email: who.email, items: (data ?? []).map((r) => ({
-        id: r.project_id, title: r.title, thumb: r.deleted ? "" : (r.thumb || ""), updated: Number(r.updated_ms), deleted: !!r.deleted })) });
+        id: r.project_id, title: r.title, thumb: r.deleted ? "" : (r.thumb || ""), updated: Number(r.updated_ms), deleted: !!r.deleted, child: r.child_id || "" })) });
     }
 
     if (action === "usage") {
-      const { data, error } = await db.from("sound_projects").select("bytes").eq("subscriber_id", who.id).eq("deleted", false);
+      const { data, error } = await db.from("sound_projects").select("bytes, child_id").eq("subscriber_id", who.id).eq("deleted", false);
       if (error) throw new Error(error.message);
       const rows = data ?? [];
       const lim = await limitsFor(who.id);
+      const by = new Map<string, { child: string; items: number; bytes: number }>();
+      for (const r of rows) {
+        const c = String(r.child_id || "");
+        const b = by.get(c) || { child: c, items: 0, bytes: 0 };
+        b.items++; b.bytes += Number(r.bytes || 0); by.set(c, b);
+      }
       return json({ ok: true, email: who.email, songs: rows.length, bytes: rows.reduce((n, r) => n + Number(r.bytes || 0), 0),
-        maxSongs: lim.items, maxBytes: lim.accountBytes });
+        maxSongs: lim.items, maxBytes: lim.accountBytes, byChild: [...by.values()] });
     }
 
     if (action === "lock") {
@@ -222,6 +235,8 @@ Deno.serve(async (req) => {
       // the song only: the small picture is kept in its own column, and nothing that isn't part of a song is kept
       const { thumb: rawThumb, ...rest } = p;
       if (Object.keys(rest).some((k) => !SONG_KEYS.has(k))) return fail("invalid");
+      const child = cleanChild(rest.child);
+      if (child === null) return fail("invalid");
       const lim = await limitsFor(who.id);
       // a steady stream of saves is fine; a flood from one account is not
       const { data: allowed, error: rateError } = await db.rpc("rate_take", { p_bucket: "sound_put", p_key: who.id, p_max: lim.savesPerHour, p_window_seconds: 3600 });
@@ -249,7 +264,7 @@ Deno.serve(async (req) => {
       const before = live.find((r) => r.project_id === id);
       if (used + bytes > lim.accountBytes && (!before || bytes > Number(before.bytes || 0))) return fail("storage_full");
       const { error } = await db.from("sound_projects").upsert({
-        subscriber_id: who.id, project_id: id, title: p.title, thumb, data: rest, bytes, updated_ms: updated, deleted: false,
+        subscriber_id: who.id, project_id: id, title: p.title, thumb, data: rest, bytes, updated_ms: updated, deleted: false, child_id: child || null,
       }, { onConflict: "subscriber_id,project_id" });
       if (error) throw new Error(error.message);
       return json({ ok: true, updated });

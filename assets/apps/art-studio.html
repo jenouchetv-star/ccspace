@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
 <script src="../vendor/lucide.js"></script>
 <script src="../lib/pixelblast.js"></script>
+<script src="../lib/studioKids.js"></script>
 <!--
   Art Space (Chike's Creative Space): a standalone drawing and design app laid out like the tools grown-ups use
   (Figma, Sketch, Photoshop, Procreate): a tool bar, a layers panel, the canvas with zoom and pan, and an
@@ -638,7 +639,7 @@ body.no-layers .layers{ display:none; }
         <b>Pixel Art</b><span class="t">A grid for sprites and icons</span>
       </button>
     </div>
-    <h2>Recent <button type="button" class="btn" data-act="open-file"><i data-lucide="folder-open"></i> Open a file</button></h2>
+    <h2><span id="recent-title">Recent</span> <button type="button" class="btn" data-act="open-file"><i data-lucide="folder-open"></i> Open a file</button></h2>
     <input type="file" id="file-in" accept=".json,application/json" class="sr-only" tabindex="-1" aria-hidden="true">
     <div id="gallery" class="gallery" aria-live="polite"></div>
   </div></div>
@@ -1268,7 +1269,7 @@ async function launch(){
 function closeLaunch(){
   const L = $("#launch");
   L.classList.add("out");
-  setTimeout(() => { L.hidden = true; L.classList.remove("out"); }, 360);
+  setTimeout(() => { L.hidden = true; L.classList.remove("out"); if (cloud.on()) kids.askIfNeeded(); }, 360);
 }
 /* the Sign in window: step 1 the email, step 2 the code */
 let signEmail = "";
@@ -1397,6 +1398,7 @@ function cloudSync(){
         const p = cleanProject(g.project);
         if (p.layers) p.layers.forEach(l => { if (l.type === "text") fitText(l); });
         Object.assign(p, { id:it.id, updated:it.updated, created:g.project.created || p.created, owner:cloud.email });
+        if (StudioKids.cleanChild(g.project.child)) p.child = g.project.child;
         if (mine && mine.trace) p.trace = mine.trace;
         p.thumb = it.thumb || thumbOf(p);
         await store.put(p); here.set(p.id, p); changedHere = true;
@@ -1938,7 +1940,7 @@ function createNewPage(){
     if (!(w >= PAGE_MIN && w <= PAGE_MAX && h >= PAGE_MIN && h <= PAGE_MAX)) return toast("Use 300 to 3,000 pixels for each side.");
   } else { const z = S.sizes.find(q => q[0] === newPick.size) || S.sizes[0]; w = z[3]; h = z[4]; }
   closeNewPage();
-  openProject(newPaint(newPick.shape, w, h));
+  openProject(forChild(newPaint(newPick.shape, w, h)));
 }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#newpage")){ e.preventDefault(); closeNewPage(); } });
 
@@ -2029,19 +2031,30 @@ async function paintSpace(){
   const hadFocus = document.activeElement && box.contains(document.activeElement) && document.activeElement.classList.contains("space__info");
   const v = spaceParts(r, spaceOpen);
   box.className = "space" + (v.level ? " space--" + v.level : "");
-  box.innerHTML = v.html;
+  /* children in the family: one family space, its bars split by child (owner, 2026-11-28) */
+  box.innerHTML = kids.on && Array.isArray(r.byChild)
+    ? kids.spaceHTML({ items: Number(r.pictures), maxItems: Number(r.maxPictures), bytes: Number(r.bytes), maxBytes: Number(r.maxBytes), byChild: r.byChild,
+        note: v.level === "full" ? "The family space is full. New pictures save on this device only until you delete some."
+          : v.level === "warn" ? "The family space is nearly full. Delete pictures you don\u2019t need to make room." : "" })
+    : v.html;
   box.hidden = false;
   icons();
   if (hadFocus) box.querySelector(".space__info").focus();
 }
+/* Each child's own space (owner, 2026-11-28; assets/lib/studioKids.js): the picked child's art, the Family shelf
+   under it, Move to, and one family space shared by everyone. No children (or not signed in): one shelf, as before. */
+let homeList = [];
+const kids = StudioKids.create({ doc: document, host: () => cloud.host(), one: "picture", many: "pictures", Many: "Pictures", own: "art", ownOne: true,
+  bar: () => $("#home .appbar"), place: (bar, chip) => { chip.style.marginLeft = "6px"; bar.appendChild(chip); },
+  counts: () => StudioKids.counts(homeList, kids.kids, p => p.child),
+  onChange: () => { renderGallery(); } });
+/** A new picture belongs to the child who's making; a grown-up's goes on the Family shelf. */
+function forChild(p){ if (kids.child) p.child = kids.child; else delete p.child; return p; }
 function paintHome(){
   document.body.classList.remove("editing", "layers-open");
   paintSpace();
   cur = null;
   artLock.release();
-  $("#home-lede").textContent = cloud.on()
-    ? "Pick a page to start. Your work saves to your account as you go, so it’s there in any browser where you sign in."
-    : "Pick a page to start. Your work saves on this device as you go.";
   return renderGallery();
 }
 async function showHome(){
@@ -2049,22 +2062,56 @@ async function showHome(){
   /* then bring in what was made in other browsers */
   cloudSync().then(changedHere => { if (changedHere && !cur) renderGallery(); if (!cur) paintSpace(); });
 }
+function artCard(p, move){
+  return '<article class="art" data-id="' + esc(p.id) + '" data-title="' + esc(p.title) + '">'
+    + '<button type="button" class="art__open" data-open="' + esc(p.id) + '" aria-label="Open ' + esc(p.title) + '">'
+    + (p.thumb ? '<img src="' + esc(p.thumb) + '" alt=""' + (p.kind === "pixel" ? ' class="px"' : "") + '>' : "") + '</button>'
+    + '<div class="art__body"><span class="art__name">' + esc(p.title) + '<span class="art__when">' + esc([when(p.updated), fileSize(p)].filter(Boolean).join(" · ")) + '</span></span>'
+    + (move ? kids.moveButtonHTML(p.id, p.title) : "") + artCardFoot(p, false) + '</div>'
+    + '</article>';
+}
 async function renderGallery(){
   const list = (await store.all().catch(() => [])).sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  homeList = list;
+  if (cloud.on() || kids.on) await kids.load();
+  const per = kids.on && cloud.on(), shelf = kids.shelf;
+  $("#home-lede").textContent = per ? kids.lede("Pick a page to start.")
+    : cloud.on() ? "Pick a page to start. Your work saves to your account as you go, so it’s there in any browser where you sign in."
+    : "Pick a page to start. Your work saves on this device as you go.";
+  const head = $("#recent-title");
+  if (head) head.textContent = per ? (shelf === undefined ? "Family shelf" : kids.heading()) : "Recent";
+  const here = per ? StudioKids.onShelf(list, shelf || "", kids.kids, p => p.child) : list;
+  const family = per && shelf ? StudioKids.onShelf(list, "", kids.kids, p => p.child) : [];
   const g = $("#gallery");
-  g.innerHTML = list.length ? list.map(p => '<article class="art" data-id="' + esc(p.id) + '" data-title="' + esc(p.title) + '">'
-      + '<button type="button" class="art__open" data-open="' + esc(p.id) + '" aria-label="Open ' + esc(p.title) + '">'
-      + (p.thumb ? '<img src="' + esc(p.thumb) + '" alt=""' + (p.kind === "pixel" ? ' class="px"' : "") + '>' : "") + '</button>'
-      + '<div class="art__body"><span class="art__name">' + esc(p.title) + '<span class="art__when">' + esc([when(p.updated), fileSize(p)].filter(Boolean).join(" · ")) + '</span></span>'
-      + artCardFoot(p, false) + '</div>'
-      + '</article>').join("")
-    : '<p class="empty">Nothing yet. Pick a page above to start.</p>';
+  g.innerHTML = here.length ? here.map(p => artCard(p, per && !shelf)).join("") : '<p class="empty">Nothing yet. Pick a page above to start.</p>';
+  const old = $("#family-shelf"); if (old) old.remove();
+  if (family.length){
+    const sec = document.createElement("div"); sec.id = "family-shelf";
+    sec.innerHTML = kids.familyShelfHTML('<div class="gallery">' + family.map(p => artCard(p, true)).join("") + '</div>');
+    g.after(sec);
+  }
   icons();
   paintLocks();
   /* the examples use the app's font for their words, so wait for it */
   (document.fonts ? document.fonts.ready : Promise.resolve()).then(drawExamples, drawExamples);
   if (!store.ok && !cloud.on()) toast("This browser can’t keep art between visits. Use Save a project file to keep it.");
 }
+/* Move to: a Family shelf picture goes to a child's space (a change like any other: it saves, and the account follows) */
+async function movePicture(btn){
+  const card = btn.closest(".art");
+  if (card && card.classList.contains("art--locked")){ toast("That picture is open on another device. Close it there first."); return; }
+  const to = await kids.moveMenu(btn);
+  if (!to) return;
+  const p = (await store.all().catch(() => [])).find(x => x.id === btn.dataset.skMove);
+  if (!p) return renderGallery();
+  p.child = to; p.updated = Math.max(Date.now(), (p.updated || 0) + 1);
+  await store.put(p);
+  const k = kids.kid(to);
+  toast("Moved to " + (k ? StudioKids.possessive(k.name) : "a child\u2019s") + " space.");
+  await renderGallery();
+  cloudSync().then(changed => { if (changed && !cur) renderGallery(); if (!cur) paintSpace(); });
+}
+$("#home").addEventListener("click", e => { const b = e.target.closest("[data-sk-move]"); if (b){ e.stopPropagation(); movePicture(b); } }, true);
 /* A picture open right now in another browser tab or device (owner, 2026-11-18): its card is greyed out and a lock
    sits where the trash can was. Picking it still says where it's open (openStored). */
 function artCardFoot(p, locked){
@@ -2077,7 +2124,7 @@ function paintLocks(){
   paintingLocks = (async () => {
     const ids = cloud.on() ? await artLockedElsewhere((a, x) => cloud.call(a, x), artLock.holder) : new Set();
     let changed = false;
-    document.querySelectorAll("#gallery .art[data-id]").forEach(el => {
+    document.querySelectorAll("#gallery .art[data-id], #family-shelf .art[data-id]").forEach(el => {
       const locked = ids.has(el.dataset.id);
       if (el.classList.contains("art--locked") === locked) return;
       el.classList.toggle("art--locked", locked);
@@ -3201,7 +3248,7 @@ document.addEventListener("click", e => {
   if (b.dataset.start){
     let p = b.dataset.start === "pixel" ? newPixel(16) : newPaint(b.dataset.format);
     if (b.dataset.start === "pattern"){ p = newPaint("square", 1500, 1500, "Untitled pattern"); p.pattern = true; }
-    openProject(p); if (b.dataset.start === "pixel") pickPixelSize(); return;
+    openProject(forChild(p)); if (b.dataset.start === "pixel") pickPixelSize(); return;
   }
   if (b.dataset.open){ openStored(b.dataset.open); return; }
   if (b.dataset.del){
@@ -3713,7 +3760,7 @@ async function share(){
 }
 function saveFile(){
   /* the trace picture is someone else's picture, only a guide: it stays on this device, not in the file */
-  const keep = Object.assign({}, cur); delete keep.thumb; delete keep.trace; delete keep.owner;
+  const keep = Object.assign({}, cur); delete keep.thumb; delete keep.trace; delete keep.owner; delete keep.child;
   saveBlob(new Blob([JSON.stringify(keep)], { type:"application/json" }), safeName() + ".art.json");
   toast("Saved a project file. Open it in Art Space any time to keep working.");
 }
@@ -3723,7 +3770,7 @@ function openFile(input){
   if (f.size > 12 * 1024 * 1024) return toast("That file is too big to be an Art Space file.");
   const r = new FileReader();
   r.onload = () => {
-    try { const p = cleanProject(JSON.parse(r.result)); if (p.layers) p.layers.forEach(l => { if (l.type === "text") fitText(l); }); openProject(p); saveNow(); toast("Opened " + f.name); }
+    try { const p = cleanProject(JSON.parse(r.result)); if (p.layers) p.layers.forEach(l => { if (l.type === "text") fitText(l); }); openProject(forChild(p)); saveNow(); toast("Opened " + f.name); }
     catch(e){ toast(e && e.message && e.message.startsWith("This") ? e.message : "That file couldn’t be opened."); }
   };
   r.readAsText(f);

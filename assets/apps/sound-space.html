@@ -16,6 +16,7 @@
 <script src="sound-space/lessons.js"></script>
 <script src="sound-space/cloud.js"></script>
 <script src="sound-space/midi.js"></script>
+<script src="../lib/studioKids.js"></script>
 <script src="sound-space/notation.js"></script>
 <!--
   Sound Space (Chike's Creative Space): kids make their own short songs. Add tracks, pick an instrument for each,
@@ -1231,7 +1232,7 @@ body.kbd-collapsed #kbd{ display:none; }
         <b>Music lessons</b><span class="t">Short lessons, one music word each</span>
       </button>
     </div>
-    <h2>Recent <button type="button" class="btn" data-act="open-file"><i data-lucide="folder-open"></i> Open a file</button></h2>
+    <h2><span id="recent-title">Recent</span> <button type="button" class="btn" data-act="open-file"><i data-lucide="folder-open"></i> Open a file</button></h2>
     <input type="file" id="file-in" accept=".json,application/json" class="sr-only" tabindex="-1" aria-hidden="true">
     <div id="gallery" class="gallery" aria-live="polite"></div>
   </div></div>
@@ -3860,7 +3861,7 @@ $("#lib-q").addEventListener("input", e => { lib.q = e.target.value; lib.shown =
 function openStarter(id){
   const st = L.STARTERS.find(s => s.id === id);
   if (!st){ toast("That starter song couldn’t be opened."); return; }
-  const s = clone(st.song); s.id = M.newSong().id; s.updatedMs = Date.now();
+  const s = clone(st.song); s.id = M.newSong().id; s.updatedMs = Date.now(); forChild(s);
   openSong(s, { save:true });
 }
 let lessonsBack = null;
@@ -3886,7 +3887,7 @@ let lesson = null, lessonTimer = 0, lessonHl = null;
 function lessonEvent(name){ if (lesson && !lesson.finished) lesson.events[name] = (lesson.events[name] || 0) + 1; }
 function startLesson(i){
   const l = LS.LESSONS[i]; if (!l) return;
-  const s = clone(l.startSong); s.id = M.newSong().id; s.updatedMs = Date.now();
+  const s = clone(l.startSong); s.id = M.newSong().id; s.updatedMs = Date.now(); forChild(s);
   openSong(s, { save:true });
   lesson = { l, n:i, step:0, events:{}, ok:false, finished:false, lit:0 };
   $("#tip").hidden = false;
@@ -4415,22 +4416,46 @@ function paintStarts(){
 }
 paintStarts();
 let blockedToastShown = false;
+/* Each child's own space (owner, 2026-11-28; assets/lib/studioKids.js): the picked child's songs, the Family shelf
+   under them, Move to, and one family space shared by everyone. No children (or not signed in): one shelf, as before. */
+let homeList = [];
+const kids = StudioKids.create({ doc: document, host: () => cloud.host(), one: "song", many: "songs", Many: "Songs", own: "songs", ownOne: false,
+  bar: () => $("#home .appbar"), place: (bar, chip) => { const g = bar.querySelector(".grow"); if (g) g.after(chip); else bar.appendChild(chip); },
+  counts: () => StudioKids.counts(homeList, kids.kids, s => s.child),
+  onChange: () => { paintHome(); } });
+/** A new song belongs to the child who's making; a grown-up's goes on the Family shelf. */
+function forChild(s){ if (kids.child) s.child = kids.child; else delete s.child; return s; }
+function songCard(s, move){
+  const title = s.title || "My song";
+  return '<article class="art" data-id="' + esc(s.id) + '" data-title="' + esc(title) + '">'
+    + '<button type="button" class="art__open" data-open="' + esc(s.id) + '" aria-label="Open ' + esc(title) + '">' + miniPicture(s) + '</button>'
+    + '<div class="art__body"><span class="art__name">' + esc(title) + '<span class="art__when">' + esc([when(s.updatedMs), fileSize(s)].filter(Boolean).join(" · ")) + '</span></span>'
+    + (move ? kids.moveButtonHTML(s.id, title) : "") + songCardFoot(s, false) + '</div>'
+    + '</article>';
+}
 async function paintHome(){
   let list = [];
   try { list = await listSongs(); } catch(e){}
+  homeList = list;
+  if (cloud.on() || kids.on) await kids.load();
   paintSpace();
-  $("#home-lede").textContent = cloud.on() ? "Pick a way to start. Your songs save to your account as you go, so they’re there in any browser where you sign in."
+  const per = kids.on && cloud.on(), shelf = kids.shelf;
+  $("#home-lede").textContent = per ? kids.lede("Pick a way to start.")
+    : cloud.on() ? "Pick a way to start. Your songs save to your account as you go, so they’re there in any browser where you sign in."
     : dbOk ? "Pick a way to start. Your songs save on this device as you go."
     : "Pick a way to start. This browser blocked saving, so songs won’t be kept after you close Sound Space.";
+  const head = $("#recent-title");
+  if (head) head.textContent = per ? (shelf === undefined ? "Family shelf" : kids.heading()) : "Recent";
+  const here = per ? StudioKids.onShelf(list, shelf || "", kids.kids, s => s.child) : list;
+  const family = per && shelf ? StudioKids.onShelf(list, "", kids.kids, s => s.child) : [];
   const g = $("#gallery");
-  g.innerHTML = list.length ? list.map(s => {
-    const title = s.title || "My song";
-    return '<article class="art" data-id="' + esc(s.id) + '" data-title="' + esc(title) + '">'
-      + '<button type="button" class="art__open" data-open="' + esc(s.id) + '" aria-label="Open ' + esc(title) + '">' + miniPicture(s) + '</button>'
-      + '<div class="art__body"><span class="art__name">' + esc(title) + '<span class="art__when">' + esc([when(s.updatedMs), fileSize(s)].filter(Boolean).join(" · ")) + '</span></span>'
-      + songCardFoot(s, false) + '</div>'
-      + '</article>';
-  }).join("") : '<p class="empty">Nothing yet. Pick a way to start above.</p>';
+  g.innerHTML = here.length ? here.map(s => songCard(s, per && !shelf)).join("") : '<p class="empty">Nothing yet. Pick a way to start above.</p>';
+  const old = $("#family-shelf"); if (old) old.remove();
+  if (family.length){
+    const sec = document.createElement("div"); sec.id = "family-shelf";
+    sec.innerHTML = kids.familyShelfHTML('<div class="gallery">' + family.map(s => songCard(s, true)).join("") + '</div>');
+    g.after(sec);
+  }
   icons();
   if (!dbOk && !blockedToastShown){ blockedToastShown = true; toast("This browser can’t keep songs between visits."); }
   paintLocks();
@@ -4448,7 +4473,7 @@ function paintLocks(){
   paintingLocks = (async () => {
     const ids = cloud.on() && songLock ? await C.lockedElsewhere((a, x) => cloud.call(a, x), songLock.holder) : new Set();
     let changed = false;
-    $$("#gallery .art[data-id]").forEach(el => {
+    $$("#gallery .art[data-id], #family-shelf .art[data-id]").forEach(el => {
       const locked = ids.has(el.dataset.id);
       if (el.classList.contains("art--locked") === locked) return;
       el.classList.toggle("art--locked", locked);
@@ -4480,7 +4505,26 @@ async function openStored(id){
   }
   openSong(v.song, { missing:v.missing, owner:rec.owner || "" });
 }
-$("#gallery").addEventListener("click", async e => {
+/* Move to: a Family shelf song goes to a child's space (a change like any other: it saves, and the account follows) */
+async function moveSong(btn){
+  const card = btn.closest(".art");
+  if (card && card.classList.contains("art--locked")){ toast("That song is open on another device. Close it there first."); return; }
+  const to = await kids.moveMenu(btn);
+  if (!to) return;
+  const st = await openDb(), rec = await st.get(btn.dataset.skMove);
+  if (!rec || rec.deleted) return paintHome();
+  rec.child = to; rec.updatedMs = Math.max(Date.now(), (rec.updatedMs || 0) + 1);
+  await st.put(rec);
+  const k = kids.kid(to);
+  toast("Moved to " + (k ? StudioKids.possessive(k.name) : "a child\u2019s") + " space.");
+  await paintHome();
+  syncHome();
+}
+/* the Move to buttons on Home (the Family shelf under a child's songs is outside #gallery) */
+$("#home").addEventListener("click", e => { const b = e.target.closest("[data-sk-move]"); if (b){ e.stopPropagation(); moveSong(b); } }, true);
+/* the songs on Home: the shelf shown and the Family shelf under it */
+$("#home").addEventListener("click", async e => {
+  if (!e.target.closest("#gallery, #family-shelf")) return;
   const o = e.target.closest("[data-open]"); if (o){ audio(); return openStored(o.dataset.open); }
   const d = e.target.closest("[data-del]");
   if (d){
@@ -4497,7 +4541,7 @@ $("#home").addEventListener("click", e => {
   const b = e.target.closest("[data-start]"); if (!b) return;
   audio();
   const kind = b.dataset.start;
-  if (kind === "empty") openSong(M.newSong({ title:"My song" }));
+  if (kind === "empty") openSong(forChild(M.newSong({ title:"My song" })));
   else if (kind === "lessons") openLessons();
   else openStarter(kind);
 });
@@ -4510,7 +4554,7 @@ $("#file-in").addEventListener("change", async e => {
   try { if (f.size < 2000000 && /\.json$/i.test(f.name)) obj = JSON.parse(await f.text()); } catch(err){}
   const v = obj ? M.validateSong(obj, CATALOG_IDS) : { ok:false };
   if (!v.ok){ toast("That file isn’t a Sound Space song."); return; }
-  const s = v.song; s.id = M.newSong().id; s.updatedMs = Date.now();
+  const s = v.song; s.id = M.newSong().id; s.updatedMs = Date.now(); forChild(s);
   openSong(s, { save:true, missing:v.missing });
 });
 
@@ -4818,7 +4862,12 @@ async function paintSpace(){
   const hadFocus = document.activeElement && box.contains(document.activeElement) && document.activeElement.classList.contains("space__info");
   const v = spaceParts(r, spaceOpen);
   box.className = "space" + (v.level ? " space--" + v.level : "");
-  box.innerHTML = v.html;
+  /* children in the family: one family space, its bars split by child (owner, 2026-11-28) */
+  box.innerHTML = kids.on && Array.isArray(r.byChild)
+    ? kids.spaceHTML({ items: Number(r.songs), maxItems: Number(r.maxSongs), bytes: Number(r.bytes), maxBytes: Number(r.maxBytes), byChild: r.byChild,
+        note: v.level === "full" ? "The family space is full. New songs save on this device only until you delete some."
+          : v.level === "warn" ? "The family space is nearly full. Delete songs you don\u2019t need to make room." : "" })
+    : v.html;
   box.hidden = false;
   icons();
   if (hadFocus) box.querySelector(".space__info").focus();
@@ -4865,7 +4914,7 @@ async function launch(){
 function closeLaunch(){
   const L = $("#launch");
   L.classList.add("out");
-  setTimeout(() => { L.hidden = true; L.classList.remove("out"); }, 360);
+  setTimeout(() => { L.hidden = true; L.classList.remove("out"); if (cloud.on()) kids.askIfNeeded(); }, 360);
 }
 let signEmail = "";
 function showSignIn(ended){

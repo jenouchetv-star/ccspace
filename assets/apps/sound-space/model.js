@@ -19,7 +19,8 @@
 
   // loopStart and loopCounts: where the loop starts (a count, from 0) and how long it is. Songs saved before them have
   // neither; their loop is worked out from the song's length (loopOf).
-  const SONG_KEYS = ["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs", "loopStart", "loopCounts"];
+  /* child: the child the song belongs to ("" or none: the Family shelf), owner 2026-11-28 (assets/lib/studioKids.js) */
+  const SONG_KEYS = ["schemaVersion", "id", "title", "counts", "tempo", "grid", "loop", "countIn", "volume", "tracks", "updatedMs", "loopStart", "loopCounts", "child"];
   const BAR = 4;
   // reverb: 0 Off, 1 Room, 2 Hall, 3 Big hall, 4 Stadium. sustain: notes ring on after they end (pitched instruments only).
   // Songs saved before these two have neither; they open as reverb 0 and sustain false.
@@ -329,6 +330,7 @@
     if (!isNum(obj.tempo) || obj.tempo < CONST.TEMPO_MIN || obj.tempo > CONST.TEMPO_MAX) return bad("bad_tempo");
     if (typeof obj.id !== "string" || !obj.id) return bad("bad_field");
     if (typeof obj.title !== "string" || obj.title.length > 60) return bad("bad_field");
+    if (obj.child !== undefined && (typeof obj.child !== "string" || !/^[A-Za-z0-9-]{0,64}$/.test(obj.child))) return bad("bad_field");
     if (obj.grid !== undefined && CONST.GRIDS.indexOf(obj.grid) < 0) return bad("bad_field");
     if (typeof obj.loop !== "boolean" || typeof obj.countIn !== "boolean") return bad("bad_field");
     if (!isNum(obj.volume) || obj.volume < 0 || obj.volume > 1) return bad("bad_field");

@@ -270,7 +270,7 @@ describe("Sound Space app page", () => {
     expect(home).toContain('<div id="home-fx" class="home__fx" aria-hidden="true"></div>');
     expect(home).toContain('<div id="space" class="space" role="status" aria-live="polite" hidden></div>');
     expect(home).toMatch(/<h1 id="home-title">New<\/h1>\s*<p class="home__lede" id="home-lede">/);
-    expect(home).toMatch(/<h2>Recent <button type="button" class="btn" data-act="open-file">/);
+    expect(home).toMatch(/<h2><span id="recent-title">Recent<\/span> <button type="button" class="btn" data-act="open-file">/);
     expect(html).toContain('<script src="../lib/pixelblast.js"></script>');
     for (const c of ["art__open", "art__body", "art__name", "art__when"]) expect(html).toContain(`class="${c}"`);
     expect(html).toContain('<p class="empty">');

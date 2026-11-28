@@ -13,7 +13,8 @@ function render(arts, slots){
     aiStage2Badge: "6–12", aiAgeUnit: "years old", aiStage2Title: "Together, every time", aiStage2Text: "Sit side by side.",
     aiStage3Badge: "13 and up", aiStage3Title: "Guided independence", aiStage3Text: "Set the rules together."
   }, slots || {});
-  const fn = new Function("slot", "slotText", "slotImg", "db", "ic", "E", "articleFigureHTML",
+  const askList = new Function("ic", "E", "function askListHTML(" + body("askListHTML") + "\nreturn askListHTML;")(name => "<i:" + name + ">", x => String(x));
+  const fn = new Function("slot", "slotText", "slotImg", "db", "ic", "E", "articleFigureHTML", "askListHTML",
     "function guideAiHTML(" + body("guideAiHTML") + "\nreturn guideAiHTML;");
   return fn(
     (g, k) => "<slot:" + k + ">" + SLOTS[k],
@@ -22,7 +23,8 @@ function render(arts, slots){
     { find: (col, id) => (col === "articles" ? arts.find(a => a.id === id) : null) || null },
     name => "<i:" + name + ">",
     s => String(s),
-    f => "<figure:" + f.type + ":" + f.title + ">"
+    f => "<figure:" + f.type + ":" + f.title + ">",
+    askList
   )();
 }
 const article = { id: "art-kids-ai-guide", status: "published", charts: [
@@ -107,5 +109,18 @@ describe("the Parent & Teacher Guide's Creating with AI section", () => {
     expect(html).toContain(".panel.guide__story.guide__ai{ background:var(--paper); }");
     expect(html).toContain(".guide__aistage{ background:none; border:0; padding:0; }");   // the ages sit right on the tan
     expect(html).toContain('{ key:"aiArticleId", section:"Creating with AI"');
+  });
+});
+
+describe("each question opens to say why it matters (owner, 2026-11-28)", () => {
+  it("a question with a reason gets a chevron and opens; one without stays a plain line", () => {
+    const out = render([article], { aiAsks: "Did you try it yourself first?\nAre you asking for a hint?", aiAsksWhy: "Trying first keeps the thinking theirs." });
+    expect(out).toContain('<li><details><summary><i:message-circle><span>Did you try it yourself first?</span><span class="guide__askx" aria-hidden="true"><i:chevron-down></span></summary><p class="guide__why">Trying first keeps the thinking theirs.</p></details></li>');
+    expect(out).toContain("<li><i:message-circle><span>Are you asking for a hint?</span></li>");
+  });
+  it("every question list on the guide has its reasons, editable one per line", () => {
+    for (const k of ["homeAsksWhy", "classAsksWhy", "storyAsksWhy", "aiAsksWhy"]) expect(html).toContain('{ key:"' + k + '"');
+    expect(html).toContain('const asks = key => askListHTML(slotText(G, key), slotText(G, key + "Why"));');
+    expect(html).toContain(".panel:has(details){ box-shadow:var(--hard); }");
   });
 });
