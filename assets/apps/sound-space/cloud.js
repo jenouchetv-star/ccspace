@@ -180,8 +180,21 @@
     if (now && now.deleted && now.updatedMs === mark.updatedMs) await store.remove(id);
   }
 
+  /** How many songs come down from the account at once (owner, 2026-11-28: faster loading, each song showing as it
+      arrives instead of all at the end). */
+  const DOWNLOADS_AT_ONCE = 4;
+  /** Run `fn` over `items`, at most `n` at a time, in order of starting. */
+  async function eachAtMost(items, n, fn) {
+    let next = 0;
+    const worker = async () => { while (next < items.length) { const i = next++; await fn(items[i], i); } };
+    await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+  }
+
   /** Bring this browser and the account into step. `call(action, extra)` is the site's bridge, `accept(project)`
       returns a valid song or null, `isOpen(id)` protects the song being edited, `thumb(song)` draws its picture.
+      `onPlan(items)` hears, before any download, the account's list entries ({ id, title, thumb, updated, child })
+      of the songs about to come down, so Home can show them at once as cards still loading; `onItem(id, ok)` hears
+      each one as it lands (ok false: it couldn't be read, or changed here meanwhile).
       Returns { ok, changed, email, inAccount: Map id -> updatedMs of the songs the account has, as they are here }. */
   async function syncSongs(o) {
     const { store, call } = o;
@@ -207,19 +220,23 @@
       if (now && !now.deleted && now.updatedMs === updatedMs && now.owner !== email) { now.owner = email; await store.put(now); }
     };
 
-    for (const id of plan.download) {
+    const listed = new Map(r.items.map((it) => [String(it.id), it]));
+    if (o.onPlan && plan.download.length) { try { o.onPlan(plan.download.map((id) => listed.get(id)).filter(Boolean)); } catch (e) {} }
+    const heard = (id, ok) => { if (o.onItem) { try { o.onItem(id, ok); } catch (e) {} } };
+    await eachAtMost(plan.download, DOWNLOADS_AT_ONCE, async (id) => {
       const m = there.get(id);
       let g = null;
       try { g = await call("get", { id }); } catch (e) {}
-      if (!g || !g.ok || !g.project) continue;
+      if (!g || !g.ok || !g.project) return heard(id, false);
       const s = o.accept ? o.accept(g.project) : g.project;
-      if (!s || s.id !== id) continue;                               // a copy that can't be read stays out
+      if (!s || s.id !== id) return heard(id, false);                // a copy that can't be read stays out
       const now = await store.get(id);                               // changed here while this was on its way
-      if (isOpen(id) || (now ? !unchanged(now, recs.get(id)) || newer(now, m) : recs.has(id))) continue;
+      if (isOpen(id) || (now ? !unchanged(now, recs.get(id)) || newer(now, m) : recs.has(id))) return heard(id, false);
       s.updatedMs = m.updatedMs;
       await store.put(Object.assign(s, email ? { owner: email } : {}));
       out.changed = true;
-    }
+      heard(id, true);
+    });
     for (const id of plan.removeLocal) {
       const x = recs.get(id), now = await store.get(id);
       if (isOpen(id) || (now && !unchanged(now, x))) continue;
@@ -339,7 +356,7 @@
   SS.cloud = {
     DB_NAME, DB_STORE, AUTOSAVE_MS, PUSH_GAP_MS, RETRY_MS, MAX_THUMB, STATUS,
     mergeSongLists, syncPlan, openStore, tombstone, songOf, host, forCloud, putStatus, syncSongs,
-    mine, createPushGate, deleteSong,
+    mine, createPushGate, deleteSong, eachAtMost, DOWNLOADS_AT_ONCE,
     LOCK_RENEW_MS, lockHolder, lockedMessage, createSongLock, lockedElsewhere
   };
 })(typeof window !== "undefined" ? window : globalThis);

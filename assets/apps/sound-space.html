@@ -4425,9 +4425,20 @@ const kids = StudioKids.create({ doc: document, host: () => cloud.host(), one: "
   onChange: () => { paintHome(); } });
 /** A new song belongs to the child who's making; a grown-up's goes on the Family shelf. */
 function forChild(s){ if (kids.child) s.child = kids.child; else delete s.child; return s; }
+/* Faster loading (owner, 2026-11-28): songs coming down from the account show at once as cards still loading (the
+   account's small picture, a soft shimmer, "Getting it from your account"), four at a time, and each fills in as it
+   lands; the family is never waited on for long. */
+const pendingSongs = new Map();   // id -> the account's list entry, while that song comes down
+const arrivedSongs = new Set();   // ids that just landed: their card eases in once
+let kidsAsking = null, pendingPaint = 0;
+function repaintSoon(){ clearTimeout(pendingPaint); pendingPaint = setTimeout(() => { if ($("#editor").hidden) paintHome(); }, 120); }
 function songCard(s, move){
   const title = s.title || "My song";
-  return '<article class="art" data-id="' + esc(s.id) + '" data-title="' + esc(title) + '">'
+  if (s.pending) return '<article class="art sk-pending" aria-busy="true" data-pending="' + esc(s.id) + '">'
+    + '<span class="art__open">' + (/^data:image\/(svg\+xml|png);base64,/.test(s.thumb || "") ? '<img src="' + esc(s.thumb) + '" alt="">' : "") + '</span>'
+    + '<div class="art__body"><span class="art__name">' + esc(title) + '<span class="art__when">Getting it from your account\u2026</span></span></div></article>';
+  const arrive = arrivedSongs.delete(s.id);
+  return '<article class="art' + (arrive ? " sk-arrive" : "") + '" data-id="' + esc(s.id) + '" data-title="' + esc(title) + '">'
     + '<button type="button" class="art__open" data-open="' + esc(s.id) + '" aria-label="Open ' + esc(title) + '">' + miniPicture(s) + '</button>'
     + '<div class="art__body"><span class="art__name">' + esc(title) + '<span class="art__when">' + esc([when(s.updatedMs), fileSize(s)].filter(Boolean).join(" · ")) + '</span></span>'
     + (move ? kids.moveButtonHTML(s.id, title) : "") + songCardFoot(s, false) + '</div>'
@@ -4436,8 +4447,23 @@ function songCard(s, move){
 async function paintHome(){
   let list = [];
   try { list = await listSongs(); } catch(e){}
+  /* songs still coming down from the account join the list as cards still loading */
+  const have = new Set(list.map(x => x.id));
+  pendingSongs.forEach((it, id) => { if (!have.has(id)) list.push({ id, title: String(it.title || ""), child: it.child || "", updatedMs: Number(it.updated) || 0, thumb: it.thumb, pending: true }); });
+  list.sort((a, b) => (b.updatedMs || 0) - (a.updatedMs || 0));
   homeList = list;
-  if (cloud.on() || kids.on) await kids.load();
+  /* who's in the family: the first time, wait a moment at most; if the account is slow, show stand-in cards (never a
+     sibling's songs) and paint again when it answers. After that, paint at once and check again in the background. */
+  let asking = false;
+  if (cloud.on() || kids.on){
+    if (!kids.loaded){
+      const ask = kidsAsking || (kidsAsking = kids.load().finally(() => { kidsAsking = null; }));
+      asking = !(await Promise.race([ask.then(() => true, () => true), wait(300).then(() => false)]));
+      if (asking) ask.then(() => { if ($("#editor").hidden) paintHome(); }, () => {});
+    } else if (!kidsAsking){
+      kidsAsking = kids.load().then(changed => { kidsAsking = null; if (changed && $("#editor").hidden) paintHome(); }, () => { kidsAsking = null; });
+    }
+  }
   paintSpace();
   const per = kids.on && cloud.on(), shelf = kids.shelf;
   $("#home-lede").textContent = per ? kids.lede("Pick a way to start.")
@@ -4449,9 +4475,11 @@ async function paintHome(){
   const here = per ? StudioKids.onShelf(list, shelf || "", kids.kids, s => s.child) : list;
   const family = per && shelf ? StudioKids.onShelf(list, "", kids.kids, s => s.child) : [];
   const g = $("#gallery");
-  g.innerHTML = here.length ? here.map(s => songCard(s, per && !shelf)).join("") : '<p class="empty">Nothing yet. Pick a way to start above.</p>';
+  g.innerHTML = asking ? kids.ghostCardsHTML(3)
+    : here.length ? here.map(s => songCard(s, per && !shelf)).join("") : '<p class="empty">Nothing yet. Pick a way to start above.</p>';
+  if (head){ const n = head.parentNode.querySelector(".sk-note"); if (n) n.remove(); if (pendingSongs.size) head.insertAdjacentHTML("afterend", kids.noteHTML(pendingSongs.size)); }
   const old = $("#family-shelf"); if (old) old.remove();
-  if (family.length){
+  if (family.length && !asking){
     const sec = document.createElement("div"); sec.id = "family-shelf";
     sec.innerHTML = kids.familyShelfHTML('<div class="gallery">' + family.map(s => songCard(s, true)).join("") + '</div>');
     g.after(sec);
@@ -4524,7 +4552,7 @@ async function moveSong(btn){
 $("#home").addEventListener("click", e => { const b = e.target.closest("[data-sk-move]"); if (b){ e.stopPropagation(); moveSong(b); } }, true);
 /* the songs on Home: the shelf shown and the Family shelf under it */
 $("#home").addEventListener("click", async e => {
-  if (!e.target.closest("#gallery, #family-shelf")) return;
+  if (!e.target.closest("#gallery, #family-shelf") || e.target.closest(".sk-pending")) return;
   const o = e.target.closest("[data-open]"); if (o){ audio(); return openStored(o.dataset.open); }
   const d = e.target.closest("[data-del]");
   if (d){
@@ -4767,9 +4795,13 @@ function syncHome(){
     accept: p => { const v = M.validateSong(p, CATALOG_IDS); return v.ok ? v.song : null; },
     isOpen: id => !$("#editor").hidden && !!song && song.id === id,
     thumb: thumbOf,
-    gate: pushGate
+    gate: pushGate,
+    /* each song coming down shows at once as a card still loading, and fills in as it lands */
+    onPlan: items => { items.forEach(it => pendingSongs.set(String(it.id), it)); repaintSoon(); },
+    onItem: (id, ok) => { pendingSongs.delete(id); if (ok) arrivedSongs.add(id); repaintSoon(); }
   })).then(r => {
-    if (!r.ok) return false;
+    pendingSongs.clear();
+    if (!r.ok){ repaintSoon(); return false; }
     cloud.setEmail(r.email);
     accountHas.clear(); r.inAccount.forEach((v, k) => accountHas.set(k, v));
     if (r.full && !fullWarned){ fullWarned = true; toast(fullToast()); }

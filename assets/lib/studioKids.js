@@ -93,6 +93,21 @@
   .sk-kid b{ display:block; font-size:16px; } .sk-kid small{ color:var(--mute, #A1A1AB); }
   .sk-grown{ border:0; background:none; color:var(--mute, #A1A1AB); font:inherit; font-weight:700; text-decoration:underline; cursor:pointer; }
   @media (max-width:560px){ .sk-who .sk-name{ display:none; } }
+  /* loading (owner, 2026-11-28): files from the account show at once as cards still loading, and fill in one by one */
+  .sk-pending .art__open{ position:relative; overflow:hidden; cursor:progress; }
+  .sk-pending .art__open > img, .sk-pending .art__open > svg{ opacity:.45; filter:saturate(.5); }
+  .sk-pending .art__open::after{ content:""; position:absolute; inset:0; background:linear-gradient(100deg, transparent 20%, rgba(255,255,255,.14) 50%, transparent 80%); background-size:250% 100%; animation:skShimmer 1.6s ease-in-out infinite; }
+  .sk-pending .art__name{ color:var(--mute, #A1A1AB); }
+  .sk-ghost .art__open{ min-height:120px; }
+  .sk-ghost .sk-line{ display:block; height:10px; border-radius:6px; background:var(--well, var(--surface-2, rgba(255,255,255,.08))); width:70%; margin:4px 0; }
+  .sk-ghost .sk-line + .sk-line{ width:40%; }
+  .sk-arrive{ animation:skIn .5s cubic-bezier(.2,.7,.3,1) both; }
+  .sk-note{ display:inline-flex; align-items:center; gap:8px; margin-left:12px; font-size:12.5px; font-weight:500; color:var(--mute, #A1A1AB); vertical-align:middle; }
+  .sk-note i{ width:12px; height:12px; border-radius:50%; border:2px solid currentColor; border-right-color:transparent; animation:skSpin .9s linear infinite; }
+  @keyframes skShimmer{ from{ background-position:120% 0; } to{ background-position:-20% 0; } }
+  @keyframes skIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
+  @keyframes skSpin{ to{ transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce){ .sk-pending .art__open::after, .sk-arrive{ animation:none; } .sk-note i{ animation-duration:2.4s; } }
   `;
   const ICON = {
     chev: '<svg class="sk-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
@@ -118,13 +133,14 @@
     const kidOf = (id) => state.kids.find((k) => k.id === id) || null;
     /** Ask the site who's in the family and who's making. Nothing to ask (no site, signed out, no children): one shelf. */
     async function load() {
+      const before = JSON.stringify([state.kids, state.shelf]);
       let fam = null;
       try { const w = o.host(); if (w && typeof w.studioFamily === "function") fam = await w.studioFamily(); } catch (e) { fam = null; }
       state.kids = fam && Array.isArray(fam.kids) ? fam.kids.filter((k) => k && cleanChild(k.id)) : [];
       state.shelf = pickedShelf({ kids: state.kids, picked: fam && fam.picked });
       state.loaded = true;
       paintChip();
-      return state;
+      return JSON.stringify([state.kids, state.shelf]) !== before;
     }
     function pick(shelf) {
       state.shelf = shelf;
@@ -207,6 +223,8 @@
     return {
       load, pick, askIfNeeded, moveMenu, paintChip,
       get on() { return state.kids.length > 0; },
+      /** the family has been asked at least once (until then the shelves aren't known) */
+      get loaded() { return state.loaded; },
       get kids() { return state.kids; },
       /** the shelf shown: a child's id, "" for the Family shelf, undefined while asking, null when there's one shelf */
       get shelf() { return state.shelf; },
@@ -227,6 +245,12 @@
         return '<section class="sk-famshelf" aria-labelledby="sk-fam-t"><h2 id="sk-fam-t">Family shelf</h2><p>' + esc(o.Many) + ' saved before each child had their own space, and what grown-ups make. Everyone in the family can open them. Move one to a child’s space to keep it there.</p>'
           + cards + '</section>';
       },
+      /** cards that stand in while the family is still being asked: no files shown yet, so no one sees a sibling's */
+      ghostCardsHTML(n) {
+        return Array.from({ length: n || 3 }, () => '<article class="art sk-pending sk-ghost" aria-hidden="true"><span class="art__open"></span><div class="art__body"><span class="art__name"><span class="sk-line"></span><span class="sk-line"></span></span></div></article>').join("");
+      },
+      /** "Getting 8 songs from your account" beside the shelf's heading while files come down */
+      noteHTML(n) { return n > 0 ? '<span class="sk-note" role="status"><i aria-hidden="true"></i>Getting ' + countText(n, o.one, o.many) + ' from your account</span>' : ""; },
       moveButtonHTML(id, title) { return '<button type="button" class="btn sk-move" data-sk-move="' + esc(id) + '" aria-label="Move ' + esc(title) + ' to a child’s space">' + ICON.move + 'Move to</button>'; },
       /** the family space bar: shared by the children, split by child */
       spaceHTML(u) {

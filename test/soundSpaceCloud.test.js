@@ -134,6 +134,28 @@ describe("Sound Space saving (cloud.js)", () => {
       return { M, C, store, acct, sync };
     }
 
+    it("faster loading: says which songs are coming, brings them down four at a time, and reports each as it lands (owner, 2026-11-28)", async () => {
+      const { M, acct, sync } = await setup();
+      for (let i = 0; i < 9; i++) acct.rows.set("song-" + i, { id: "song-" + i, title: "Song " + i, data: song(M, "song-" + i, 100 + i), thumb: "", updated: 100 + i, deleted: false });
+      let busy = 0, most = 0;
+      acct.hook = async (action) => { if (action !== "get") return; busy++; most = Math.max(most, busy); await new Promise((r) => setTimeout(r, 5)); busy--; };
+      const planned = [], landed = [];
+      const r = await sync({ onPlan: (items) => planned.push(...items.map((it) => it.id)), onItem: (id, ok) => landed.push([id, ok]) });
+      expect(r.ok).toBe(true);
+      expect(planned.sort()).toEqual(Array.from({ length: 9 }, (_, i) => "song-" + i).sort());
+      expect(landed).toHaveLength(9);
+      expect(landed.every(([, ok]) => ok)).toBe(true);
+      expect(most).toBe(4);
+    });
+
+    it("a song that can't be read still reports, so its loading card goes away", async () => {
+      const { M, acct, sync } = await setup();
+      acct.rows.set("bad", { id: "bad", title: "Bad", data: { nope: true }, thumb: "", updated: 50, deleted: false });
+      const landed = [];
+      await sync({ onItem: (id, ok) => landed.push([id, ok]) });
+      expect(landed).toEqual([["bad", false]]);
+    });
+
     it("sends songs made here, and a song saved here is then in the account", async () => {
       const { M, store, acct, sync } = await setup();
       await store.put(song(M, "song-one", 1000, "Here first"));

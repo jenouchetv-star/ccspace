@@ -82,3 +82,28 @@ describe("both apps use it", () => {
     expect(site).toContain("function studioPick(");
   });
 });
+
+describe("faster loading (owner, 2026-11-28)", () => {
+  const sound = readFileSync(new URL("../assets/apps/sound-space.html", import.meta.url), "utf8");
+  const art = readFileSync(new URL("../assets/apps/art-studio.html", import.meta.url), "utf8");
+  it("Home never waits long for the family: 300 ms at most, then stand-in cards, never a sibling's files", () => {
+    for (const page of [sound, art]) {
+      expect(page).toContain("Promise.race([ask.then(() => true, () => true), wait(300).then(() => false)])");
+      expect(page).toContain("kids.ghostCardsHTML(3)");
+    }
+  });
+  it("files from the account show at once as cards still loading, and fill in as they land", () => {
+    expect(sound).toContain("onPlan: items => { items.forEach(it => pendingSongs.set(String(it.id), it)); repaintSoon(); }");
+    expect(sound).toContain("Getting it from your account");
+    expect(art).toContain("todo.forEach(it => pendingArt.set(it.id, it));");
+    expect(art).toContain("await Promise.all(Array.from({ length: Math.min(4, todo.length) }");
+    expect(art).toContain("Getting it from your account");
+  });
+  it("the note beside the shelf says how many are coming", () => {
+    const k = K.create({ doc: { addEventListener() {} }, host: () => null, one: "song", many: "songs", Many: "Songs", own: "songs" });
+    expect(k.noteHTML(8)).toContain("Getting 8 songs from your account");
+    expect(k.noteHTML(1)).toContain("Getting 1 song from your account");
+    expect(k.noteHTML(0)).toBe("");
+    expect(k.ghostCardsHTML(3).match(/sk-ghost/g)).toHaveLength(3);
+  });
+});

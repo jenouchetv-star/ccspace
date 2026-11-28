@@ -1382,7 +1382,9 @@ function cloudSync(){
     const local = await store.all().catch(() => []);
     const here = new Map(local.map(p => [p.id, p])), there = new Map(r.items.map(i => [i.id, i]));
     let changedHere = false;
-    /* down: pictures that are newer in the account, and pictures deleted from it */
+    /* down: pictures deleted from the account go here too; pictures that are newer there come down four at a time,
+       each showing at once as a card still loading and filling in as it lands (owner, 2026-11-28: faster loading) */
+    const todo = [];
     for (const it of r.items){
       const mine = here.get(it.id);
       if (cur && cur.id === it.id) continue;            // never swap the open picture under someone's brush
@@ -1392,8 +1394,15 @@ function cloudSync(){
         continue;
       }
       if (mine && (mine.updated || 0) >= it.updated) continue;
+      todo.push(it);
+    }
+    todo.forEach(it => pendingArt.set(it.id, it));
+    if (todo.length) repaintSoon();
+    let next = 0;
+    const one = async it => {
+      const mine = here.get(it.id);
       const g = await cloud.call("get", { id:it.id });
-      if (!g || !g.ok || !g.project) continue;
+      if (!g || !g.ok || !g.project || (cur && cur.id === it.id)){ pendingArt.delete(it.id); repaintSoon(); return; }
       try {
         const p = cleanProject(g.project);
         if (p.layers) p.layers.forEach(l => { if (l.type === "text") fitText(l); });
@@ -1402,8 +1411,11 @@ function cloudSync(){
         if (mine && mine.trace) p.trace = mine.trace;
         p.thumb = it.thumb || thumbOf(p);
         await store.put(p); here.set(p.id, p); changedHere = true;
+        arrivedArt.add(p.id);
       } catch(e){ /* a copy that can't be read stays out */ }
-    }
+      pendingArt.delete(it.id); repaintSoon();
+    };
+    await Promise.all(Array.from({ length: Math.min(4, todo.length) }, async () => { while (next < todo.length) await one(todo[next++]); }));
     /* up: pictures this browser has that the account doesn't, or has an older copy of */
     for (const p of here.values()){
       if (!mineToSync(p)) continue;
@@ -1416,7 +1428,7 @@ function cloudSync(){
       if (p.owner !== cloud.email){ p.owner = cloud.email; await store.put(p); }
     }
     return changedHere;
-  })().finally(() => { syncing = null; });
+  })().finally(() => { syncing = null; if (pendingArt.size){ pendingArt.clear(); repaintSoon(); } });
   return syncing;
 }
 let pushTimer = 0, pushing = null;
@@ -2062,8 +2074,18 @@ async function showHome(){
   /* then bring in what was made in other browsers */
   cloudSync().then(changedHere => { if (changedHere && !cur) renderGallery(); if (!cur) paintSpace(); });
 }
+/* Faster loading (owner, 2026-11-28): pictures coming down from the account show at once as cards still loading, and
+   each fills in as it lands; the family is never waited on for long. */
+const pendingArt = new Map();   // id -> the account's list entry, while that picture comes down
+const arrivedArt = new Set();   // ids that just landed: their card eases in once
+let kidsAsking = null, pendingPaint = 0;
+function repaintSoon(){ clearTimeout(pendingPaint); pendingPaint = setTimeout(() => { if (!cur) renderGallery(); }, 120); }
 function artCard(p, move){
-  return '<article class="art" data-id="' + esc(p.id) + '" data-title="' + esc(p.title) + '">'
+  if (p.pending) return '<article class="art sk-pending" aria-busy="true" data-pending="' + esc(p.id) + '">'
+    + '<span class="art__open">' + (/^data:image\/png;base64,/.test(p.thumb || "") ? '<img src="' + esc(p.thumb) + '" alt=""' + (p.kind === "pixel" ? ' class="px"' : "") + '>' : "") + '</span>'
+    + '<div class="art__body"><span class="art__name">' + esc(p.title) + '<span class="art__when">Getting it from your account\u2026</span></span></div></article>';
+  const arrive = arrivedArt.delete(p.id);
+  return '<article class="art' + (arrive ? " sk-arrive" : "") + '" data-id="' + esc(p.id) + '" data-title="' + esc(p.title) + '">'
     + '<button type="button" class="art__open" data-open="' + esc(p.id) + '" aria-label="Open ' + esc(p.title) + '">'
     + (p.thumb ? '<img src="' + esc(p.thumb) + '" alt=""' + (p.kind === "pixel" ? ' class="px"' : "") + '>' : "") + '</button>'
     + '<div class="art__body"><span class="art__name">' + esc(p.title) + '<span class="art__when">' + esc([when(p.updated), fileSize(p)].filter(Boolean).join(" · ")) + '</span></span>'
@@ -2072,8 +2094,23 @@ function artCard(p, move){
 }
 async function renderGallery(){
   const list = (await store.all().catch(() => [])).sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  /* pictures still coming down from the account join the list as cards still loading */
+  const have = new Set(list.map(x => x.id));
+  pendingArt.forEach((it, id) => { if (!have.has(id)) list.push({ id, title: String(it.title || "Untitled"), kind: it.kind, child: it.child || "", updated: Number(it.updated) || 0, thumb: it.thumb, pending: true }); });
+  list.sort((a, b) => (b.updated || 0) - (a.updated || 0));
   homeList = list;
-  if (cloud.on() || kids.on) await kids.load();
+  /* who's in the family: the first time, wait a moment at most; if the account is slow, show stand-in cards (never a
+     sibling's art) and paint again when it answers. After that, paint at once and check again in the background. */
+  let asking = false;
+  if (cloud.on() || kids.on){
+    if (!kids.loaded){
+      const ask = kidsAsking || (kidsAsking = kids.load().finally(() => { kidsAsking = null; }));
+      asking = !(await Promise.race([ask.then(() => true, () => true), wait(300).then(() => false)]));
+      if (asking) ask.then(() => { if (!cur) renderGallery(); }, () => {});
+    } else if (!kidsAsking){
+      kidsAsking = kids.load().then(changed => { kidsAsking = null; if (changed && !cur) renderGallery(); }, () => { kidsAsking = null; });
+    }
+  }
   const per = kids.on && cloud.on(), shelf = kids.shelf;
   $("#home-lede").textContent = per ? kids.lede("Pick a page to start.")
     : cloud.on() ? "Pick a page to start. Your work saves to your account as you go, so it’s there in any browser where you sign in."
@@ -2083,9 +2120,11 @@ async function renderGallery(){
   const here = per ? StudioKids.onShelf(list, shelf || "", kids.kids, p => p.child) : list;
   const family = per && shelf ? StudioKids.onShelf(list, "", kids.kids, p => p.child) : [];
   const g = $("#gallery");
-  g.innerHTML = here.length ? here.map(p => artCard(p, per && !shelf)).join("") : '<p class="empty">Nothing yet. Pick a page above to start.</p>';
+  g.innerHTML = asking ? kids.ghostCardsHTML(3)
+    : here.length ? here.map(p => artCard(p, per && !shelf)).join("") : '<p class="empty">Nothing yet. Pick a page above to start.</p>';
+  if (head){ const n = head.parentNode.querySelector(".sk-note"); if (n) n.remove(); if (pendingArt.size) head.insertAdjacentHTML("afterend", kids.noteHTML(pendingArt.size)); }
   const old = $("#family-shelf"); if (old) old.remove();
-  if (family.length){
+  if (family.length && !asking){
     const sec = document.createElement("div"); sec.id = "family-shelf";
     sec.innerHTML = kids.familyShelfHTML('<div class="gallery">' + family.map(p => artCard(p, true)).join("") + '</div>');
     g.after(sec);
